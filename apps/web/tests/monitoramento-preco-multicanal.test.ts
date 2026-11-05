@@ -826,3 +826,145 @@ test("H3-8. exatamente um canal pressionado continua garantido", async () => {
     && !codigo.includes("aria-pressed={false}"),
     "nenhum botao pode ter estado fixo");
 });
+
+// ---------------------------------------------------------------------------
+// T-0067 — o canal vive na URL e o canal nao publicado declara o aviso da API
+//
+// Import por NAMESPACE de proposito: no codigo anterior a T-0067 estas funcoes
+// nao existiam, e um import nomeado derrubaria o arquivo inteiro. Assim so' os
+// testes novos falham na contraprova, e os antigos continuam medindo.
+// ---------------------------------------------------------------------------
+
+import * as libT0067 from "../src/lib/monitoramento-preco.ts";
+
+type FnCanalDaUrl = (search: string) => string;
+type FnSearchComCanal = (search: string, canal: string) => string;
+type FnAviso = (meta: unknown) => string | null;
+
+function canalDaUrl(search: string): string {
+  const fn = (libT0067 as Record<string, unknown>).canalDaUrl as FnCanalDaUrl | undefined;
+  assert.equal(typeof fn, "function", "canalDaUrl precisa existir na lib");
+  return fn!(search);
+}
+
+function searchComCanal(search: string, canal: string): string {
+  const fn = (libT0067 as Record<string, unknown>).searchComCanal as FnSearchComCanal | undefined;
+  assert.equal(typeof fn, "function", "searchComCanal precisa existir na lib");
+  return fn!(search, canal);
+}
+
+function avisoCanalIndisponivel(meta: unknown): string | null {
+  const fn = (libT0067 as Record<string, unknown>).avisoCanalIndisponivel as FnAviso | undefined;
+  assert.equal(typeof fn, "function", "avisoCanalIndisponivel precisa existir na lib");
+  return fn!(meta);
+}
+
+const TODAS_AS_FLAGS = {
+  NEXT_PUBLIC_PMA_SHOPEE_ENABLED: "true",
+  NEXT_PUBLIC_PMA_TIKTOK_ENABLED: "true",
+};
+
+/** Texto que a API devolve hoje em `meta.warnings` no envelope indisponivel. */
+const AVISO_DA_API =
+  "Canal reconhecido, porem ainda nao publicado: nenhuma observacao foi "
+  + "consultada. Contagens zeradas significam ausencia de fonte, nao ausencia "
+  + "de desvio; coverage_rate vem nulo justamente para nao afirmar 0%.";
+
+test("T67-1. com as flags ligadas o seletor oferece os tres canais e grava o canal", async () => {
+  comFlags(TODAS_AS_FLAGS, () => {
+    assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml", "shopee", "tiktok"]);
+  });
+  const codigo = await lerCodigo(PAGE);
+  const bloco = codigo.split("const trocaCanal")[1].split("const submeterBusca")[0];
+  assert.ok(/sincronizaUrl\(\{[^}]*canal: novo/.test(bloco),
+    "a troca de canal precisa gravar o canal novo na URL");
+});
+
+test("T67-2. link direto: ?canal= de canal habilitado e' lido da URL", async () => {
+  comFlags(TODAS_AS_FLAGS, () => {
+    assert.equal(canalDaUrl("?canal=shopee"), "shopee");
+    assert.equal(canalDaUrl("?canal=tiktok&observed_date=2026-11-04"), "tiktok");
+    assert.equal(canalDaUrl("?canal=ml"), "ml");
+    assert.equal(canalDaUrl(""), "ml", "sem parametro o padrao continua ML");
+  });
+  const codigo = await lerCodigo(PAGE);
+  assert.ok(codigo.includes("canalDaUrl(window.location.search)"),
+    "a pagina precisa ler o canal da URL no carregamento");
+  assert.ok(codigo.includes('useState<Marketplace>("ml")'),
+    "o primeiro render continua ML: o servidor nao conhece a URL");
+});
+
+test("T67-3. canal desabilitado ou invalido na URL cai para ML", () => {
+  semFlags(() => {
+    assert.equal(canalDaUrl("?canal=shopee"), "ml", "flag desligada nao abre o canal pela URL");
+    assert.equal(canalDaUrl("?canal=tiktok"), "ml");
+  });
+  comFlags({ NEXT_PUBLIC_PMA_SHOPEE_ENABLED: "true" }, () => {
+    assert.equal(canalDaUrl("?canal=shopee"), "shopee");
+    assert.equal(canalDaUrl("?canal=tiktok"), "ml", "so' a flag do proprio canal conta");
+  });
+  comFlags(TODAS_AS_FLAGS, () => {
+    for (const lixo of ["?canal=SHOPEE", "?canal=amazon", "?canal=", "?canal=<b>x</b>"]) {
+      assert.equal(canalDaUrl(lixo), "ml", `"${lixo}" nao pode virar canal`);
+    }
+  });
+});
+
+test("T67-4. ida e volta: gravar o canal preserva os demais parametros", () => {
+  const ida = searchComCanal("?observed_date=2026-11-04&utm=x", "shopee");
+  const params = new URLSearchParams(ida);
+  assert.equal(params.get("canal"), "shopee");
+  assert.equal(params.get("observed_date"), "2026-11-04", "a data nao some");
+  assert.equal(params.get("utm"), "x", "parametro alheio nao some");
+  comFlags(TODAS_AS_FLAGS, () => {
+    assert.equal(canalDaUrl(ida), "shopee", "o que foi gravado e' o que volta");
+    assert.equal(canalDaUrl(searchComCanal("", "tiktok")), "tiktok");
+  });
+  // ML e' o padrao: sai da URL, e o link antigo continua identico.
+  assert.equal(searchComCanal("?canal=shopee&utm=x", "ml"), "?utm=x");
+  assert.equal(searchComCanal("?canal=tiktok", "ml"), "");
+  assert.equal(searchComCanal("", "ml"), "");
+});
+
+test("T67-5. canal nao publicado mostra o aviso DA API, nunca um texto fixo", () => {
+  const aviso = avisoCanalIndisponivel({
+    availability: "unavailable", unavailable_reason: null, warnings: [AVISO_DA_API],
+  });
+  assert.equal(aviso, AVISO_DA_API, "o texto e' o que a API devolveu");
+  assert.equal(
+    avisoCanalIndisponivel({ availability: "available", unavailable_reason: null, warnings: ["x"] }),
+    null,
+    "canal publicado nao ganha aviso de indisponibilidade",
+  );
+  assert.equal(avisoCanalIndisponivel(null), null);
+  // Envelope sem warnings: ainda assim ha explicacao, e ela nao afirma zero.
+  const semTexto = avisoCanalIndisponivel({
+    availability: "unavailable", unavailable_reason: null, warnings: [],
+  });
+  assert.ok(semTexto && semTexto.length > 0, "indisponivel nunca fica sem explicacao");
+  assert.ok(!/\b0\b/.test(semTexto!), "a explicacao nao pode afirmar zero");
+});
+
+test("T67-6. a pagina renderiza o aviso da API e nao mostra 0 no canal indisponivel", async () => {
+  const codigo = await lerCodigo(PAGE);
+  assert.ok(codigo.includes("avisoCanalIndisponivel(meta)"),
+    "o aviso vem de meta.warnings, via lib");
+  assert.ok(!codigo.includes("Sem fotografia publicada neste canal."),
+    "o texto fixo antigo dava a razao sem a explicacao da API");
+  // KPIs: travessao, nunca a contagem zerada do envelope.
+  const kpis = codigo.split('aria-label="Indicadores"')[1].split("</section>")[0];
+  assert.ok(/canalIndisponivel \? INDISPONIVEL : fmtContagem\(k\.valor\)/.test(kpis),
+    "KPI de canal indisponivel e' ausencia, nao zero");
+  // Causas: o ramo "zero medido" nao pode responder pelo canal indisponivel.
+  const causas = codigo.split('aria-label="Causas da ausência de referência"')[1]
+    .split("</section>")[0];
+  assert.ok(causas.indexOf("canalIndisponivel") >= 0
+    && causas.indexOf("canalIndisponivel") < causas.indexOf("causas.total === 0"),
+    "canal indisponivel e' testado antes do zero medido");
+  // Tabela: o vazio do canal indisponivel e' explicado pelo aviso.
+  const tabela = codigo.split('aria-label="Anúncios monitorados"')[1];
+  assert.ok(tabela.includes("estado.fresh && linhas.length === 0 && avisoCanal &&"),
+    "a tabela vazia do canal indisponivel mostra o aviso");
+  assert.ok(tabela.includes("estado.fresh && linhas.length === 0 && !avisoCanal &&"),
+    "'Nenhum anuncio para os filtros' nao responde pelo canal indisponivel");
+});
