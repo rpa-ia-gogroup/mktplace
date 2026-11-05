@@ -74,6 +74,10 @@ import {
   situacaoFrescorLabel,
   temPrecoObservado,
   type EscopoFiltro,
+  // T-0067 — canal na URL e aviso de canal nao publicado
+  avisoCanalIndisponivel,
+  canalDaUrl,
+  searchComCanal,
 } from "@/lib/monitoramento-preco";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -107,11 +111,13 @@ function dataInicialDaUrl(): string {
   return bruto && RE_DATA.test(bruto) ? bruto : "";
 }
 
-function sincronizaUrl(data: string) {
+/** Grava data e/ou canal na URL; o que nao veio no argumento fica intocado. */
+function sincronizaUrl(mudanca: { data?: string; canal?: Marketplace }) {
   if (typeof window === "undefined") return;
   const url = new URL(window.location.href);
-  if (data) url.searchParams.set(PARAM_DATA, data);
-  else url.searchParams.delete(PARAM_DATA);
+  if (mudanca.canal) url.search = searchComCanal(url.search, mudanca.canal);
+  if (mudanca.data) url.searchParams.set(PARAM_DATA, mudanca.data);
+  else if (mudanca.data === "") url.searchParams.delete(PARAM_DATA);
   window.history.replaceState(null, "", url.toString());
 }
 
@@ -201,6 +207,17 @@ export default function MonitoramentoPrecoPage() {
       }),
     [marketplace, marcaEfetiva, status, productQuery, observedDate, shopAccount, productType, offset],
   );
+
+  // T-0067 — link direto/reload com `?canal=`. Lido DEPOIS da hidratacao, e
+  // nao no inicializador do `useState` como a data: o canal muda o titulo e o
+  // seletor, e o HTML do servidor (que nao conhece a URL) sairia diferente do
+  // primeiro render do cliente. A requisicao de ML que comeca no mesmo ciclo e'
+  // abortada pela troca de `requestKey`. Nao passa por `trocaCanal` de
+  // proposito: a data que veio no mesmo link continua valendo.
+  useEffect(() => {
+    const daUrl = canalDaUrl(window.location.search);
+    if (daUrl !== "ml") setMarketplace(daUrl);
+  }, []);
 
   // Guarda de frescor: uma resposta antiga que chegue depois de uma nova
   // requisicao NAO pode sobrescrever o estado. `latestKey` e' comparada no
@@ -308,7 +325,9 @@ export default function MonitoramentoPrecoPage() {
         setProductType("");
         setEscopo("todos");
         setObservedDate("");
-        sincronizaUrl("");
+        // A data sai (a do canal anterior nao vale no novo); o canal entra; o
+        // resto da URL fica.
+        sincronizaUrl({ data: "", canal: novo });
         setDados(null);
         setLinhaAberta(null);
         return novo;
@@ -342,7 +361,7 @@ export default function MonitoramentoPrecoPage() {
   const trocaData = useCallback((valor: string) => {
     setOffset(0);
     setObservedDate(valor);
-    sincronizaUrl(valor);
+    sincronizaUrl({ data: valor });
   }, []);
 
   const temFiltro =
@@ -420,7 +439,9 @@ export default function MonitoramentoPrecoPage() {
   const politica = politicaDataView(meta);
   const cobertura = resumoCobertura(meta);
   const contas = coberturaPorConta(meta?.account_clocks);
-  const canalIndisponivel = meta?.availability === "unavailable";
+  // T-0067 — o texto vem de `meta.warnings`: a API e' dona da explicacao.
+  const avisoCanal = avisoCanalIndisponivel(meta);
+  const canalIndisponivel = avisoCanal !== null;
   const contasDoFiltro = contas.map((c) => c.conta);
   // Os QUATRO estados, sempre. `product_type_counts` conta so' as ATIVAS, e
   // filtrar as opcoes por ele esconderia do filtro um tipo que existe apenas
@@ -558,9 +579,12 @@ export default function MonitoramentoPrecoPage() {
         )}
 
         {/* Canal reconhecido, porem sem nada publicado. Nao e' erro. */}
-        {canalIndisponivel && (
-          <p className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-3">
-            Sem fotografia publicada neste canal.
+        {avisoCanal && (
+          <p
+            role="status"
+            className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-3"
+          >
+            {avisoCanal}
           </p>
         )}
 
@@ -786,7 +810,9 @@ export default function MonitoramentoPrecoPage() {
                     <InfoDica texto={k.detalhe} emControle />
                   </span>
                   <span className="block text-2xl font-bold text-slate-900 tabular-nums">
-                    {fmtContagem(k.valor)}
+                    {/* Canal nao publicado: o envelope traz contagens zeradas,
+                        que sao ausencia de fonte, nunca zero medido. */}
+                    {canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
                   </span>
                   <span className="sr-only">{k.detalhe}</span>
                 </button>
@@ -806,7 +832,7 @@ export default function MonitoramentoPrecoPage() {
                   <InfoDica texto={k.detalhe} emControle />
                 </span>
                 <span className="block text-lg font-bold text-slate-800 tabular-nums">
-                  {fmtContagem(k.valor)}
+                  {canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
                 </span>
                 <span className="sr-only">{k.detalhe}</span>
               </button>
@@ -866,6 +892,11 @@ export default function MonitoramentoPrecoPage() {
         ) : estado.error ? (
           <p className="text-sm text-slate-600">
             Causas indisponíveis — veja o aviso de falha.
+          </p>
+        ) : canalIndisponivel ? (
+          /* Canal nao publicado: nada foi medido, entao nao ha "zero medido". */
+          <p className="text-sm text-slate-600">
+            Causas indisponíveis — canal ainda não publicado (não é zero).
           </p>
         ) : causas.indisponivel ? (
           /* Deploy antigo da API: AUSENCIA DE CAMPO, nao ausencia de causa. */
@@ -1131,7 +1162,17 @@ export default function MonitoramentoPrecoPage() {
           </div>
         )}
 
-        {estado.fresh && linhas.length === 0 && (
+        {/* T-0067 — canal nao publicado: a tabela vazia diz POR QUE esta vazia. */}
+        {estado.fresh && linhas.length === 0 && avisoCanal && (
+          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm p-8 text-center">
+            <h2 className="text-sm font-semibold text-slate-700">
+              {canalLabel(marketplace)}: canal ainda não publicado
+            </h2>
+            <p className="text-xs text-slate-500 mt-2">{avisoCanal}</p>
+          </div>
+        )}
+
+        {estado.fresh && linhas.length === 0 && !avisoCanal && (
           <div className="bg-white border border-violet-100 rounded-2xl shadow-sm p-8 text-center">
             <h2 className="text-sm font-semibold text-slate-700">
               Nenhum anúncio para os filtros selecionados

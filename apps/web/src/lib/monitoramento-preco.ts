@@ -97,6 +97,58 @@ export function canaisDisponiveis(): CanalView[] {
   return CANAIS.filter((c) => canalHabilitado(c.id));
 }
 
+// ---------------------------------------------------------------------------
+// T-0067 — o canal vive na URL (`?canal=`), para o link ser compartilhavel
+// ---------------------------------------------------------------------------
+
+export const PARAM_CANAL = "canal";
+
+/**
+ * Canal pedido pela URL. FAIL-CLOSED: so' vale um canal reconhecido E
+ * habilitado pela capacidade do frontend; qualquer outra coisa — ausente,
+ * caixa diferente, canal desligado, lixo — cai para o ML. Um link com
+ * `?canal=shopee` nao abre um canal que o seletor nao ofereceria.
+ */
+export function canalDaUrl(search: string): Marketplace {
+  const bruto = new URLSearchParams(search).get(PARAM_CANAL);
+  const canal = CANAIS.find((c) => c.id === bruto)?.id;
+  return canal && canalHabilitado(canal) ? canal : "ml";
+}
+
+/**
+ * `search` com o canal gravado, preservando os demais parametros. O ML e' o
+ * padrao e SAI da URL: o link de quem nunca trocou de canal fica identico.
+ */
+export function searchComCanal(search: string, canal: Marketplace): string {
+  const params = new URLSearchParams(search);
+  if (canal === "ml") params.delete(PARAM_CANAL);
+  else params.set(PARAM_CANAL, canal);
+  const texto = params.toString();
+  return texto ? `?${texto}` : "";
+}
+
+/** Usado so' se o envelope indisponivel vier sem `warnings`. Nao afirma zero. */
+const AVISO_CANAL_INDISPONIVEL_PADRAO =
+  "Canal reconhecido, porém ainda não publicado: nenhuma observação foi " +
+  "consultada. Ausência de fonte não é ausência de desvio.";
+
+/**
+ * Aviso do canal reconhecido mas nao publicado (`availability=unavailable`).
+ * O texto e' o que a API devolve em `meta.warnings` — ela e' dona da
+ * explicacao. `null` quando o canal esta' publicado.
+ */
+export function avisoCanalIndisponivel(
+  meta:
+    | Pick<MonitoramentoPrecoMeta, "availability" | "warnings" | "unavailable_reason">
+    | null
+    | undefined,
+): string | null {
+  if (!meta || meta.availability !== "unavailable") return null;
+  const avisos = (meta.warnings ?? []).filter((w) => w && w.trim());
+  if (avisos.length > 0) return avisos.join(" ");
+  return meta.unavailable_reason || AVISO_CANAL_INDISPONIVEL_PADRAO;
+}
+
 /**
  * Filtros que fazem sentido no canal. O ML nao modela conta de loja nem
  * `product_type` materializado, e o backend recusa os dois com 422 — mandar
