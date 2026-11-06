@@ -646,11 +646,13 @@ class FakeNeon:
     """Roteia pelo texto do SQL e registra os parametros recebidos."""
 
     def __init__(self, mart_rows=(), afiliado_rows=(), insumos=(), marcas=("barbours", "kokeshi"),
-                 tabela_existe=True, premissas=None):
+                 tabela_existe=True, premissas=None, frete_comprador=None):
         self.mart_rows, self.afiliado_rows, self.marcas = list(mart_rows), list(afiliado_rows), list(marcas)
         self.insumos, self.tabela_existe = list(insumos), tabela_existe
         #: `None` = migration 026 nao aplicada (estado real do Neon hoje).
         self.premissas = None if premissas is None else list(premissas)
+        #: T-0068. `None` = coluna `buyer_shipping_fee` ausente (Neon antes da 041).
+        self.frete_comprador = None if frete_comprador is None else list(frete_comprador)
         self.params: list[dict] = []
         self.sqls: list[str] = []
 
@@ -658,6 +660,10 @@ class FakeNeon:
         sql = str(stmt)
         self.params.append(params or {})
         self.sqls.append(sql)
+        if "buyer_shipping_fee" in sql and "pg_attribute" in sql:
+            return _Res([self.frete_comprador is not None])
+        if "buyer_shipping_fee" in sql:
+            return _Res([r for r in self.frete_comprador if r["marca"] in params["marcas"]])
         if "to_regclass" in sql and "fact_dre_premissa_mensal" in sql:
             return _Res([self.premissas is not None])
         if "to_regclass" in sql:

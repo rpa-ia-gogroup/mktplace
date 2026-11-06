@@ -27,6 +27,8 @@ FONTES — SO' O NEON (Gate DRE-DATA-BRIDGE-1)
 - `marts.fact_marketplace_daily_performance`: receita, taxas ML/Shopee, Ads,
   frete ML/Shopee.
 - `marts.fact_tiktok_affiliate_cost_order_monthly`: afiliados TikTok.
+- `marts.fact_tiktok_order_discounts_daily.buyer_shipping_fee` (T-0068): frete
+  pago pelo comprador, subtraido do GMV TikTok na receita quando completo.
 - `marts.fact_dre_insumo_mensal`: CMV fiscal e repasse TikTok por coorte,
   e (T-0059) a taxa da Shopee do escrow (`shopee_taxa_escrow`), que substitui
   o `total_fees` do mart quando ele nao cobre a celula (ver `_taxa_shopee_escrow`),
@@ -264,6 +266,11 @@ class InsumosCelula:
     #: Impostos realizados do webgex (T-0069). `None` = nada publicado para a chave.
     impostos: dict | None = None
     motivo_sem_insumo: str = "competencia nao publicada em marts.fact_dre_insumo_mensal"
+    #: T-0068, so' celula TikTok: frete pago pelo comprador nos dias com GMV
+    #: (`ler_frete_comprador`). `None` = nada lido para a chave.
+    frete_comprador: dict | None = None
+    #: `False` = a coluna `buyer_shipping_fee` nao existe no Neon (041 nao aplicada).
+    frete_comprador_coluna: bool = False
 
 
 def _comp(valor=None, status=INDISPONIVEL, motivo=None, fonte=None, somavel=True, partes=None,
@@ -363,15 +370,21 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
     comps: dict[str, dict] = {}
 
     # --- receita -----------------------------------------------------------
-    receita = _num(mart.get("gmv"))
+    # `gmv` fica guardado: a razao do CMV (receita fiscal / GMV) segue sobre o
+    # GMV do mart, mesmo quando a receita TikTok sai sem o frete (T-0068).
+    gmv = _num(mart.get("gmv"))
+    receita = gmv
     fonte_receita = "marts.fact_marketplace_daily_performance.gmv"
-    if dias >= dias_mes:
-        comps["receita"] = _comp(valor=receita, status=DISPONIVEL, fonte=fonte_receita, somavel=False)
-    else:
-        comps["receita"] = _comp(valor=receita, status=COBERTURA_PARCIAL, fonte=fonte_receita, somavel=False,
-                                 motivo=f"receita presente em {dias} de {dias_mes} dias do mes")
+    motivo_receita = None
     if canal == "tiktok":
-        avisos.append("Receita do TikTok inclui o frete pago pelo comprador (Gate DQ-TK1); ML e Shopee nao incluem.")
+        receita, fonte_receita, motivo_receita = _receita_tiktok_sem_frete(ins, gmv, fonte_receita, avisos)
+    if dias >= dias_mes:
+        comps["receita"] = _comp(valor=receita, status=DISPONIVEL, fonte=fonte_receita, somavel=False,
+                                 motivo=motivo_receita)
+    else:
+        parcial = f"receita presente em {dias} de {dias_mes} dias do mes"
+        comps["receita"] = _comp(valor=receita, status=COBERTURA_PARCIAL, fonte=fonte_receita, somavel=False,
+                                 motivo=f"{parcial}; {motivo_receita}" if motivo_receita else parcial)
 
     # --- devolucoes: sem fonte servivel em nenhum canal ----------------------
     comps["devolucoes"] = _comp(motivo="sem fonte de devolucao/reembolso em valor (perguntas C6, F5)")
@@ -429,7 +442,7 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         comps["frete"] = _frete_tiktok(ins)
 
     # --- cmv -------------------------------------------------------------------
-    comps["cmv"] = _cmv(ins, receita, avisos)
+    comps["cmv"] = _cmv(ins, gmv, avisos)
 
     # --- guardrails de dupla contagem e classificacao -------------------------
     tx, af = comps["taxas"], comps["afiliados"]
@@ -610,6 +623,51 @@ def _impostos_agregados(destino: dict, partes: list[dict]) -> None:
                       p.get("_imp_receita_casada") is not None for p in partes):
         rf = sum(p["_imp_receita_fiscal"] for p in partes)
         destino["cobertura"] = round(sum(p["_imp_receita_casada"] for p in partes) / rf, 6)
+
+
+#: T-0068: frete pago pelo comprador do TikTok, por dia x marca.
+TABELA_DESCONTOS_TIKTOK = "marts.fact_tiktok_order_discounts_daily"
+FONTE_FRETE_COMPRADOR = f"{TABELA_DESCONTOS_TIKTOK}.buyer_shipping_fee"
+MOTIVO_FRETE_COMPRADOR_AUSENTE = "receita TikTok inclui frete do comprador: buyer_shipping_fee ausente"
+
+
+def _receita_tiktok_sem_frete(ins: InsumosCelula, gmv: float | None, fonte_gmv: str,
+                              avisos: list[str]) -> tuple[float | None, str, str | None]:
+    """Receita TikTok = GMV do mart − frete pago pelo comprador (T-0068, D6 opcao a).
+
+    O GMV TikTok e' `SUM(total_amount)`, que contem o frete pago pelo
+    comprador; o frete da DRE e' o `shipping_cost_amount` do repasse, que ja'
+    vem LIQUIDO desse frete. Somar os dois conta o frete do comprador duas
+    vezes a favor da margem. Aqui ele sai da receita.
+
+    So' subtrai quando o dado existe: coluna presente e valor nao nulo em TODO
+    dia do mes com GMV no mart. Faltando, devolve o GMV como antes, com o
+    motivo `MOTIVO_FRETE_COMPRADOR_AUSENTE` — sem estimar a parte que falta.
+    Devolve `(receita, fonte, motivo)`.
+    """
+    def ausente(detalhe: str) -> tuple[float | None, str, str]:
+        avisos.append(f"Receita do TikTok inclui o frete pago pelo comprador ({detalhe}); ML e Shopee nao incluem.")
+        return gmv, fonte_gmv, f"{MOTIVO_FRETE_COMPRADOR_AUSENTE} ({detalhe})"
+
+    if gmv is None:
+        return gmv, fonte_gmv, None
+    if not ins.frete_comprador_coluna:
+        return ausente(f"coluna nao existe em {TABELA_DESCONTOS_TIKTOK}; migration 041 nao aplicada")
+    fr = ins.frete_comprador
+    if fr is None or not fr.get("dias_com_gmv"):
+        if gmv == 0:
+            return gmv, fonte_gmv, None
+        return ausente("nenhum dia com GMV encontrado na fato de descontos")
+    dias_gmv = int(fr["dias_com_gmv"])
+    faltam = dias_gmv - int(fr.get("dias_com_frete") or 0)
+    if faltam > 0:
+        return ausente(f"nulo ou sem linha em {faltam} de {dias_gmv} dias com GMV")
+    frete = _num(fr.get("frete"))
+    if frete is None or frete < 0:
+        return ausente("soma do mes nula ou negativa")
+    avisos.append(f"Receita do TikTok sem o frete pago pelo comprador (R$ {frete:.2f} no mes, {FONTE_FRETE_COMPRADOR}); "
+                  "o frete liquido do repasse segue em frete.")
+    return round(gmv - frete, 2), f"{fonte_gmv} − {FONTE_FRETE_COMPRADOR}", None
 
 
 def _taxa_tiktok(ins: InsumosCelula, avisos: list[str]) -> dict:
@@ -954,6 +1012,63 @@ def ler_neon(db: Session, inicio: date, fim: date, mkt_ids: list[int], marcas: l
     return mart, afiliado
 
 
+#: T-0068. `pg_attribute` (nao `information_schema`, que filtra por privilegio);
+#: `to_regclass` devolve NULL sem a tabela, sem envenenar a transacao.
+SQL_FRETE_COMPRADOR_EXISTE = """
+    SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('marts.fact_tiktok_order_discounts_daily')
+          AND attname = 'buyer_shipping_fee'
+          AND NOT attisdropped
+    )
+"""
+
+#: Frete do comprador SO' nos dias em que o mart tem GMV TikTok nao nulo e
+#: diferente de zero: e' a receita de que ele sera' subtraido. Mesmo relogio
+#: dos dois lados (`created_at::date` do pedido). `dias_com_frete` conta so'
+#: valor nao nulo; dia com GMV sem linha na fato conta como ausente.
+SQL_FRETE_COMPRADOR = """
+    WITH dias_com_gmv AS (
+        SELECT f.date AS ref_date, l.brand_key AS marca
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date BETWEEN :inicio AND :fim
+          AND f.marketplace_id = :mkt_id
+          AND l.brand_key = ANY(:marcas)
+        GROUP BY 1, 2
+        HAVING SUM(f.gmv) <> 0
+    )
+    SELECT date_trunc('month', d.ref_date)::date AS mes,
+           d.marca                                AS marca,
+           COUNT(*)                               AS dias_com_gmv,
+           COUNT(t.buyer_shipping_fee)            AS dias_com_frete,
+           SUM(t.buyer_shipping_fee)              AS frete
+    FROM dias_com_gmv d
+    LEFT JOIN marts.fact_tiktok_order_discounts_daily t
+           ON t.ref_date = d.ref_date AND t.brand = d.marca
+    GROUP BY 1, 2
+"""
+
+
+@dataclass
+class LeituraFreteComprador:
+    coluna_existe: bool
+    linhas: list[dict] = field(default_factory=list)
+
+
+def ler_frete_comprador(db: Session, inicio: date, fim: date, marcas: list[str]) -> LeituraFreteComprador:
+    """Frete pago pelo comprador TikTok por mes x marca (T-0068).
+
+    Coluna ausente (migration 041 nao aplicada) nao e' erro: `coluna_existe=False`
+    e a receita TikTok sai como antes, com motivo.
+    """
+    if db.execute(text(SQL_FRETE_COMPRADOR_EXISTE)).scalar() is not True:
+        return LeituraFreteComprador(coluna_existe=False)
+    rows = db.execute(text(SQL_FRETE_COMPRADOR), {"inicio": inicio, "fim": fim, "mkt_id": TIKTOK_ID,
+                                                  "marcas": marcas}).mappings().all()
+    return LeituraFreteComprador(coluna_existe=True, linhas=[dict(r) for r in rows])
+
+
 def marcas_ativas(db: Session) -> list[str]:
     return sorted(db.execute(text("SELECT brand_key FROM marts.dim_loja WHERE ativo")).scalars().all())
 
@@ -1168,14 +1283,18 @@ def montar_dre(
     agora: datetime,
     periodo_origem: str = "informado",
     premissas: dre_premissas.LeituraPremissas | None = None,
+    frete_comprador: LeituraFreteComprador | None = None,
 ) -> dict:
     """Monta a resposta inteira a partir de linhas ja lidas. Funcao PURA.
 
     `premissas` (opcional) acrescenta `cenario_premissas` — sempre estimado —
-    sem alterar nenhum campo realizado.
+    sem alterar nenhum campo realizado. `frete_comprador` (T-0068) ausente
+    equivale a coluna inexistente: receita TikTok com frete, com motivo.
     """
     meses = meses_do_periodo(inicio, fim)
     af_idx = {(_chave_mes(r["mes"]), r["marca"]): r for r in afiliado_rows}
+    fc = frete_comprador or LeituraFreteComprador(coluna_existe=False)
+    fc_idx = {(_chave_mes(r["mes"]), r["marca"]): r for r in fc.linhas}
     cmv_idx, rep_idx = indexar_insumos(insumos.linhas, agora)
     txs_idx = indexar_taxa_shopee(insumos.linhas, agora)
     imp_idx = indexar_impostos(insumos.linhas, agora)
@@ -1197,6 +1316,8 @@ def montar_dre(
             taxa_shopee=txs_idx.get((mes, canal, r["marca"])) if canal == "shopee" else None,
             impostos=imp_idx.get((mes, canal, r["marca"])),
             motivo_sem_insumo=motivo_sem,
+            frete_comprador=fc_idx.get((mes, r["marca"])) if canal == "tiktok" else None,
+            frete_comprador_coluna=fc.coluna_existe,
         )
         base.append(montar_celula_base(ins, hoje))
     base.sort(key=lambda c: (c["mes"], CANAIS.index(c["canal"]), c["marca"]))
@@ -1263,6 +1384,9 @@ def get_dre(db: Session, *, inicio: date, fim: date, canais: list[str],
     mart_rows, afiliado_rows = ler_neon(db, inicio, fim, mkt_ids, escopo_marcas)
     insumos = ler_insumos(db, inicio, fim, canais, escopo_marcas)
     premissas = ler_premissas(db, inicio, fim, escopo_marcas)
+    frete_comprador = (ler_frete_comprador(db, inicio, fim, escopo_marcas)
+                       if "tiktok" in canais else None)
     return montar_dre(inicio=inicio, fim=fim, canais=canais, marcas=escopo_marcas,
                       mart_rows=mart_rows, afiliado_rows=afiliado_rows, insumos=insumos,
-                      hoje=hoje, agora=agora, periodo_origem=periodo_origem, premissas=premissas)
+                      hoje=hoje, agora=agora, periodo_origem=periodo_origem, premissas=premissas,
+                      frete_comprador=frete_comprador)

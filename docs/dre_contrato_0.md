@@ -117,6 +117,30 @@ L12 (=) Margem após impostos                   [só existe com L11 disponível]
 | Responsável | Dados |
 | Decisão pendente | D3 (frete no TikTok, §10) |
 
+#### 4.1.1 Receita TikTok sem o frete pago pelo comprador (T-0068, 06/11/2026)
+
+**Decisão:** 06/11/2026, Mário, D6 opção (a), via B aprovada pelo supervisor. "D6" aqui é a medição do frete TikTok da
+entrega `dre-custos-vivos` (`D6_frete_tiktok_medicao.md`), **não** a D6 de impostos da §10. Para o TikTok, substitui a
+recomendação D3 da §10 ("manter o frete na receita"); ML e Shopee não mudam.
+
+**Por quê:** o GMV TikTok é `SUM(total_amount)` e `total_amount = sub_total + shipping_fee (+ handling_fee)`. O frete
+da DRE (§4.8) é o `shipping_cost_amount` do repasse, que já vem **líquido** do frete pago pelo comprador
+(`customer_paid_shipping_fee_amount` somado). Com o frete na receita, ele entrava duas vezes a favor da margem:
+**[FATO]** ~2,07% da receita TikTok em set/26 (1,32% a 2,44% por marca).
+
+| Campo | Regra |
+|---|---|
+| Fórmula | receita TikTok = `SUM(gmv)` do mart − `SUM(buyer_shipping_fee)`, no mesmo mês × marca, somando o frete **só nos dias em que o mart tem GMV TikTok ≠ 0** |
+| Fonte do frete | `marts.fact_tiktok_order_discounts_daily.buyer_shipping_fee` (migration 041), publicada por `pipelines/sync_tiktok_order_discounts_daily.py` |
+| Definição de `buyer_shipping_fee` | `SUM(shipping_fee)` dos pedidos de `raw.tiktok_shop_orders`, **mesma população comercial** (`COMMERCIAL_ORDER_STATUSES`) e **mesma deduplicação** (`DISTINCT ON (order_id) … updated_at DESC NULLS LAST, id DESC`) do `official_gmv` e do GMV do conector; grão `created_at::date` × marca, o mesmo relógio do mart. **Não** é `official_gmv − sub_total`, que inclui `handling_fee` e resíduo |
+| Nulo | pedido comercial com `shipping_fee` nulo deixa a chave (dia × marca) com `buyer_shipping_fee` **NULL** — ausência, nunca zero; o sync registra WARN (`ftodd_frete_comprador_nulo`) sem bloquear os descontos. Sem pedido comercial no dia = `0` medido |
+| Regra de ausência | a subtração só acontece com a coluna presente **e** valor não nulo em **todo** dia do mês com GMV. Faltando (coluna inexistente, dia nulo, dia sem linha), a receita fica igual à de antes (GMV com frete) e o componente receita leva o motivo `receita TikTok inclui frete do comprador: buyer_shipping_fee ausente (…)`, com o detalhe; o aviso de qualidade diz o mesmo. Nada é estimado para a parte que falta. Status e classificação da célula não mudam |
+| Sinal | magnitude ≥ 0 (CHECK da 041, que também recusa `NaN`); soma negativa é tratada como ausente |
+| CMV | a razão receita fiscal / GMV (§4.9) continua sobre o **GMV do mart**, sem o ajuste |
+| Efeito na margem | a margem de contribuição conhecida cai **exatamente** pelo frete subtraído; o frete líquido do repasse (§4.8) não muda |
+| Fora do escopo | GMV da Torre e demais endpoints seguem com `total_amount` (Gate DQ-TK1); o mart não muda |
+| Ativação | inerte até a 041 ser aplicada no Neon e a fato ser recarregada (backfill jun–out por `--mode window`); até lá a DRE devolve a receita de antes, com o motivo |
+
 ### 4.2 L2 — Cancelamentos em valor
 
 | Campo | Contrato |
