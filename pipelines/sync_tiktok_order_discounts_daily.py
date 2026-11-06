@@ -170,8 +170,9 @@ COVERAGE_NOTE = (
     "completude da ingestao: nao existe manifesto por data x marca."
 )
 
-#: Colunas do destino, explicitas. Nunca `SELECT *`, nunca `INSERT` posicional.
-TARGET_COLUMNS = (
+#: Colunas do destino ate' a migration 040, explicitas. Nunca `SELECT *`, nunca
+#: `INSERT` posicional.
+TARGET_COLUMNS_SEM_FRETE = (
     "ref_date",
     "brand",
     "commercial_orders",
@@ -186,6 +187,15 @@ TARGET_COLUMNS = (
     "raw_max_updated_at",
     "source_run_id",
 )
+
+#: T-0068: frete pago pelo comprador, coluna aditiva da migration 041. So' entra
+#: no INSERT quando o destino TEM a coluna (`destino_tem_frete_comprador`): o
+#: codigo pode chegar ao Airflow antes de a 041 ser aplicada no Neon, e ate' la'
+#: o lote precisa sair com a forma de hoje.
+BUYER_SHIPPING_FEE_COLUMN = "buyer_shipping_fee"
+
+#: Forma COMPLETA do destino, com a 041 aplicada.
+TARGET_COLUMNS = TARGET_COLUMNS_SEM_FRETE + (BUYER_SHIPPING_FEE_COLUMN,)
 
 _PADROES_SENSIVEIS = (
     re.compile(r"postgres(?:ql)?://[^\s]*", re.I),
@@ -382,6 +392,8 @@ WITH raw_dedup AS (
     SELECT DISTINCT ON (order_id)
         order_id, brand, order_status, created_at,
         total_amount, sub_total, seller_discount, platform_discount,
+        -- T-0068: frete pago pelo comprador (parcela de total_amount).
+        shipping_fee,
         -- Os dois relogios de procedencia. `updated_at` tambem e' o criterio de
         -- desempate do DISTINCT ON, herdado do conector (DQ-TK1).
         updated_at, updated_at_tiktok
@@ -404,6 +416,17 @@ SELECT
                                                                   AS seller_discount_signed,
     {_zero_se_populacao_vazia("SUM(o.platform_discount)", _COMERCIAL)}
                                                                   AS platform_subsidy_amount,
+    -- T-0068: frete pago pelo comprador, MESMA populacao comercial e MESMA
+    -- dedup de official_gmv. Pedido comercial com shipping_fee nulo deixa a
+    -- chave inteira NULL (ausencia, nunca zero) em vez de bloquear a carga:
+    -- a coluna nao e' obrigatoria para os descontos, e a DRE le NULL como
+    -- frete ausente. Populacao comercial vazia continua zero medido.
+    CASE
+        WHEN COUNT(*) FILTER (WHERE {_COMERCIAL}) = 0 THEN 0::numeric
+        WHEN COUNT(*) FILTER (WHERE {_COMERCIAL} AND o.shipping_fee IS NULL) > 0
+            THEN NULL::numeric
+        ELSE SUM(o.shipping_fee) FILTER (WHERE {_COMERCIAL})
+    END                                                           AS buyer_shipping_fee,
 
     COUNT(*) FILTER (WHERE {_CANCELADO})                          AS cancelled_orders,
     {_zero_se_populacao_vazia("-SUM(o.seller_discount)", _CANCELADO)}
@@ -433,7 +456,9 @@ SELECT
                                                                   AS commercial_null_money,
     COUNT(*) FILTER (WHERE {_CANCELADO} AND (
         o.seller_discount IS NULL OR o.platform_discount IS NULL))
-                                                                  AS cancelled_null_money
+                                                                  AS cancelled_null_money,
+    COUNT(*) FILTER (WHERE {_COMERCIAL} AND o.shipping_fee IS NULL)
+                                                                  AS commercial_null_shipping_fee
 FROM raw_dedup o
 GROUP BY 1, 2
 ORDER BY 1, 2
@@ -459,6 +484,9 @@ class SourceRow:
     unknown_orders: int
     commercial_null_money: int
     cancelled_null_money: int
+    #: T-0068. Default so' para fixtures antigas; a leitura real sempre traz.
+    buyer_shipping_fee: object = None
+    commercial_null_shipping_fee: int = 0
 
 
 @dataclass
@@ -597,8 +625,20 @@ def validate_contract(snapshot: SourceSnapshot) -> list[str]:
                 "platform_subsidy_amount negativo: a fonte mudou a convencao "
                 "de sinal do subsidio."
             )
+        if r.buyer_shipping_fee is not None and r.buyer_shipping_fee < 0:
+            raise DiscountSyncError(
+                "buyer_shipping_fee negativo: o frete pago pelo comprador e' "
+                "magnitude; a fonte mudou a convencao de sinal do shipping_fee."
+            )
 
     warnings: list[str] = []
+    chaves_sem_frete = sum(1 for r in snapshot.rows if r.commercial_null_shipping_fee)
+    if chaves_sem_frete:
+        warnings.append(
+            f"{chaves_sem_frete} chave(s) (data, marca) com pedido comercial sem "
+            "shipping_fee: buyer_shipping_fee sai NULL nelas (ausencia, nao "
+            "zero). Nao bloqueia os descontos."
+        )
     if snapshot.missing_keys:
         warnings.append(
             f"{len(snapshot.missing_keys)} chave(s) (data, marca) da grade "
@@ -624,50 +664,109 @@ def coverage_status(snapshot: SourceSnapshot) -> str:
 # Publicacao
 # ---------------------------------------------------------------------------
 
-_COLS = ", ".join(TARGET_COLUMNS)
-_BINDS = ", ".join(f":{c}" for c in TARGET_COLUMNS)
-
 SQL_STAGING_CREATE = text(f"""
     CREATE TEMP TABLE stg_ftodd (
         LIKE {TARGET_TABLE} INCLUDING DEFAULTS
     ) ON COMMIT DROP
 """)
 
-SQL_STAGING_INSERT = text(f"INSERT INTO stg_ftodd ({_COLS}) VALUES ({_BINDS})")
-
 SQL_DELETE_JANELA = text(f"""
     DELETE FROM {TARGET_TABLE}
     WHERE ref_date >= :date_from AND ref_date <= :date_to
 """)
 
-SQL_INSERT_DO_STAGING = text(f"""
-    INSERT INTO {TARGET_TABLE} ({_COLS})
-    SELECT {_COLS} FROM stg_ftodd
-""")
+@dataclass(frozen=True)
+class SqlPublicacao:
+    """Os tres SQLs que dependem do conjunto de colunas, gerados de UMA tupla.
 
-#: EXCEPT bidirecional staging x destino, restrito a janela. Zero linha dos dois
-#: lados e' a unica prova de igualdade -- contagem e soma nao detectam troca.
-SQL_EXCEPT_BIDIRECIONAL = text(f"""
+    So' existem dois conjuntos, montados no import a partir de constantes:
+    nenhum nome de coluna vem do dado (nada de `records[0].keys()`).
+    """
+
+    colunas: tuple[str, ...]
+    staging_insert: object
+    insert_do_staging: object
+    except_bidirecional: object
+
+
+def _sql_publicacao(colunas: tuple[str, ...]) -> SqlPublicacao:
+    cols = ", ".join(colunas)
+    binds = ", ".join(f":{c}" for c in colunas)
+    return SqlPublicacao(
+        colunas=colunas,
+        staging_insert=text(f"INSERT INTO stg_ftodd ({cols}) VALUES ({binds})"),
+        insert_do_staging=text(f"""
+    INSERT INTO {TARGET_TABLE} ({cols})
+    SELECT {cols} FROM stg_ftodd
+"""),
+        # EXCEPT bidirecional staging x destino, restrito a janela. Zero linha
+        # dos dois lados e' a unica prova de igualdade -- contagem e soma nao
+        # detectam troca. EXCEPT compara NULL como igual a NULL: frete ausente
+        # nas duas pontas nao vira diferenca.
+        except_bidirecional=text(f"""
     WITH destino AS (
-        SELECT {_COLS} FROM {TARGET_TABLE}
+        SELECT {cols} FROM {TARGET_TABLE}
         WHERE ref_date >= :date_from AND ref_date <= :date_to
     ),
-    so_no_staging AS (SELECT {_COLS} FROM stg_ftodd EXCEPT SELECT {_COLS} FROM destino),
-    so_no_destino AS (SELECT {_COLS} FROM destino EXCEPT SELECT {_COLS} FROM stg_ftodd)
+    so_no_staging AS (SELECT {cols} FROM stg_ftodd EXCEPT SELECT {cols} FROM destino),
+    so_no_destino AS (SELECT {cols} FROM destino EXCEPT SELECT {cols} FROM stg_ftodd)
     SELECT
         (SELECT COUNT(*) FROM so_no_staging) AS so_staging,
         (SELECT COUNT(*) FROM so_no_destino) AS so_destino
+"""),
+    )
+
+
+#: Destino com a 041 aplicada: forma completa.
+SQL_COM_FRETE = _sql_publicacao(TARGET_COLUMNS)
+#: Destino ainda sem a coluna (Neon em 040): exatamente o lote de antes.
+SQL_SEM_FRETE = _sql_publicacao(TARGET_COLUMNS_SEM_FRETE)
+
+#: Aliases da forma completa, para leitura e testes estruturais.
+SQL_STAGING_INSERT = SQL_COM_FRETE.staging_insert
+SQL_INSERT_DO_STAGING = SQL_COM_FRETE.insert_do_staging
+SQL_EXCEPT_BIDIRECIONAL = SQL_COM_FRETE.except_bidirecional
+
+#: `pg_attribute`, e nao `information_schema.columns`: a segunda so' lista
+#: colunas sobre as quais o papel tem privilegio, e um GRANT por coluna faria a
+#: coluna "sumir". `to_regclass` devolve NULL (nao erro) sem a tabela, entao a
+#: consulta nunca envenena a transacao da publicacao.
+SQL_DESTINO_TEM_FRETE = text("""
+    SELECT EXISTS (
+        SELECT 1 FROM pg_attribute
+        WHERE attrelid = to_regclass('marts.fact_tiktok_order_discounts_daily')
+          AND attname = 'buyer_shipping_fee'
+          AND NOT attisdropped
+    )
 """)
 
 
-def publish_in_transaction(conn, snapshot: SourceSnapshot, run_id: str) -> int:
+def destino_tem_frete_comprador(conn) -> bool:
+    """`True` so' quando o destino tem `buyer_shipping_fee` (migration 041).
+
+    Qualquer resposta que nao seja exatamente `True` conta como ausente: na
+    duvida, o lote sai com a forma de antes, que o destino sempre aceita.
+    """
+    return conn.execute(SQL_DESTINO_TEM_FRETE).scalar() is True
+
+
+def publish_in_transaction(conn, snapshot: SourceSnapshot, run_id: str,
+                           com_frete_comprador: bool | None = None) -> int:
     """Staging temporario -> DELETE da janela -> INSERT -> EXCEPT. Uma transacao.
 
     `DELETE` limitado a `ref_date BETWEEN date_from AND date_to`: nunca toca dia
     fora da janela recarregada. Recarga integral (nao UPSERT) porque um pedido
     que migrou para CANCELLED precisa SAIR de `commercial_*` -- um UPSERT
     deixaria o valor antigo na chave.
+
+    `com_frete_comprador` decide a FORMA do lote (T-0068); `None` = perguntar
+    ao destino, na mesma transacao. Sem a coluna, lote e SQLs sao exatamente os
+    de antes da 041; com ela, TODAS as linhas levam `buyer_shipping_fee`.
     """
+    if com_frete_comprador is None:
+        com_frete_comprador = destino_tem_frete_comprador(conn)
+    sql = SQL_COM_FRETE if com_frete_comprador else SQL_SEM_FRETE
+
     conn.execute(text(f"SET LOCAL statement_timeout = {TARGET_STATEMENT_TIMEOUT_MS}"))
     conn.execute(SQL_STAGING_CREATE)
 
@@ -691,6 +790,10 @@ def publish_in_transaction(conn, snapshot: SourceSnapshot, run_id: str) -> int:
         "raw_max_updated_at": r.raw_max_updated_at,
         "source_run_id": run_id,
     } for r in snapshot.rows]
+    if com_frete_comprador:
+        # Lote HOMOGENEO: a chave entra em todas as linhas ou em nenhuma.
+        for p, r in zip(parametros, snapshot.rows):
+            p[BUYER_SHIPPING_FEE_COLUMN] = r.buyer_shipping_fee
 
     # Guarda defensiva: `validate_contract` ja aborta com janela vazia, entao
     # esta lista nunca deveria chegar vazia. Um `executemany` com lista vazia
@@ -702,14 +805,14 @@ def publish_in_transaction(conn, snapshot: SourceSnapshot, run_id: str) -> int:
             "deveria ter abortado antes. DELETE sem INSERT esvaziaria a "
             "janela no destino."
         )
-    conn.execute(SQL_STAGING_INSERT, parametros)
+    conn.execute(sql.staging_insert, parametros)
 
     janela = {"date_from": snapshot.window.date_from,
               "date_to": snapshot.window.date_to}
     conn.execute(SQL_DELETE_JANELA, janela)
-    conn.execute(SQL_INSERT_DO_STAGING)
+    conn.execute(sql.insert_do_staging)
 
-    diff = conn.execute(SQL_EXCEPT_BIDIRECIONAL, janela).mappings().one()
+    diff = conn.execute(sql.except_bidirecional, janela).mappings().one()
     if diff["so_staging"] or diff["so_destino"]:
         raise DiscountSyncError(
             f"EXCEPT bidirecional falhou: {diff['so_staging']} linha(s) so' no "
@@ -884,6 +987,17 @@ def build_quality_checks(snapshot: SourceSnapshot, run_ids: dict[str, int],
         }),
     })
 
+    sem_frete = sum(1 for r in snapshot.rows if r.commercial_null_shipping_fee)
+    checks.append({
+        "nome": "ftodd_frete_comprador_nulo",
+        # WARN: a chave sai com buyer_shipping_fee NULL e a DRE mantem a
+        # receita com frete, com motivo. Nao invalida os descontos.
+        "status": "pass" if sem_frete == 0 else "warn",
+        "severidade": "medium",
+        "failed": sem_frete,
+        "detalhes": _detalhes({**janela, "keys_null_shipping_fee": sem_frete}),
+    })
+
     fora = sum(
         1 for r in snapshot.rows
         if (r.seller_discount_signed or 0) > 0
@@ -989,6 +1103,12 @@ def run_dry(mode: str, agora: datetime | None = None,
         "cancelled_orders": snapshot.cancelled,
         "unpaid_onhold_orders": snapshot.unpaid_onhold,
         "unknown_orders": snapshot.unknown,
+        # T-0068: conferencia do backfill contra a medicao D6, sem banco.
+        "buyer_shipping_fee": sum(
+            (r.buyer_shipping_fee for r in snapshot.rows
+             if r.buyer_shipping_fee is not None), 0),
+        "buyer_shipping_fee_null_keys": sum(
+            1 for r in snapshot.rows if r.buyer_shipping_fee is None),
         "coverage_status": coverage_status(snapshot),
         "missing_keys": len(snapshot.missing_keys),
         "brands_absent": snapshot.brands_absent,
@@ -1063,7 +1183,16 @@ def run_apply(mode: str, agora: datetime | None = None,
         warnings = validate_contract(snapshot)
         extracted = snapshot.total_dedup
 
-        loaded = publish_in_transaction(conn_pub, snapshot, run_id)
+        # Na MESMA transacao do lock: a forma do lote acompanha o destino.
+        com_frete = destino_tem_frete_comprador(conn_pub)
+        if not com_frete:
+            warnings.append(
+                "destino sem buyer_shipping_fee (migration 041 nao aplicada): "
+                "lote publicado sem o frete do comprador; a DRE mantem a "
+                "receita TikTok com frete, com motivo."
+            )
+        loaded = publish_in_transaction(conn_pub, snapshot, run_id,
+                                        com_frete_comprador=com_frete)
 
         # A partir daqui NINGUEM sabe se o servidor efetivou. Marcar antes do
         # commit e' o que impede tratar um commit que levantou como se nada
@@ -1129,6 +1258,7 @@ def run_apply(mode: str, agora: datetime | None = None,
         "date_to": window.date_to,
         "rows_extracted": extracted,
         "rows_loaded": loaded,
+        "buyer_shipping_fee_publicado": com_frete,
         "coverage_status": coverage_status(snapshot),
         "warnings": warnings,
     }
