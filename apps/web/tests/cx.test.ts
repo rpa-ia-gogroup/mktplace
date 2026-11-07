@@ -18,6 +18,7 @@ import {
   montarPedidosMotivo,
   montarStatusMarcas,
   reais,
+  resumoCxGerencial,
   problemaNoPayloadCx,
   tipoDoItem,
   urlCxShopee,
@@ -384,4 +385,28 @@ test("tela: fila do chat e coluna de tempo com ⓘ", () => {
   assert.ok(tela.includes("<ThAjuda ajuda={AJUDA_CX.tempoResposta}>Tempo resp.</ThAjuda>"));
   assert.ok(tela.includes('data-testid="cx-fila"'));
   assert.ok(tela.includes("<InfoDica texto={AJUDA_CX.fila}"));
+});
+
+// ---------------------------------------------------------------------------
+// Resumo da Gerencial (GERENCIAL-CX, 07/11/2026)
+// ---------------------------------------------------------------------------
+test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia vira traco", () => {
+  const r = resumoCxGerencial(comConversas(30), rotulo);
+  assert.deepEqual(r, {
+    contactRate: "20,0%", // 200 conversas / 1000 pedidos (rituaria sem chat fica fora)
+    aguardando: "1,5%", // 3 / 200
+    cancelamento: "1,8%", // 23 / 1300
+    reembolsado: reais(450.5),
+    reembolsoPct: "0,8%", // 8 aceitas / 1000 pedidos
+    semChat: ["RITUARIA"],
+  });
+
+  const p = comConversas(30);
+  p.chat.nao_lidas[0] = { ...p.chat.nao_lidas[0], conversas_truncado: true };
+  const piso = resumoCxGerencial(p, rotulo);
+  assert.equal(piso.contactRate, "≥ 20,0%");
+  assert.equal(piso.aguardando, "≤ 1,5%");
+
+  const vazio = resumoCxGerencial({ ...comConversas(30), chat: { ...chat(), nao_lidas_estado: "erro" }, devolucoes: undefined }, rotulo);
+  assert.deepEqual([vazio.contactRate, vazio.aguardando, vazio.reembolsado, vazio.reembolsoPct], ["—", "—", "—", null]);
 });

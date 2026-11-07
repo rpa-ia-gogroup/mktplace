@@ -467,6 +467,7 @@ export function montarStatusMarcas(
 // reembolsamos, reenviamos e cancelamos). Devolucoes e cancelamentos juntos.
 // ---------------------------------------------------------------------------
 export const MAX_ITENS_PARETO = 10;
+export const MOTIVO_REENVIO = "nenhuma API da Shopee marca o pedido reenviado";
 
 export interface ItemPareto {
   chave: string;
@@ -555,7 +556,7 @@ export function montarPareto(
   for (const b of [blocoDev, blocoCan]) {
     if (b?.excluidos && b.rotulo_excluidos) notas.push(`${inteiro(b.excluidos)} ${b.rotulo_excluidos}.`);
   }
-  notas.push("Reenvios: nenhuma API da Shopee marca o pedido reenviado; sem fonte ainda.");
+  notas.push(`Reenvios: ${MOTIVO_REENVIO}; sem fonte ainda.`);
 
   const erro = dev?.estado === "erro" || can.motivos?.estado === "erro";
   return {
@@ -580,6 +581,56 @@ export function montarPareto(
       reembolsado: devMarca.has(m) ? reais(devMarca.get(m)?.reembolsado) : "—",
     })),
     notas,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Resumo da Gerencial (GERENCIAL-CX, 07/11/2026): uma taxa por tile, somando
+// as lojas do filtro. Cada taxa so' usa a marca que tem os dois lados da
+// conta (Kokeshi sem chat fica fora do contact rate, nunca vira zero).
+// ---------------------------------------------------------------------------
+type Num = number | null | undefined;
+
+function razaoPct(pares: [Num, Num][]): number | null {
+  const ok = pares.filter((p): p is [number, number] => p[0] != null && p[1] != null && Number.isFinite(p[0]) && p[1] > 0);
+  if (!ok.length) return null;
+  return (ok.reduce((a, p) => a + p[0], 0) / ok.reduce((a, p) => a + p[1], 0)) * 100;
+}
+
+export interface ResumoCx {
+  contactRate: string;
+  aguardando: string;
+  cancelamento: string;
+  reembolsado: string;
+  /** Reembolsos aceitos ÷ pedidos; null quando nao da para tirar do payload. */
+  reembolsoPct: string | null;
+  /** Marcas com pedido e sem conversas lidas: fora do contact rate e do aguardando. */
+  semChat: string[];
+}
+
+export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: string) => string): ResumoCx {
+  const { chat, atendimento, devolucoes: dev } = dados;
+  const usa7 = dados.janela.dias === 7;
+  const fotos = new Map((chat.nao_lidas_estado === "dado" ? chat.nao_lidas ?? [] : []).map((n) => [n.marca, n]));
+  const pedidos = new Map(atendimento.marcas.map((m) => [m.marca, m.pedidos]));
+  const conv = (m: string) => {
+    const n = fotos.get(m);
+    return n ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
+  };
+  const comChat = [...fotos.keys()].filter((m) => conv(m) != null);
+  // "≥ 1.000" na coleta: a conversa e' um piso, entao o contact rate e' piso e o % aguardando e' teto.
+  const truncado = comChat.some((m) => fotos.get(m)?.conversas_truncado);
+  const cr = dados.janela.dias <= 30 ? razaoPct(comChat.map((m) => [conv(m), pedidos.get(m)])) : null;
+  const ag = razaoPct(comChat.map((m) => [fotos.get(m)?.aguardando_resposta, conv(m)]));
+  const devOk = dev?.estado === "dado";
+  const reemb = devOk ? razaoPct(dev.marcas.map((m) => [m.aceitas, pedidos.get(m.marca)])) : null;
+  return {
+    contactRate: cr == null ? "—" : `${truncado ? "≥ " : ""}${pct(cr)}`,
+    aguardando: ag == null ? "—" : `${truncado ? "≤ " : ""}${pct(ag)}`,
+    cancelamento: pct(razaoPct(atendimento.marcas.map((m) => [m.cancelamentos, m.pedidos]))),
+    reembolsado: devOk ? reais(dev.reembolsado) : "—",
+    reembolsoPct: reemb == null ? null : pct(reemb),
+    semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
   };
 }
 
