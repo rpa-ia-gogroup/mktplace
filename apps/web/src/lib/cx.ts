@@ -599,23 +599,25 @@ function razaoPct(pares: [Num, Num][]): number | null {
   return (ok.reduce((a, p) => a + p[0], 0) / ok.reduce((a, p) => a + p[1], 0)) * 100;
 }
 
-export type IndicadorCx = "contactRate" | "aguardando" | "cancelamento" | "reembolso";
-export const INDICADORES_CX: readonly IndicadorCx[] = ["contactRate", "aguardando", "cancelamento", "reembolso"];
+export type IndicadorCx = "contactRate" | "resposta" | "cancelamento" | "reembolso";
+export const INDICADORES_CX: readonly IndicadorCx[] = ["contactRate", "resposta", "cancelamento", "reembolso"];
 export const ROTULO_INDICADOR: Record<IndicadorCx, string> = {
   contactRate: "Contact rate",
-  aguardando: "Aguardando resposta",
+  resposta: "Taxa de resposta",
   cancelamento: "Cancelamento",
   reembolso: "Reembolso",
 };
+/** Na taxa de resposta, CAIR e' pior; nos outros tres, subir e' pior. */
+export const MENOR_E_PIOR: ReadonlySet<IndicadorCx> = new Set<IndicadorCx>(["resposta"]);
 
 /**
- * Regra de risco (v3, 07/11/2026). A base de cada indicador e' a MEDIANA das
- * marcas medidas, cada marca com o mesmo peso: a taxa da Shopee e' ponderada
- * por pedidos e a Kokeshi (64% dos pedidos, taxas baixas) a puxava para
- * baixo, deixando quase todas as outras vermelhas. Com menos de 3 marcas
- * medidas nao ha comparacao justa: o indicador nao marca ninguem.
- * Acima = passa de 1,2x a mediana (subir e' pior nos quatro). Cor pela
- * contagem (0 verde, 1 ambar, 2+ vermelho); ordem pela soma do excesso.
+ * Regra de risco (v3/v4, 07/11/2026). A base de cada indicador e' a MEDIANA
+ * das marcas medidas, cada marca com o mesmo peso: a taxa da Shopee e'
+ * ponderada por pedidos e a Kokeshi (64% dos pedidos, taxas baixas) a puxava
+ * para baixo. Com menos de 3 marcas medidas nao ha comparacao justa: o
+ * indicador nao marca ninguem. Fora da curva = passa de 1,2x a mediana (ou,
+ * na taxa de resposta, fica abaixo de mediana / 1,2). Cor pela contagem
+ * (0 verde, 1 ambar, 2+ vermelho); ordem pela soma do excesso relativo.
  */
 export const FOLGA_RISCO = 1.2;
 /** Quantas marcas a linha "Atenção" mostra. */
@@ -623,13 +625,15 @@ export const MAX_ALERTAS = 2;
 /** Nome curto do indicador na linha "Atenção". */
 export const ROTULO_CURTO: Record<IndicadorCx, string> = {
   contactRate: "contact rate",
-  aguardando: "aguardando",
+  resposta: "resposta",
   cancelamento: "cancelamento",
   reembolso: "reembolso",
 };
 export const MIN_MARCAS_RISCO = 3;
+/** shortcut: resposta 0% teria excesso infinito; o teto so' ordena, trocar se 0% virar caso real. */
+const TETO_EXCESSO = 10;
 export const AJUDA_RISCO =
-  "Uma marca fica fora da curva num indicador quando passa de 1,2× a mediana das marcas (cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta). Nos quatro, subir é pior. Aparecem até 2 marcas, as mais acima, cada uma com o pior indicador. Âmbar: um indicador acima. Vermelho: dois ou mais.";
+  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais.";
 
 /** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
 export function medianaRisco(vals: number[]): number | null {
@@ -639,16 +643,47 @@ export function medianaRisco(vals: number[]): number | null {
   return o.length % 2 ? o[meio] : (o[meio - 1] + o[meio]) / 2;
 }
 
+/** Quanto a marca esta' alem da mediana, no sentido do pior (0 = na mediana). */
+export function excessoRelativo(i: IndicadorCx, valor: number, mediana: number): number {
+  if (MENOR_E_PIOR.has(i)) return valor > 0 ? mediana / valor - 1 : TETO_EXCESSO;
+  return valor / mediana - 1;
+}
+
+export function foraDaCurva(i: IndicadorCx, valor: number | null, mediana: number | null): boolean {
+  if (valor == null || mediana == null || mediana <= 0) return false;
+  return MENOR_E_PIOR.has(i) ? valor < mediana / FOLGA_RISCO : valor > mediana * FOLGA_RISCO;
+}
+
+/**
+ * Media da taxa de resposta: ponderada pelas conversas quando TODA marca com
+ * taxa tem conversas medidas (> 0); senao, media simples. Nada medido = null.
+ */
+export function mediaResposta(
+  itens: { valor: number | null; peso: number | null }[],
+): { valor: number | null; tipo: "ponderada" | "simples" | null } {
+  const ok = itens.filter((x): x is { valor: number; peso: number | null } => x.valor != null && Number.isFinite(x.valor));
+  if (!ok.length) return { valor: null, tipo: null };
+  if (ok.every((x) => x.peso != null && x.peso > 0)) {
+    const peso = ok.reduce((a, x) => a + x.peso!, 0);
+    return { valor: ok.reduce((a, x) => a + x.valor * x.peso!, 0) / peso, tipo: "ponderada" };
+  }
+  return { valor: ok.reduce((a, x) => a + x.valor, 0) / ok.length, tipo: "simples" };
+}
+
 export interface MarcaCx {
   chave: string;
   marca: string;
   /** Taxa (%) por indicador; null = sem medida para a marca. */
   valores: Record<IndicadorCx, number | null>;
+  /** Numerador / denominador (ou a meta, na resposta), em texto curto. */
+  detalhes: Record<IndicadorCx, string | null>;
+  /** Por que nao ha valor (so' quando o valor e' null). */
+  motivos: Record<IndicadorCx, string | null>;
   /** Cancelamento (%) na janela anterior; null = sem historico. */
   cancelamentoAnterior: number | null;
   reembolsado: number | null;
   acima: IndicadorCx[];
-  /** Soma de (valor / mediana - 1) nos indicadores acima: a ordem do risco. */
+  /** Soma do excesso relativo nos indicadores fora da curva: a ordem do risco. */
   excesso: number;
   tom: "bom" | "atencao" | "critico";
 }
@@ -671,12 +706,16 @@ export interface DeltaCx {
 
 export interface ResumoCx {
   contactRate: string;
-  aguardando: string;
+  /** Taxa de resposta do chat (Saude da Conta), media das lojas. */
+  resposta: string;
+  respostaMedia: "ponderada" | "simples" | null;
+  /** "Meta >= 60" da propria Shopee, quando vier igual para todas. */
+  respostaMeta: string | null;
   cancelamento: string;
   reembolsado: string;
   /** Reembolsos aceitos ÷ pedidos; null quando nao da para tirar do payload. */
   reembolsoPct: string | null;
-  /** Marcas com pedido e sem conversas lidas: fora do contact rate e do aguardando. */
+  /** Marcas com pedido e sem conversas lidas: fora do contact rate. */
   semChat: string[];
   /** Cancelamento contra a janela anterior, nas marcas com historico; null = sem historico. */
   cancelamentoDelta: DeltaCx | null;
@@ -684,14 +723,16 @@ export interface ResumoCx {
   semHistoricoCancelamento: string[];
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
   cancelamentoBase: { anterior: string; atual: string } | null;
-  /** Taxa da Shopee no filtro (os tiles). */
+  /** Valor da Shopee no filtro (os tiles). */
   totais: Record<IndicadorCx, number | null>;
   /** Mediana das marcas por indicador, base do risco; null = menos de 3 marcas medidas. */
   medianas: Record<IndicadorCx, number | null>;
-  /** Linha "Atencao": ate' MAX_ALERTAS marcas acima, maior excesso primeiro, cada uma com o PIOR indicador. */
+  /** Linha "Atencao": ate' MAX_ALERTAS marcas fora, maior excesso primeiro, cada uma com o PIOR indicador. */
   alertas: AlertaCx[];
-  /** Da pior para a melhor; so' marcas com alguma medida. */
+  /** Do maior excesso para o menor; so' marcas com alguma medida. */
   marcas: MarcaCx[];
+  /** Todas as marcas do recorte, inclusive sem medida (o drill-down mostra "—" e o motivo). */
+  todas: MarcaCx[];
 }
 
 /** Uma casa decimal, como na tela: menos que 0,05 p.p. e' estavel. */
@@ -706,10 +747,17 @@ export function pctCx(v: number | null | undefined): string {
   return pct(v);
 }
 
+function porIndicador<T>(f: (i: IndicadorCx) => T): Record<IndicadorCx, T> {
+  return Object.fromEntries(INDICADORES_CX.map((i) => [i, f(i)])) as Record<IndicadorCx, T>;
+}
+
 export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: string) => string): ResumoCx {
   const { chat, atendimento, devolucoes: dev } = dados;
   const usa7 = dados.janela.dias === 7;
-  const fotos = new Map((chat.nao_lidas_estado === "dado" ? chat.nao_lidas ?? [] : []).map((n) => [n.marca, n]));
+  const comFotos = chat.nao_lidas_estado === "dado";
+  const fotos = new Map((comFotos ? chat.nao_lidas ?? [] : []).map((n) => [n.marca, n]));
+  const contas = new Map(chat.contas.map((c) => [c.marca, c]));
+  const semFoto = new Map(chat.sem_foto.map((s) => [s.marca, s.motivo]));
   const linhas = new Map(atendimento.marcas.map((m) => [m.marca, m]));
   const pedidos = (m: string) => linhas.get(m)?.pedidos;
   const devOk = dev?.estado === "dado";
@@ -718,67 +766,98 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     const n = fotos.get(m);
     return n ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
   };
+  const metricaResposta = (m: string) => contas.get(m)?.metricas.find((x) => x.codigo === COD_RESPONDIDO);
+  const resposta = (m: string) => {
+    const v = metricaResposta(m)?.valor;
+    return v != null && Number.isFinite(v) ? v : null;
+  };
   const comChat = [...fotos.keys()].filter((m) => conv(m) != null);
-  // "≥ 1.000" na coleta: a conversa e' um piso, entao o contact rate e' piso e o % aguardando e' teto.
+  // "≥ 1.000" na coleta: a conversa e' um piso, entao o contact rate e' piso.
   const truncado = comChat.some((m) => fotos.get(m)?.conversas_truncado);
   const comCr = dados.janela.dias <= 30;
 
-  /** Os pares (numerador, denominador) de cada indicador numa marca. */
+  /** (numerador, denominador) das tres taxas sobre pedidos/conversas. */
   const par = (i: IndicadorCx, m: string): [Num, Num] => {
     if (i === "contactRate") return comCr ? [conv(m), pedidos(m)] : [null, null];
-    if (i === "aguardando") return [conv(m) == null ? null : fotos.get(m)?.aguardando_resposta, conv(m)];
     if (i === "cancelamento") return [linhas.get(m)?.cancelamentos, pedidos(m)];
-    return [devs.get(m)?.aceitas, pedidos(m)];
+    if (i === "reembolso") return [devs.get(m)?.aceitas, pedidos(m)];
+    return [null, null];
   };
-  const chaves = [...new Set([...linhas.keys(), ...fotos.keys(), ...devs.keys()])];
-  const totais = Object.fromEntries(
-    INDICADORES_CX.map((i) => [i, razaoPct(chaves.map((m) => par(i, m)))]),
-  ) as Record<IndicadorCx, number | null>;
+  const valor = (i: IndicadorCx, m: string) => (i === "resposta" ? resposta(m) : razaoPct([par(i, m)]));
+  const chaves = [...new Set([...linhas.keys(), ...fotos.keys(), ...devs.keys(), ...contas.keys(), ...semFoto.keys()])];
+
+  const media = mediaResposta(chaves.map((m) => ({ valor: resposta(m), peso: conv(m) })));
+  const totais = porIndicador((i) => (i === "resposta" ? media.valor : razaoPct(chaves.map((m) => par(i, m)))));
+
+  const detalhe = (i: IndicadorCx, m: string): string | null => {
+    if (valor(i, m) == null) return null;
+    if (i === "contactRate") return `${inteiro(conv(m))} conversas / ${inteiro(pedidos(m))} pedidos`;
+    if (i === "cancelamento") return `${inteiro(linhas.get(m)?.cancelamentos)} cancelamentos / ${inteiro(pedidos(m))} pedidos`;
+    if (i === "reembolso") {
+      const r = devs.get(m)?.reembolsado;
+      return `${inteiro(devs.get(m)?.aceitas)} devoluções aceitas / ${inteiro(pedidos(m))} pedidos${r != null ? ` · ${reais(r)}` : ""}`;
+    }
+    const partes = [metricaResposta(m)?.rotulo_meta ?? null, conv(m) != null ? `${inteiro(conv(m))} conversas` : null];
+    return partes.filter(Boolean).join(" · ") || null;
+  };
+  const motivo = (i: IndicadorCx, m: string): string | null => {
+    if (valor(i, m) != null) return null;
+    const semPedidos = !pedidos(m) ? "Sem pedidos no período." : null;
+    if (i === "contactRate") {
+      if (!comCr) return "Contact rate só em 7 e 30 dias.";
+      if (conv(m) == null) return comFotos ? "Sem leitura de conversas na coleta do chat." : "Conversas indisponíveis nesta carga.";
+      return semPedidos;
+    }
+    if (i === "resposta") {
+      if (semFoto.has(m)) return semFoto.get(m)!;
+      return contas.has(m) ? "A Saúde da Conta não trouxe a taxa de resposta." : "Sem Saúde da Conta da Shopee.";
+    }
+    if (i === "cancelamento") return linhas.has(m) ? semPedidos : "Pedidos indisponíveis nesta carga.";
+    if (!devOk) return dev?.motivo_indisponivel ?? "Devoluções indisponíveis nesta carga.";
+    if (devs.get(m)?.aceitas == null) return "Sem carga de devoluções desta loja.";
+    return semPedidos;
+  };
 
   // Delta: as mesmas marcas nas duas janelas (quem nao tem historico fica fora).
   const comHist = atendimento.marcas.filter((m) => m.pedidos_anterior != null);
   const cancAtual = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
   const cancAnt = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
 
-  const valoresDe = (m: string) =>
-    Object.fromEntries(INDICADORES_CX.map((i) => [i, razaoPct([par(i, m)])])) as Record<IndicadorCx, number | null>;
-  const porMarca = chaves.map((m) => ({ m, valores: valoresDe(m) }));
-  const medianas = Object.fromEntries(
-    INDICADORES_CX.map((i) => [
-      i,
-      medianaRisco(porMarca.map((x) => x.valores[i]).filter((v): v is number => v != null)),
-    ]),
-  ) as Record<IndicadorCx, number | null>;
+  const porMarca = chaves.map((m) => ({ m, valores: porIndicador((i) => valor(i, m)) }));
+  const medianas = porIndicador((i) =>
+    medianaRisco(porMarca.map((x) => x.valores[i]).filter((v): v is number => v != null)),
+  );
 
-  const marcas: MarcaCx[] = porMarca
+  const todas: MarcaCx[] = porMarca
     .map(({ m, valores }) => {
-      const acima = INDICADORES_CX.filter((i) => {
-        const v = valores[i];
-        const med = medianas[i];
-        return v != null && med != null && med > 0 && v > med * FOLGA_RISCO;
-      });
+      const acima = INDICADORES_CX.filter((i) => foraDaCurva(i, valores[i], medianas[i]));
       const l = linhas.get(m);
       return {
         chave: m,
         marca: rotuloMarca(m),
         valores,
+        detalhes: porIndicador((i) => detalhe(i, m)),
+        motivos: porIndicador((i) => motivo(i, m)),
         cancelamentoAnterior: razaoPct([[l?.cancelamentos_anterior, l?.pedidos_anterior]]),
         reembolsado: devs.get(m)?.reembolsado ?? null,
         acima,
-        excesso: acima.reduce((a, i) => a + valores[i]! / medianas[i]! - 1, 0),
+        excesso: acima.reduce((a, i) => a + excessoRelativo(i, valores[i]!, medianas[i]!), 0),
         tom: (acima.length >= 2 ? "critico" : acima.length === 1 ? "atencao" : "bom") as MarcaCx["tom"],
       };
     })
-    .filter((x) => INDICADORES_CX.some((i) => x.valores[i] != null))
     .sort((a, b) => b.excesso - a.excesso || a.marca.localeCompare(b.marca));
+  const marcas = todas.filter((x) => INDICADORES_CX.some((i) => x.valores[i] != null));
   const delta = deltaPp(cancAtual, cancAnt);
   const semHistoricoCancelamento = atendimento.marcas
     .filter((m) => m.pedidos && m.pedidos_anterior == null)
     .map((m) => rotuloMarca(m.marca));
+  const metas = [...new Set(chaves.map((m) => metricaResposta(m)?.rotulo_meta).filter((x): x is string => !!x))];
 
   return {
     contactRate: totais.contactRate == null ? "—" : `${truncado ? "≥ " : ""}${pct(totais.contactRate)}`,
-    aguardando: totais.aguardando == null ? "—" : `${truncado ? "≤ " : ""}${pct(totais.aguardando)}`,
+    resposta: pct(totais.resposta),
+    respostaMedia: media.tipo,
+    respostaMeta: metas.length === 1 ? metas[0] : null,
     cancelamento: pct(totais.cancelamento),
     reembolsado: devOk ? reais(dev.reembolsado) : "—",
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
@@ -789,14 +868,14 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     totais,
     medianas,
     marcas,
+    todas,
     alertas: marcas
       .filter((m) => m.acima.length)
       .slice(0, MAX_ALERTAS)
       .map((m) => {
-        // pior = maior excesso relativo (valor / mediana), nao a ordem fixa dos indicadores
-        const pior = m.acima.reduce((a, b) =>
-          m.valores[b]! / medianas[b]! > m.valores[a]! / medianas[a]! ? b : a,
-        );
+        // pior = maior excesso relativo, nao a ordem fixa dos indicadores
+        const exc = (i: IndicadorCx) => excessoRelativo(i, m.valores[i]!, medianas[i]!);
+        const pior = m.acima.reduce((a, b) => (exc(b) > exc(a) ? b : a));
         return {
           chave: m.chave,
           marca: m.marca,
@@ -807,6 +886,48 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
         };
       }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Drill-down de um tile (dialogo da Gerencial): marcas da pior para a melhor
+// ---------------------------------------------------------------------------
+export interface LinhaDrilldownCx {
+  chave: string;
+  marca: string;
+  valor: string;
+  detalhe: string | null;
+  /** So' no cancelamento, quando ha historico. */
+  antes: string | null;
+  /** Por que nao ha valor ("—" nunca vira zero). */
+  motivo: string | null;
+  fora: boolean;
+  /** 0-100, relativo ao maior valor medido (barra). */
+  largura: number | null;
+}
+
+export function linhasDrilldownCx(r: ResumoCx, i: IndicadorCx): LinhaDrilldownCx[] {
+  const menor = MENOR_E_PIOR.has(i);
+  const medidas = r.todas.filter((m) => m.valores[i] != null);
+  const maior = Math.max(0, ...medidas.map((m) => m.valores[i]!));
+  const ordenadas = [
+    ...medidas.sort(
+      (a, b) => (menor ? a.valores[i]! - b.valores[i]! : b.valores[i]! - a.valores[i]!) || a.marca.localeCompare(b.marca),
+    ),
+    ...r.todas.filter((m) => m.valores[i] == null).sort((a, b) => a.marca.localeCompare(b.marca)),
+  ];
+  return ordenadas.map((m) => {
+    const v = m.valores[i];
+    return {
+      chave: m.chave,
+      marca: m.marca,
+      valor: pct(v),
+      detalhe: m.detalhes[i],
+      antes: i === "cancelamento" && v != null && m.cancelamentoAnterior != null ? pct(m.cancelamentoAnterior) : null,
+      motivo: v == null ? m.motivos[i] ?? "Sem medida no recorte." : null,
+      fora: foraDaCurva(i, v, r.medianas[i]),
+      largura: v == null ? null : maior > 0 ? Math.max(2, Math.round((v / maior) * 100)) : 0,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
