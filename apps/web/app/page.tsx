@@ -75,6 +75,7 @@ import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
+import CxResumo from "@/components/gerencial/CxResumo";
 import MovementsPanels from "@/components/gerencial/MovementsPanels";
 import AttentionQueue from "@/components/gerencial/AttentionQueue";
 import MetaHero from "@/components/gerencial/MetaHero";
@@ -697,6 +698,9 @@ function GerencialInner() {
         dateTo={filters.dateTo}
         compare={filters.compare}
       />
+
+      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
+      {isMarketplaceSelected(filters.channels, "shopee") && <CxResumo brands={filters.brands} />}
 
       {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
           Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
