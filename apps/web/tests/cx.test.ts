@@ -24,6 +24,7 @@ import {
   mediaResposta,
   linhasDrilldownCx,
   foraDaCurva,
+  metaCurta,
   problemaNoPayloadCx,
   tipoDoItem,
   urlCxShopee,
@@ -401,7 +402,7 @@ test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia 
     [r.contactRate, r.resposta, r.respostaMedia, r.respostaMeta, r.cancelamento, r.reembolsado, r.reembolsoPct, r.semChat],
     // 200/1000 (rituaria sem chat fica fora) · (82,65 + 45,31) / 2: rituaria sem conversas = media simples
     // · 23/1300 · 8 aceitas/1000
-    ["20,0%", "64,0%", "simples", "Meta >= 60", "1,8%", reais(450.5), "0,8%", ["RITUARIA"]],
+    ["20,0%", "64,0%", "simples", "meta ≥ 60%", "1,8%", reais(450.5), "0,8%", ["RITUARIA"]],
   );
   assert.equal(r.cancelamentoDelta, null, "API antiga, sem *_anterior: sem delta");
 
@@ -417,6 +418,12 @@ test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia 
     [vazio.contactRate, vazio.resposta, vazio.respostaMedia, vazio.reembolsado, vazio.reembolsoPct],
     ["—", "—", null, "—", null],
   );
+});
+
+test("meta da Shopee em texto curto; formato desconhecido fica como veio", () => {
+  assert.equal(metaCurta("Meta >= 60"), "meta ≥ 60%");
+  assert.equal(metaCurta("Meta <= 1.5"), "meta ≤ 1.5%");
+  assert.equal(metaCurta("Excelente"), "Excelente");
 });
 
 test("taxa de resposta: media ponderada pelas conversas so' quando toda marca tem conversas; senao simples", () => {
@@ -561,7 +568,7 @@ test("drill-down: marcas da pior para a melhor no sentido do indicador; sem medi
     ["KOKESHI", "—", false],
   ]);
   assert.equal(resp[4].motivo, "Aguardando a primeira captura do bot.", "sem medida: traco e motivo, nunca zero");
-  assert.equal(resp[0].detalhe, "Meta >= 60 · 100 conversas");
+  assert.equal(resp[0].detalhe, "meta ≥ 60% · 100 conversas");
 
   const canc = linhasDrilldownCx(r, "cancelamento");
   assert.deepEqual(canc.map((l) => l.marca), ["BARBOURS", "APICE", "LESCENT", "RITUARIA", "KOKESHI"]); // maior primeiro

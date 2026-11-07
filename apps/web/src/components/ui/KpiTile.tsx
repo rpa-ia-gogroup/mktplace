@@ -21,7 +21,7 @@ export default function KpiTile({
   destaque = false,
   ajuda,
 }: {
-  rotulo: string;
+  rotulo: ReactNode;
   valor: ReactNode;
   /** Meta, delta ou denominador. Uma linha. */
   comparacao?: ReactNode;

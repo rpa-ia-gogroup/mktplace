@@ -1,22 +1,23 @@
 "use client";
 
 /**
- * CX · Shopee na Gerencial (GERENCIAL-CX, 07/11/2026; v3 enxuta no mesmo dia).
+ * CX · Shopee na Gerencial (GERENCIAL-CX, 07/11/2026; v4 com drill-down).
  *
  * Mesma rota da /cx (`/api/v1/cx/shopee`), buscada pelo navegador. Sempre 30
  * dias fechados, escrito no cabecalho, sem casar com o periodo da Gerencial.
  * Marca segue o filtro global; a pagina so' monta isto com a Shopee no filtro.
  *
- * Card = rotulo, valor e no maximo UMA linha. Definicao, unidade, falta de
- * historico e base da seta vao para o ⓘ. Comparacao so' onde ha historico de
- * verdade (cancelamento); sem historico, nao ha delta — nunca inventado.
+ * Card = rotulo, valor e no maximo UMA linha (reservada em todos, para a
+ * mesma altura). Clicar abre o dialogo unico da pagina com o valor de cada
+ * marca (`CxDrilldownContent`), como os outros cards da Gerencial; as
+ * ressalvas do card vao junto. Comparacao so' onde ha historico de verdade
+ * (cancelamento); sem historico, nao ha delta — nunca inventado.
  *
  * Embaixo, uma linha: "Atencao" com ate' 2 marcas fora da curva (regra da
- * mediana no ⓘ). Hover/foco num tile (o padrao da rosca do MetaHero) troca a
- * linha pelo valor de cada marca naquele indicador.
+ * mediana no ⓘ).
  */
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { MessageCircle } from "lucide-react";
 
 import InfoDica from "@/components/ui/InfoDica";
@@ -32,12 +33,9 @@ import {
   ROTULO_INDICADOR,
   carregarCxShopee,
   hrefCx,
-  pctCx,
-  reais,
   resumoCxGerencial,
   type DeltaCx,
   type IndicadorCx,
-  type MarcaCx,
   type ResultadoCx,
   type ResumoCx,
 } from "@/lib/cx";
@@ -54,19 +52,55 @@ const COR_DELTA: Record<DeltaCx["sentido"], string> = {
   melhorou: "font-semibold text-ok-ink",
   estavel: "text-ink-muted",
 };
-const FALADO_DELTA: Record<DeltaCx["sentido"], string> = {
-  piorou: "subiu (piorou)",
-  melhorou: "caiu (melhorou)",
-  estavel: "estável",
-};
 const PONTO_TOM = { atencao: "bg-warn", critico: "bg-crit" } as const;
 const TINTA_TOM = { atencao: "text-warn-ink", critico: "text-crit-ink" } as const;
 
-export default function CxResumo({ brands }: { brands: string[] }) {
+/** As ressalvas de cada card: o ⓘ do card e o rodape do detalhe dizem o mesmo. */
+export function notasDoTile(r: ResumoCx, i: IndicadorCx): string[] {
+  if (i === "contactRate") {
+    return [
+      `${AJUDA_CX.contactRate} Conversas ÷ pedidos.`,
+      r.semChat.length ? `Sem dado de chat, fora da conta: ${r.semChat.join(", ")}.` : "",
+      SEM_HISTORICO_CHAT,
+    ].filter(Boolean);
+  }
+  if (i === "resposta") {
+    return [
+      "Taxa de resposta do chat da Saúde da Conta da Shopee (a mesma coluna \"% respondido\" da aba CX), na janela que a própria Shopee usa, da fotografia diária mais recente de cada loja.",
+      r.respostaMedia === "ponderada"
+        ? "O card é a média das lojas ponderada pelas conversas de 30 dias da coleta."
+        : r.respostaMedia === "simples"
+          ? "O card é a média simples das lojas: nem toda loja tem as conversas medidas para ponderar."
+          : "",
+      r.respostaMeta ? `Na Saúde da Conta, ${r.respostaMeta} (meta da própria Shopee).` : "",
+      "Aqui cair é pior. Sem comparação ainda com o período anterior.",
+    ].filter(Boolean);
+  }
+  if (i === "cancelamento") {
+    return [
+      `${AJUDA_CX.cancelamentos} Cancelamentos ÷ pedidos.`,
+      "A seta compara com os 30 dias anteriores, em pontos percentuais; subir é pior.",
+      r.cancelamentoBase
+        ? `A seta compara sem ${r.semHistoricoCancelamento.join(", ")} (sem histórico): ${r.cancelamentoBase.anterior} → ${r.cancelamentoBase.atual}.`
+        : "",
+    ].filter(Boolean);
+  }
+  return [
+    "Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos.",
+    SEM_HISTORICO_DEVOLUCAO,
+  ];
+}
+
+export default function CxResumo({
+  brands,
+  onOpen,
+}: {
+  brands: string[];
+  /** Abre o dialogo unico da Gerencial com o detalhe por marca do card. */
+  onOpen: (indicador: IndicadorCx, resumo: ResumoCx, geradoEm: string) => void;
+}) {
   const marca = brands.length ? brands.join(",") : null;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
-  // Tile sob o mouse (ou com foco): a linha de baixo mostra esse indicador por marca.
-  const [ativo, setAtivo] = useState<IndicadorCx | null>(null);
 
   const carregar = useCallback(() => {
     let vivo = true;
@@ -112,8 +146,8 @@ export default function CxResumo({ brands }: { brands: string[] }) {
         />
       ) : (
         <div className="flex flex-col gap-3">
-          <Tiles r={r} ativo={ativo} setAtivo={setAtivo} />
-          <LinhaDeBaixo r={r} ativo={ativo} />
+          <Tiles r={r} abrir={(i) => onOpen(i, r, resultado.dados.gerado_em)} />
+          <LinhaAtencao r={r} />
         </div>
       )}
     </Panel>
@@ -121,113 +155,70 @@ export default function CxResumo({ brands }: { brands: string[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tiles: rotulo, valor e no maximo uma linha
+// Tiles: rotulo, valor e uma linha (reservada) — clicaveis, como a KpiBand
 // ---------------------------------------------------------------------------
 /** 2 colunas no celular, 3 + 2 de 640 a 1024 px (grade de 6), 5 em linha acima. */
 const SPAN_TOPO = "sm:col-span-2 lg:col-span-1";
 const SPAN_BASE = "sm:col-span-3 lg:col-span-1";
-/** Conteudo no topo do card: o valor fica na mesma altura com ou sem linha embaixo. */
+/** Conteudo no topo do card: o valor fica na mesma altura com ou sem linha. */
 const CARD = "min-w-0 rounded-xl [&>div]:h-full [&>div]:justify-start";
+/** Sem linha de comparacao: reserva a altura dela (todos os cards iguais). */
+const SEM_LINHA = <span aria-hidden="true">&nbsp;</span>;
 
-function Tiles({
-  r,
-  ativo,
-  setAtivo,
-}: {
-  r: ResumoCx;
-  ativo: IndicadorCx | null;
-  setAtivo: (i: IndicadorCx | null) => void;
-}) {
-  const comMarcas = r.marcas.length > 1;
-  const hover = (i: IndicadorCx, span: string) => ({
-    className: `${CARD} transition-shadow duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span} ${
-      ativo === i ? "ring-1 ring-accent/50" : ""
-    }`,
-    ...(comMarcas && {
-      tabIndex: 0,
-      "aria-label": `${ROTULO_INDICADOR[i]}: ver por marca`,
-      onMouseEnter: () => setAtivo(i),
-      onMouseLeave: () => setAtivo(null),
-      onFocus: () => setAtivo(i),
-      onBlur: () => setAtivo(null),
-    }),
-  });
+function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
   const delta = r.cancelamentoDelta;
-  // A seta so' compara as marcas com historico: a base vai para o ⓘ e o hover da linha.
-  const baseDaSeta = r.cancelamentoBase
-    ? `A seta compara sem ${r.semHistoricoCancelamento.join(", ")} (sem histórico): ${r.cancelamentoBase.anterior} → ${r.cancelamentoBase.atual}.`
-    : undefined;
+
+  const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode) => (
+    <button
+      type="button"
+      onClick={() => abrir(i)}
+      aria-haspopup="dialog"
+      aria-label={`${ROTULO_INDICADOR[i]}: ${valor}. Ver por marca`}
+      className={`${CARD} card-hover w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span}`}
+    >
+      <KpiTile
+        rotulo={
+          i === "resposta" ? (
+            // "Taxa de resposta" quebra em 390 px e desalinha a fileira; o nome inteiro esta' no aria-label
+            <>
+              <span className="sm:hidden">Resposta</span>
+              <span className="hidden sm:inline">Taxa de resposta</span>
+            </>
+          ) : (
+            ROTULO_INDICADOR[i]
+          )
+        }
+        valor={valor}
+        comparacao={linha ?? SEM_LINHA}
+        // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
+        ajuda={<InfoDica emControle texto={notasDoTile(r, i).join(" ")} />}
+      />
+    </button>
+  );
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo">
-      <div {...hover("contactRate", SPAN_TOPO)}>
-        <KpiTile
-          rotulo="Contact rate"
-          valor={r.contactRate}
-          ajuda={
-            <InfoDica
-              titulo="Contact rate"
-              texto={`${AJUDA_CX.contactRate} ${SEM_HISTORICO_CHAT}`}
-              nota={r.semChat.length ? `Sem dado de chat, fora da conta: ${r.semChat.join(", ")}.` : undefined}
-            />
-          }
-        />
-      </div>
-      <div {...hover("aguardando", SPAN_TOPO)}>
-        <KpiTile
-          rotulo="Aguardando"
-          valor={r.aguardando}
-          ajuda={
-            <InfoDica
-              titulo="Aguardando resposta"
-              texto={`${AJUDA_CX.aguardando} Taxa sobre as conversas do período. ${SEM_HISTORICO_CHAT}`}
-              nota="Inclui conversas antigas paradas, não só as do período."
-            />
-          }
-        />
-      </div>
-      <div {...hover("cancelamento", SPAN_TOPO)}>
-        <KpiTile
-          rotulo="Cancelamento"
-          valor={r.cancelamento}
-          comparacao={
-            delta ? (
-              <span className={COR_DELTA[delta.sentido]} title={baseDaSeta}>
-                <span aria-hidden="true">{delta.texto}</span>
-                <span className="sr-only">
-                  {FALADO_DELTA[delta.sentido]} {delta.texto.replace(/^[▲▼=]\s*/, "")}
-                </span>
-                <span className="font-normal text-ink-faint"> vs 30 dias antes</span>
-              </span>
-            ) : undefined
-          }
-          ajuda={
-            <InfoDica
-              titulo="Cancelamento"
-              texto={`${AJUDA_CX.cancelamentos} Taxa sobre os pedidos. A seta compara com os 30 dias anteriores, em pontos percentuais; subir é pior.`}
-              nota={baseDaSeta}
-            />
-          }
-        />
-      </div>
-      <div {...hover("reembolso", SPAN_BASE)}>
-        <KpiTile
-          rotulo="Reembolso"
-          valor={r.reembolsado}
-          comparacao={r.reembolsoPct ? `${r.reembolsoPct} dos pedidos` : undefined}
-          ajuda={
-            <InfoDica
-              titulo="Reembolso"
-              texto={`Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos. ${SEM_HISTORICO_DEVOLUCAO}`}
-            />
-          }
-        />
-      </div>
+      {card("contactRate", SPAN_TOPO, r.contactRate, null)}
+      {card("resposta", SPAN_TOPO, r.resposta, null)}
+      {card(
+        "cancelamento",
+        SPAN_TOPO,
+        r.cancelamento,
+        delta ? (
+          <span className={`whitespace-nowrap ${COR_DELTA[delta.sentido]}`}>
+            {delta.texto}
+            {/* no celular a linha so' cabe a seta: "vs 30 dias antes" fica no detalhe */}
+            <span className="hidden font-normal text-ink-faint sm:inline"> vs 30 dias antes</span>
+          </span>
+        ) : null,
+      )}
+      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null)}
       <div className={`col-span-2 ${CARD} ${SPAN_BASE}`}>
         <KpiTile
           rotulo="Reenvio"
           tom="ausente"
           valor="Sem fonte"
+          comparacao={SEM_LINHA}
           ajuda={
             <InfoDica
               titulo="Reenvio"
@@ -241,41 +232,16 @@ function Tiles({
 }
 
 // ---------------------------------------------------------------------------
-// Uma linha: "Atencao" (padrao) ou o indicador do tile ativo, por marca
+// Uma linha: "Atencao" com ate' 2 marcas fora da curva
 // ---------------------------------------------------------------------------
-function valorDaMarca(m: MarcaCx, i: IndicadorCx): string {
-  const v = pctCx(m.valores[i]);
-  if (i === "cancelamento" && m.cancelamentoAnterior != null) return `${v} (antes ${pctCx(m.cancelamentoAnterior)})`;
-  if (i === "reembolso" && m.reembolsado != null) return `${reais(m.reembolsado)} · ${v}`;
-  return v;
-}
-
-const LINHA = "flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted";
-
-function LinhaDeBaixo({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
+function LinhaAtencao({ r }: { r: ResumoCx }) {
   // Com menos de 3 marcas nao ha mediana justa: nem alerta, nem "nenhuma fora da curva".
   if (r.marcas.length < MIN_MARCAS_RISCO) return null;
-
-  if (ativo) {
-    const med = r.medianas[ativo];
-    return (
-      <p className={LINHA} aria-live="polite" data-testid="cx-marcas">
-        <span className="font-semibold text-ink">
-          {ROTULO_INDICADOR[ativo]}
-          {med != null && <span className="font-normal text-ink-faint"> (mediana {pctCx(med)})</span>}:
-        </span>
-        {r.marcas.map((m, idx) => (
-          <span key={m.chave} className={m.acima.includes(ativo) ? "text-crit-ink" : undefined}>
-            {idx > 0 && <span aria-hidden="true" className="mr-1.5 text-ink-faint">·</span>}
-            <span className="font-semibold">{m.marca}</span> <span className="tabular-nums">{valorDaMarca(m, ativo)}</span>
-          </span>
-        ))}
-      </p>
-    );
-  }
-
   return (
-    <p className={LINHA} aria-live="polite" data-testid="cx-marcas">
+    <p
+      className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted"
+      data-testid="cx-marcas"
+    >
       {r.alertas.length ? (
         <>
           <span className="font-semibold text-ink">Atenção:</span>
@@ -285,8 +251,7 @@ function LinhaDeBaixo({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) 
               <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_TOM[a.tom]}`} />
               <span className={`font-semibold ${TINTA_TOM[a.tom]}`}>{a.marca}</span>
               <span className="tabular-nums">
-                {ROTULO_CURTO[a.indicador]} {a.valor}{" "}
-                <span className="text-ink-faint">(mediana {a.mediana})</span>
+                {ROTULO_CURTO[a.indicador]} {a.valor} <span className="text-ink-faint">(mediana {a.mediana})</span>
               </span>
             </span>
           ))}

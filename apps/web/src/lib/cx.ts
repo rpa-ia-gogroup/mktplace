@@ -747,6 +747,14 @@ export function pctCx(v: number | null | undefined): string {
   return pct(v);
 }
 
+/** "Meta >= 60" (Shopee) -> "meta ≥ 60%"; outro formato fica como veio. */
+export function metaCurta(rotulo: string): string {
+  const m = /^meta\s*(>=|<=|>|<)\s*([\d.,]+)\s*%?$/i.exec(rotulo.trim());
+  if (!m) return rotulo;
+  const sinal = { ">=": "≥", "<=": "≤", ">": ">", "<": "<" }[m[1]] ?? m[1];
+  return `meta ${sinal} ${m[2]}%`;
+}
+
 function porIndicador<T>(f: (i: IndicadorCx) => T): Record<IndicadorCx, T> {
   return Object.fromEntries(INDICADORES_CX.map((i) => [i, f(i)])) as Record<IndicadorCx, T>;
 }
@@ -797,7 +805,8 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
       const r = devs.get(m)?.reembolsado;
       return `${inteiro(devs.get(m)?.aceitas)} devoluções aceitas / ${inteiro(pedidos(m))} pedidos${r != null ? ` · ${reais(r)}` : ""}`;
     }
-    const partes = [metricaResposta(m)?.rotulo_meta ?? null, conv(m) != null ? `${inteiro(conv(m))} conversas` : null];
+    const meta = metricaResposta(m)?.rotulo_meta;
+    const partes = [meta ? metaCurta(meta) : null, conv(m) != null ? `${inteiro(conv(m))} conversas` : null];
     return partes.filter(Boolean).join(" · ") || null;
   };
   const motivo = (i: IndicadorCx, m: string): string | null => {
@@ -857,7 +866,7 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     contactRate: totais.contactRate == null ? "—" : `${truncado ? "≥ " : ""}${pct(totais.contactRate)}`,
     resposta: pct(totais.resposta),
     respostaMedia: media.tipo,
-    respostaMeta: metas.length === 1 ? metas[0] : null,
+    respostaMeta: metas.length === 1 ? metaCurta(metas[0]) : null,
     cancelamento: pct(totais.cancelamento),
     reembolsado: devOk ? reais(dev.reembolsado) : "—",
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
