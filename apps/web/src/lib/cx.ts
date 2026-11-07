@@ -93,6 +93,8 @@ export interface CxShopeeResponse {
   atendimento: CanalAtendimento;
   /** Ausente na API antiga: a pagina mostra "sem fonte". */
   devolucoes?: DevolucoesShopee;
+  /** Base de `*_anterior` (os `dias` antes de `janela`). Ausente na API antiga. */
+  janela_anterior?: AtendimentoResponse["janela"] | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -597,6 +599,43 @@ function razaoPct(pares: [Num, Num][]): number | null {
   return (ok.reduce((a, p) => a + p[0], 0) / ok.reduce((a, p) => a + p[1], 0)) * 100;
 }
 
+export type IndicadorCx = "contactRate" | "aguardando" | "cancelamento" | "reembolso";
+export const INDICADORES_CX: readonly IndicadorCx[] = ["contactRate", "aguardando", "cancelamento", "reembolso"];
+export const ROTULO_INDICADOR: Record<IndicadorCx, string> = {
+  contactRate: "Contact rate",
+  aguardando: "Aguardando resposta",
+  cancelamento: "Cancelamento",
+  reembolso: "Reembolso",
+};
+
+/**
+ * Regra de risco (uma frase, a mesma do ⓘ): nos quatro indicadores SUBIR E'
+ * PIOR; a marca fica "acima" num deles quando passa a taxa da Shopee no
+ * filtro em 20% ou mais. Nenhum = verde, um = ambar, dois ou mais = vermelho.
+ */
+export const FOLGA_RISCO = 1.2;
+export const AJUDA_RISCO =
+  "Uma marca fica acima num indicador quando a taxa dela passa a da Shopee no filtro em 20% ou mais. Nos quatro, subir é pior. Verde: nenhum acima. Âmbar: um. Vermelho: dois ou mais.";
+
+export interface MarcaCx {
+  chave: string;
+  marca: string;
+  /** Taxa (%) por indicador; null = sem medida para a marca. */
+  valores: Record<IndicadorCx, number | null>;
+  /** Cancelamento (%) na janela anterior; null = sem historico. */
+  cancelamentoAnterior: number | null;
+  reembolsado: number | null;
+  acima: IndicadorCx[];
+  tom: "bom" | "atencao" | "critico";
+}
+
+export interface DeltaCx {
+  /** "▲ 0,4 p.p." / "▼ 1,2 p.p." / "= estável" */
+  texto: string;
+  /** Subir e' pior: "piorou" quando a taxa sobe. */
+  sentido: "piorou" | "melhorou" | "estavel";
+}
+
 export interface ResumoCx {
   contactRate: string;
   aguardando: string;
@@ -606,13 +645,36 @@ export interface ResumoCx {
   reembolsoPct: string | null;
   /** Marcas com pedido e sem conversas lidas: fora do contact rate e do aguardando. */
   semChat: string[];
+  /** Cancelamento contra a janela anterior, nas marcas com historico; null = sem historico. */
+  cancelamentoDelta: DeltaCx | null;
+  /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
+  semHistoricoCancelamento: string[];
+  /** Taxa da Shopee no filtro, base da regra de risco. */
+  totais: Record<IndicadorCx, number | null>;
+  /** Da pior para a melhor; so' marcas com alguma medida. */
+  marcas: MarcaCx[];
+}
+
+/** Uma casa decimal, como na tela: menos que 0,05 p.p. e' estavel. */
+export function deltaPp(atual: number | null, anterior: number | null): DeltaCx | null {
+  if (atual == null || anterior == null) return null;
+  const d = atual - anterior;
+  if (Math.abs(d) < 0.05) return { texto: "= estável", sentido: "estavel" };
+  return { texto: `${d > 0 ? "▲" : "▼"} ${FMT_PCT.format(Math.abs(d))} p.p.`, sentido: d > 0 ? "piorou" : "melhorou" };
+}
+
+export function pctCx(v: number | null | undefined): string {
+  return pct(v);
 }
 
 export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: string) => string): ResumoCx {
   const { chat, atendimento, devolucoes: dev } = dados;
   const usa7 = dados.janela.dias === 7;
   const fotos = new Map((chat.nao_lidas_estado === "dado" ? chat.nao_lidas ?? [] : []).map((n) => [n.marca, n]));
-  const pedidos = new Map(atendimento.marcas.map((m) => [m.marca, m.pedidos]));
+  const linhas = new Map(atendimento.marcas.map((m) => [m.marca, m]));
+  const pedidos = (m: string) => linhas.get(m)?.pedidos;
+  const devOk = dev?.estado === "dado";
+  const devs = new Map((devOk ? dev.marcas : []).map((m) => [m.marca, m]));
   const conv = (m: string) => {
     const n = fotos.get(m);
     return n ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
@@ -620,17 +682,63 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
   const comChat = [...fotos.keys()].filter((m) => conv(m) != null);
   // "≥ 1.000" na coleta: a conversa e' um piso, entao o contact rate e' piso e o % aguardando e' teto.
   const truncado = comChat.some((m) => fotos.get(m)?.conversas_truncado);
-  const cr = dados.janela.dias <= 30 ? razaoPct(comChat.map((m) => [conv(m), pedidos.get(m)])) : null;
-  const ag = razaoPct(comChat.map((m) => [fotos.get(m)?.aguardando_resposta, conv(m)]));
-  const devOk = dev?.estado === "dado";
-  const reemb = devOk ? razaoPct(dev.marcas.map((m) => [m.aceitas, pedidos.get(m.marca)])) : null;
+  const comCr = dados.janela.dias <= 30;
+
+  /** Os pares (numerador, denominador) de cada indicador numa marca. */
+  const par = (i: IndicadorCx, m: string): [Num, Num] => {
+    if (i === "contactRate") return comCr ? [conv(m), pedidos(m)] : [null, null];
+    if (i === "aguardando") return [conv(m) == null ? null : fotos.get(m)?.aguardando_resposta, conv(m)];
+    if (i === "cancelamento") return [linhas.get(m)?.cancelamentos, pedidos(m)];
+    return [devs.get(m)?.aceitas, pedidos(m)];
+  };
+  const chaves = [...new Set([...linhas.keys(), ...fotos.keys(), ...devs.keys()])];
+  const totais = Object.fromEntries(
+    INDICADORES_CX.map((i) => [i, razaoPct(chaves.map((m) => par(i, m)))]),
+  ) as Record<IndicadorCx, number | null>;
+
+  // Delta: as mesmas marcas nas duas janelas (quem nao tem historico fica fora).
+  const comHist = atendimento.marcas.filter((m) => m.pedidos_anterior != null);
+  const cancAtual = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
+  const cancAnt = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
+
+  const marcas: MarcaCx[] = chaves
+    .map((m) => {
+      const valores = Object.fromEntries(INDICADORES_CX.map((i) => [i, razaoPct([par(i, m)])])) as Record<
+        IndicadorCx,
+        number | null
+      >;
+      const acima = INDICADORES_CX.filter((i) => {
+        const v = valores[i];
+        const t = totais[i];
+        return v != null && t != null && t > 0 && v >= t * FOLGA_RISCO;
+      });
+      const l = linhas.get(m);
+      return {
+        chave: m,
+        marca: rotuloMarca(m),
+        valores,
+        cancelamentoAnterior: razaoPct([[l?.cancelamentos_anterior, l?.pedidos_anterior]]),
+        reembolsado: devs.get(m)?.reembolsado ?? null,
+        acima,
+        tom: (acima.length >= 2 ? "critico" : acima.length === 1 ? "atencao" : "bom") as MarcaCx["tom"],
+      };
+    })
+    .filter((x) => INDICADORES_CX.some((i) => x.valores[i] != null))
+    .sort((a, b) => b.acima.length - a.acima.length || a.marca.localeCompare(b.marca));
+
   return {
-    contactRate: cr == null ? "—" : `${truncado ? "≥ " : ""}${pct(cr)}`,
-    aguardando: ag == null ? "—" : `${truncado ? "≤ " : ""}${pct(ag)}`,
-    cancelamento: pct(razaoPct(atendimento.marcas.map((m) => [m.cancelamentos, m.pedidos]))),
+    contactRate: totais.contactRate == null ? "—" : `${truncado ? "≥ " : ""}${pct(totais.contactRate)}`,
+    aguardando: totais.aguardando == null ? "—" : `${truncado ? "≤ " : ""}${pct(totais.aguardando)}`,
+    cancelamento: pct(totais.cancelamento),
     reembolsado: devOk ? reais(dev.reembolsado) : "—",
-    reembolsoPct: reemb == null ? null : pct(reemb),
+    reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
     semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
+    cancelamentoDelta: deltaPp(cancAtual, cancAnt),
+    semHistoricoCancelamento: atendimento.marcas
+      .filter((m) => m.pedidos && m.pedidos_anterior == null)
+      .map((m) => rotuloMarca(m.marca)),
+    totais,
+    marcas,
   };
 }
 
