@@ -75,7 +75,9 @@ import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
-import CxResumo from "@/components/gerencial/CxResumo";
+import CxResumo, { notasDoTile } from "@/components/gerencial/CxResumo";
+import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
+import { ROTULO_INDICADOR, hrefCx, type IndicadorCx, type ResumoCx } from "@/lib/cx";
 import MovementsPanels from "@/components/gerencial/MovementsPanels";
 import AttentionQueue from "@/components/gerencial/AttentionQueue";
 import MetaHero from "@/components/gerencial/MetaHero";
@@ -132,7 +134,8 @@ type DialogView =
   | { kind: "movement"; movement: Movement }
   | { kind: "concentration"; entry: ConcentrationEntry }
   | { kind: "commercial"; item: CommercialAttentionItem }
-  | { kind: "dataWarning"; item: DataConfidenceItem };
+  | { kind: "dataWarning"; item: DataConfidenceItem }
+  | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string };
 
 function GerencialInner() {
   // GERENCIAL-METAS-1: abre no mes corrente, porque e' nele que a meta ainda
@@ -549,6 +552,8 @@ function GerencialInner() {
         return dialog.item.title;
       case "dataWarning":
         return "Aviso de confiança no dado";
+      case "cx":
+        return `${ROTULO_INDICADOR[dialog.indicador]} por marca · Shopee`;
       case "pulse": {
         if (dialog.view.key) {
           const g =
@@ -679,7 +684,12 @@ function GerencialInner() {
       </div>
 
       {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
-      {isMarketplaceSelected(filters.channels, "shopee") && <CxResumo brands={filters.brands} />}
+      {isMarketplaceSelected(filters.channels, "shopee") && (
+        <CxResumo
+          brands={filters.brands}
+          onOpen={(indicador, resumo, geradoEm) => setDialog({ kind: "cx", indicador, resumo, geradoEm })}
+        />
+      )}
 
       {/* ---- Dobra 3: marca x canal ---- */}
       <BrandChannelMatrix
@@ -921,6 +931,17 @@ function GerencialInner() {
             periodLabel={periodLabel}
             refreshedAt={sources.executiveSummary.refreshedAt}
             href={buildHref(dialog.item.href)}
+          />
+        )}
+
+        {dialog?.kind === "cx" && (
+          <CxDrilldownContent
+            indicador={dialog.indicador}
+            resumo={dialog.resumo}
+            notas={notasDoTile(dialog.resumo, dialog.indicador)}
+            geradoEm={dialog.geradoEm}
+            // a /cx so' le' uma marca na URL; com varias, abre em "Todas"
+            cxHref={hrefCx({ marca: filters.brands.length === 1 ? filters.brands[0] : null, dias: 30 })}
           />
         )}
 

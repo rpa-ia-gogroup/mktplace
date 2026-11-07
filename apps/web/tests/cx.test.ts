@@ -21,6 +21,10 @@ import {
   resumoCxGerencial,
   deltaPp,
   medianaRisco,
+  mediaResposta,
+  linhasDrilldownCx,
+  foraDaCurva,
+  metaCurta,
   problemaNoPayloadCx,
   tipoDoItem,
   urlCxShopee,
@@ -395,20 +399,39 @@ test("tela: fila do chat e coluna de tempo com ⓘ", () => {
 test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia vira traco", () => {
   const r = resumoCxGerencial(comConversas(30), rotulo);
   assert.deepEqual(
-    [r.contactRate, r.aguardando, r.cancelamento, r.reembolsado, r.reembolsoPct, r.semChat],
-    // 200/1000 (rituaria sem chat fica fora) · 3/200 · 23/1300 · 8 aceitas/1000
-    ["20,0%", "1,5%", "1,8%", reais(450.5), "0,8%", ["RITUARIA"]],
+    [r.contactRate, r.resposta, r.respostaMedia, r.respostaMeta, r.cancelamento, r.reembolsado, r.reembolsoPct, r.semChat],
+    // 200/1000 (rituaria sem chat fica fora) · (82,65 + 45,31) / 2: rituaria sem conversas = media simples
+    // · 23/1300 · 8 aceitas/1000
+    ["20,0%", "64,0%", "simples", "meta ≥ 60%", "1,8%", reais(450.5), "0,8%", ["RITUARIA"]],
   );
   assert.equal(r.cancelamentoDelta, null, "API antiga, sem *_anterior: sem delta");
 
   const p = comConversas(30);
   p.chat.nao_lidas[0] = { ...p.chat.nao_lidas[0], conversas_truncado: true };
-  const piso = resumoCxGerencial(p, rotulo);
-  assert.equal(piso.contactRate, "≥ 20,0%");
-  assert.equal(piso.aguardando, "≤ 1,5%");
+  assert.equal(resumoCxGerencial(p, rotulo).contactRate, "≥ 20,0%");
 
-  const vazio = resumoCxGerencial({ ...comConversas(30), chat: { ...chat(), nao_lidas_estado: "erro" }, devolucoes: undefined }, rotulo);
-  assert.deepEqual([vazio.contactRate, vazio.aguardando, vazio.reembolsado, vazio.reembolsoPct], ["—", "—", "—", null]);
+  const vazio = resumoCxGerencial(
+    { ...comConversas(30), chat: { ...chat(), contas: [], nao_lidas_estado: "erro" }, devolucoes: undefined },
+    rotulo,
+  );
+  assert.deepEqual(
+    [vazio.contactRate, vazio.resposta, vazio.respostaMedia, vazio.reembolsado, vazio.reembolsoPct],
+    ["—", "—", null, "—", null],
+  );
+});
+
+test("meta da Shopee em texto curto; formato desconhecido fica como veio", () => {
+  assert.equal(metaCurta("Meta >= 60"), "meta ≥ 60%");
+  assert.equal(metaCurta("Meta <= 1.5"), "meta ≤ 1.5%");
+  assert.equal(metaCurta("Excelente"), "Excelente");
+});
+
+test("taxa de resposta: media ponderada pelas conversas so' quando toda marca tem conversas; senao simples", () => {
+  assert.deepEqual(mediaResposta([{ valor: 90, peso: 300 }, { valor: 60, peso: 100 }]), { valor: 82.5, tipo: "ponderada" });
+  assert.deepEqual(mediaResposta([{ valor: 90, peso: 300 }, { valor: 60, peso: null }]), { valor: 75, tipo: "simples" });
+  assert.deepEqual(mediaResposta([{ valor: 90, peso: 300 }, { valor: 60, peso: 0 }]), { valor: 75, tipo: "simples" });
+  assert.deepEqual(mediaResposta([{ valor: null, peso: 300 }, { valor: 60, peso: 100 }]), { valor: 60, tipo: "ponderada" });
+  assert.deepEqual(mediaResposta([{ valor: null, peso: 300 }]), { valor: null, tipo: null }, "nada medido: nunca zero");
 });
 
 test("resumo da Gerencial: delta do cancelamento so' nas marcas com historico; subir e' piorar", () => {
@@ -425,15 +448,20 @@ test("resumo da Gerencial: delta do cancelamento so' nas marcas com historico; s
   assert.deepEqual(deltaPp(2.01, 2), { texto: "= estável", sentido: "estavel" });
 });
 
-type LinhaTeste = { marca: string; pedidos: number; canc: number; aceitas: number; conv?: number; ag?: number };
+type LinhaTeste = { marca: string; pedidos: number; canc: number; aceitas: number; conv?: number; resp?: number };
 function comMarcas(ls: LinhaTeste[]) {
   const p = comConversas(30);
+  const conta = p.chat.contas[0];
   return {
     ...p,
     chat: {
       ...p.chat,
+      sem_foto: [],
+      contas: ls
+        .filter((l) => l.resp != null)
+        .map((l) => ({ ...conta, marca: l.marca, metricas: [metrica("shopee_11", "Taxa de resposta do chat", l.resp!, "ok", "Meta >= 60")] })),
       nao_lidas: ls.filter((l) => l.conv != null).map((l) => ({
-        marca: l.marca, valor: null, capturado_em: null, conversas_30d: l.conv, aguardando_resposta: l.ag ?? null,
+        marca: l.marca, valor: null, capturado_em: null, conversas_30d: l.conv, aguardando_resposta: null,
       })),
     },
     atendimento: {
@@ -452,7 +480,7 @@ function comMarcas(ls: LinhaTeste[]) {
 
 test("risco: base e' a mediana das marcas; com menos de 3 marcas medidas, ninguem fica acima", () => {
   const r = resumoCxGerencial(comConversas(30), rotulo); // 2 marcas
-  assert.deepEqual(r.medianas, { contactRate: null, aguardando: null, cancelamento: null, reembolso: null });
+  assert.deepEqual(r.medianas, { contactRate: null, resposta: null, cancelamento: null, reembolso: null });
   assert.deepEqual(r.marcas.map((m) => [m.chave, m.acima, m.tom]), [["apice", [], "bom"], ["rituaria", [], "bom"]]);
   assert.equal(medianaRisco([1, 9, 3, 7]), 5);
   assert.equal(medianaRisco([4, 1]), null);
@@ -477,32 +505,80 @@ test("risco: marca dominante de taxa baixa nao deixa as outras vermelhas", () =>
   assert.deepEqual(r.alertas, [], "sem alerta: a tela diz 'Nenhuma marca fora da curva'");
 });
 
-test("risco: muito acima em um indicador vem antes de pouco acima em dois (cor ainda pela contagem)", () => {
+test("risco: na taxa de resposta menor e' pior; muito fora em um indicador vem antes de pouco fora em dois", () => {
   const r = resumoCxGerencial(
     comMarcas([
-      { marca: "apice", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, ag: 4 },
-      { marca: "barbours", pedidos: 1000, canc: 65, aceitas: 25, conv: 100, ag: 4 }, // 6,5/5 e 2,5/2: +0,30 +0,25
-      { marca: "lescent", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, ag: 5 },
-      { marca: "rituaria", pedidos: 1000, canc: 45, aceitas: 18, conv: 100, ag: 24 }, // aguardando 24/4: +5,0
+      { marca: "apice", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 90 },
+      { marca: "barbours", pedidos: 1000, canc: 65, aceitas: 25, conv: 100, resp: 85 }, // 6,5/5 e 2,5/2: +0,30 +0,25
+      { marca: "lescent", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 88 },
+      { marca: "rituaria", pedidos: 1000, canc: 45, aceitas: 18, conv: 100, resp: 20 }, // 86,5/20: +3,3
     ]),
     rotulo,
   );
-  assert.equal(r.medianas.aguardando, 4.5);
+  assert.equal(r.medianas.resposta, 86.5);
+  assert.equal(r.respostaMedia, "ponderada");
+  assert.equal(r.resposta, "70,8%"); // (90 + 85 + 88 + 20) / 4, pesos iguais
   assert.deepEqual(
     r.marcas.map((m) => [m.chave, m.acima, m.tom]),
     [
-      ["rituaria", ["aguardando"], "atencao"],
+      ["rituaria", ["resposta"], "atencao"],
       ["barbours", ["cancelamento", "reembolso"], "critico"],
       ["apice", [], "bom"],
       ["lescent", [], "bom"],
     ],
   );
-  assert.ok(Math.abs(r.marcas[0].excesso - (24 / 4.5 - 1)) < 1e-9);
+  assert.ok(Math.abs(r.marcas[0].excesso - (86.5 / 20 - 1)) < 1e-9);
   // linha "Atencao": ate' 2 marcas, cada uma com o PIOR indicador (barbours: cancelamento 6,5/5 = 1,30 > reembolso 2,5/2 = 1,25)
   assert.deepEqual(r.alertas, [
-    { chave: "rituaria", marca: "RITUARIA", tom: "atencao", indicador: "aguardando", valor: "24,0%", mediana: "4,5%" },
+    { chave: "rituaria", marca: "RITUARIA", tom: "atencao", indicador: "resposta", valor: "20,0%", mediana: "86,5%" },
     { chave: "barbours", marca: "BARBOURS", tom: "critico", indicador: "cancelamento", valor: "6,5%", mediana: "5,0%" },
   ]);
+  // resposta ALTA nunca e' alerta: 99% contra mediana 86,5% fica dentro
+  assert.equal(foraDaCurva("resposta", 99, 86.5), false);
+  assert.equal(foraDaCurva("resposta", 72, 86.5), true); // 86,5 / 1,2 = 72,08
+  assert.equal(foraDaCurva("cancelamento", 6, 5), false); // 5 x 1,2 = 6: precisa PASSAR
+});
+
+test("drill-down: marcas da pior para a melhor no sentido do indicador; sem medida no fim, com motivo", () => {
+  const p = comMarcas([
+    { marca: "apice", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 90 },
+    { marca: "barbours", pedidos: 1000, canc: 65, aceitas: 25, conv: 100, resp: 85 },
+    { marca: "lescent", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 88 },
+    { marca: "rituaria", pedidos: 1000, canc: 45, aceitas: 18, conv: 100, resp: 20 },
+  ]);
+  const comKokeshi = {
+    ...p,
+    chat: { ...p.chat, sem_foto: [{ marca: "kokeshi", motivo: "Aguardando a primeira captura do bot." }] },
+    atendimento: {
+      ...p.atendimento,
+      marcas: [
+        ...p.atendimento.marcas.map((m) => (m.marca === "barbours" ? { ...m, pedidos_anterior: 1000, cancelamentos_anterior: 50 } : m)),
+        { marca: "kokeshi", pedidos: 9000, cancelamentos: 90, taxa_cancelamento_pct: null, cancelamentos_comprador: null, em_devolucao: null },
+      ],
+    },
+  };
+  const r = resumoCxGerencial(comKokeshi, rotulo);
+
+  const resp = linhasDrilldownCx(r, "resposta");
+  assert.deepEqual(resp.map((l) => [l.marca, l.valor, l.fora]), [
+    ["RITUARIA", "20,0%", true], // menor primeiro: cair e' pior
+    ["BARBOURS", "85,0%", false],
+    ["LESCENT", "88,0%", false],
+    ["APICE", "90,0%", false],
+    ["KOKESHI", "—", false],
+  ]);
+  assert.equal(resp[4].motivo, "Aguardando a primeira captura do bot.", "sem medida: traco e motivo, nunca zero");
+  assert.equal(resp[0].detalhe, "meta ≥ 60% · 100 conversas");
+
+  const canc = linhasDrilldownCx(r, "cancelamento");
+  assert.deepEqual(canc.map((l) => l.marca), ["BARBOURS", "APICE", "LESCENT", "RITUARIA", "KOKESHI"]); // maior primeiro
+  assert.deepEqual([canc[0].valor, canc[0].antes, canc[0].detalhe], ["6,5%", "5,0%", "65 cancelamentos / 1.000 pedidos"]);
+  assert.equal(canc[4].antes, null, "kokeshi sem historico: sem 'antes'");
+  assert.equal(canc[0].largura, 100);
+
+  const cr = linhasDrilldownCx(r, "contactRate");
+  assert.equal(cr.at(-1)?.motivo, "Sem leitura de conversas na coleta do chat.");
+  assert.equal(cr[0].detalhe, "100 conversas / 1.000 pedidos");
 });
 
 test("seta do cancelamento: base explicita quando exclui marca sem historico", () => {
