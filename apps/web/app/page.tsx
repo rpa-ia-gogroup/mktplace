@@ -678,6 +678,9 @@ function GerencialInner() {
         </div>
       </div>
 
+      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
+      {isMarketplaceSelected(filters.channels, "shopee") && <CxResumo brands={filters.brands} />}
+
       {/* ---- Dobra 3: marca x canal ---- */}
       <BrandChannelMatrix
         matrix={matrix}
@@ -698,9 +701,6 @@ function GerencialInner() {
         dateTo={filters.dateTo}
         compare={filters.compare}
       />
-
-      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
-      {isMarketplaceSelected(filters.channels, "shopee") && <CxResumo brands={filters.brands} />}
 
       {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
           Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
