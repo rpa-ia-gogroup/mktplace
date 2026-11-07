@@ -609,13 +609,26 @@ export const ROTULO_INDICADOR: Record<IndicadorCx, string> = {
 };
 
 /**
- * Regra de risco (uma frase, a mesma do ⓘ): nos quatro indicadores SUBIR E'
- * PIOR; a marca fica "acima" num deles quando passa a taxa da Shopee no
- * filtro em 20% ou mais. Nenhum = verde, um = ambar, dois ou mais = vermelho.
+ * Regra de risco (v3, 07/11/2026). A base de cada indicador e' a MEDIANA das
+ * marcas medidas, cada marca com o mesmo peso: a taxa da Shopee e' ponderada
+ * por pedidos e a Kokeshi (64% dos pedidos, taxas baixas) a puxava para
+ * baixo, deixando quase todas as outras vermelhas. Com menos de 3 marcas
+ * medidas nao ha comparacao justa: o indicador nao marca ninguem.
+ * Acima = passa de 1,2x a mediana (subir e' pior nos quatro). Cor pela
+ * contagem (0 verde, 1 ambar, 2+ vermelho); ordem pela soma do excesso.
  */
 export const FOLGA_RISCO = 1.2;
+export const MIN_MARCAS_RISCO = 3;
 export const AJUDA_RISCO =
-  "Uma marca fica acima num indicador quando a taxa dela passa a da Shopee no filtro em 20% ou mais. Nos quatro, subir é pior. Verde: nenhum acima. Âmbar: um. Vermelho: dois ou mais.";
+  "Uma marca fica acima num indicador quando passa de 1,2× a mediana das marcas (cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta). Nos quatro, subir é pior. Verde: nenhum acima. Âmbar: um. Vermelho: dois ou mais. A ordem é pelo tamanho do excesso.";
+
+/** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
+export function medianaRisco(vals: number[]): number | null {
+  if (vals.length < MIN_MARCAS_RISCO) return null;
+  const o = [...vals].sort((a, b) => a - b);
+  const meio = Math.floor(o.length / 2);
+  return o.length % 2 ? o[meio] : (o[meio - 1] + o[meio]) / 2;
+}
 
 export interface MarcaCx {
   chave: string;
@@ -626,6 +639,8 @@ export interface MarcaCx {
   cancelamentoAnterior: number | null;
   reembolsado: number | null;
   acima: IndicadorCx[];
+  /** Soma de (valor / mediana - 1) nos indicadores acima: a ordem do risco. */
+  excesso: number;
   tom: "bom" | "atencao" | "critico";
 }
 
@@ -649,8 +664,12 @@ export interface ResumoCx {
   cancelamentoDelta: DeltaCx | null;
   /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
   semHistoricoCancelamento: string[];
-  /** Taxa da Shopee no filtro, base da regra de risco. */
+  /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
+  cancelamentoBase: { anterior: string; atual: string } | null;
+  /** Taxa da Shopee no filtro (os tiles). */
   totais: Record<IndicadorCx, number | null>;
+  /** Mediana das marcas por indicador, base do risco; null = menos de 3 marcas medidas. */
+  medianas: Record<IndicadorCx, number | null>;
   /** Da pior para a melhor; so' marcas com alguma medida. */
   marcas: MarcaCx[];
 }
@@ -701,16 +720,22 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
   const cancAtual = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
   const cancAnt = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
 
-  const marcas: MarcaCx[] = chaves
-    .map((m) => {
-      const valores = Object.fromEntries(INDICADORES_CX.map((i) => [i, razaoPct([par(i, m)])])) as Record<
-        IndicadorCx,
-        number | null
-      >;
+  const valoresDe = (m: string) =>
+    Object.fromEntries(INDICADORES_CX.map((i) => [i, razaoPct([par(i, m)])])) as Record<IndicadorCx, number | null>;
+  const porMarca = chaves.map((m) => ({ m, valores: valoresDe(m) }));
+  const medianas = Object.fromEntries(
+    INDICADORES_CX.map((i) => [
+      i,
+      medianaRisco(porMarca.map((x) => x.valores[i]).filter((v): v is number => v != null)),
+    ]),
+  ) as Record<IndicadorCx, number | null>;
+
+  const marcas: MarcaCx[] = porMarca
+    .map(({ m, valores }) => {
       const acima = INDICADORES_CX.filter((i) => {
         const v = valores[i];
-        const t = totais[i];
-        return v != null && t != null && t > 0 && v >= t * FOLGA_RISCO;
+        const med = medianas[i];
+        return v != null && med != null && med > 0 && v > med * FOLGA_RISCO;
       });
       const l = linhas.get(m);
       return {
@@ -720,11 +745,16 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
         cancelamentoAnterior: razaoPct([[l?.cancelamentos_anterior, l?.pedidos_anterior]]),
         reembolsado: devs.get(m)?.reembolsado ?? null,
         acima,
+        excesso: acima.reduce((a, i) => a + valores[i]! / medianas[i]! - 1, 0),
         tom: (acima.length >= 2 ? "critico" : acima.length === 1 ? "atencao" : "bom") as MarcaCx["tom"],
       };
     })
     .filter((x) => INDICADORES_CX.some((i) => x.valores[i] != null))
-    .sort((a, b) => b.acima.length - a.acima.length || a.marca.localeCompare(b.marca));
+    .sort((a, b) => b.excesso - a.excesso || a.marca.localeCompare(b.marca));
+  const delta = deltaPp(cancAtual, cancAnt);
+  const semHistoricoCancelamento = atendimento.marcas
+    .filter((m) => m.pedidos && m.pedidos_anterior == null)
+    .map((m) => rotuloMarca(m.marca));
 
   return {
     contactRate: totais.contactRate == null ? "—" : `${truncado ? "≥ " : ""}${pct(totais.contactRate)}`,
@@ -733,11 +763,11 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     reembolsado: devOk ? reais(dev.reembolsado) : "—",
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
     semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
-    cancelamentoDelta: deltaPp(cancAtual, cancAnt),
-    semHistoricoCancelamento: atendimento.marcas
-      .filter((m) => m.pedidos && m.pedidos_anterior == null)
-      .map((m) => rotuloMarca(m.marca)),
+    cancelamentoDelta: delta,
+    semHistoricoCancelamento,
+    cancelamentoBase: delta && semHistoricoCancelamento.length ? { anterior: pct(cancAnt), atual: pct(cancAtual) } : null,
     totais,
+    medianas,
     marcas,
   };
 }
