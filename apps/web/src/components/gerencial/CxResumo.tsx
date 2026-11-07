@@ -1,25 +1,24 @@
 "use client";
 
 /**
- * CX · Shopee na Gerencial (GERENCIAL-CX, 07/11/2026; v2 no mesmo dia).
+ * CX · Shopee na Gerencial (GERENCIAL-CX, 07/11/2026; v3 enxuta no mesmo dia).
  *
  * Mesma rota da /cx (`/api/v1/cx/shopee`), buscada pelo navegador. Sempre 30
  * dias fechados, escrito no cabecalho, sem casar com o periodo da Gerencial.
  * Marca segue o filtro global; a pagina so' monta isto com a Shopee no filtro.
  *
- * Comparacao so' onde ha historico de verdade: cancelamento (pedidos da Silver,
- * desde 01/2026). Devolucoes comecam em 05/10 e o chat e' fotografia desde
- * 04/11: esses tiles dizem "sem historico ainda", nunca um delta inventado.
+ * Card = rotulo, valor e no maximo UMA linha. Definicao, unidade, falta de
+ * historico e base da seta vao para o ⓘ. Comparacao so' onde ha historico de
+ * verdade (cancelamento); sem historico, nao ha delta — nunca inventado.
  *
- * Hover/foco num tile (o padrao da rosca do MetaHero) troca a linha de marcas
- * embaixo para o valor de cada marca naquele indicador. Sem hover, a mesma
- * linha mostra o risco por marca.
+ * Embaixo, uma linha: "Atencao" com ate' 2 marcas fora da curva (regra da
+ * mediana no ⓘ). Hover/foco num tile (o padrao da rosca do MetaHero) troca a
+ * linha pelo valor de cada marca naquele indicador.
  */
 import Link from "next/link";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 
-import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiTile from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
@@ -27,7 +26,9 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
   AJUDA_CX,
   AJUDA_RISCO,
+  MIN_MARCAS_RISCO,
   MOTIVO_REENVIO,
+  ROTULO_CURTO,
   ROTULO_INDICADOR,
   carregarCxShopee,
   hrefCx,
@@ -44,8 +45,8 @@ import { brandLabel } from "@/lib/filters/brands";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const DIAS = 30;
-const SEM_HISTORICO_CHAT = "sem histórico ainda (coleta desde 04/11)";
-const SEM_HISTORICO_DEVOLUCAO = "sem histórico ainda (devoluções desde 05/10)";
+const SEM_HISTORICO_CHAT = "Sem comparação ainda: a coleta do chat começou em 04/11.";
+const SEM_HISTORICO_DEVOLUCAO = "Sem comparação ainda: as devoluções são coletadas desde 05/10.";
 
 /** Classes literais (o Tailwind so' gera o que encontra escrito). */
 const COR_DELTA: Record<DeltaCx["sentido"], string> = {
@@ -58,11 +59,13 @@ const FALADO_DELTA: Record<DeltaCx["sentido"], string> = {
   melhorou: "caiu (melhorou)",
   estavel: "estável",
 };
+const PONTO_TOM = { atencao: "bg-warn", critico: "bg-crit" } as const;
+const TINTA_TOM = { atencao: "text-warn-ink", critico: "text-crit-ink" } as const;
 
 export default function CxResumo({ brands }: { brands: string[] }) {
   const marca = brands.length ? brands.join(",") : null;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
-  // Tile sob o mouse (ou com foco): a linha de marcas mostra esse indicador.
+  // Tile sob o mouse (ou com foco): a linha de baixo mostra esse indicador por marca.
   const [ativo, setAtivo] = useState<IndicadorCx | null>(null);
 
   const carregar = useCallback(() => {
@@ -84,16 +87,7 @@ export default function CxResumo({ brands }: { brands: string[] }) {
 
   return (
     <Panel
-      titulo={
-        <span className="inline-flex flex-wrap items-center gap-2">
-          CX
-          <span className="inline-flex items-center gap-1.5 font-normal text-ink-muted">
-            <span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-shopee" />
-            Shopee
-          </span>
-          <Chip>Só Shopee por enquanto</Chip>
-        </span>
-      }
+      titulo="CX · Shopee"
       icone={MessageCircle}
       descricao="Últimos 30 dias até ontem"
       aria-label="CX Shopee"
@@ -105,7 +99,6 @@ export default function CxResumo({ brands }: { brands: string[] }) {
           Ver CX completo →
         </Link>
       }
-      rodape="ML e TikTok entram quando a coleta de CX desses canais existir."
     >
       {!resultado ? (
         <StateBlock tipo="carregando" compacto titulo="Carregando CX da Shopee" />
@@ -120,7 +113,7 @@ export default function CxResumo({ brands }: { brands: string[] }) {
       ) : (
         <div className="flex flex-col gap-3">
           <Tiles r={r} ativo={ativo} setAtivo={setAtivo} />
-          <LinhaMarcas r={r} ativo={ativo} />
+          <LinhaDeBaixo r={r} ativo={ativo} />
         </div>
       )}
     </Panel>
@@ -128,21 +121,13 @@ export default function CxResumo({ brands }: { brands: string[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Tiles
+// Tiles: rotulo, valor e no maximo uma linha
 // ---------------------------------------------------------------------------
-/** Duas linhas sempre (definicao + historico): os valores ficam na mesma altura. */
-function Comparacao({ definicao, historico }: { definicao: ReactNode; historico: ReactNode }) {
-  return (
-    <>
-      <span className="block">{definicao}</span>
-      <span className="block text-ink-faint">{historico}</span>
-    </>
-  );
-}
-
 /** 2 colunas no celular, 3 + 2 de 640 a 1024 px (grade de 6), 5 em linha acima. */
 const SPAN_TOPO = "sm:col-span-2 lg:col-span-1";
 const SPAN_BASE = "sm:col-span-3 lg:col-span-1";
+/** Conteudo no topo do card: o valor fica na mesma altura com ou sem linha embaixo. */
+const CARD = "min-w-0 rounded-xl [&>div]:h-full [&>div]:justify-start";
 
 function Tiles({
   r,
@@ -155,7 +140,7 @@ function Tiles({
 }) {
   const comMarcas = r.marcas.length > 1;
   const hover = (i: IndicadorCx, span: string) => ({
-    className: `min-w-0 rounded-xl transition-shadow duration-150 [&>div]:h-full [&>div]:justify-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span} ${
+    className: `${CARD} transition-shadow duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span} ${
       ativo === i ? "ring-1 ring-accent/50" : ""
     }`,
     ...(comMarcas && {
@@ -168,6 +153,10 @@ function Tiles({
     }),
   });
   const delta = r.cancelamentoDelta;
+  // A seta so' compara as marcas com historico: a base vai para o ⓘ e o hover da linha.
+  const baseDaSeta = r.cancelamentoBase
+    ? `A seta compara sem ${r.semHistoricoCancelamento.join(", ")} (sem histórico): ${r.cancelamentoBase.anterior} → ${r.cancelamentoBase.atual}.`
+    : undefined;
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo">
@@ -175,11 +164,10 @@ function Tiles({
         <KpiTile
           rotulo="Contact rate"
           valor={r.contactRate}
-          comparacao={<Comparacao definicao="conversas ÷ pedidos" historico={SEM_HISTORICO_CHAT} />}
           ajuda={
             <InfoDica
               titulo="Contact rate"
-              texto={AJUDA_CX.contactRate}
+              texto={`${AJUDA_CX.contactRate} ${SEM_HISTORICO_CHAT}`}
               nota={r.semChat.length ? `Sem dado de chat, fora da conta: ${r.semChat.join(", ")}.` : undefined}
             />
           }
@@ -189,11 +177,10 @@ function Tiles({
         <KpiTile
           rotulo="Aguardando"
           valor={r.aguardando}
-          comparacao={<Comparacao definicao="das conversas" historico={SEM_HISTORICO_CHAT} />}
           ajuda={
             <InfoDica
               titulo="Aguardando resposta"
-              texto={AJUDA_CX.aguardando}
+              texto={`${AJUDA_CX.aguardando} Taxa sobre as conversas do período. ${SEM_HISTORICO_CHAT}`}
               nota="Inclui conversas antigas paradas, não só as do período."
             />
           }
@@ -204,30 +191,21 @@ function Tiles({
           rotulo="Cancelamento"
           valor={r.cancelamento}
           comparacao={
-            <Comparacao
-              definicao="dos pedidos"
-              historico={
-                delta ? (
-                  <span className={COR_DELTA[delta.sentido]}>
-                    <span aria-hidden="true">{delta.texto}</span>
-                    <span className="sr-only">{FALADO_DELTA[delta.sentido]} {delta.texto.replace(/^[▲▼=]\s*/, "")}</span>
-                    <span className="font-normal text-ink-faint"> vs 30 dias antes</span>
-                  </span>
-                ) : (
-                  "sem histórico ainda"
-                )
-              }
-            />
+            delta ? (
+              <span className={COR_DELTA[delta.sentido]} title={baseDaSeta}>
+                <span aria-hidden="true">{delta.texto}</span>
+                <span className="sr-only">
+                  {FALADO_DELTA[delta.sentido]} {delta.texto.replace(/^[▲▼=]\s*/, "")}
+                </span>
+                <span className="font-normal text-ink-faint"> vs 30 dias antes</span>
+              </span>
+            ) : undefined
           }
           ajuda={
             <InfoDica
               titulo="Cancelamento"
-              texto={`${AJUDA_CX.cancelamentos} A comparação é com os 30 dias anteriores, em pontos percentuais; subir é pior.`}
-              nota={
-                r.semHistoricoCancelamento.length
-                  ? `Fora da comparação (sem histórico de pedidos na janela anterior): ${r.semHistoricoCancelamento.join(", ")}.`
-                  : undefined
-              }
+              texto={`${AJUDA_CX.cancelamentos} Taxa sobre os pedidos. A seta compara com os 30 dias anteriores, em pontos percentuais; subir é pior.`}
+              nota={baseDaSeta}
             />
           }
         />
@@ -236,29 +214,24 @@ function Tiles({
         <KpiTile
           rotulo="Reembolso"
           valor={r.reembolsado}
-          comparacao={
-            <Comparacao
-              definicao={r.reembolsoPct ? `${r.reembolsoPct} dos pedidos` : "devoluções aceitas"}
-              historico={SEM_HISTORICO_DEVOLUCAO}
-            />
-          }
+          comparacao={r.reembolsoPct ? `${r.reembolsoPct} dos pedidos` : undefined}
           ajuda={
             <InfoDica
               titulo="Reembolso"
-              texto="Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos."
+              texto={`Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos. ${SEM_HISTORICO_DEVOLUCAO}`}
             />
           }
         />
       </div>
-      <div className={`col-span-2 min-w-0 [&>div]:h-full [&>div]:justify-start ${SPAN_BASE}`}>
+      <div className={`col-span-2 ${CARD} ${SPAN_BASE}`}>
         <KpiTile
           rotulo="Reenvio"
           tom="ausente"
           valor="Sem fonte"
-          comparacao={
-            <Comparacao
-              definicao={`${MOTIVO_REENVIO[0].toUpperCase()}${MOTIVO_REENVIO.slice(1)}.`}
-              historico="entra quando houver fonte"
+          ajuda={
+            <InfoDica
+              titulo="Reenvio"
+              texto={`${MOTIVO_REENVIO[0].toUpperCase()}${MOTIVO_REENVIO.slice(1)}. Entra quando houver fonte; nunca aparece como zero.`}
             />
           }
         />
@@ -268,7 +241,7 @@ function Tiles({
 }
 
 // ---------------------------------------------------------------------------
-// Linha de marcas: risco (padrao) ou o indicador do tile ativo
+// Uma linha: "Atencao" (padrao) ou o indicador do tile ativo, por marca
 // ---------------------------------------------------------------------------
 function valorDaMarca(m: MarcaCx, i: IndicadorCx): string {
   const v = pctCx(m.valores[i]);
@@ -277,55 +250,51 @@ function valorDaMarca(m: MarcaCx, i: IndicadorCx): string {
   return v;
 }
 
-function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
-  // Com uma marca so', a "media da Shopee" e' ela mesma: nada a comparar.
-  if (r.marcas.length < 2) return null;
-  return (
-    <div className="flex flex-col gap-2 border-t border-line pt-3" aria-live="polite" data-testid="cx-marcas">
-      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-        {ativo ? (
-          <>
-            {ROTULO_INDICADOR[ativo]} por marca
-            <span className="font-normal normal-case tracking-normal">
-              · Shopee {pctCx(r.totais[ativo])}
-            </span>
-          </>
-        ) : (
-          <>
-            Risco por marca
-            <InfoDica titulo="Risco por marca" texto={AJUDA_RISCO} />
-          </>
-        )}
+const LINHA = "flex flex-wrap items-center gap-x-1.5 gap-y-1 border-t border-line pt-3 text-xs text-ink-muted";
+
+function LinhaDeBaixo({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
+  // Com menos de 3 marcas nao ha mediana justa: nem alerta, nem "nenhuma fora da curva".
+  if (r.marcas.length < MIN_MARCAS_RISCO) return null;
+
+  if (ativo) {
+    const med = r.medianas[ativo];
+    return (
+      <p className={LINHA} aria-live="polite" data-testid="cx-marcas">
+        <span className="font-semibold text-ink">
+          {ROTULO_INDICADOR[ativo]}
+          {med != null && <span className="font-normal text-ink-faint"> (mediana {pctCx(med)})</span>}:
+        </span>
+        {r.marcas.map((m, idx) => (
+          <span key={m.chave} className={m.acima.includes(ativo) ? "text-crit-ink" : undefined}>
+            {idx > 0 && <span aria-hidden="true" className="mr-1.5 text-ink-faint">·</span>}
+            <span className="font-semibold">{m.marca}</span> <span className="tabular-nums">{valorDaMarca(m, ativo)}</span>
+          </span>
+        ))}
       </p>
-      {/* o Chip nao quebra linha; aqui o texto do risco pode passar de 390 px */}
-      <ul className="flex flex-wrap gap-2 [&>li>span]:max-w-full [&>li>span]:whitespace-normal [&>li>span>span:first-child]:shrink-0">
-        {r.marcas.map((m) => {
-          if (ativo) {
-            const semMedida = m.valores[ativo] == null;
-            const tom = semMedida ? "ausente" : m.acima.includes(ativo) ? "critico" : "neutro";
-            return (
-              <li key={m.chave}>
-                <Chip tom={tom} ponto={tom === "critico"}>
-                  <span className="font-semibold">{m.marca}</span>
-                  <span className="tabular-nums">{valorDaMarca(m, ativo)}</span>
-                </Chip>
-              </li>
-            );
-          }
-          return (
-            <li key={m.chave}>
-              <Chip tom={m.tom} ponto>
-                <span className="font-semibold">{m.marca}</span>
-                <span className="tabular-nums">
-                  {m.acima.length
-                    ? m.acima.map((i) => `${ROTULO_INDICADOR[i].toLowerCase()} ${pctCx(m.valores[i])}`).join(" · ")
-                    : "dentro da média"}
-                </span>
-              </Chip>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    );
+  }
+
+  return (
+    <p className={LINHA} aria-live="polite" data-testid="cx-marcas">
+      {r.alertas.length ? (
+        <>
+          <span className="font-semibold text-ink">Atenção:</span>
+          {r.alertas.map((a, idx) => (
+            <span key={a.chave} className="inline-flex items-center gap-1.5">
+              {idx > 0 && <span aria-hidden="true" className="text-ink-faint">·</span>}
+              <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_TOM[a.tom]}`} />
+              <span className={`font-semibold ${TINTA_TOM[a.tom]}`}>{a.marca}</span>
+              <span className="tabular-nums">
+                {ROTULO_CURTO[a.indicador]} {a.valor}{" "}
+                <span className="text-ink-faint">(mediana {a.mediana})</span>
+              </span>
+            </span>
+          ))}
+        </>
+      ) : (
+        <span>Nenhuma marca fora da curva</span>
+      )}
+      <InfoDica titulo="Atenção" texto={AJUDA_RISCO} />
+    </p>
   );
 }
