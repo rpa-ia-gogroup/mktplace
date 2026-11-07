@@ -19,6 +19,7 @@ import {
   montarStatusMarcas,
   reais,
   resumoCxGerencial,
+  deltaPp,
   problemaNoPayloadCx,
   tipoDoItem,
   urlCxShopee,
@@ -392,14 +393,12 @@ test("tela: fila do chat e coluna de tempo com ⓘ", () => {
 // ---------------------------------------------------------------------------
 test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia vira traco", () => {
   const r = resumoCxGerencial(comConversas(30), rotulo);
-  assert.deepEqual(r, {
-    contactRate: "20,0%", // 200 conversas / 1000 pedidos (rituaria sem chat fica fora)
-    aguardando: "1,5%", // 3 / 200
-    cancelamento: "1,8%", // 23 / 1300
-    reembolsado: reais(450.5),
-    reembolsoPct: "0,8%", // 8 aceitas / 1000 pedidos
-    semChat: ["RITUARIA"],
-  });
+  assert.deepEqual(
+    [r.contactRate, r.aguardando, r.cancelamento, r.reembolsado, r.reembolsoPct, r.semChat],
+    // 200/1000 (rituaria sem chat fica fora) · 3/200 · 23/1300 · 8 aceitas/1000
+    ["20,0%", "1,5%", "1,8%", reais(450.5), "0,8%", ["RITUARIA"]],
+  );
+  assert.equal(r.cancelamentoDelta, null, "API antiga, sem *_anterior: sem delta");
 
   const p = comConversas(30);
   p.chat.nao_lidas[0] = { ...p.chat.nao_lidas[0], conversas_truncado: true };
@@ -409,4 +408,37 @@ test("resumo da Gerencial: taxas so' com marcas que tem os dois lados; ausencia 
 
   const vazio = resumoCxGerencial({ ...comConversas(30), chat: { ...chat(), nao_lidas_estado: "erro" }, devolucoes: undefined }, rotulo);
   assert.deepEqual([vazio.contactRate, vazio.aguardando, vazio.reembolsado, vazio.reembolsoPct], ["—", "—", "—", null]);
+});
+
+test("resumo da Gerencial: delta do cancelamento so' nas marcas com historico; subir e' piorar", () => {
+  const p = comConversas(30);
+  const [apice, rit] = p.atendimento.marcas;
+  const com = (a: object, r: object) => ({ ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, ...a }, { ...rit, ...r }] } });
+  // apice 20/1000 = 2,0% agora contra 10/1000 = 1,0% antes; rituaria sem historico fica fora do delta
+  const piorou = resumoCxGerencial(com({ pedidos_anterior: 1000, cancelamentos_anterior: 10 }, {}), rotulo);
+  assert.deepEqual(piorou.cancelamentoDelta, { texto: "▲ 1,0 p.p.", sentido: "piorou" });
+  assert.deepEqual(piorou.semHistoricoCancelamento, ["RITUARIA"]);
+  assert.equal(piorou.marcas.find((m) => m.chave === "apice")?.cancelamentoAnterior, 1);
+  const melhorou = resumoCxGerencial(com({ pedidos_anterior: 500, cancelamentos_anterior: 25 }, {}), rotulo);
+  assert.deepEqual(melhorou.cancelamentoDelta, { texto: "▼ 3,0 p.p.", sentido: "melhorou" });
+  assert.deepEqual(deltaPp(2.01, 2), { texto: "= estável", sentido: "estavel" });
+});
+
+test("risco por marca: acima da Shopee em 20% ou mais, por indicador; dois ou mais = critico", () => {
+  // cancelamento: apice 2,0% e rituaria 1,0% contra 1,8% da Shopee -> apice so' 11% acima (nao conta)
+  const r = resumoCxGerencial(comConversas(30), rotulo);
+  assert.deepEqual(r.marcas.map((m) => [m.chave, m.acima, m.tom]), [
+    ["apice", [], "bom"],
+    ["rituaria", [], "bom"],
+  ]);
+  const p = comConversas(30);
+  const ruim = { ...p.atendimento.marcas[1], cancelamentos: 30 }; // rituaria 10% contra 3,8% da Shopee
+  const dev = { ...p.devolucoes, marcas: [...p.devolucoes.marcas, { marca: "rituaria", devolucoes: 9, aceitas: 9, em_andamento: 0, canceladas: 0, reembolsado: 90 }] };
+  const r2 = resumoCxGerencial({ ...p, atendimento: { ...p.atendimento, marcas: [p.atendimento.marcas[0], ruim] }, devolucoes: dev }, rotulo);
+  assert.deepEqual(r2.marcas[0], {
+    chave: "rituaria", marca: "RITUARIA", tom: "critico", acima: ["cancelamento", "reembolso"],
+    valores: { contactRate: null, aguardando: null, cancelamento: 10, reembolso: 3 },
+    cancelamentoAnterior: null, reembolsado: 90,
+  });
+  assert.equal(r2.marcas[1].tom, "bom");
 });

@@ -100,6 +100,9 @@ export interface LinhaMarca {
   taxa_cancelamento_pct: number | null;
   cancelamentos_comprador: number | null;
   em_devolucao: number | null;
+  /** So' na aba CX: a mesma conta na janela anterior. Ausente/null = sem historico (nunca zero). */
+  pedidos_anterior?: number | null;
+  cancelamentos_anterior?: number | null;
 }
 
 export interface Pendencia {
