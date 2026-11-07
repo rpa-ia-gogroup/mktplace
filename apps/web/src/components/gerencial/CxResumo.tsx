@@ -211,7 +211,12 @@ function Tiles({
                   <span className={COR_DELTA[delta.sentido]}>
                     <span aria-hidden="true">{delta.texto}</span>
                     <span className="sr-only">{FALADO_DELTA[delta.sentido]} {delta.texto.replace(/^[▲▼=]\s*/, "")}</span>
-                    <span className="font-normal text-ink-faint"> vs 30 dias antes</span>
+                    <span className="font-normal text-ink-faint">
+                      {" "}vs 30 dias antes
+                      {/* a seta so' compara quem tem historico: a base fica escrita no tile */}
+                      {r.cancelamentoBase &&
+                        ` (sem ${r.semHistoricoCancelamento.join(", ")}: ${r.cancelamentoBase.anterior} → ${r.cancelamentoBase.atual})`}
+                    </span>
                   </span>
                 ) : (
                   "sem histórico ainda"
@@ -277,9 +282,15 @@ function valorDaMarca(m: MarcaCx, i: IndicadorCx): string {
   return v;
 }
 
+/** No celular a lista de risco mostra as piores e esconde o resto atras de "ver todas". */
+const VISIVEIS_CELULAR = 2;
+
 function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
-  // Com uma marca so', a "media da Shopee" e' ela mesma: nada a comparar.
+  const [todas, setTodas] = useState(false);
+  // Com uma marca so' nao ha com quem comparar.
   if (r.marcas.length < 2) return null;
+  const escondidas = !ativo && !todas ? r.marcas.length - VISIVEIS_CELULAR : 0;
+  const noCelular = (idx: number) => (escondidas > 0 && idx >= VISIVEIS_CELULAR ? "hidden sm:block" : undefined);
   return (
     <div className="flex flex-col gap-2 border-t border-line pt-3" aria-live="polite" data-testid="cx-marcas">
       <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -288,6 +299,7 @@ function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
             {ROTULO_INDICADOR[ativo]} por marca
             <span className="font-normal normal-case tracking-normal">
               · Shopee {pctCx(r.totais[ativo])}
+              {r.medianas[ativo] != null && ` · mediana das marcas ${pctCx(r.medianas[ativo])}`}
             </span>
           </>
         ) : (
@@ -299,7 +311,7 @@ function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
       </p>
       {/* o Chip nao quebra linha; aqui o texto do risco pode passar de 390 px */}
       <ul className="flex flex-wrap gap-2 [&>li>span]:max-w-full [&>li>span]:whitespace-normal [&>li>span>span:first-child]:shrink-0">
-        {r.marcas.map((m) => {
+        {r.marcas.map((m, idx) => {
           if (ativo) {
             const semMedida = m.valores[ativo] == null;
             const tom = semMedida ? "ausente" : m.acima.includes(ativo) ? "critico" : "neutro";
@@ -313,19 +325,28 @@ function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
             );
           }
           return (
-            <li key={m.chave}>
+            <li key={m.chave} className={noCelular(idx)}>
               <Chip tom={m.tom} ponto>
                 <span className="font-semibold">{m.marca}</span>
                 <span className="tabular-nums">
                   {m.acima.length
                     ? m.acima.map((i) => `${ROTULO_INDICADOR[i].toLowerCase()} ${pctCx(m.valores[i])}`).join(" · ")
-                    : "dentro da média"}
+                    : "sem alerta"}
                 </span>
               </Chip>
             </li>
           );
         })}
       </ul>
+      {escondidas > 0 && (
+        <button
+          type="button"
+          onClick={() => setTodas(true)}
+          className="inline-flex min-h-11 items-center self-start rounded-lg px-2 text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:hidden"
+        >
+          Ver todas as marcas ({r.marcas.length})
+        </button>
+      )}
     </div>
   );
 }
