@@ -474,6 +474,7 @@ test("risco: marca dominante de taxa baixa nao deixa as outras vermelhas", () =>
   assert.equal(r.cancelamento, "2,3%", "o tile segue a taxa da Shopee no filtro");
   assert.deepEqual([r.medianas.cancelamento, r.medianas.reembolso], [5, 2]);
   assert.ok(r.marcas.every((m) => m.tom === "bom" && m.acima.length === 0), JSON.stringify(r.marcas.map((m) => [m.chave, m.acima])));
+  assert.deepEqual(r.alertas, [], "sem alerta: a tela diz 'Nenhuma marca fora da curva'");
 });
 
 test("risco: muito acima em um indicador vem antes de pouco acima em dois (cor ainda pela contagem)", () => {
@@ -497,6 +498,11 @@ test("risco: muito acima em um indicador vem antes de pouco acima em dois (cor a
     ],
   );
   assert.ok(Math.abs(r.marcas[0].excesso - (24 / 4.5 - 1)) < 1e-9);
+  // linha "Atencao": ate' 2 marcas, cada uma com o PIOR indicador (barbours: cancelamento 6,5/5 = 1,30 > reembolso 2,5/2 = 1,25)
+  assert.deepEqual(r.alertas, [
+    { chave: "rituaria", marca: "RITUARIA", tom: "atencao", indicador: "aguardando", valor: "24,0%", mediana: "4,5%" },
+    { chave: "barbours", marca: "BARBOURS", tom: "critico", indicador: "cancelamento", valor: "6,5%", mediana: "5,0%" },
+  ]);
 });
 
 test("seta do cancelamento: base explicita quando exclui marca sem historico", () => {

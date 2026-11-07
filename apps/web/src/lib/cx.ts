@@ -618,9 +618,18 @@ export const ROTULO_INDICADOR: Record<IndicadorCx, string> = {
  * contagem (0 verde, 1 ambar, 2+ vermelho); ordem pela soma do excesso.
  */
 export const FOLGA_RISCO = 1.2;
+/** Quantas marcas a linha "Atenção" mostra. */
+export const MAX_ALERTAS = 2;
+/** Nome curto do indicador na linha "Atenção". */
+export const ROTULO_CURTO: Record<IndicadorCx, string> = {
+  contactRate: "contact rate",
+  aguardando: "aguardando",
+  cancelamento: "cancelamento",
+  reembolso: "reembolso",
+};
 export const MIN_MARCAS_RISCO = 3;
 export const AJUDA_RISCO =
-  "Uma marca fica acima num indicador quando passa de 1,2× a mediana das marcas (cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta). Nos quatro, subir é pior. Verde: nenhum acima. Âmbar: um. Vermelho: dois ou mais. A ordem é pelo tamanho do excesso.";
+  "Uma marca fica fora da curva num indicador quando passa de 1,2× a mediana das marcas (cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta). Nos quatro, subir é pior. Aparecem até 2 marcas, as mais acima, cada uma com o pior indicador. Âmbar: um indicador acima. Vermelho: dois ou mais.";
 
 /** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
 export function medianaRisco(vals: number[]): number | null {
@@ -642,6 +651,15 @@ export interface MarcaCx {
   /** Soma de (valor / mediana - 1) nos indicadores acima: a ordem do risco. */
   excesso: number;
   tom: "bom" | "atencao" | "critico";
+}
+
+export interface AlertaCx {
+  chave: string;
+  marca: string;
+  tom: "atencao" | "critico";
+  indicador: IndicadorCx;
+  valor: string;
+  mediana: string;
 }
 
 export interface DeltaCx {
@@ -670,6 +688,8 @@ export interface ResumoCx {
   totais: Record<IndicadorCx, number | null>;
   /** Mediana das marcas por indicador, base do risco; null = menos de 3 marcas medidas. */
   medianas: Record<IndicadorCx, number | null>;
+  /** Linha "Atencao": ate' MAX_ALERTAS marcas acima, maior excesso primeiro, cada uma com o PIOR indicador. */
+  alertas: AlertaCx[];
   /** Da pior para a melhor; so' marcas com alguma medida. */
   marcas: MarcaCx[];
 }
@@ -769,6 +789,23 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     totais,
     medianas,
     marcas,
+    alertas: marcas
+      .filter((m) => m.acima.length)
+      .slice(0, MAX_ALERTAS)
+      .map((m) => {
+        // pior = maior excesso relativo (valor / mediana), nao a ordem fixa dos indicadores
+        const pior = m.acima.reduce((a, b) =>
+          m.valores[b]! / medianas[b]! > m.valores[a]! / medianas[a]! ? b : a,
+        );
+        return {
+          chave: m.chave,
+          marca: m.marca,
+          tom: m.tom as AlertaCx["tom"],
+          indicador: pior,
+          valor: pct(m.valores[pior]),
+          mediana: pct(medianas[pior]),
+        };
+      }),
   };
 }
 
