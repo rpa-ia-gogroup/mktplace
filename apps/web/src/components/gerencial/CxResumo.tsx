@@ -95,7 +95,7 @@ export default function CxResumo({ brands }: { brands: string[] }) {
         </span>
       }
       icone={MessageCircle}
-      descricao="Shopee · últimos 30 dias até ontem"
+      descricao="Últimos 30 dias até ontem"
       aria-label="CX Shopee"
       acao={
         <Link
@@ -258,7 +258,7 @@ function Tiles({
           comparacao={
             <Comparacao
               definicao={`${MOTIVO_REENVIO[0].toUpperCase()}${MOTIVO_REENVIO.slice(1)}.`}
-              historico="Nunca mostrado como zero."
+              historico="entra quando houver fonte"
             />
           }
         />
@@ -297,7 +297,8 @@ function LinhaMarcas({ r, ativo }: { r: ResumoCx; ativo: IndicadorCx | null }) {
           </>
         )}
       </p>
-      <ul className="flex flex-wrap gap-2">
+      {/* o Chip nao quebra linha; aqui o texto do risco pode passar de 390 px */}
+      <ul className="flex flex-wrap gap-2 [&>li>span]:max-w-full [&>li>span]:whitespace-normal [&>li>span>span:first-child]:shrink-0">
         {r.marcas.map((m) => {
           if (ativo) {
             const semMedida = m.valores[ativo] == null;
