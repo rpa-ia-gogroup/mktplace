@@ -48,6 +48,8 @@ import { formatarInstante } from "@/lib/performance-contas";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { torreFetch } from "@/lib/torre-fetch";
 
+import CxSite from "./CxSite";
+
 export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
@@ -96,6 +98,7 @@ export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
       {!marca && <StatusMarcas itens={montarStatusMarcas(dados, brandLabel)} />}
       <Atendimento v={montarAtendimentoCx(dados, brandLabel)} />
       <Pareto v={montarPareto(dados, brandLabel)} filtros={filtros} />
+      <CxSite filtros={filtros} />
     </>
   );
 }
