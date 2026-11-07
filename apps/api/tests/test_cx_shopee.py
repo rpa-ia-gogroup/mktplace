@@ -155,7 +155,7 @@ def test_rota_shopee_responde_e_repassa_filtros(cliente):
     assert r.status_code == 200
     assert chamadas == [(["apice"], 90)]
     corpo = r.json()
-    assert set(corpo) == {"gerado_em", "janela", "chat", "atendimento", "devolucoes"}
+    assert set(corpo) == {"gerado_em", "janela", "janela_anterior", "chat", "atendimento", "devolucoes"}
 
 
 def test_flag_desligada_e_404(cliente, monkeypatch):
@@ -335,3 +335,37 @@ def test_sql_do_export_tira_o_nao_pago_e_usa_o_dia_de_brasilia():
 def test_so_kokeshi_com_neon_caido_e_erro_nao_vazio():
     resp, _ = _montar(brands=["kokeshi"], torre=_torre_kokeshi(falhas={"export_marcas"}))
     assert resp.atendimento.indicadores[0].estado == "erro"
+
+
+# ---------------------------------------------------------------------------
+# GERENCIAL-CX-V2 (07/11/2026): cancelamento na janela anterior
+# ---------------------------------------------------------------------------
+def test_cancelamento_anterior_so_das_lojas_com_app_e_falha_vira_nulo():
+    from datetime import date
+
+    class ComAnterior(FonteCx):
+        """Na janela anterior so' a barbours vendeu (apice sem linha = zero medido)."""
+
+        def __call__(self, sql, params):
+            if sql == svc.SQL_SHOPEE_MARCAS and params["inicio"] == date(2026, 9, 5):
+                self.chamadas.append(("anterior", params))
+                if "anterior" in self.falhas_coleta:
+                    raise RuntimeError(f"falhou em {base_cx.SEGREDO}")
+                return [{"marca": "barbours", "pedidos": 700, "cancelados": 21, "cancelados_comprador": 9,
+                         "nao_pagos": 5, "atualizado_em": AGORA}]
+            return super().__call__(sql, params)
+
+    resp, fonte = _montar(fonte=ComAnterior(), torre=_torre_kokeshi())
+    # 30 dias ate' 03/11 = 05/10..03/11; anterior = 05/09..04/10
+    assert (resp.janela_anterior.inicio, resp.janela_anterior.fim) == (date(2026, 9, 5), date(2026, 10, 4))
+    m = {x.marca: x for x in resp.atendimento.marcas}
+    assert (m["barbours"].pedidos_anterior, m["barbours"].cancelamentos_anterior) == (700, 21)
+    assert (m["apice"].pedidos_anterior, m["apice"].cancelamentos_anterior) == (0, 0)
+    assert m["kokeshi"].pedidos_anterior is None, "export da Kokeshi sem historico: nunca zero"
+    assert [p["marcas"] for n, p in fonte.chamadas if n == "anterior"] == [["apice", "barbours", "lescent", "rituaria"]]
+    assert m["barbours"].pedidos == 800, "a janela atual segue igual"
+
+    caiu, _ = _montar(fonte=ComAnterior(falhas_coleta={"anterior"}))
+    assert all(x.pedidos_anterior is None for x in caiu.atendimento.marcas)
+    assert caiu.atendimento.indicadores[0].estado == "dado"
+    assert base_cx.SEGREDO not in caiu.model_dump_json()

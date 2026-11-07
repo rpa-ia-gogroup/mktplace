@@ -80,6 +80,10 @@ class LinhaMarca(BaseModel):
     cancelamentos: Optional[int] = None
     cancelamentos_comprador: Optional[int] = None
     em_devolucao: Optional[int] = None
+    #: Mesma conta na janela anterior (`janela_anterior` da aba CX). None = sem
+    #: historico comparavel (Kokeshi: export so' desde 04/10/2026), nunca 0.
+    pedidos_anterior: Optional[int] = None
+    cancelamentos_anterior: Optional[int] = None
 
 
 class Pendencia(BaseModel):
@@ -196,6 +200,8 @@ class CxShopeeResponse(BaseModel):
     chat: ChatShopee
     atendimento: CanalAtendimento
     devolucoes: DevolucoesShopee
+    #: Os `dias` antes de `janela` (D-60..D-31 na de 30), base de `*_anterior`.
+    janela_anterior: Optional[Janela] = None
 
 
 # ---------------------------------------------------------------------------

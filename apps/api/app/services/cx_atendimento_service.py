@@ -519,8 +519,15 @@ def _canal_ml(consultar: Consultar, marcas: list[str], janela: Janela, agora: da
 
 
 def _canal_shopee(consultar: Consultar, marcas: list[str], janela: Janela, agora: datetime,
-                  consultar_torre: Optional[Consultar] = None) -> CanalAtendimento:
-    """`consultar_torre` None = so' as lojas com app (a aba antiga de Atendimento)."""
+                  consultar_torre: Optional[Consultar] = None,
+                  anterior: Optional[Janela] = None) -> CanalAtendimento:
+    """`consultar_torre` None = so' as lojas com app (a aba antiga de Atendimento).
+
+    `anterior` (aba CX): a mesma contagem de pedidos na janela anterior, so'
+    das lojas com app — a Silver tem pedidos desde 01/2026. A Kokeshi fica
+    None: o export so' comeca em 04/10/2026.
+    shortcut: Kokeshi sem comparacao; ligar quando o export cobrir `anterior` inteira (~03/12/2026).
+    """
     do_canal = SHOPEE_MARCAS + (SHOPEE_EXPORT if consultar_torre else ())
     cobertura = _cobertura(marcas, do_canal, "Sem app Shopee (só export manual).")
     if not cobertura.marcas:
@@ -537,6 +544,12 @@ def _canal_shopee(consultar: Consultar, marcas: list[str], janela: Janela, agora
                         "desde": janela.fim - timedelta(days=DIAS_FOTOGRAFIA_DEVOLUCAO - 1)})
     else:
         linhas, motivos, devol = [], [], []
+    linhas_ant = None
+    if api and anterior is not None:
+        linhas_ant = _rodar(consultar, "shopee_marcas_anterior", SQL_SHOPEE_MARCAS,
+                            {**params, "inicio": anterior.inicio, "fim": anterior.fim})
+    # Silver com historico: loja sem linha na janela anterior = zero medido
+    ant_marca = None if linhas_ant is None else {str(r.get("marca")): r for r in linhas_ant}
     linhas_exp, motivos_exp = [], []
     if exp and consultar_torre:
         p_exp = {"marcas": exp, "inicio": janela.inicio, "fim": janela.fim}
@@ -557,7 +570,10 @@ def _canal_shopee(consultar: Consultar, marcas: list[str], janela: Janela, agora
         r = por_marca.get(m)
         pedidos_m = _int(r.get("pedidos")) if r else None
         cancelados_m = _int(r.get("cancelados")) if r else None
+        ra = ant_marca.get(m, {}) if ant_marca is not None and m in api else None
         marcas_linhas.append(LinhaMarca(
+            pedidos_anterior=None if ra is None else (_int(ra.get("pedidos")) or 0),
+            cancelamentos_anterior=None if ra is None else (_int(ra.get("cancelados")) or 0),
             marca=m,
             pedidos=pedidos_m,
             cancelamentos=cancelados_m,
@@ -1074,11 +1090,16 @@ def montar_cx_shopee(*, brands: Optional[list[str]] = None, dias: int = JANELA_P
         estado_nl = estado_exp if not marcas_shopee else _juntar_estados(estado_nl, estado_exp)
         nao_lidas = nao_lidas + nl_exp
     chat = chat.model_copy(update={"nao_lidas_estado": estado_nl, "nao_lidas": nao_lidas})
+    # Comparacao so' de cancelamento: devolucoes (raw.shopee_returns) so' existem
+    # desde 05/10/2026 e o chat e' fotografia desde 04/11/2026.
+    anterior = Janela(inicio=janela.inicio - timedelta(days=janela.dias),
+                      fim=janela.inicio - timedelta(days=1), dias=janela.dias)
     return CxShopeeResponse(
         gerado_em=agora,
         janela=janela,
+        janela_anterior=anterior,
         chat=chat,
-        atendimento=_canal_shopee(consultar, marcas, janela, agora, consultar_torre),
+        atendimento=_canal_shopee(consultar, marcas, janela, agora, consultar_torre, anterior),
         devolucoes=_devolucoes_shopee(
             consultar, marcas_shopee, janela, None if tabelas is None else tabelas["returns"],
             consultar_torre=consultar_torre,
