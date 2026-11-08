@@ -196,12 +196,24 @@ export const AJUDA_SITE = {
     "recente ainda recebe reenvios. Linhas sem valor contam na quantidade, não na taxa.",
   reembolso:
     "Valor da NF dos pedidos com reembolso ÷ faturamento do e-commerce da marca, pela safra (mês do pedido " +
-    "original). Realizado bruto: não aplica a regra oficial do Vision e não bate com o Vision CX.",
+    "original). Realizado bruto: não aplica a regra oficial do Vision e não bate com o Vision CX. Safra " +
+    "recente ainda recebe reembolsos. Linhas sem valor contam na quantidade, não na taxa.",
   reviews:
     "Reviews do Judge.me criadas no período (sem as marcadas como spam), publicadas ou não. A Rituária usa " +
     "Konfidency e fica fora.",
-  produtos: "Só produtos com o mínimo de reviews no período. Nota média e % de reviews com 1 a 3 estrelas.",
+  produtos:
+    "Só produtos com o mínimo de reviews no período, sem brindes (título ou endereço com \"brinde\"). " +
+    "Nota média e % de reviews com 1 a 3 estrelas.",
 } as const;
+
+/** Ressalvas que ficam visíveis no bloco, não só no ⓘ. */
+export const RESSALVA_REENVIO =
+  "Reenvio e reembolso: realizado bruto, não bate com o Vision CX. Safra recente ainda recebe reenvios e reembolsos.";
+
+/** A aba aceita 7 dias; o bloco do site só tem 30 ou 90. */
+export function avisoRecorte(dias: number): string | null {
+  return diasSite(dias) === dias ? null : `${diasSite(dias)} dias: o site não tem recorte de ${dias}`;
+}
 
 export interface TileSite {
   rotulo: string;
@@ -221,7 +233,7 @@ export function montarTilesSite(d: CxSiteResponse): TileSite[] {
   const taxa = (rotulo: string, v: number | null | undefined, valor: number | null | undefined,
                 qtd: number | null | undefined, ajuda: string): TileSite => {
     if (rr.estado !== "dado") return { rotulo, valor: "—", comparacao: motivo(rr, "Sem dado."), ajuda, ausente: true };
-    const base = `${fmtBrlCurto(valor ?? 0)} em ${fmtNumCurto(qtd ?? 0)} pedidos · ${safra}`;
+    const base = `${fmtBrlCurto(valor ?? 0)} em ${fmtNumCurto(qtd ?? 0)} solicitações · ${safra}`;
     if (v == null) return { rotulo, valor: "—", comparacao: rr.motivo_sem_taxa ?? base, ajuda, ausente: true };
     return { rotulo, valor: pct(v), comparacao: base, ajuda, ausente: false };
   };

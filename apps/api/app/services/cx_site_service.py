@@ -128,13 +128,17 @@ SELECT marca, SUM(receita_total) AS faturamento
  GROUP BY marca
 """
 
-SQL_REVIEWS = """
+SQL_REVIEWS = r"""
 SELECT brand AS marca,
        product_external_id AS produto_id,
        MAX(product_title) AS produto,
        COUNT(*) AS reviews,
        SUM(rating) AS soma,
-       COUNT(*) FILTER (WHERE rating <= 3) AS baixas
+       COUNT(*) FILTER (WHERE rating <= 3) AS baixas,
+       -- Brinde nao tem campo: a loja marca no titulo ou no handle.
+       -- Titulo com mais brinde e produto pago que leva brinde, entao fica.
+       BOOL_OR((product_title ~* '\mbrinde\M' AND product_title !~* '\+\s*brinde')
+               OR product_handle ~* '(^brinde-|-brinde$|freegift)') AS brinde
   FROM silver.fct_judgeme_reviews
  WHERE brand = ANY(:marcas)
    AND COALESCE(curated, '') <> 'spam'
@@ -309,7 +313,7 @@ def _bloco_reviews(consultar: Consultar, marcas: list[str], janela: Janela, agor
                        **nota(_num(l["reviews"]), _num(l["soma"]), _num(l["baixas"])))
         for l in itens
         if l.get("produto_id") is not None and (l.get("produto") or "").strip()
-        and int(l["reviews"]) >= MINIMO_REVIEWS
+        and int(l["reviews"]) >= MINIMO_REVIEWS and not l.get("brinde")
     ]
     tot = [sum(v[i] for v in soma_marca.values()) for i in range(3)]
     piores = sorted(produtos, key=lambda p: (p.media, -p.reviews))[:TOP_PRODUTOS]

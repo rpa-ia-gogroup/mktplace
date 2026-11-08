@@ -34,9 +34,9 @@ ROTAS = {
 }
 
 
-def _produto(marca, pid, nome, n, media, baixas):
+def _produto(marca, pid, nome, n, media, baixas, brinde=False):
     return {"marca": marca, "produto_id": pid, "produto": nome, "reviews": n,
-            "soma": media * n, "baixas": baixas}
+            "soma": media * n, "baixas": baixas, "brinde": brinde}
 
 
 class Fonte:
@@ -62,6 +62,7 @@ class Fonte:
                 _produto("barbours", 3, "Pomada C", 12, 4.5, 1),
                 _produto("barbours", 4, "Raro D", 3, 1.0, 3),  # abaixo do minimo: fora do ranking
                 _produto("barbours", None, None, 5, 5.0, 0),  # sem produto: so' no total
+                _produto("kokeshi", 6, "Necessaire Brinde", 30, 5.0, 0, brinde=True),  # so' no total
             ],
             "reviews_carga": [{"carregado_em": CARGA_PARADA,
                                "ultima_review_em": datetime(2026, 10, 26, 4, 0, tzinfo=timezone.utc)}],
@@ -114,6 +115,13 @@ def test_consultas_nao_leem_pii():
             assert campo not in baixo
 
 
+def test_brinde_e_marcado_pelo_titulo_ou_handle():
+    sql = svc.SQL_REVIEWS
+    assert r"product_title ~* '\mbrinde\M'" in sql
+    assert r"!~* '\+\s*brinde'" in sql  # "+ BRINDE" e' produto pago com brinde
+    assert "AS brinde" in sql
+
+
 # ---------------------------------------------------------------------------
 # NPS
 # ---------------------------------------------------------------------------
@@ -159,9 +167,9 @@ def test_so_apice_no_filtro_e_sem_fonte_sem_consultar():
 def test_reviews_ranking_com_minimo_e_frescor_visivel():
     rv = _montar()[0].reviews
     assert rv.estado == "dado"
-    assert rv.reviews == 80  # inclui o produto raro e a linha sem produto
+    assert rv.reviews == 110  # inclui o produto raro, a linha sem produto e o brinde
     assert [p.produto for p in rv.piores] == ["Máscara B", "Pomada C", "Sérum A"]
-    assert rv.melhores == []  # todos os elegiveis ja' estao nos piores
+    assert rv.melhores == []  # todos os elegiveis ja' estao nos piores; o brinde nunca entra
     assert rv.piores[0].baixas_pct == 50.0
     assert rv.aviso_frescor and "26/10" in rv.aviso_frescor
 
