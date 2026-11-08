@@ -16,8 +16,13 @@ import {
   seloFrescor,
   topRupturas,
   total,
+  fmtReais,
+  mancheteImpacto,
+  type CanalImpactoOk,
+  type ImpactoRuptura,
   type ResumoCanal,
 } from "../src/lib/full-visao-geral.ts";
+import { tituloMarca } from "../src/lib/ml-full-estoque.ts";
 import type { EstoqueFullOk, ProdutoEstoque } from "../src/lib/estoque-full.ts";
 import type { InventarioML, MarcaML, MLFullEstoqueOk } from "../src/lib/ml-full-estoque.ts";
 import { NAV_SECTIONS, getRouteTitle, isNavItemActive, navSections } from "../src/components/shell/nav-config.ts";
@@ -292,4 +297,88 @@ test("Shopee: ruptura no Full com estoque do vendedor nao para a venda", () => {
   if (m.status !== "ok") throw new Error("esperava ok");
   assert.equal(m.semVendedor, null, "no ML nao se aplica");
   assert.equal(m.rupturas[0].estoqueVendedor, undefined);
+});
+
+// ---------------------------------------------------------------------------
+// FULL-IMPACTO-1 — impacto POTENCIAL no faturamento
+// ---------------------------------------------------------------------------
+
+function canalImpacto(canal: "ml" | "shopee", extra: Partial<CanalImpactoOk> = {}): CanalImpactoOk {
+  return {
+    canal, status: "ok", ref_date: canal === "ml" ? "2026-11-04" : "2026-11-08", rupturas: 0, sem_preco: 0,
+    preco_fallback: 0, sem_estoque_vendedor: null, perda_dia: null, perda_dia_sem_vendedor: null,
+    gmv_full_dia: null, dias_gmv: 28, pct_gmv_full: null, pct_gmv_full_sem_vendedor: null, motivo_pct: null,
+    marcas: [], itens: [], ...extra,
+  };
+}
+
+const IMPACTO: ImpactoRuptura = {
+  janela_gmv_dias: 28, limitacoes: [],
+  ml: canalImpacto("ml", {
+    perda_dia: 13307.94, pct_gmv_full: 0.1031,
+    marcas: [
+      { brand: "kokeshi", rupturas: 2, sem_preco: 0, perda_dia: 8000, perda_dia_sem_vendedor: null, gmv_full_dia: 50000, pct_gmv_full: 0.16, pct_gmv_full_sem_vendedor: null },
+      { brand: "barbours", rupturas: 0, sem_preco: 0, perda_dia: 0, perda_dia_sem_vendedor: null, gmv_full_dia: 40000, pct_gmv_full: 0, pct_gmv_full_sem_vendedor: null },
+    ],
+    itens: [
+      { brand: "kokeshi", sku: "K1", titulo: "Kit", media_diaria_28d: 3, preco_medio: 100, fonte_preco: "vendas_30d", mes_preco: null, estoque_vendedor: null, perda_dia: 300 },
+      { brand: "kokeshi", sku: "K2", titulo: null, media_diaria_28d: 12, preco_medio: null, fonte_preco: null, mes_preco: null, estoque_vendedor: null, perda_dia: null },
+    ],
+  }),
+  shopee: canalImpacto("shopee", {
+    perda_dia: 7487.8, perda_dia_sem_vendedor: 1459.43, pct_gmv_full: 0.1455, pct_gmv_full_sem_vendedor: 0.0284,
+    marcas: [
+      // bruto alto, mas o destaque (sem estoque do vendedor) e' menor que o da Kokeshi no ML
+      { brand: "apice", rupturas: 1, sem_preco: 0, perda_dia: 9000, perda_dia_sem_vendedor: 500, gmv_full_dia: 12000, pct_gmv_full: 0.75, pct_gmv_full_sem_vendedor: 0.04 },
+    ],
+    itens: [
+      { brand: "apice", sku: "A1", titulo: "Serum A1", media_diaria_28d: 9, preco_medio: 50, fonte_preco: "mes", mes_preco: "2026-11-01", estoque_vendedor: 0, perda_dia: 450 },
+    ],
+  }),
+};
+
+/** O compacto do pt-BR usa espaco nao separavel ("13,3 mil"); o teste compara o texto. */
+const sp = (t: string | null) => t?.replace(/ /g, " ") ?? null;
+
+test("fmtReais: compacto em pt-BR e ausencia nunca vira R$ 0", () => {
+  assert.equal(sp(fmtReais(13307.94)), "R$ 13,3 mil");
+  assert.equal(sp(fmtReais(950)), "R$ 950");
+  assert.equal(fmtReais(null), "—");
+  assert.equal(sp(fmtReais(0)), "R$ 0", "zero medido continua zero");
+});
+
+test("manchete de impacto: por canal, Shopee pelo destaque, sem somar R$", () => {
+  assert.equal(sp(mancheteImpacto(IMPACTO)),
+    "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full) e R$ 1,5 mil/dia na Shopee (2,8%)");
+  const soML = { ...IMPACTO, shopee: { canal: "shopee" as const, status: "unavailable" as const, motivo: "x" } };
+  assert.equal(sp(mancheteImpacto(soML)), "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full)");
+  assert.equal(mancheteImpacto(null), null);
+  const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk, shopee: soML.shopee };
+  assert.equal(sp(mancheteImpacto(semPct)), "impacto potencial de R$ 13,3 mil/dia no ML");
+});
+
+test("ruptura por marca com impacto: ordena pela maior perda de destaque, nunca a soma", () => {
+  const linhas = rupturaPorMarca([resumoML(ML), resumoShopee(SHOPEE)], IMPACTO);
+  assert.equal(linhas[0].marca, "kokeshi");
+  assert.equal(linhas[0].maiorPerda, 8000);
+  const apice = linhas.find((l) => l.marca === "apice")!;
+  assert.equal(apice.maiorPerda, 500, "Shopee usa o sem estoque do vendedor, nao o bruto");
+  assert.equal(linhas.find((l) => l.marca === "barbours")!.maiorPerda, 0, "zero medido");
+  assert.equal(linhas.find((l) => l.marca === "lescent")!.maiorPerda, null, "sem impacto: ausente");
+});
+
+test("top rupturas com impacto: por R$/dia, sem preco no fim, canal sem impacto depois", () => {
+  const top = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, IMPACTO);
+  assert.deepEqual(top.map((t) => [t.canal, t.perdaDia]), [["shopee", 450], ["ml", 300], ["ml", null]]);
+  assert.equal(top[0].estoqueVendedor, 0);
+  assert.equal(top[1].estoqueVendedor, undefined);
+  const soML = { ...IMPACTO, shopee: { canal: "shopee" as const, status: "unavailable" as const, motivo: "x" } };
+  const misto = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, soML);
+  assert.deepEqual(misto.map((t) => t.perdaDia), [300, null, undefined], "Shopee sem impacto: itens do estoque, R$ ausente");
+});
+
+test("rotulo de marca igual ao do resto da Torre", () => {
+  assert.equal(tituloMarca("apice"), "ÁPICE");
+  assert.equal(tituloMarca("rituaria"), "RITUÁRIA");
+  assert.equal(tituloMarca("kokeshi"), "KOKESHI");
 });

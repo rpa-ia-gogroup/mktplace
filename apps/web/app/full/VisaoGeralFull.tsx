@@ -22,7 +22,7 @@ import InfoDica from "@/components/ui/InfoDica";
 import KpiTile from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import { fetchEstoqueFull, fetchMLFullEstoque } from "@/lib/api-client";
+import { fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
 import { hrefAba } from "@/lib/full-abas";
 import {
@@ -30,7 +30,12 @@ import {
   QUERY_ML,
   QUERY_SHOPEE,
   fmtPct,
+  fmtReais,
+  impactosOk,
   manchete,
+  mancheteImpacto,
+  pctDestaque,
+  perdaDestaque,
   mediana,
   oks,
   pct,
@@ -42,6 +47,7 @@ import {
   total,
   type Canal,
   type MarcaCanal,
+  type ImpactoRuptura,
   type ResumoCanal,
   type Totais,
 } from "@/lib/full-visao-geral";
@@ -53,6 +59,13 @@ const DICA_RUPTURA =
   "Fora do total: kits da Shopee (não conciliados), a Kokeshi na Shopee (sem conta na esteira de estoque) e a Ápice no ML.";
 const NOTA_VENDEDOR =
   "Ruptura no Full não quer dizer venda parada: na Shopee o vendedor pode ter estoque próprio e seguir vendendo fora do Full.";
+const DICA_IMPACTO =
+  "Impacto POTENCIAL, não perda medida: venda média diária de 28 dias × preço médio do item, somado por canal. " +
+  "ML: preço de 30 dias do anúncio-âncora; sem venda no período, usa o preço anunciado. " +
+  "Shopee: preço médio do MÊS por SKU (a fonte é mensal); o destaque conta só os itens sem estoque do vendedor. " +
+  "% sobre o GMV Full/dia dos 28 dias antes da foto. R$ não é somado entre canais (datas e grãos diferentes).";
+const NOTA_IMPACTO =
+  "No ML, anúncios do mesmo inventário fora do Full podem seguir vendendo. Item sem preço fica fora da soma.";
 const DICA_COBERTURA =
   "Mediana da cobertura em dias dos itens com venda nos 28 dias, como a API calcula item a item. Itens sem venda ficam fora.";
 
@@ -82,21 +95,39 @@ function Fracao({ parte, base, motivo }: { parte: number | null; base: number | 
   );
 }
 
+/** Segunda linha da celula de marca: R$/dia e % do Full da marca naquele canal. */
+function ImpactoMarca({ canal, m }: { canal: Canal; m: { perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number } }) {
+  const v = perdaDestaque(canal, m);
+  const p = pctDestaque(canal, m);
+  return (
+    <span className="block text-xs text-ink-muted">
+      {v === null ? <Ausente motivo="sem preço" /> : `${fmtReais(v)}/dia`}
+      {p !== null && ` · ${fmtPct(p)} do Full`}
+      {m.sem_preco > 0 && ` · ${fmtInt(m.sem_preco)} sem preço`}
+    </span>
+  );
+}
+
 export default function VisaoGeralFull() {
   const [canais, setCanais] = useState<ResumoCanal[] | null>(null);
+  // `null` = impacto nao carregou: a tela segue sem R$, nunca com R$ 0.
+  const [impacto, setImpacto] = useState<ImpactoRuptura | null>(null);
   const [tentativa, setTentativa] = useState(0);
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
 
   useEffect(() => {
     const ctrl = new AbortController();
     setCanais(null);
+    setImpacto(null);
     Promise.allSettled([
       fetchMLFullEstoque(QUERY_ML, ctrl.signal).then((r) => resumoML(validarPayloadML(r))),
       fetchEstoqueFull(QUERY_SHOPEE, ctrl.signal).then(resumoShopee),
-    ]).then((res) => {
+      fetchImpactoRuptura(ctrl.signal),
+    ]).then(([ml, shopee, imp]) => {
       if (ctrl.signal.aborted) return;
-      setCanais(res.map((r, i) =>
-        r.status === "fulfilled" ? r.value : { canal: CANAIS[i], status: "erro", motivo: motivoErro(r.reason) }));
+      setCanais([ml, shopee].map((r, i) =>
+        r.status === "fulfilled" ? r.value : { canal: CANAIS[i], status: "erro" as const, motivo: motivoErro(r.reason) }));
+      setImpacto(imp.status === "fulfilled" ? imp.value : null);
     });
     return () => ctrl.abort();
   }, [tentativa]);
@@ -107,20 +138,26 @@ export default function VisaoGeralFull() {
       {canais === null ? (
         <StateBlock tipo="carregando" titulo="Carregando o estoque Full do ML e da Shopee" />
       ) : (
-        <Conteudo canais={canais} recarregar={recarregar} />
+        <Conteudo canais={canais} impacto={impacto} recarregar={recarregar} />
       )}
     </PageContainer>
   );
 }
 
-function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: () => void }) {
+function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; recarregar: () => void }) {
   const ok = oks(canais);
   const m = manchete(canais);
   const tot = total(canais);
   const shopee = ok.find((c) => c.canal === "shopee");
-  const marcas = rupturaPorMarca(canais);
-  const pior = marcas[0]?.taxa ? marcas[0] : null;
-  const top = topRupturas(canais);
+  const marcas = rupturaPorMarca(canais, impacto);
+  const pior = marcas[0]?.maiorPerda || marcas[0]?.taxa ? marcas[0] : null;
+  const top = topRupturas(canais, 10, impacto);
+  const imp = impactosOk(impacto);
+  const impShopee = imp.find((c) => c.canal === "shopee");
+  const frase = mancheteImpacto(impacto);
+  const semPreco = imp.reduce((s, c) => s + c.sem_preco, 0);
+  const fallbackML = imp.find((c) => c.canal === "ml")?.preco_fallback ?? 0;
+  const impactoFora = impacto ? [impacto.ml, impacto.shopee].filter((c) => c.status !== "ok") : null;
   const algumaIncompleta = ok.some((c) => !c.rupturasCompletas);
   const falhou = canais.some((c) => c.status === "erro");
 
@@ -142,6 +179,7 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
         <div className="flex items-start gap-2">
           <h3 id="full-manchete" className={`text-xl font-bold leading-snug ${m.critico ? "text-crit-ink" : "text-ink"}`}>
             {m.texto}
+            {frase && <> · {frase}</>}
           </h3>
           <InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} className="mt-1" />
         </div>
@@ -154,6 +192,21 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
               <strong className="font-semibold text-ink">{fmtInt(shopee.semVendedor)} também sem estoque do vendedor</strong>
             )}{" "}
             (essas param a venda)
+            {impShopee && impShopee.perda_dia !== null && (
+              <> · {fmtReais(impShopee.perda_dia)}/dia se contar os que têm estoque do vendedor</>
+            )}
+          </p>
+        )}
+        {(semPreco > 0 || fallbackML > 0 || impacto === null || impactoFora?.length) && (
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+            {impacto === null ? "Impacto no faturamento indisponível agora." : (
+              <>
+                {impactoFora?.map((c) => `${NOME_CANAL[c.canal]}: impacto indisponível. `)}
+                {semPreco > 0 && `${fmtInt(semPreco)} sem preço ficaram fora da soma. `}
+                {fallbackML > 0 && `ML: ${fmtInt(fallbackML)} com preço anunciado (sem venda em 30 dias).`}
+              </>
+            )}
+            <InfoDica texto={DICA_IMPACTO} nota={NOTA_IMPACTO} />
           </p>
         )}
         <div className="flex flex-wrap gap-1.5">
@@ -253,13 +306,22 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
       <Panel
         titulo="Ruptura por marca"
         descricao={pior ? (
-          <>Pior: <strong className="font-semibold text-crit-ink">{tituloMarca(pior.marca)}</strong>, {fmtPct(pior.taxa)} em ruptura ({fmtInt(pior.ruptura)} de {fmtInt(pior.base)})</>
+          pior.maiorPerda !== null ? (
+            <>Maior impacto: <strong className="font-semibold text-crit-ink">{tituloMarca(pior.marca)}</strong>, {fmtReais(pior.maiorPerda)}/dia potencial
+              {CANAIS.filter((c) => pior.impacto[c] && perdaDestaque(c, pior.impacto[c]!) === pior.maiorPerda).map((c) => {
+                const pc = pctDestaque(c, pior.impacto[c]!);
+                return <span key={c}> {c === "ml" ? "no ML" : "na Shopee"}{pc !== null ? ` (${fmtPct(pc)} do Full da marca)` : ""}</span>;
+              })}
+            </>
+          ) : (
+            <>Pior: <strong className="font-semibold text-crit-ink">{tituloMarca(pior.marca)}</strong>, {fmtPct(pior.taxa)} em ruptura ({fmtInt(pior.ruptura)} de {fmtInt(pior.base)})</>
+          )
         ) : undefined}
         semPadding
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-[480px] text-sm">
-            <caption className="sr-only">Percentual de itens em ruptura por marca e canal</caption>
+            <caption className="sr-only">Percentual de itens em ruptura e impacto potencial por marca e canal, da maior perda para a menor</caption>
             <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
               <tr>
                 <th scope="col" className="px-4 py-2 text-left">Marca</th>
@@ -283,6 +345,7 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
                       return (
                         <td key={canal} className="px-4 py-2 text-right tabular-nums">
                           {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} /> : <Ausente motivo={fora ? "canal sem dado agora" : "marca fora deste canal"} />}
+                          {cel && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} />}
                         </td>
                       );
                     })}
@@ -298,7 +361,7 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
       {/* d. Rupturas mais urgentes */}
       <Panel
         titulo="Rupturas mais urgentes"
-        descricao={`Top ${top.length} por venda média diária (28 dias)${algumaIncompleta ? " · lista incompleta" : ""}`}
+        descricao={`Top ${top.length} por ${imp.length ? "impacto potencial R$/dia" : "venda média diária (28 dias)"}${algumaIncompleta ? " · lista incompleta" : ""}`}
         acao={
           <span className="flex flex-wrap gap-3 text-sm">
             {ok.map((c) => (
@@ -314,13 +377,14 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
           <StateBlock tipo="vazio" titulo="Nenhuma ruptura no Full" compacto />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
-              <caption className="sr-only">Rupturas no Full ordenadas por venda média diária</caption>
+            <table className="w-full min-w-[640px] text-sm">
+              <caption className="sr-only">Rupturas no Full ordenadas por {imp.length ? "impacto potencial em R$ por dia" : "venda média diária"}</caption>
               <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
                 <tr>
                   <th scope="col" className="px-4 py-2 text-left">Produto</th>
                   <th scope="col" className="px-4 py-2 text-left">Marca</th>
                   <th scope="col" className="px-4 py-2 text-left">Canal</th>
+                  <th scope="col" className="px-4 py-2 text-right">Impacto potencial/dia</th>
                   <th scope="col" className="px-4 py-2 text-right">Venda/dia</th>
                   <th scope="col" className="px-4 py-2 text-right">Estoque do vendedor</th>
                 </tr>
@@ -331,6 +395,11 @@ function Conteudo({ canais, recarregar }: { canais: ResumoCanal[]; recarregar: (
                     <th scope="row" className="max-w-[280px] truncate px-4 py-2 text-left font-medium text-ink" title={t.nome}>{t.nome}</th>
                     <td className="px-4 py-2 text-ink-muted">{tituloMarca(t.marca)}</td>
                     <td className="px-4 py-2 text-ink-muted">{NOME_CANAL[t.canal]}</td>
+                    <td className="px-4 py-2 text-right font-semibold tabular-nums text-ink">
+                      {t.perdaDia === undefined ? <Ausente motivo="impacto do canal indisponível" />
+                        : t.perdaDia === null ? <Ausente motivo="sem preço" />
+                        : fmtReais(t.perdaDia)}
+                    </td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtDecimal(t.mediaDiaria)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">
                       {t.estoqueVendedor === undefined ? <Ausente motivo="não se aplica ao ML" />

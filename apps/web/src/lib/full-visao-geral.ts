@@ -51,6 +51,8 @@ export interface ItemRuptura {
   mediaDiaria: number;
   /** Shopee: estoque do vendedor (fora do Full). `undefined` no ML: nao se aplica. */
   estoqueVendedor?: number | null;
+  /** Impacto POTENCIAL em R$/dia. `null` = sem preco; `undefined` = impacto nao carregado. */
+  perdaDia?: number | null;
 }
 
 export interface ResumoOk {
@@ -263,14 +265,21 @@ export interface LinhaMarca {
   base: number;
   ruptura: number;
   taxa: number | null;
+  impacto: Partial<Record<Canal, MarcaImpacto>>;
+  /** Maior perda de destaque entre os canais (R$ nunca somado entre canais). */
+  maiorPerda: number | null;
 }
 
-/** Ruptura por marca, da pior para a melhor; marca sem nenhuma medicao no fim. */
-export function rupturaPorMarca(canais: ResumoCanal[]): LinhaMarca[] {
+/**
+ * Ruptura por marca. Com impacto: da maior perda de destaque (ML: perda;
+ * Shopee: so' os sem estoque do vendedor) para a menor -- o MAIOR entre os
+ * canais, nunca a soma. Sem impacto: pela taxa de ruptura. Sem medicao no fim.
+ */
+export function rupturaPorMarca(canais: ResumoCanal[], impacto: ImpactoRuptura | null = null): LinhaMarca[] {
   const linhas = new Map<string, LinhaMarca>();
   for (const c of oks(canais)) {
     for (const m of c.marcas) {
-      const l = linhas.get(m.marca) ?? { marca: m.marca, celulas: {}, base: 0, ruptura: 0, taxa: null };
+      const l = linhas.get(m.marca) ?? { marca: m.marca, celulas: {}, base: 0, ruptura: 0, taxa: null, impacto: {}, maiorPerda: null };
       l.celulas[c.canal] = m;
       if (m.base !== null && m.ruptura !== null) {
         l.base += m.base;
@@ -280,14 +289,131 @@ export function rupturaPorMarca(canais: ResumoCanal[]): LinhaMarca[] {
       linhas.set(m.marca, l);
     }
   }
+  for (const c of impactosOk(impacto)) {
+    for (const m of c.marcas) {
+      const l = linhas.get(m.brand);
+      if (!l) continue;
+      l.impacto[c.canal] = m;
+      const v = perdaDestaque(c.canal, m);
+      if (v !== null) l.maiorPerda = Math.max(l.maiorPerda ?? 0, v);
+    }
+  }
   return [...linhas.values()].sort(
-    (a, b) => (b.taxa ?? -1) - (a.taxa ?? -1) || b.ruptura - a.ruptura || a.marca.localeCompare(b.marca),
+    (a, b) => (b.maiorPerda ?? -1) - (a.maiorPerda ?? -1)
+      || (b.taxa ?? -1) - (a.taxa ?? -1) || b.ruptura - a.ruptura || a.marca.localeCompare(b.marca),
   );
 }
 
-export function topRupturas(canais: ResumoCanal[], n = 10): ItemRuptura[] {
+/**
+ * Top N rupturas. Canal com impacto: itens da rota de impacto, por perda R$/dia
+ * (sem preco no fim). Canal sem impacto: itens do estoque, depois, por venda/dia.
+ */
+export function topRupturas(canais: ResumoCanal[], n = 10, impacto: ImpactoRuptura | null = null): ItemRuptura[] {
+  const comImpacto = new Map(impactosOk(impacto).map((c) => [c.canal, c]));
   return oks(canais)
-    .flatMap((c) => c.rupturas)
-    .sort((a, b) => b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome))
+    .flatMap((c) => comImpacto.get(c.canal)?.itens.map((i) => itemDoImpacto(c.canal, i)) ?? c.rupturas)
+    .sort((a, b) =>
+      (b.perdaDia ?? -1) - (a.perdaDia ?? -1) || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome))
     .slice(0, n);
+}
+
+// ---------------------------------------------------------------------------
+// Impacto POTENCIAL no faturamento (rota /performance/full-impacto-ruptura)
+// ---------------------------------------------------------------------------
+
+export interface ItemImpacto {
+  brand: string;
+  sku: string | null;
+  titulo: string | null;
+  media_diaria_28d: number;
+  preco_medio: number | null;
+  fonte_preco: "vendas_30d" | "anuncio" | "mes" | null;
+  mes_preco: string | null;
+  estoque_vendedor: number | null;
+  perda_dia: number | null;
+}
+
+export interface MarcaImpacto {
+  brand: string;
+  rupturas: number;
+  sem_preco: number;
+  perda_dia: number | null;
+  perda_dia_sem_vendedor: number | null;
+  gmv_full_dia: number | null;
+  pct_gmv_full: number | null;
+  pct_gmv_full_sem_vendedor: number | null;
+}
+
+export interface CanalImpactoOk {
+  canal: Canal;
+  status: "ok";
+  ref_date: string;
+  rupturas: number;
+  sem_preco: number;
+  preco_fallback: number;
+  sem_estoque_vendedor: number | null;
+  perda_dia: number | null;
+  perda_dia_sem_vendedor: number | null;
+  gmv_full_dia: number | null;
+  dias_gmv: number;
+  pct_gmv_full: number | null;
+  pct_gmv_full_sem_vendedor: number | null;
+  motivo_pct: string | null;
+  marcas: MarcaImpacto[];
+  itens: ItemImpacto[];
+}
+
+export type CanalImpacto = CanalImpactoOk | { canal: Canal; status: "unavailable"; motivo: string };
+
+export interface ImpactoRuptura {
+  ml: CanalImpacto;
+  shopee: CanalImpacto;
+  janela_gmv_dias: number;
+  limitacoes: string[];
+}
+
+export function impactosOk(i: ImpactoRuptura | null): CanalImpactoOk[] {
+  if (!i) return [];
+  return [i.ml, i.shopee].filter((c): c is CanalImpactoOk => c.status === "ok");
+}
+
+/** O numero de destaque: no ML a perda; na Shopee so' os sem estoque do vendedor (os que param a venda). */
+export function perdaDestaque(canal: Canal, m: { perda_dia: number | null; perda_dia_sem_vendedor: number | null }): number | null {
+  return canal === "shopee" ? m.perda_dia_sem_vendedor : m.perda_dia;
+}
+
+export function pctDestaque(canal: Canal, m: { pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null }): number | null {
+  return canal === "shopee" ? m.pct_gmv_full_sem_vendedor : m.pct_gmv_full;
+}
+
+/** "R$ 13,3 mil" / "R$ 950". `null` vira travessao, nunca R$ 0. */
+export function fmtReais(v: number | null | undefined): string {
+  if (v === null || v === undefined) return "—";
+  return `R$ ${v.toLocaleString("pt-BR", { notation: "compact", maximumFractionDigits: 1 })}`;
+}
+
+function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
+  const nome = canal === "ml"
+    ? identificacaoML({ sku: i.sku, titulo: i.titulo, ancora_e_variacao: null }).texto
+    : i.titulo?.trim() || i.sku?.trim() || "sem identificação";
+  return {
+    canal, marca: i.brand, nome, mediaDiaria: i.media_diaria_28d,
+    estoqueVendedor: canal === "shopee" ? i.estoque_vendedor : undefined,
+    perdaDia: i.perda_dia,
+  };
+}
+
+/**
+ * Trecho de impacto da manchete, por canal e SEM somar R$ entre canais:
+ * "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full) e R$ 1,5 mil/dia na Shopee (2,8%)".
+ */
+export function mancheteImpacto(impacto: ImpactoRuptura | null): string | null {
+  const partes = impactosOk(impacto)
+    .filter((c) => perdaDestaque(c.canal, c) !== null)
+    .map((c, idx) => {
+      const p = pctDestaque(c.canal, c);
+      const pctTxt = p === null ? "" : ` (${fmtPct(p)}${idx === 0 ? " do Full" : ""})`;
+      return `${fmtReais(perdaDestaque(c.canal, c))}/dia ${c.canal === "ml" ? "no ML" : "na Shopee"}${pctTxt}`;
+    });
+  return partes.length ? `impacto potencial de ${partes.join(" e ")}` : null;
 }
