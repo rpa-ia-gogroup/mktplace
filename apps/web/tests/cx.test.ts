@@ -15,6 +15,7 @@ import {
   lerFiltrosCx,
   montarAtendimentoCx,
   montarPareto,
+  montarAvaliacaoLoja,
   montarPedidosMotivo,
   montarStatusMarcas,
   reais,
@@ -175,9 +176,11 @@ test("atendimento: conversas, aguardando, % respondido e contact rate por loja",
   const apice = v.linhas.find((l) => l.chave === "apice")!;
   assert.deepEqual([apice.conversas, apice.aguardando, apice.naoLidas, apice.contactRate], ["200", "3", "4", "20,0%"]);
   assert.equal(apice.respondido?.valor, "82,65%");
+  assert.equal(apice.aguardandoPct, "1,5%", "3 aguardando / 200 conversas");
   const rit = v.linhas.find((l) => l.chave === "rituaria")!;
   assert.equal(rit.conversas, "—", "sem a leitura nova: traco, nunca zero");
   assert.equal(rit.contactRate, "—");
+  assert.equal(rit.aguardandoPct, "—", "sem conversas: traco, nunca 0%");
   assert.equal(rit.respondido?.fora, true);
   assert.deepEqual(v.totais, { conversas: "200", aguardando: "3", naoLidas: "10", mais24h: "—", foraDaMeta: ["RITUARIA"] });
   assert.ok(v.notas.some((n) => /Tempo de resposta/.test(n)));
@@ -200,6 +203,7 @@ test("atendimento: sem coleta de conversas avisa no rodape; truncado vira piso",
   trunc.chat.nao_lidas[0].conversas_truncado = true;
   const v = montarAtendimentoCx(trunc, rotulo);
   assert.equal(v.linhas[0].conversas, "≥ 200");
+  assert.equal(v.linhas[0].aguardandoPct, "≤ 1,5%", "conversas sao piso: o % e' teto");
   assert.ok(v.notas.some((n) => /piso/.test(n)));
 });
 
@@ -220,9 +224,49 @@ test("pareto: devolucoes e cancelamentos juntos, do maior para o menor, com acum
     ["APICE", "1.000", "20", "10"],
     ["RITUARIA", "300", "3", "—"],
   ]);
+  // % dos pedidos; devolucao liquida (12 - 2 canceladas) / 1.000; reembolso = aceitas / pedidos
+  assert.deepEqual(
+    v.linhas.map((l) => [l.marca, l.cancelamentosPct, l.devolucoesPct, l.reembolsoPct, l.cancelamentoDelta]),
+    [
+      ["APICE", "2,0%", "1,0%", "0,8%", null],
+      ["RITUARIA", "1,0%", "—", null, null],
+    ],
+  );
   assert.ok(v.notas.some((n) => /^9 pedidos não pagos/.test(n)));
   assert.ok(v.notas.some((n) => /Reenvios/.test(n)));
   assert.equal(v.resto, null);
+});
+
+test("pareto por marca: seta do cancelamento contra a janela anterior; sem historico, sem seta", () => {
+  const p = comConversas(30);
+  const [apice, rit] = p.atendimento.marcas;
+  const v = montarPareto(
+    { ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, pedidos_anterior: 1000, cancelamentos_anterior: 10 }, rit] } },
+    rotulo,
+  );
+  assert.deepEqual([v.linhas[0].cancelamentoDelta, v.linhas[0].cancelamentoAntes], [{ texto: "▲ 1,0 p.p.", sentido: "piorou" }, "1,0%"]);
+  assert.deepEqual([v.linhas[1].cancelamentoDelta, v.linhas[1].cancelamentoAntes], [null, null]);
+});
+
+test("avaliacao da loja: da pior para a melhor, meta da Shopee, sem nota fica de fora (nunca zero)", () => {
+  const nota = (marca: string, valor: number, situacao: "ok" | "fora") => ({
+    ...chat().contas[0],
+    marca,
+    metricas: [{ ...metrica("shopee_22", "Nota da loja", valor, situacao, "Meta >= 4.5"), unidade: "contagem" as const, meta: 4.5 }],
+  });
+  const a = montarAvaliacaoLoja(
+    { chat: { ...chat(), contas: [nota("apice", 4.91, "ok"), nota("lescent", 4.77, "ok"), nota("barbours", 4.83, "ok"), { ...chat().contas[0], marca: "kokeshi" }] } },
+    rotulo,
+  );
+  assert.equal(a?.meta, "meta ≥ 4,5");
+  assert.deepEqual(a?.itens.map((x) => [x.marca, x.nota, x.pior, x.fora]), [
+    ["LESCENT", "4,77", true, false],
+    ["BARBOURS", "4,83", false, false],
+    ["APICE", "4,91", false, false],
+  ]);
+  const fora = montarAvaliacaoLoja({ chat: { ...chat(), contas: [nota("apice", 4.2, "fora")] } }, rotulo);
+  assert.deepEqual(fora?.itens.map((x) => [x.nota, x.pior, x.fora]), [["4,20", false, true]], "uma loja so': sem 'pior'");
+  assert.equal(montarAvaliacaoLoja({ chat: { ...chat(), contas: [] } }, rotulo), null);
 });
 
 test("pareto: top 10 e o resto somado numa linha; sem devolucoes = nota, nao zero", () => {
@@ -269,7 +313,8 @@ test("ajuda: conversas e cancelamentos explicados no ⓘ, nao em nota", () => {
   assert.match(AJUDA_CX.cancelamentos, /não pagos/);
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
   assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.conversas\}>Conversas<\/ThAjuda>/);
-  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.cancelamentos\}>Cancel\.<\/ThAjuda>/);
+  assert.match(AJUDA_CX.cancelamentosMarca, /não pagos/);
+  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.cancelamentosMarca\}>Cancel\.<\/ThAjuda>/);
   assert.match(tela, /\{!marca && <StatusMarcas/);
 });
 

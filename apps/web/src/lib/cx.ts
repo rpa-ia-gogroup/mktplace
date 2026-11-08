@@ -232,6 +232,9 @@ export interface LinhaAtendimentoCx {
   chave: string;
   marca: string;
   conversas: string;
+  /** Aguardando resposta ÷ conversas do periodo; "—" sem as duas leituras. */
+  aguardandoPct: string;
+  /** Contagem (vai no title/texto pequeno). */
   aguardando: string;
   naoLidas: string;
   respondido: CelulaMeta | null;
@@ -321,6 +324,8 @@ export function montarAtendimentoCx(
     chave: m,
     marca: rotuloMarca(m),
     conversas: conv == null ? "—" : `${n?.conversas_truncado ? "≥ " : ""}${inteiro(conv)}`,
+    // conversas truncadas sao piso, entao o % e' teto
+    aguardandoPct: conv && n?.aguardando_resposta != null ? `${n.conversas_truncado ? "≤ " : ""}${pct((n.aguardando_resposta / conv) * 100)}` : "—",
     aguardando: inteiro(n?.aguardando_resposta),
     naoLidas: inteiro(n?.valor),
     respondido: celulaMeta(contas.get(m), COD_RESPONDIDO),
@@ -386,12 +391,66 @@ export function montarAtendimentoCx(
 }
 
 // ---------------------------------------------------------------------------
+// Avaliacao da loja (Saude da Conta, metric_id 22 "Shop Rating"): a media das
+// notas que os compradores deram a loja, 0 a 5, com a meta da propria Shopee.
+// ---------------------------------------------------------------------------
+export interface AvaliacaoLojaCx {
+  /** "meta ≥ 4,5" quando vier igual para todas as lojas. */
+  meta: string | null;
+  /** Da pior para a melhor; so' lojas com nota (sem nota nao aparece, nunca vira zero). */
+  itens: { chave: string; marca: string; nota: string; fora: boolean; pior: boolean }[];
+}
+
+const SINAL_META: Record<string, string> = { ">=": "≥", "<=": "≤", ">": ">", "<": "<" };
+/** Duas casas: com uma, 4,77 e 4,83 viram o mesmo 4,8 e a pior some. */
+const FMT_NOTA = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+export function montarAvaliacaoLoja(
+  dados: Pick<CxShopeeResponse, "chat">,
+  rotuloMarca: (m: string) => string,
+): AvaliacaoLojaCx | null {
+  const comNota = dados.chat.contas
+    .map((c) => ({ marca: c.marca, m: c.metricas.find((x) => x.codigo === COD_NOTA) }))
+    .filter((x): x is { marca: string; m: ContaOficial["metricas"][number] & { valor: number } } =>
+      x.m?.valor != null && Number.isFinite(x.m.valor),
+    )
+    .sort((a, b) => a.m.valor - b.m.valor || a.marca.localeCompare(b.marca));
+  if (!comNota.length) return null;
+  const metas = [
+    ...new Set(
+      comNota.map(({ m }) =>
+        m.meta == null ? null : `meta ${SINAL_META[m.comparador ?? ""] ?? m.comparador ?? ""} ${valorMetrica({ valor: m.meta, unidade: m.unidade })}`.replace(/\s+/g, " "),
+      ),
+    ),
+  ];
+  return {
+    meta: metas.length === 1 ? metas[0] : null,
+    itens: comNota.map(({ marca, m }, i) => ({
+      chave: marca,
+      marca: rotuloMarca(marca),
+      nota: FMT_NOTA.format(m.valor),
+      fora: m.situacao === "fora",
+      pior: i === 0 && comNota.length > 1,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Ajuda dos numeros (o "ⓘ" ao lado do rotulo; a tela fica so' com o numero)
 // ---------------------------------------------------------------------------
 export const AJUDA_CX = {
   conversas:
     "Conversas do chat da Shopee com mensagem no período (7 ou 30 dias, pela última mensagem). Cada comprador conta uma vez, mesmo que mande várias mensagens.",
   aguardando: "Conversas em que a última mensagem é do comprador: ele está esperando a loja responder.",
+  aguardandoPct:
+    "Conversas esperando a resposta da loja na última leitura do chat ÷ conversas do período. Embaixo, a contagem.",
+  cancelamentosMarca:
+    "Cancelados ÷ pedidos do período (embaixo, a contagem); os não pagos, que a Shopee cancela sozinha, ficam de fora. A seta compara com o período anterior de mesmo tamanho, em pontos percentuais; subir é pior.",
+  devolucoesMarca:
+    "Pedidos de devolução ou reembolso abertos pelo comprador ÷ pedidos do período (embaixo, a contagem). Os que o próprio comprador cancelou ficam de fora.",
+  reembolsadoMarca: "Valor reembolsado nas devoluções aceitas; ao lado, devoluções aceitas ÷ pedidos.",
+  avaliacao:
+    "Nota da loja na Saúde da Conta da Shopee: a média das avaliações que os compradores deram à loja, de 0 a 5. A meta é a da própria Shopee. Em destaque, a pior.",
   naoLidas: "Conversas com mensagem ainda não aberta pela loja, na última leitura do chat (a cada 2 h).",
   contactRate: "Conversas ÷ pedidos do período: de cada 100 pedidos, quantos viraram conversa no chat.",
   tempoResposta:
@@ -497,9 +556,17 @@ export interface VisaoPareto {
     chave: string;
     marca: string;
     pedidos: string;
+    /** % dos pedidos; a contagem fica em `cancelamentos`/`devolucoes`. */
+    cancelamentosPct: string;
     cancelamentos: string;
+    /** Contra a janela anterior; null = sem historico. */
+    cancelamentoDelta: DeltaCx | null;
+    cancelamentoAntes: string | null;
+    devolucoesPct: string;
     devolucoes: string;
     reembolsado: string;
+    /** Devolucoes aceitas ÷ pedidos (a mesma taxa do card da Gerencial). */
+    reembolsoPct: string | null;
   }[];
   notas: string[];
 }
@@ -574,14 +641,26 @@ export function montarPareto(
     resto: fora.length
       ? `+ ${fora.length} motivo(s) com ${inteiro(somaFora)} caso(s) (${pct((somaFora / total) * 100)})`
       : null,
-    linhas: marcas.map((m) => ({
-      chave: m,
-      marca: rotuloMarca(m),
-      pedidos: inteiro(canMarca.get(m)?.pedidos),
-      cancelamentos: inteiro(canMarca.get(m)?.cancelamentos),
-      devolucoes: inteiro(liquidas(devMarca.get(m))),
-      reembolsado: devMarca.has(m) ? reais(devMarca.get(m)?.reembolsado) : "—",
-    })),
+    linhas: marcas.map((m) => {
+      const c = canMarca.get(m);
+      const d = devMarca.get(m);
+      const atual = razaoPct([[c?.cancelamentos, c?.pedidos]]);
+      const antes = razaoPct([[c?.cancelamentos_anterior, c?.pedidos_anterior]]);
+      const reemb = razaoPct([[d?.aceitas, c?.pedidos]]);
+      return {
+        chave: m,
+        marca: rotuloMarca(m),
+        pedidos: inteiro(c?.pedidos),
+        cancelamentosPct: pct(atual),
+        cancelamentos: inteiro(c?.cancelamentos),
+        cancelamentoDelta: deltaPp(atual, antes),
+        cancelamentoAntes: antes == null ? null : pct(antes),
+        devolucoesPct: pct(razaoPct([[liquidas(d), c?.pedidos]])),
+        devolucoes: inteiro(liquidas(d)),
+        reembolsado: d ? reais(d.reembolsado) : "—",
+        reembolsoPct: reemb == null ? null : pct(reemb),
+      };
+    }),
     notas,
   };
 }
