@@ -34,9 +34,12 @@ import {
   type LinhaFilaCx,
   type ResultadoPedidos,
   montarAtendimentoCx,
+  montarAvaliacaoLoja,
   montarPareto,
   montarStatusMarcas,
+  type AvaliacaoLojaCx,
   type CelulaMeta,
+  type DeltaCx,
   type StatusMarca,
   type FiltrosCx,
   type ResultadoCx,
@@ -96,7 +99,7 @@ export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
     <>
       <p className="text-xs text-ink-muted" data-testid="cx-escopo">{escopo}</p>
       {!marca && <StatusMarcas itens={montarStatusMarcas(dados, brandLabel)} />}
-      <Atendimento v={montarAtendimentoCx(dados, brandLabel)} />
+      <Atendimento v={montarAtendimentoCx(dados, brandLabel)} avaliacao={montarAvaliacaoLoja(dados, brandLabel)} />
       <Pareto v={montarPareto(dados, brandLabel)} filtros={filtros} />
       <CxSite filtros={filtros} />
     </>
@@ -165,7 +168,52 @@ function ComMeta({ c }: { c: CelulaMeta | null }) {
 // ---------------------------------------------------------------------------
 // 1. Atendimento
 // ---------------------------------------------------------------------------
-function Atendimento({ v }: { v: VisaoAtendimentoCx }) {
+/** Numero com a contagem embaixo, pequena (ausencia segue "—"). */
+function ComContagem({ valor, contagem }: { valor: string; contagem: string }) {
+  return (
+    <>
+      <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
+      {contagem !== "—" && <span className="block text-xs text-ink-faint">{contagem}</span>}
+    </>
+  );
+}
+
+const COR_DELTA: Record<DeltaCx["sentido"], string> = {
+  piorou: "font-semibold text-crit-ink",
+  melhorou: "font-semibold text-ok-ink",
+  estavel: "text-ink-faint",
+};
+
+/** "Avaliação da loja": uma linha, da pior para a melhor, a pior em destaque. */
+function AvaliacaoLoja({ a }: { a: AvaliacaoLojaCx }) {
+  return (
+    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-muted" data-testid="cx-avaliacao">
+      <span className="font-semibold text-ink">Avaliação da loja por marca</span>
+      {a.meta && <span className="text-ink-faint">({a.meta})</span>}
+      <InfoDica titulo="Avaliação da loja" texto={AJUDA_CX.avaliacao} />
+      {a.itens.map((x, idx) => (
+        <span key={x.chave} className="inline-flex items-center gap-1 tabular-nums">
+          {idx > 0 && <span aria-hidden="true" className="text-ink-faint">·</span>}
+          <span
+            className={
+              x.fora
+                ? "rounded-md bg-crit-soft px-1.5 py-0.5 font-bold text-crit-ink ring-1 ring-crit/30"
+                : x.pior
+                  ? "rounded-md bg-raised px-1.5 py-0.5 font-semibold text-ink ring-1 ring-line-strong"
+                  : ""
+            }
+          >
+            {x.marca} {x.nota}
+            {x.pior && <span className="font-normal"> (pior)</span>}
+            {x.fora && <span className="font-normal"> (fora da meta)</span>}
+          </span>
+        </span>
+      ))}
+    </p>
+  );
+}
+
+function Atendimento({ v, avaliacao }: { v: VisaoAtendimentoCx; avaliacao: AvaliacaoLojaCx | null }) {
   return (
     <Panel titulo="Atendimento" descricao="Chat da Shopee por loja" aria-label="Atendimento">
       {v.estado !== "dado" ? (
@@ -185,6 +233,7 @@ function Atendimento({ v }: { v: VisaoAtendimentoCx }) {
               ["Lojas fora da meta", v.totais.foraDaMeta.length ? v.totais.foraDaMeta.join(", ") : "Nenhuma"],
             ]}
           />
+          {avaliacao && <AvaliacaoLoja a={avaliacao} />}
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <caption className="sr-only">Atendimento do chat por loja Shopee</caption>
@@ -192,7 +241,7 @@ function Atendimento({ v }: { v: VisaoAtendimentoCx }) {
                 <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
                   <th scope="col" className="py-2 pr-3">Marca</th>
                   <ThAjuda ajuda={AJUDA_CX.conversas}>Conversas</ThAjuda>
-                  <ThAjuda ajuda={AJUDA_CX.aguardando}>Aguardando</ThAjuda>
+                  <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
                   <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
                   <th scope="col" className={TH}>% respondido</th>
                   <th scope="col" className={TH}>Nota</th>
@@ -205,7 +254,7 @@ function Atendimento({ v }: { v: VisaoAtendimentoCx }) {
                   <tr key={l.chave} className="border-b border-line last:border-b-0">
                     <th scope="row" className="py-2 pr-3 text-left font-semibold text-ink">{l.marca}</th>
                     <td className={TD}>{l.conversas}</td>
-                    <td className={TD}>{l.aguardando}</td>
+                    <td className={TD}><ComContagem valor={l.aguardandoPct} contagem={l.aguardando} /></td>
                     <td className={TD}>{l.naoLidas}</td>
                     <td className={TD}><ComMeta c={l.respondido} /></td>
                     <td className={TD}><ComMeta c={l.nota} /></td>
@@ -336,9 +385,9 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
                   <tr className="border-b border-line text-left text-xs font-semibold text-ink-faint">
                     <th scope="col" className="py-2 pr-3">Marca</th>
                     <th scope="col" className={TH}>Pedidos</th>
-                    <ThAjuda ajuda={AJUDA_CX.cancelamentos}>Cancel.</ThAjuda>
-                    <ThAjuda ajuda={AJUDA_CX.devolucoes}>Devol.</ThAjuda>
-                    <th scope="col" className={TH}>Reembolsado</th>
+                    <ThAjuda ajuda={AJUDA_CX.cancelamentosMarca}>Cancel.</ThAjuda>
+                    <ThAjuda ajuda={AJUDA_CX.devolucoesMarca}>Devol.</ThAjuda>
+                    <ThAjuda ajuda={AJUDA_CX.reembolsadoMarca}>Reembolsado</ThAjuda>
                   </tr>
                 </thead>
                 <tbody>
@@ -346,9 +395,23 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
                     <tr key={l.chave} className="border-b border-line last:border-b-0">
                       <th scope="row" className="py-2 pr-3 text-left font-medium text-ink">{l.marca}</th>
                       <td className={TD}>{l.pedidos}</td>
-                      <td className={TD}>{l.cancelamentos}</td>
-                      <td className={TD}>{l.devolucoes}</td>
-                      <td className={TD}>{l.reembolsado}</td>
+                      <td className={TD}>
+                        <span className={l.cancelamentosPct === "—" ? "text-ink-faint" : "text-ink"}>{l.cancelamentosPct}</span>
+                        {l.cancelamentoDelta && (
+                          <span
+                            className={`ml-1 text-xs ${COR_DELTA[l.cancelamentoDelta.sentido]}`}
+                            title={l.cancelamentoAntes ? `Antes: ${l.cancelamentoAntes}` : undefined}
+                          >
+                            {l.cancelamentoDelta.texto}
+                          </span>
+                        )}
+                        {l.cancelamentos !== "—" && <span className="block text-xs text-ink-faint">{l.cancelamentos}</span>}
+                      </td>
+                      <td className={TD}><ComContagem valor={l.devolucoesPct} contagem={l.devolucoes} /></td>
+                      <td className={TD}>
+                        {l.reembolsado}
+                        {l.reembolsoPct && <span className="ml-1 text-xs text-ink-faint">· {l.reembolsoPct}</span>}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
