@@ -448,7 +448,7 @@ test("resumo da Gerencial: delta do cancelamento so' nas marcas com historico; s
   assert.deepEqual(deltaPp(2.01, 2), { texto: "= estável", sentido: "estavel" });
 });
 
-type LinhaTeste = { marca: string; pedidos: number; canc: number; aceitas: number; conv?: number; resp?: number };
+type LinhaTeste = { marca: string; pedidos: number; canc: number; aceitas: number; conv?: number; resp?: number; sit?: "ok" | "fora" };
 function comMarcas(ls: LinhaTeste[]) {
   const p = comConversas(30);
   const conta = p.chat.contas[0];
@@ -459,7 +459,7 @@ function comMarcas(ls: LinhaTeste[]) {
       sem_foto: [],
       contas: ls
         .filter((l) => l.resp != null)
-        .map((l) => ({ ...conta, marca: l.marca, metricas: [metrica("shopee_11", "Taxa de resposta do chat", l.resp!, "ok", "Meta >= 60")] })),
+        .map((l) => ({ ...conta, marca: l.marca, metricas: [metrica("shopee_11", "Taxa de resposta do chat", l.resp!, l.sit ?? "ok", "Meta >= 60")] })),
       nao_lidas: ls.filter((l) => l.conv != null).map((l) => ({
         marca: l.marca, valor: null, capturado_em: null, conversas_30d: l.conv, aguardando_resposta: null,
       })),
@@ -481,7 +481,8 @@ function comMarcas(ls: LinhaTeste[]) {
 test("risco: base e' a mediana das marcas; com menos de 3 marcas medidas, ninguem fica acima", () => {
   const r = resumoCxGerencial(comConversas(30), rotulo); // 2 marcas
   assert.deepEqual(r.medianas, { contactRate: null, resposta: null, cancelamento: null, reembolso: null });
-  assert.deepEqual(r.marcas.map((m) => [m.chave, m.acima, m.tom]), [["apice", [], "bom"], ["rituaria", [], "bom"]]);
+  // sem mediana ninguem fica acima; a meta oficial vale mesmo assim (rituaria 45,31% com situacao "fora")
+  assert.deepEqual(r.marcas.map((m) => [m.chave, m.acima, m.tom]), [["rituaria", [], "critico"], ["apice", [], "bom"]]);
   assert.equal(medianaRisco([1, 9, 3, 7]), 5);
   assert.equal(medianaRisco([4, 1]), null);
 });
@@ -530,13 +531,39 @@ test("risco: na taxa de resposta menor e' pior; muito fora em um indicador vem a
   assert.ok(Math.abs(r.marcas[0].excesso - (86.5 / 20 - 1)) < 1e-9);
   // linha "Atencao": ate' 2 marcas, cada uma com o PIOR indicador (barbours: cancelamento 6,5/5 = 1,30 > reembolso 2,5/2 = 1,25)
   assert.deepEqual(r.alertas, [
-    { chave: "rituaria", marca: "RITUARIA", tom: "atencao", indicador: "resposta", valor: "20,0%", mediana: "86,5%" },
-    { chave: "barbours", marca: "BARBOURS", tom: "critico", indicador: "cancelamento", valor: "6,5%", mediana: "5,0%" },
+    { chave: "rituaria", marca: "RITUARIA", tom: "atencao", indicador: "resposta", valor: "20,0%", referencia: "(mediana 86,5%)" },
+    { chave: "barbours", marca: "BARBOURS", tom: "critico", indicador: "cancelamento", valor: "6,5%", referencia: "(mediana 5,0%)" },
   ]);
   // resposta ALTA nunca e' alerta: 99% contra mediana 86,5% fica dentro
   assert.equal(foraDaCurva("resposta", 99, 86.5), false);
   assert.equal(foraDaCurva("resposta", 72, 86.5), true); // 86,5 / 1,2 = 72,08
   assert.equal(foraDaCurva("cancelamento", 6, 5), false); // 5 x 1,2 = 6: precisa PASSAR
+});
+
+test("risco: resposta abaixo da meta oficial da Shopee fica vermelha e na frente, com a meta no lugar da mediana", () => {
+  const base = (resp: number, sit: "ok" | "fora") =>
+    resumoCxGerencial(
+      comMarcas([
+        { marca: "apice", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 90 },
+        { marca: "barbours", pedidos: 1000, canc: 100, aceitas: 25, conv: 100, resp: 85 }, // 10/5 e 2,5/2: +1,0 +0,25
+        { marca: "lescent", pedidos: 1000, canc: 50, aceitas: 20, conv: 100, resp: 88 },
+        { marca: "rituaria", pedidos: 1000, canc: 45, aceitas: 18, conv: 100, resp, sit },
+      ]),
+      rotulo,
+    );
+  // fora da meta (situacao do payload): passa a frente da barbours, que tem excesso maior (1,25 > 86,5/55 - 1 = 0,57)
+  const fora = base(55, "fora");
+  assert.deepEqual(fora.alertas, [
+    { chave: "rituaria", marca: "RITUARIA", tom: "critico", indicador: "resposta", valor: "55,0%", referencia: "(meta ≥ 60%)" },
+    { chave: "barbours", marca: "BARBOURS", tom: "critico", indicador: "cancelamento", valor: "10,0%", referencia: "(mediana 5,0%)" },
+  ]);
+  // dentro da meta: segue a mediana (65 < 86,5 / 1,2), ambar e atras do maior excesso
+  const dentro = base(65, "ok");
+  assert.deepEqual(dentro.alertas.map((a) => [a.chave, a.tom, a.referencia]), [
+    ["barbours", "critico", "(mediana 5,0%)"],
+    ["rituaria", "atencao", "(mediana 86,5%)"],
+  ]);
+  assert.equal(dentro.marcas.find((m) => m.chave === "rituaria")?.foraMeta, false);
 });
 
 test("drill-down: marcas da pior para a melhor no sentido do indicador; sem medida no fim, com motivo", () => {

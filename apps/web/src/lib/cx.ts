@@ -633,7 +633,7 @@ export const MIN_MARCAS_RISCO = 3;
 /** shortcut: resposta 0% teria excesso infinito; o teto so' ordena, trocar se 0% virar caso real. */
 const TETO_EXCESSO = 10;
 export const AJUDA_RISCO =
-  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais.";
+  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais. Taxa de resposta abaixo da meta oficial da Shopee deixa a marca vermelha e em primeiro, mostrando a meta no lugar da mediana.";
 
 /** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
 export function medianaRisco(vals: number[]): number | null {
@@ -685,6 +685,8 @@ export interface MarcaCx {
   acima: IndicadorCx[];
   /** Soma do excesso relativo nos indicadores fora da curva: a ordem do risco. */
   excesso: number;
+  /** Taxa de resposta fora da meta oficial da Shopee (situacao do payload): vermelha e na frente. */
+  foraMeta: boolean;
   tom: "bom" | "atencao" | "critico";
 }
 
@@ -694,7 +696,8 @@ export interface AlertaCx {
   tom: "atencao" | "critico";
   indicador: IndicadorCx;
   valor: string;
-  mediana: string;
+  /** "(mediana 86,5%)" ou, fora da meta oficial, "(meta ≥ 60%)". */
+  referencia: string;
 }
 
 export interface DeltaCx {
@@ -727,9 +730,9 @@ export interface ResumoCx {
   totais: Record<IndicadorCx, number | null>;
   /** Mediana das marcas por indicador, base do risco; null = menos de 3 marcas medidas. */
   medianas: Record<IndicadorCx, number | null>;
-  /** Linha "Atencao": ate' MAX_ALERTAS marcas fora, maior excesso primeiro, cada uma com o PIOR indicador. */
+  /** Linha "Atencao": ate' MAX_ALERTAS marcas, fora da meta oficial primeiro, depois maior excesso; cada uma com o PIOR indicador. */
   alertas: AlertaCx[];
-  /** Do maior excesso para o menor; so' marcas com alguma medida. */
+  /** Fora da meta oficial primeiro, depois do maior excesso para o menor; so' marcas com alguma medida. */
   marcas: MarcaCx[];
   /** Todas as marcas do recorte, inclusive sem medida (o drill-down mostra "—" e o motivo). */
   todas: MarcaCx[];
@@ -841,6 +844,7 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     .map(({ m, valores }) => {
       const acima = INDICADORES_CX.filter((i) => foraDaCurva(i, valores[i], medianas[i]));
       const l = linhas.get(m);
+      const foraMeta = metricaResposta(m)?.situacao === "fora" && valores.resposta != null;
       return {
         chave: m,
         marca: rotuloMarca(m),
@@ -851,10 +855,11 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
         reembolsado: devs.get(m)?.reembolsado ?? null,
         acima,
         excesso: acima.reduce((a, i) => a + excessoRelativo(i, valores[i]!, medianas[i]!), 0),
-        tom: (acima.length >= 2 ? "critico" : acima.length === 1 ? "atencao" : "bom") as MarcaCx["tom"],
+        foraMeta,
+        tom: (foraMeta || acima.length >= 2 ? "critico" : acima.length === 1 ? "atencao" : "bom") as MarcaCx["tom"],
       };
     })
-    .sort((a, b) => b.excesso - a.excesso || a.marca.localeCompare(b.marca));
+    .sort((a, b) => Number(b.foraMeta) - Number(a.foraMeta) || b.excesso - a.excesso || a.marca.localeCompare(b.marca));
   const marcas = todas.filter((x) => INDICADORES_CX.some((i) => x.valores[i] != null));
   const delta = deltaPp(cancAtual, cancAnt);
   const semHistoricoCancelamento = atendimento.marcas
@@ -879,19 +884,20 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     marcas,
     todas,
     alertas: marcas
-      .filter((m) => m.acima.length)
+      .filter((m) => m.foraMeta || m.acima.length)
       .slice(0, MAX_ALERTAS)
       .map((m) => {
-        // pior = maior excesso relativo, nao a ordem fixa dos indicadores
+        // pior = maior excesso relativo, nao a ordem fixa dos indicadores; fora da meta oficial, a resposta
         const exc = (i: IndicadorCx) => excessoRelativo(i, m.valores[i]!, medianas[i]!);
-        const pior = m.acima.reduce((a, b) => (exc(b) > exc(a) ? b : a));
+        const pior = m.foraMeta ? "resposta" : m.acima.reduce((a, b) => (exc(b) > exc(a) ? b : a));
+        const meta = metricaResposta(m.chave)?.rotulo_meta;
         return {
           chave: m.chave,
           marca: m.marca,
           tom: m.tom as AlertaCx["tom"],
           indicador: pior,
           valor: pct(m.valores[pior]),
-          mediana: pct(medianas[pior]),
+          referencia: m.foraMeta ? `(${meta ? metaCurta(meta) : "fora da meta da Shopee"})` : `(mediana ${pct(medianas[pior])})`,
         };
       }),
   };
