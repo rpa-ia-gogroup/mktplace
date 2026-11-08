@@ -53,6 +53,8 @@ export interface ItemRuptura {
   estoqueVendedor?: number | null;
   /** Impacto POTENCIAL em R$/dia. `null` = sem preco; `undefined` = impacto nao carregado. */
   perdaDia?: number | null;
+  /** Perda bruta do item (Shopee com estoque do vendedor: so' como apoio). */
+  perdaBruta?: number | null;
 }
 
 export interface ResumoOk {
@@ -268,6 +270,8 @@ export interface LinhaMarca {
   impacto: Partial<Record<Canal, MarcaImpacto>>;
   /** Maior perda de destaque entre os canais (R$ nunca somado entre canais). */
   maiorPerda: number | null;
+  /** Shopee com ruptura em que TODOS os itens tem estoque do vendedor: R$ 0 explicado, nao "0,0%". */
+  vendedorTemEstoque: boolean;
 }
 
 /**
@@ -279,7 +283,7 @@ export function rupturaPorMarca(canais: ResumoCanal[], impacto: ImpactoRuptura |
   const linhas = new Map<string, LinhaMarca>();
   for (const c of oks(canais)) {
     for (const m of c.marcas) {
-      const l = linhas.get(m.marca) ?? { marca: m.marca, celulas: {}, base: 0, ruptura: 0, taxa: null, impacto: {}, maiorPerda: null };
+      const l = linhas.get(m.marca) ?? { marca: m.marca, celulas: {}, base: 0, ruptura: 0, taxa: null, impacto: {}, maiorPerda: null, vendedorTemEstoque: false };
       l.celulas[c.canal] = m;
       if (m.base !== null && m.ruptura !== null) {
         l.base += m.base;
@@ -294,6 +298,10 @@ export function rupturaPorMarca(canais: ResumoCanal[], impacto: ImpactoRuptura |
       const l = linhas.get(m.brand);
       if (!l) continue;
       l.impacto[c.canal] = m;
+      if (c.canal === "shopee") {
+        const its = c.itens.filter((i) => i.brand === m.brand);
+        l.vendedorTemEstoque = its.length > 0 && its.every((i) => (i.estoque_vendedor ?? 0) > 0);
+      }
       const v = perdaDestaque(c.canal, m);
       if (v !== null) l.maiorPerda = Math.max(l.maiorPerda ?? 0, v);
     }
@@ -392,6 +400,16 @@ export function fmtReais(v: number | null | undefined): string {
   return `R$ ${v.toLocaleString("pt-BR", { notation: "compact", maximumFractionDigits: 1 })}`;
 }
 
+/**
+ * A MESMA regra da manchete e da tabela por marca: na Shopee so' perde quem
+ * esta' sem estoque do vendedor. Com estoque do vendedor o destaque e' R$ 0
+ * (segue vendendo fora do Full); estoque do vendedor nao informado e' ausencia.
+ */
+export function perdaDestaqueShopee(i: Pick<ItemImpacto, "perda_dia" | "estoque_vendedor">): number | null {
+  if (i.estoque_vendedor === null) return null;
+  return i.estoque_vendedor > 0 ? 0 : i.perda_dia;
+}
+
 function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
   const nome = canal === "ml"
     ? identificacaoML({ sku: i.sku, titulo: i.titulo, ancora_e_variacao: null }).texto
@@ -399,7 +417,8 @@ function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
   return {
     canal, marca: i.brand, nome, mediaDiaria: i.media_diaria_28d,
     estoqueVendedor: canal === "shopee" ? i.estoque_vendedor : undefined,
-    perdaDia: i.perda_dia,
+    perdaDia: canal === "shopee" ? perdaDestaqueShopee(i) : i.perda_dia,
+    perdaBruta: i.perda_dia,
   };
 }
 

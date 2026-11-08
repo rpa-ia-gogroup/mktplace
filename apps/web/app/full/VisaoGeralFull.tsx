@@ -96,9 +96,13 @@ function Fracao({ parte, base, motivo }: { parte: number | null; base: number | 
 }
 
 /** Segunda linha da celula de marca: R$/dia e % do Full da marca naquele canal. */
-function ImpactoMarca({ canal, m }: { canal: Canal; m: { perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number } }) {
+function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedorTemEstoque: boolean; m: { perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number } }) {
   const v = perdaDestaque(canal, m);
   const p = pctDestaque(canal, m);
+  // R$ 0 porque o vendedor cobre as rupturas: diz o porque, nao "R$ 0/dia · 0,0%".
+  if (vendedorTemEstoque) {
+    return <span className="block text-xs text-ink-muted" title={`${fmtReais(m.perda_dia)}/dia no Full, sem contar o estoque do vendedor`}>vendedor tem estoque</span>;
+  }
   return (
     <span className="block text-xs text-ink-muted">
       {v === null ? <Ausente motivo="sem preço" /> : `${fmtReais(v)}/dia`}
@@ -345,7 +349,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
                       return (
                         <td key={canal} className="px-4 py-2 text-right tabular-nums">
                           {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} /> : <Ausente motivo={fora ? "canal sem dado agora" : "marca fora deste canal"} />}
-                          {cel && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} />}
+                          {cel && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
                         </td>
                       );
                     })}
@@ -397,8 +401,13 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
                     <td className="px-4 py-2 text-ink-muted">{NOME_CANAL[t.canal]}</td>
                     <td className="px-4 py-2 text-right font-semibold tabular-nums text-ink">
                       {t.perdaDia === undefined ? <Ausente motivo="impacto do canal indisponível" />
-                        : t.perdaDia === null ? <Ausente motivo="sem preço" />
-                        : fmtReais(t.perdaDia)}
+                        : t.perdaDia === null ? <Ausente motivo={t.canal === "shopee" && t.estoqueVendedor === null ? "estoque do vendedor não informado" : "sem preço"} />
+                        : t.canal === "shopee" && (t.estoqueVendedor ?? 0) > 0 ? (
+                          <span className="flex flex-col items-end font-normal">
+                            <span className="rounded-md bg-raised px-1.5 py-0.5 text-xs font-medium text-ink-muted ring-1 ring-inset ring-line">vendedor tem estoque</span>
+                            <span className="text-xs text-ink-faint">{fmtReais(t.perdaBruta)} no Full</span>
+                          </span>
+                        ) : fmtReais(t.perdaDia)}
                     </td>
                     <td className="px-4 py-2 text-right tabular-nums">{fmtDecimal(t.mediaDiaria)}</td>
                     <td className="px-4 py-2 text-right tabular-nums">

@@ -382,3 +382,47 @@ test("rotulo de marca igual ao do resto da Torre", () => {
   assert.equal(tituloMarca("rituaria"), "RITUÁRIA");
   assert.equal(tituloMarca("kokeshi"), "KOKESHI");
 });
+
+// ---------------------------------------------------------------------------
+// FULL-IMPACTO-COERENCIA — a mesma regra da Shopee na manchete, marca e top 10
+// ---------------------------------------------------------------------------
+
+const itemSh = (brand: string, perda: number | null, vendedor: number | null) => ({
+  brand, sku: `${brand}-${perda}-${vendedor}`, titulo: `${brand} ${vendedor}`, media_diaria_28d: 1, preco_medio: 10,
+  fonte_preco: "mes" as const, mes_preco: "2026-11-01", estoque_vendedor: vendedor, perda_dia: perda,
+});
+
+const COERENCIA: ImpactoRuptura = {
+  ...IMPACTO,
+  shopee: canalImpacto("shopee", {
+    perda_dia: 2650, perda_dia_sem_vendedor: 50,
+    marcas: [
+      { brand: "barbours", rupturas: 2, sem_preco: 0, perda_dia: 2600, perda_dia_sem_vendedor: 0, gmv_full_dia: 1000, pct_gmv_full: 2.6, pct_gmv_full_sem_vendedor: 0 },
+      { brand: "apice", rupturas: 2, sem_preco: 0, perda_dia: 50, perda_dia_sem_vendedor: 50, gmv_full_dia: 1000, pct_gmv_full: 0.05, pct_gmv_full_sem_vendedor: 0.05 },
+    ],
+    itens: [
+      itemSh("barbours", 1400, 5239), // vendedor tem estoque: destaque R$ 0
+      itemSh("barbours", 1200, 3841),
+      itemSh("apice", 50, 0), // sem estoque do vendedor: perde de verdade
+      itemSh("apice", 30, null), // nao sabemos o estoque do vendedor
+    ],
+  }),
+};
+
+test("top 10: item da Shopee com estoque do vendedor vale R$ 0, como na manchete", () => {
+  const top = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, COERENCIA);
+  const sh = top.filter((t) => t.canal === "shopee");
+  // ML 300 e Shopee 50 primeiro; os com estoque do vendedor (R$ 0) depois; desconhecido no fim
+  assert.deepEqual(top.map((t) => [t.canal, t.perdaDia]).slice(0, 2), [["ml", 300], ["shopee", 50]]);
+  const comVendedor = sh.filter((t) => (t.estoqueVendedor ?? 0) > 0);
+  assert.deepEqual(comVendedor.map((t) => [t.perdaDia, t.perdaBruta]).sort(), [[0, 1200], [0, 1400]], "bruto so' como apoio");
+  assert.equal(sh.find((t) => t.estoqueVendedor === null)!.perdaDia, null, "desconhecido nao vira zero");
+  assert.ok(top.indexOf(comVendedor[0]) > top.findIndex((t) => t.perdaDia === 50));
+});
+
+test("tabela por marca: Shopee com ruptura coberta pelo vendedor e' explicada, nao 'R$ 0 · 0,0%'", () => {
+  const resumo = resumoShopee(shopee([produto("barbours", "RUPTURA_CANDIDATA"), produto("apice", "RUPTURA_CANDIDATA")]));
+  const linhas = rupturaPorMarca([resumo], COERENCIA);
+  assert.equal(linhas.find((l) => l.marca === "barbours")!.vendedorTemEstoque, true);
+  assert.equal(linhas.find((l) => l.marca === "apice")!.vendedorTemEstoque, false, "misto: um item para a venda");
+});
