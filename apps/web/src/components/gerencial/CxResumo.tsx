@@ -251,7 +251,7 @@ function LinhaAtencao({ r }: { r: ResumoCx }) {
               <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_TOM[a.tom]}`} />
               <span className={`font-semibold ${TINTA_TOM[a.tom]}`}>{a.marca}</span>
               <span className="tabular-nums">
-                {ROTULO_CURTO[a.indicador]} {a.valor} <span className="text-ink-faint">(mediana {a.mediana})</span>
+                {ROTULO_CURTO[a.indicador]} {a.valor} <span className="text-ink-faint">{a.referencia}</span>
               </span>
             </span>
           ))}
