@@ -146,3 +146,11 @@ export function agrupar(serie: PontoDiario[], fim: string, grao: Grao): Barra[] 
   }
   return barras;
 }
+
+/**
+ * Ticket medio da barra em R$ por peca (o mesmo conceito do "Preco medio" do
+ * card). Barra sem venda devolve `null`: a linha quebra ali, nunca cai a zero.
+ */
+export function ticketMedio(b: Pick<Barra, "pecas" | "receita">): number | null {
+  return b.pecas > 0 ? b.receita / b.pecas : null;
+}

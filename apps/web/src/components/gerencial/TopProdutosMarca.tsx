@@ -32,6 +32,11 @@ const Grafico = dynamic(() => import("./TopProdutoGrafico"), {
   loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-raised motion-reduce:animate-none" />,
 });
 
+const Ticket = dynamic(() => import("./TopProdutoTicket"), {
+  ssr: false,
+  loading: () => <div className="h-full w-full animate-pulse rounded-lg bg-raised motion-reduce:animate-none" />,
+});
+
 const VISIVEIS = 5;
 type CanalCard = "todos" | Marketplace;
 const TODOS_CANAIS: Marketplace[] = ["tiktok", "ml", "shopee"];
@@ -437,6 +442,20 @@ function DetalheTop({
           )}
         </div>
       </div>
+
+      {/* Segue o agrupamento acima: sem seletor proprio. */}
+      {!erro && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-ink">Ticket médio (R$ por peça) · {TITULO_GRAO[grao]}</h3>
+          <div className="h-44">
+            {!det ? (
+              <div className="h-full w-full animate-pulse rounded-lg bg-raised motion-reduce:animate-none" />
+            ) : (
+              <Ticket barras={barras} canal={p.canal} />
+            )}
+          </div>
+        </div>
+      )}
 
       {det && (det.extras.length > 0 || det.aviso_extras) && (
         <div className="flex flex-col gap-2">

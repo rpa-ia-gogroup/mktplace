@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agrupar, comparacaoValida, rotuloPeriodo, variacao } from "../src/lib/gerencial/top-produtos.ts";
+import { agrupar, comparacaoValida, rotuloPeriodo, ticketMedio, variacao } from "../src/lib/gerencial/top-produtos.ts";
 
 test("comparacao: so' hoje contra ontem inteiro nao vale; rotulo diz o periodo", () => {
   const hoje = "2026-11-06";
@@ -46,4 +46,17 @@ test("variacao sem base nao inventa 100%", () => {
   assert.equal(variacao(150, 100), 50);
   assert.equal(variacao(10, 0), null);
   assert.equal(variacao(10, null), null);
+});
+
+test("ticket medio: R$ por peca na barra; sem venda e' ausente, nunca zero", () => {
+  assert.equal(ticketMedio({ pecas: 4, receita: 100 }), 25);
+  assert.equal(ticketMedio({ pecas: 0, receita: 0 }), null);
+  // segue o agrupamento: semana com 3 pecas e R$ 30 -> R$ 10; dia sem venda -> null
+  const dias = agrupar(
+    [{ dia: "2026-11-05", pecas: 3, receita: 30 }, { dia: "2026-11-03", pecas: 1, receita: 40 }],
+    "2026-11-05", "dia",
+  ).map(ticketMedio);
+  assert.deepEqual(dias.slice(-3), [40, null, 10]);
+  const semana = agrupar([{ dia: "2026-11-05", pecas: 3, receita: 30 }, { dia: "2026-11-03", pecas: 1, receita: 40 }], "2026-11-05", "semana");
+  assert.equal(ticketMedio(semana.at(-1)!), 70 / 4, "receita / pecas da semana, nao media dos dias");
 });
