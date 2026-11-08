@@ -17,7 +17,8 @@ import {
   topRupturas,
   total,
   fmtReais,
-  mancheteImpacto,
+  linhaImpacto,
+  dicaImpacto,
   type CanalImpactoOk,
   type ImpactoRuptura,
   type ResumoCanal,
@@ -181,9 +182,9 @@ test("total so' com os dois canais medidos", () => {
   assert.equal(total([resumoML(ML), { canal: "shopee", status: "erro", motivo: "x" }]), null);
 });
 
-test("manchete: numero, %, recorte por canal e vermelho so' com ruptura", () => {
+test("manchete: % antes do absoluto, sem datas, impacto ou recorte por canal", () => {
   const m = manchete([resumoML(ML), resumoShopee(SHOPEE)]);
-  assert.equal(m.texto, "3 produtos sem saldo no Full com demanda (37,5% do sortimento): 2 no ML (foto de 04/11) e 1 na Shopee (foto de 08/11)");
+  assert.equal(m.texto, "37,5% do sortimento sem estoque no Full com demanda · 3 produtos");
   assert.equal(m.critico, true);
 });
 
@@ -191,15 +192,15 @@ test("manchete: sem ruptura nao e' critica", () => {
   const semRuptura = shopee([produto("apice", "SUFICIENTE")]);
   const m = manchete([resumoShopee(semRuptura)]);
   assert.equal(m.critico, false);
-  assert.equal(m.texto, "Nenhum produto sem saldo no Full com demanda da Shopee");
+  assert.equal(m.texto, "Nenhum produto sem estoque no Full com demanda");
 });
 
-test("manchete: canal fora e' dito, nunca somado como zero", () => {
+test("manchete: canal fora conta so' o medido, sem sufixo e nunca como zero", () => {
   const m = manchete([resumoML(ML), { canal: "shopee", status: "erro", motivo: "caiu" }]);
-  assert.equal(m.texto, "2 produtos sem saldo no Full com demanda do ML (50,0% do sortimento). Shopee: sem dado de estoque agora");
+  assert.equal(m.texto, "50,0% do sortimento do ML sem estoque no Full com demanda · 2 produtos");
   assert.equal(manchete([{ canal: "ml", status: "erro", motivo: "" }, { canal: "shopee", status: "erro", motivo: "" }]).critico, false);
   assert.equal(manchete([resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA")]))]).texto,
-    "1 produto sem saldo no Full com demanda da Shopee (100,0% do sortimento)");
+    "100,0% do sortimento da Shopee sem estoque no Full com demanda · 1 produto");
 });
 
 test("ruptura por marca: pior primeiro, junta canais e mantem a ausencia por celula", () => {
@@ -267,21 +268,14 @@ test("menu: uma entrada 'Full' em Operações, sem as quatro antigas", () => {
   }
 });
 
-test("manchete: mesma data nao repete a foto", () => {
-  const mesmaData = ml([inventario("kokeshi", "RUPTURA_CANDIDATA")], [marcaML("kokeshi", 1, 1)], {
-    frescor: { ref_date: "2026-11-08", ultima_fotografia_disponivel: "2026-11-08", published_at: null, dias_desde_a_fotografia: 0, horas_desde_a_publicacao: null, publicacao_agendada: false },
-  });
-  assert.ok(!manchete([resumoML(mesmaData), resumoShopee(SHOPEE)]).texto.includes("foto de"));
-});
-
-test("selo de frescor diz canal, data e idade", () => {
+test("selo de frescor: data e idade; foto velha escreve 'desatualizada'", () => {
   const r = resumoML(ML);
   if (r.status !== "ok") throw new Error("esperava ok");
-  assert.equal(seloFrescor(r), "ML: foto de 04/11, 4 dias");
   assert.equal(r.frescorVelho, true);
+  assert.equal(seloFrescor(r), "foto de 04/11 · desatualizada");
   const s = resumoShopee(SHOPEE);
   if (s.status !== "ok") throw new Error("esperava ok");
-  assert.equal(seloFrescor(s), "Shopee: foto de 08/11, hoje");
+  assert.equal(seloFrescor(s), "foto de 08/11, hoje");
 });
 
 test("Shopee: ruptura no Full com estoque do vendedor nao para a venda", () => {
@@ -347,14 +341,33 @@ test("fmtReais: compacto em pt-BR e ausencia nunca vira R$ 0", () => {
   assert.equal(sp(fmtReais(0)), "R$ 0", "zero medido continua zero");
 });
 
-test("manchete de impacto: por canal, Shopee pelo destaque, sem somar R$", () => {
-  assert.equal(sp(mancheteImpacto(IMPACTO)),
-    "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full) e R$ 1,5 mil/dia na Shopee (2,8%)");
+test("linha de impacto: por canal, Shopee so' dos sem vendedor, ausencia nunca vira R$ 0", () => {
+  const txt = (l: { rotulo: string; valor: string | null }) => sp(`${l.rotulo}: ${l.valor}`);
+  assert.equal(txt(linhaImpacto("ml", IMPACTO)), "Impacto potencial: 10,3% do faturamento Full · R$ 13,3 mil/dia");
+  assert.equal(txt(linhaImpacto("shopee", IMPACTO, 18)), "Impacto potencial dos 18: 2,8% do faturamento Full · R$ 1,5 mil/dia");
+  assert.equal(linhaImpacto("shopee", IMPACTO, null).rotulo, "Impacto potencial dos sem estoque do vendedor");
+  // impacto fora (rota caiu ou canal indisponivel): "indisponível agora", sem R$
+  assert.equal(txt(linhaImpacto("ml", null)), "Impacto potencial: indisponível agora");
   const soML = { ...IMPACTO, shopee: { canal: "shopee" as const, status: "unavailable" as const, motivo: "x" } };
-  assert.equal(sp(mancheteImpacto(soML)), "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full)");
-  assert.equal(mancheteImpacto(null), null);
-  const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk, shopee: soML.shopee };
-  assert.equal(sp(mancheteImpacto(semPct)), "impacto potencial de R$ 13,3 mil/dia no ML");
+  assert.equal(linhaImpacto("shopee", soML, 18).valor, "indisponível agora");
+  // pct ausente: so' o R$; perda ausente: null (vira "—" com motivo)
+  const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk };
+  assert.equal(sp(linhaImpacto("ml", semPct).valor), "R$ 13,3 mil/dia");
+  const semPerda = { ...IMPACTO, ml: { ...IMPACTO.ml, perda_dia: null } as CanalImpactoOk };
+  assert.equal(linhaImpacto("ml", semPerda).valor, null);
+  for (const l of [linhaImpacto("ml", null), linhaImpacto("shopee", soML, 18), linhaImpacto("ml", semPerda)]) {
+    assert.ok(!String(l.valor).includes("R$ 0"));
+  }
+});
+
+test("dica de impacto: ressalvas do proprio canal, R$ bruto da Shopee so' no ⓘ", () => {
+  const imp = { ...IMPACTO, ml: { ...IMPACTO.ml, preco_fallback: 16, sem_preco: 2 } as CanalImpactoOk };
+  const ml = sp(dicaImpacto("ml", imp))!;
+  assert.ok(ml.includes("16 usam o preço anunciado") && ml.includes("2 sem preço ficaram fora da soma"));
+  const sh = sp(dicaImpacto("shopee", imp))!;
+  assert.ok(sh.includes("Contando também os que têm estoque do vendedor: R$ 7,5 mil/dia."));
+  assert.ok(!sh.includes("sem preço ficaram fora"), "o sem preço do ML nao vaza para a Shopee");
+  assert.ok(sp(dicaImpacto("shopee", null))!.startsWith("Impacto POTENCIAL"));
 });
 
 test("ruptura por marca com impacto: ordena pela maior perda de destaque, nunca a soma", () => {

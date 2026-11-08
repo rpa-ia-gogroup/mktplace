@@ -228,35 +228,31 @@ export function diaMes(iso: string): string {
   return m ? `${m[2]}/${m[1]}` : iso;
 }
 
-/** Selo de frescor do topo: "ML: foto de 04/11, 4 dias". */
+/** Chip de frescor da linha do canal: "foto de 08/11, hoje" ou "foto de 04/11 · desatualizada". */
 export function seloFrescor(c: ResumoOk): string {
+  if (c.frescorVelho) return `foto de ${diaMes(c.refDate)} · desatualizada`;
   const d = c.diasFoto;
   const idade = d === null ? "" : d <= 0 ? ", hoje" : d === 1 ? ", 1 dia" : `, ${d} dias`;
-  return `${NOME_CANAL[c.canal]}: foto de ${diaMes(c.refDate)}${idade}`;
+  return `foto de ${diaMes(c.refDate)}${idade}`;
 }
 
 function plural(n: number, um: string, varios: string): string {
   return `${n.toLocaleString("pt-BR")} ${n === 1 ? um : varios}`;
 }
 
-/** A frase do topo: o numero que mais importa, com o recorte por canal. */
+/**
+ * Titulo do topo: % antes do absoluto, sem datas, impacto ou recorte por canal
+ * (isso vai na linha de cada canal). Canal fora nao entra nem como zero.
+ */
 export function manchete(canais: ResumoCanal[]): { texto: string; critico: boolean } {
   const ok = oks(canais);
-  const fora = canais.filter((c) => c.status !== "ok").map((c) => NOME_CANAL[c.canal]);
-  const sufixo = fora.length ? `. ${fora.join(" e ")}: sem dado de estoque agora` : "";
   if (!ok.length) return { texto: "Estoque Full sem dado agora nos dois canais", critico: false };
   const n = ok.reduce((s, c) => s + c.ruptura, 0);
+  if (n === 0) return { texto: "Nenhum produto sem estoque no Full com demanda", critico: false };
   const base = ok.reduce((s, c) => s + c.base, 0);
-  const onde = ok.length === 1 ? (ok[0].canal === "ml" ? " do ML" : " da Shopee") : "";
-  // Fotos de dias diferentes: cada parcela diz a sua data, para a soma nao parecer uma foto so'.
-  const datasDiferentes = new Set(ok.map((c) => c.refDate)).size > 1;
-  const foto = (c: ResumoOk) => (datasDiferentes ? ` (foto de ${diaMes(c.refDate)})` : "");
-  if (n === 0) return { texto: `Nenhum produto sem saldo no Full com demanda${onde}${sufixo}`, critico: false };
-  const recorte = ok.length > 1
-    ? `: ${ok.map((c) => `${c.ruptura.toLocaleString("pt-BR")} ${c.canal === "ml" ? "no ML" : "na Shopee"}${foto(c)}`).join(" e ")}`
-    : foto(ok[0]);
+  const de = ok.length === 1 ? (ok[0].canal === "ml" ? " do ML" : " da Shopee") : "";
   return {
-    texto: `${plural(n, "produto", "produtos")} sem saldo no Full com demanda${onde} (${fmtPct(pct(n, base))} do sortimento)${recorte}${sufixo}`,
+    texto: `${fmtPct(pct(n, base))} do sortimento${de} sem estoque no Full com demanda · ${plural(n, "produto", "produtos")}`,
     critico: true,
   };
 }
@@ -423,16 +419,33 @@ function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
 }
 
 /**
- * Trecho de impacto da manchete, por canal e SEM somar R$ entre canais:
- * "impacto potencial de R$ 13,3 mil/dia no ML (10,3% do Full) e R$ 1,5 mil/dia na Shopee (2,8%)".
+ * Linha de impacto do canal no topo. `valor: null` = sem preco (vira "—" com
+ * motivo); impacto fora = "indisponível agora". Nunca R$ 0 por ausencia.
+ * Shopee conta so' os sem estoque do vendedor (`semVendedor` itens).
  */
-export function mancheteImpacto(impacto: ImpactoRuptura | null): string | null {
-  const partes = impactosOk(impacto)
-    .filter((c) => perdaDestaque(c.canal, c) !== null)
-    .map((c, idx) => {
-      const p = pctDestaque(c.canal, c);
-      const pctTxt = p === null ? "" : ` (${fmtPct(p)}${idx === 0 ? " do Full" : ""})`;
-      return `${fmtReais(perdaDestaque(c.canal, c))}/dia ${c.canal === "ml" ? "no ML" : "na Shopee"}${pctTxt}`;
-    });
-  return partes.length ? `impacto potencial de ${partes.join(" e ")}` : null;
+export function linhaImpacto(
+  canal: Canal, impacto: ImpactoRuptura | null, semVendedor: number | null = null,
+): { rotulo: string; valor: string | null } {
+  const rotulo = canal === "ml" ? "Impacto potencial"
+    : semVendedor === null ? "Impacto potencial dos sem estoque do vendedor"
+    : `Impacto potencial ${semVendedor === 1 ? "do" : "dos"} ${semVendedor.toLocaleString("pt-BR")}`;
+  const c = impactosOk(impacto).find((x) => x.canal === canal);
+  if (!c) return { rotulo, valor: "indisponível agora" };
+  const v = perdaDestaque(canal, c);
+  if (v === null) return { rotulo, valor: null };
+  const p = pctDestaque(canal, c);
+  return { rotulo, valor: `${p === null ? "" : `${fmtPct(p)} do faturamento Full · `}${fmtReais(v)}/dia` };
+}
+
+/** Texto do ⓘ de impacto do canal, com as ressalvas DAQUELE canal (sem preco, preco anunciado). */
+export function dicaImpacto(canal: Canal, impacto: ImpactoRuptura | null): string {
+  const c = impactosOk(impacto).find((x) => x.canal === canal);
+  const fim = "% sobre o faturamento Full/dia dos 28 dias antes da foto. R$ não é somado entre canais.";
+  const semPreco = c && c.sem_preco > 0 ? ` ${c.sem_preco.toLocaleString("pt-BR")} sem preço ficaram fora da soma.` : "";
+  if (canal === "ml") {
+    const fallback = c && c.preco_fallback > 0 ? ` ${c.preco_fallback.toLocaleString("pt-BR")} usam o preço anunciado (sem venda em 30 dias).` : "";
+    return `Impacto POTENCIAL, não perda medida: venda média diária de 28 dias × preço do anúncio-âncora em 30 dias. ${fim}${fallback}${semPreco}`;
+  }
+  const bruto = c && c.perda_dia !== null ? ` Contando também os que têm estoque do vendedor: ${fmtReais(c.perda_dia)}/dia.` : "";
+  return `Impacto POTENCIAL: venda média diária de 28 dias × preço médio do mês por SKU, só dos itens sem estoque do vendedor.${bruto} ${fim}${semPreco}`;
 }
