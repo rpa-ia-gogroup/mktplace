@@ -43,11 +43,11 @@ import {
   shopeeFbsEnabled,
 } from "../src/lib/shopee-fbs-flag.ts";
 import {
-  SHOPEE_FBS_NAV,
   NAV_SECTIONS,
   getRouteTitle,
   navSections,
 } from "../src/components/shell/nav-config.ts";
+import { abasVisiveis } from "../src/lib/full-abas.ts";
 
 const RAIZ = join(import.meta.dirname, "..");
 const fonte = (rel: string) => readFileSync(join(RAIZ, rel), "utf8");
@@ -56,6 +56,7 @@ const CLIENT = fonte("app/full-shopee/FullShopeeClient.tsx");
 const PAGE = fonte("app/full-shopee/page.tsx");
 const LIB = fonte("src/lib/shopee-fbs.ts");
 const NAVLIST = fonte("src/components/shell/NavList.tsx");
+const FULL_PAGE = fonte("app/full/page.tsx");
 const API_CLIENT = fonte("src/lib/api-client.ts");
 
 const HOJE = "2026-09-16";
@@ -153,33 +154,25 @@ test("flag ausente, vazia ou diferente de 'true' mantem a tela desligada", () =>
     true);
 });
 
-test("item de navegacao so' existe com a flag ligada", () => {
-  const desligado = navSections({ shopeeFbs: false });
-  assert.equal(JSON.stringify(desligado), JSON.stringify(NAV_SECTIONS),
-    "com a flag off a navegacao e' identica a original");
-  const ligado = navSections({ shopeeFbs: true });
-  const hrefs = ligado.flatMap((s) => s.pages.map((p) => p.href));
-  assert.ok(hrefs.includes("/full-shopee"));
-  const ops = ligado.find((s) => s.label === "Operações");
-  assert.ok(ops?.pages.some((p) => p.href === SHOPEE_FBS_NAV.href));
+
+test("a sub-aba so' existe com a flag ligada", () => {
+  // FULL-UNIFICADO-1: o item de menu virou a sub-aba "Desempenho Shopee" de /full.
+  const chaves = (on: boolean) => abasVisiveis({ desempenhoShopee: on }).map((a) => a.chave);
+  assert.ok(!chaves(false).includes("desempenho-shopee"));
+  assert.ok(chaves(true).includes("desempenho-shopee"));
+  assert.match(FULL_PAGE, /desempenhoShopee: shopeeFbsEnabled\(\)/);
 });
 
-test("a rota e' de topo, para nao colidir com /operacoes por prefixo", () => {
-  assert.equal(SHOPEE_FBS_NAV.href, "/full-shopee");
-  assert.ok(!SHOPEE_FBS_NAV.href.startsWith("/operacoes/"));
-});
-
-test("NavList consulta a flag, nao a lista fixa", () => {
-  assert.match(NAVLIST, /shopeeFbs: shopeeFbsEnabled\(\)/);
+test("NavList consulta as flags, nao a lista fixa", () => {
   assert.ok(!/\bNAV_SECTIONS\.map\b/.test(NAVLIST),
     "a lista fixa nao pode ser usada direto: ignoraria a flag");
 });
 
 test("a rota falha FECHADA no servidor, nao apenas no menu", () => {
-  assert.match(PAGE, /import \{ notFound \} from "next\/navigation"/);
+  assert.match(PAGE, /import \{ notFound, redirect \} from "next\/navigation"/);
   assert.match(PAGE, /if \(!shopeeFbsEnabled\(\)\) notFound\(\);/);
-  // O guard vem ANTES de montar o cliente -- nenhum fetch acontece.
-  assert.ok(PAGE.indexOf("notFound()") < PAGE.indexOf("<FullShopeeClient"));
+  // FULL-UNIFICADO-1: o guard vem ANTES do redirect para a sub-aba de /full.
+  assert.ok(PAGE.indexOf("notFound()") < PAGE.indexOf("redirect("));
 });
 
 test("com a flag off nenhuma requisicao pode partir", () => {
@@ -628,23 +621,16 @@ test("ordenacao dos comparativos e deterministica", () => {
 // ---------------------------------------------------------------------------
 
 test("/full-ml continua intacto e separado", () => {
-  const ml = fonte("app/full-ml/page.tsx");
+  const ml = fonte("app/full-ml/FullMLClient.tsx");
   assert.ok(ml.includes("Full Mercado Livre"));
   assert.ok(!ml.toLowerCase().includes("shopee"),
     "a tela do ML nao pode ter sido tocada");
   assert.ok(!CLIENT.includes("full-ml"));
   assert.ok(!CLIENT.includes("ml-fulfillment"));
-  // As duas rotas coexistem na navegacao com a flag ligada.
-  const hrefs = navSections({ shopeeFbs: true }).flatMap((s) => s.pages.map((p) => p.href));
-  assert.ok(hrefs.includes("/full-ml") && hrefs.includes("/full-shopee"));
+  // FULL-UNIFICADO-1: as duas sao sub-abas de /full, cada uma com o seu client.
+  assert.ok(FULL_PAGE.includes("<FullMLClient />") && FULL_PAGE.includes("<FullShopeeClient />"));
 });
 
-test("nenhuma rota existente foi removida ou renomeada", () => {
-  const antes = NAV_SECTIONS.flatMap((s) => s.pages.map((p) => p.href));
-  const depois = navSections({ shopeeFbs: true }).flatMap((s) => s.pages.map((p) => p.href));
-  for (const h of antes) assert.ok(depois.includes(h), `rota sumiu: ${h}`);
-  assert.equal(depois.length, antes.length + 1);
-});
 
 
 test("nenhum texto da tela nasce abaixo de 12px", () => {
@@ -676,33 +662,6 @@ test("a flag e' lida por acesso LITERAL a process.env", () => {
 // Flags independentes — Gate FULL-SH-1D-R/V
 // ---------------------------------------------------------------------------
 
-test("as duas flags sao independentes: a matriz completa", () => {
-  // O risco que isto trava: duas funcoes separadas partindo de NAV_SECTIONS se
-  // ignoram, e ligar uma frente esconderia a outra. Uma funcao so', com as
-  // duas flags, faz elas COMPOREM.
-  const href = (f: Parameters<typeof navSections>[0]) =>
-    navSections(f).flatMap((s) => s.pages.map((p) => p.href));
-
-  const nenhuma = href({ expedicao: false, shopeeFbs: false });
-  assert.ok(!nenhuma.includes("/expedicao"));
-  assert.ok(!nenhuma.includes("/full-shopee"));
-  assert.ok(nenhuma.includes("/full-ml"), "Full ML nao depende de flag");
-
-  const soExp = href({ expedicao: true, shopeeFbs: false });
-  assert.ok(soExp.includes("/expedicao"), "Expedicao precisa aparecer");
-  assert.ok(!soExp.includes("/full-shopee"),
-    "ligar a Expedicao NAO pode revelar o Full Shopee");
-
-  const soShopee = href({ expedicao: false, shopeeFbs: true });
-  assert.ok(soShopee.includes("/full-shopee"));
-  assert.ok(!soShopee.includes("/expedicao"),
-    "ligar o Full Shopee NAO pode revelar a Expedicao");
-
-  const ambas = href({ expedicao: true, shopeeFbs: true });
-  assert.ok(ambas.includes("/expedicao") && ambas.includes("/full-shopee"));
-  assert.equal(ambas.length, nenhuma.length + 2, "dois itens distintos");
-  assert.equal(new Set(ambas).size, ambas.length, "nenhum item duplicado");
-});
 
 test("navSections aceita o booleano legado da Expedicao", () => {
   // O chamador original passava um unico booleano. Quebrar essa forma seria
@@ -716,13 +675,13 @@ test("navSections aceita o booleano legado da Expedicao", () => {
 
 test("getRouteTitle reconhece as DUAS rotas novas", () => {
   const nav = fonte("src/components/shell/nav-config.ts");
-  assert.match(nav, /navSections\(\{ expedicao: true, shopeeFbs: true \}\)/);
-  // E o titulo resolve de fato.
-  assert.equal(getRouteTitle("/full-shopee"), "Full Shopee");
+  assert.match(nav, /navSections\(\{ expedicao: true \}\)/);
+  // FULL-UNIFICADO-1: as rotas antigas so' redirecionam; o titulo e' o do Full.
+  assert.equal(getRouteTitle("/full"), "Full");
   // Gate EXP-UX-2C — o rotulo perdeu o "Shopee": a tela e' multicanal e o canal
   // se escolhe dentro dela. A ROTA nao mudou.
   assert.equal(getRouteTitle("/expedicao"), "Expedição");
-  assert.equal(getRouteTitle("/full-ml"), "Full Mercado Livre");
+
 });
 
 test("a Expedicao continua registrada e intacta", () => {

@@ -44,7 +44,7 @@ import {
   type MLFulfillmentResponse,
 } from "../src/lib/ml-fulfillment.ts";
 
-const PAGE = readFileSync(new URL("../app/full-ml/page.tsx", import.meta.url), "utf8");
+const PAGE = readFileSync(new URL("../app/full-ml/FullMLClient.tsx", import.meta.url), "utf8");
 const TREND = readFileSync(
   new URL("../src/components/MLFulfillmentTrend.tsx", import.meta.url), "utf8");
 const NAV = readFileSync(
@@ -583,7 +583,8 @@ test("nao ha texto abaixo de 12px", () => {
 // ---------------------------------------------------------------------------
 
 test("a rota entra na navegacao sem remover nem renomear nada", () => {
-  assert.ok(NAV.includes('{ href: "/full-ml", label: "Full Mercado Livre" }'));
+  // FULL-UNIFICADO-1: a tela virou a sub-aba "Envio ML" de /full.
+  assert.ok(NAV.includes('{ href: "/full", label: "Full" }'));
   for (const existente of [
     '"/", label: "Gerencial"', '"/canais"', '"/produtos"', '"/qualidade"',
     '"/financeiro"', '"/regioes"', '"/tempo-real"', '"/pedidos"',
@@ -597,12 +598,12 @@ test("a rota entra na navegacao sem remover nem renomear nada", () => {
 test("a rota e' de topo, para nao colidir com /operacoes por prefixo", () => {
   // `isNavItemActive` casa por `startsWith`: /operacoes/full-ml deixaria os
   // dois itens ativos ao mesmo tempo.
-  assert.ok(!NAV.includes('"/operacoes/full-ml"'));
-  assert.ok(NAV.includes('"/full-ml"'));
+  assert.ok(!NAV.includes('"/operacoes/full'));
+  assert.ok(NAV.includes('"/full"'));
 });
 
 test("a tela nao e' apresentada como estoque nem expedicao", () => {
   assert.ok(!/Estoque|Expedi[çc][ãa]o/.test(
-    NAV.split('"/full-ml"')[1].split("}")[0] ?? ""));
+    NAV.split('"/full"')[1].split("}")[0] ?? ""));
   assert.ok(PAGE.includes("modalidade logística"));
 });

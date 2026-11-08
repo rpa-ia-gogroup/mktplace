@@ -51,10 +51,6 @@ import {
   type Frescor,
   type ProdutoEstoque,
 } from "../src/lib/estoque-full.ts";
-import {
-  ESTOQUE_FULL_NAV,
-  navSections,
-} from "../src/components/shell/nav-config.ts";
 
 const RAIZ = join(import.meta.dirname, "..");
 const CLIENT_SRC = readFileSync(
@@ -62,7 +58,8 @@ const CLIENT_SRC = readFileSync(
   "utf8",
 );
 const PAGE_SRC = readFileSync(
-  join(RAIZ, "app", "estoque-full", "page.tsx"),
+  // FULL-UNIFICADO-1: a tela e' montada como sub-aba de /full.
+  join(RAIZ, "app", "full", "page.tsx"),
   "utf8",
 );
 
@@ -370,25 +367,6 @@ test("a rota nao depende de flag de build: quem decide e' a API", () => {
   assert.doesNotMatch(PAGE_SRC, /notFound\(\)/);
   assert.doesNotMatch(PAGE_SRC, /process\.env/);
   assert.match(PAGE_SRC, /<EstoqueFullClient \/>/);
-});
-
-test("o item de menu responde so' a propria flag", () => {
-  const semFlag = navSections({ shopeeFbs: true, expedicao: true });
-  const hrefs = semFlag.flatMap((s) => s.pages.map((p) => p.href));
-  assert.ok(!hrefs.includes(ESTOQUE_FULL_NAV.href));
-
-  const comFlag = navSections({ estoqueFull: true });
-  const comHrefs = comFlag.flatMap((s) => s.pages.map((p) => p.href));
-  assert.ok(comHrefs.includes("/estoque-full"));
-});
-
-test("o rotulo do menu nao colide com as outras telas Full", () => {
-  const todos = navSections({
-    estoqueFull: true,
-    shopeeFbs: true,
-    expedicao: true,
-  }).flatMap((s) => s.pages.map((p) => p.label));
-  assert.equal(new Set(todos).size, todos.length, "rotulo duplicado no menu");
 });
 
 // ---------------------------------------------------------------------------
