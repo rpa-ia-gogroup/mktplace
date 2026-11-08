@@ -15,12 +15,14 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import type { FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_SITE,
+  avisoRecorte,
   carregarCxSite,
   foraDasFontes,
   montarMarcasSite,
   montarTilesSite,
   nota,
   pct,
+  RESSALVA_REENVIO,
   seloFrescor,
   textoSafra,
   type ResultadoCxSite,
@@ -58,10 +60,18 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
   const tiles = montarTilesSite(d);
   const linhas = montarMarcasSite(d, brandLabel);
   const fora = foraDasFontes(d, brandLabel);
+  const recorte = avisoRecorte(dias);
   const selos = [seloFrescor("NPS", d.nps), seloFrescor("Reenvio", d.reenvio_reembolso), seloFrescor("Reviews", d.reviews)];
 
   return (
-    <Panel titulo={TITULO} descricao="NPS, reenvio, reembolso e reviews do site" aria-label={TITULO}>
+    <Panel
+      titulo={
+        <span className="inline-flex flex-wrap items-baseline gap-x-2">
+          {TITULO}
+          {recorte && <span className="text-xs font-normal text-ink-faint" data-testid="cx-site-recorte">{recorte}</span>}
+        </span>
+      }
+      descricao="NPS, reenvio, reembolso e reviews do site" aria-label={TITULO}>
       <div className="flex flex-col gap-4" data-testid="cx-site">
         <div className="flex flex-wrap gap-2">
           <Chip>{textoJanela(d.janela)}</Chip>
@@ -73,6 +83,7 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
         {d.reviews.aviso_frescor && (
           <p className="text-xs font-medium text-crit-ink" data-testid="cx-site-aviso-reviews">Reviews: {d.reviews.aviso_frescor}</p>
         )}
+        <p className="text-xs text-ink-muted" data-testid="cx-site-ressalva">{RESSALVA_REENVIO}</p>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {tiles.map((t) => (

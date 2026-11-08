@@ -7,12 +7,15 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  AJUDA_SITE,
+  avisoRecorte,
   carregarCxSite,
   diasSite,
   foraDasFontes,
   montarMarcasSite,
   montarTilesSite,
   problemaNoPayloadSite,
+  RESSALVA_REENVIO,
   seloFrescor,
   textoSafra,
   urlCxSite,
@@ -54,6 +57,21 @@ test("rota aceita 30 ou 90: 7 dias da aba vira 30", () => {
   assert.equal(urlCxSite("/torre-api", { marca: "kokeshi", dias: 7 }), "/torre-api/api/v1/cx/site?brands=kokeshi&dias=30");
 });
 
+test("7 dias da aba aparece como 30 ao lado do titulo", () => {
+  assert.equal(avisoRecorte(7), "30 dias: o site não tem recorte de 7");
+  assert.equal(avisoRecorte(30), null);
+  assert.equal(avisoRecorte(90), null);
+});
+
+test("ressalvas do reenvio/reembolso visiveis e no ⓘ dos dois", () => {
+  assert.match(RESSALVA_REENVIO, /não bate com o Vision CX/);
+  assert.match(RESSALVA_REENVIO, /Safra recente ainda recebe/);
+  for (const ajuda of [AJUDA_SITE.reenvio, AJUDA_SITE.reembolso]) {
+    assert.match(ajuda, /não bate com o Vision CX/);
+    assert.match(ajuda, /Safra recente ainda recebe/);
+  }
+});
+
 test("payload sem um bloco e' recusado", () => {
   assert.equal(problemaNoPayloadSite(payload()), null);
   const { reviews: _r, ...sem } = payload();
@@ -72,7 +90,7 @@ test("carregar nunca lanca", async () => {
 test("tiles priorizam percentual e ausencia nunca vira 0%", () => {
   const t = montarTilesSite(payload());
   assert.deepEqual(t.map((x) => x.valor), ["43,3", "1,0%", "0,5%", "9,5%"]);
-  assert.match(t[1].comparacao, /safra out\/26/);
+  assert.match(t[1].comparacao, /14 solicitações · safra out\/26/);
 
   const semTaxa = payload();
   semTaxa.reenvio_reembolso.taxa_reenvio_pct = null;
@@ -111,4 +129,6 @@ test("bloco entra na aba CX por uma linha", () => {
   assert.match(fonte, /<CxSite filtros=\{filtros\} \/>/);
   const bloco = readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8");
   assert.match(bloco, /CX do site \(DTC\)/);
+  assert.match(bloco, /\{RESSALVA_REENVIO\}/);
+  assert.match(bloco, /avisoRecorte\(dias\)/);
 });
