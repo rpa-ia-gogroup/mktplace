@@ -58,13 +58,6 @@ import {
   type MLFullEstoqueResponse,
   type MotivoIndisponivelML,
 } from "../src/lib/ml-full-estoque.ts";
-import {
-  ESTOQUE_FULL_NAV,
-  ML_FULL_ESTOQUE_NAV,
-  getRouteTitle,
-  isNavItemActive,
-  navSections,
-} from "../src/components/shell/nav-config.ts";
 
 const RAIZ = join(import.meta.dirname, "..");
 const CLIENT_SRC = readFileSync(
@@ -72,7 +65,8 @@ const CLIENT_SRC = readFileSync(
   "utf8",
 );
 const PAGE_SRC = readFileSync(
-  join(RAIZ, "app", "estoque-ml-full", "page.tsx"),
+  // FULL-UNIFICADO-1: a tela e' montada como sub-aba de /full.
+  join(RAIZ, "app", "full", "page.tsx"),
   "utf8",
 );
 const API_CLIENT_SRC = readFileSync(
@@ -100,25 +94,6 @@ test("a rota nao depende de flag de build: quem decide e' a API", () => {
   assert.doesNotMatch(PAGE_SRC, /notFound\(\)/);
   assert.doesNotMatch(PAGE_SRC, /process\.env/);
   assert.match(PAGE_SRC, /<MLFullEstoqueClient \/>/);
-});
-
-test("o menu responde so' a propria flag e nao colide com /full-ml nem /estoque-full", () => {
-  const sem = navSections({ estoqueFull: true, shopeeFbs: true, expedicao: true })
-    .flatMap((s) => s.pages.map((p) => p.href));
-  assert.ok(!sem.includes(ML_FULL_ESTOQUE_NAV.href));
-
-  const com = navSections({ mlFullEstoque: true, estoqueFull: true });
-  const paginas = com.flatMap((s) => s.pages);
-  assert.ok(paginas.some((p) => p.href === "/estoque-ml-full"));
-  const rotulos = paginas.map((p) => p.label);
-  assert.equal(new Set(rotulos).size, rotulos.length, "rotulo duplicado");
-
-  // `isNavItemActive` casa por prefixo: nenhuma rota vizinha pode acender junto.
-  for (const vizinha of ["/full-ml", ESTOQUE_FULL_NAV.href]) {
-    assert.equal(isNavItemActive(vizinha, ML_FULL_ESTOQUE_NAV.href), false);
-    assert.equal(isNavItemActive(ML_FULL_ESTOQUE_NAV.href, vizinha), false);
-  }
-  assert.equal(getRouteTitle("/estoque-ml-full"), "Estoque Full Mercado Livre");
 });
 
 test("o cliente chama a rota de estoque, nao a de modalidade de envio", () => {

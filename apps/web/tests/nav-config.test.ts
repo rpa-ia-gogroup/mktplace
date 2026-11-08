@@ -6,7 +6,6 @@ import {
   EXPEDICAO_NAV,
   NAV_SECTIONS,
   PERFORMANCE_CONTAS_NAV,
-  SHOPEE_FBS_NAV,
   getRouteTitle,
   isNavItemActive,
   navSections,
@@ -58,8 +57,8 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
     // Gate FULL-1D — superficie de modalidade logistica do Mercado Livre.
     // Rota de TOPO, e nao filha de /operacoes: `isNavItemActive` casa por
     // prefixo, e um filho deixaria os dois itens ativos ao mesmo tempo.
-    // Nao e estoque nem expedicao; mede por onde o pedido foi enviado.
-    "/full-ml",
+    // FULL-UNIFICADO-1: as quatro telas do Full viraram uma rota so', /full.
+    "/full",
     // METAS-1 — metas mensais de GMV por marca x canal (grupo Planejamento).
     "/metas",
     // Gate AVH-4B-S Task 2/2 — referencias externas da Avoe.
@@ -111,11 +110,9 @@ test("Gate EXP-UX-2C: a Expedicao no menu nao diz o canal", () => {
   assert.equal(EXPEDICAO_NAV.label, "Expedição");
   assert.equal(EXPEDICAO_NAV.href, "/expedicao", "a ROTA nao pode mudar");
   assert.ok(!/Shopee|Mercado Livre/.test(EXPEDICAO_NAV.label));
-  // e as duas telas Full, que nomeiam canal de proposito, seguem intactas
-  assert.equal(SHOPEE_FBS_NAV.label, "Full Shopee");
-  assert.equal(SHOPEE_FBS_NAV.href, "/full-shopee");
+  // FULL-UNIFICADO-1: o Full virou uma entrada so'; o canal se escolhe na sub-aba.
   const ops = NAV_SECTIONS.find((s) => s.label === "Operações")!;
-  assert.ok(ops.pages.some((p) => p.href === "/full-ml" && p.label === "Full Mercado Livre"));
+  assert.ok(ops.pages.some((p) => p.href === "/full" && p.label === "Full"));
 });
 
 test("Gate EXP-UX-2C: o estado ativo do menu nao mudou", () => {
@@ -195,7 +192,7 @@ test("T-0014: Performance das contas ausente do menu com a flag desligada (padra
     assert.ok(!hrefs(navSections({ performanceContas: flag })).includes("/performance-contas"));
   }
   // Ligar as OUTRAS flags nao revela este item.
-  const outras = navSections({ expedicao: true, shopeeFbs: true, estoqueFull: true, mlFullEstoque: true });
+  const outras = navSections({ expedicao: true });
   assert.ok(!hrefs(outras).includes("/performance-contas"));
 });
 

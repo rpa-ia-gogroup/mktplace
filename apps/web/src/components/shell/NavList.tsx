@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   Activity,
   BookMarked,
-  Boxes,
   Calculator,
   Gauge,
   CircleDot,
@@ -10,8 +9,6 @@ import {
   Lightbulb,
   MapPinned,
   Package,
-  PackageCheck,
-  PackageSearch,
   Radar,
   ShieldCheck,
   ShoppingBag,
@@ -24,7 +21,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { expedicaoHabilitado } from "@/lib/expedicao-contract";
-import { shopeeFbsEnabled } from "@/lib/shopee-fbs-flag";
 import { habilitado as performanceContasHabilitado } from "@/lib/performance-contas";
 
 import { isNavItemActive, navSections } from "./nav-config";
@@ -50,11 +46,8 @@ export const ICONE_DA_ROTA: Record<string, LucideIcon> = {
   "/inteligencia": Lightbulb,
   "/monitoramento-preco": Radar,
   "/operacoes": Users,
-  "/full-ml": Warehouse,
+  "/full": Warehouse,
   "/expedicao": Truck,
-  "/full-shopee": Boxes,
-  "/estoque-full": PackageSearch,
-  "/estoque-ml-full": PackageCheck,
   "/metas": Target,
   "/performance-contas": Gauge,
   "/referencias-externas/avoe": BookMarked,
@@ -106,9 +99,6 @@ export default function NavList({ pathname, hrefFor, alvoAmplo = false, recolhid
       {navSections({
         expedicao: expedicaoHabilitado(process.env.NEXT_PUBLIC_EXPEDICAO_ENABLED),
         cx: true,
-        shopeeFbs: shopeeFbsEnabled(),
-        estoqueFull: true,
-        mlFullEstoque: true,
         performanceContas: performanceContasHabilitado(),
       }).map((section, idx) => (
         <div key={section.label} className="flex flex-col gap-0.5">

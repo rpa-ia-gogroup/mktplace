@@ -59,10 +59,11 @@ export const NAV_SECTIONS: NavSection[] = [
       // `isNavItemActive` casa por prefixo: um filho de /operacoes deixaria os
       // dois itens ativos ao mesmo tempo.
       //
-      // Mede MODALIDADE LOGISTICA do envio, nao posicao de estoque nem
-      // expedicao -- por isso nao entra no grupo de Pedidos nem se mistura com
-      // a frente de Expedicao.
-      { href: "/full-ml", label: "Full Mercado Livre" },
+      // FULL-UNIFICADO-1: virou `/full`, rota unica com sub-abas (estoque ML e
+      // Shopee, envio ML, desempenho Shopee). As rotas antigas redirecionam.
+      // Nenhuma rota comeca com "/full" alem das antigas, que so' redirecionam,
+      // entao o casamento por prefixo nao acende outro item.
+      { href: "/full", label: "Full" },
     ],
   },
   // METAS-1 — grupo PROPRIO: Metas e' a unica tela da Torre que RECEBE dado
@@ -99,23 +100,6 @@ export const NAV_SECTIONS: NavSection[] = [
 export const EXPEDICAO_NAV: NavPage = { href: "/expedicao", label: "Expedição" };
 
 /**
- * Gate FULL-SH-1D — item da tela Full Shopee, atras de
- * `NEXT_PUBLIC_SHOPEE_FBS_ENABLED`.
- *
- * Entra em "Operações" e e' rota de TOPO, nao filha de `/operacoes`:
- * `isNavItemActive` casa por prefixo, e um filho deixaria os dois itens
- * ativos ao mesmo tempo — o mesmo motivo que levou o Full ML para rota
- * propria.
- *
- * O rotulo diz "Shopee" e nao apenas "Full": a Torre ja' tem "Full Mercado
- * Livre", e duas entradas chamadas "Full" seriam indistinguiveis no menu.
- */
-export const SHOPEE_FBS_NAV: NavPage = {
-  href: "/full-shopee",
-  label: "Full Shopee",
-};
-
-/**
  * Itens opcionais, cada um atras da PROPRIA flag.
  *
  * Uma funcao so', e nao uma por frente: duas funcoes partindo de
@@ -127,40 +111,6 @@ export const SHOPEE_FBS_NAV: NavPage = {
  * desligada. Esconder so' o menu deixaria a URL direta acessivel, e a API nao
  * tem autenticacao.
  */
-/**
- * Gate FULL-SOURCE-3 — item da tela de Estoque Full, atras de
- * `NEXT_PUBLIC_SHOPEE_FBS_STOCK_ENABLED`.
- *
- * Flag PROPRIA, e nao a do Full Shopee: aquela ja' esta ligada em producao e
- * governa a tela de DESEMPENHO. Compartilhar faria esta tela nascer visivel
- * sobre fatos que ainda nem existem no banco produtivo.
- *
- * O rotulo diz "Estoque Full Shopee" por inteiro: a Torre ja' tem "Full
- * Shopee" (desempenho) e "Full Mercado Livre", e "Estoque Full" sozinho seria
- * mais um item quase-homonimo no mesmo grupo.
- */
-export const ESTOQUE_FULL_NAV: NavPage = {
-  href: "/estoque-full",
-  label: "Estoque Full Shopee",
-};
-
-/**
- * ML-FULL-STOCK-API-1 — item da tela de Estoque Full do Mercado Livre, atras
- * de `NEXT_PUBLIC_ML_FULL_STOCK_ENABLED`.
- *
- * A ROTA nao e' `/estoque-full-ml` nem `/full-ml-estoque` de proposito:
- * `isNavItemActive` casa por PREFIXO, e qualquer uma das duas deixaria ativo
- * tambem o item de `/estoque-full` (Shopee) ou de `/full-ml` (modalidade de
- * envio). `/estoque-ml-full` nao e' prefixada por nenhuma rota existente.
- *
- * O rotulo diz "Estoque" por inteiro: "Full Mercado Livre" ja' existe e mede
- * MODALIDADE DE ENVIO, nao estoque.
- */
-export const ML_FULL_ESTOQUE_NAV: NavPage = {
-  href: "/estoque-ml-full",
-  label: "Estoque Full Mercado Livre",
-};
-
 /**
  * T-0014 — item da tela "Performance das contas", atras de
  * `NEXT_PUBLIC_PERFORMANCE_CONTAS_ENABLED` (helper `habilitado()` de
@@ -187,9 +137,6 @@ export const CX_NAV: NavPage = { href: "/cx", label: "CX" };
 export interface NavFlags {
   expedicao?: boolean;
   cx?: boolean;
-  shopeeFbs?: boolean;
-  estoqueFull?: boolean;
-  mlFullEstoque?: boolean;
   performanceContas?: boolean;
 }
 
@@ -200,9 +147,6 @@ export function navSections(flags: NavFlags | boolean = {}): NavSection[] {
   const extras: NavPage[] = [];
   if (f.expedicao) extras.push(EXPEDICAO_NAV);
   if (f.cx) extras.push(CX_NAV);
-  if (f.shopeeFbs) extras.push(SHOPEE_FBS_NAV);
-  if (f.estoqueFull) extras.push(ESTOQUE_FULL_NAV);
-  if (f.mlFullEstoque) extras.push(ML_FULL_ESTOQUE_NAV);
   if (f.performanceContas) extras.push(PERFORMANCE_CONTAS_NAV);
   if (!extras.length) return NAV_SECTIONS;
   return NAV_SECTIONS.map((s) =>
@@ -234,13 +178,10 @@ export function getRouteTitle(pathname: string): string {
   //
   // Isto NAO revela tela nenhuma: `getRouteTitle` so' traduz um pathname em
   // rotulo. Quem decide se a rota existe e' o guard de cada page.
-  // ML-FULL-STOCK-API-1: resolvido a' parte, sem mexer na lista abaixo (que
-  // e' pinada por teste). Mesma logica: quem esta' na rota passou pelo guard.
-  if (pathname.startsWith(ML_FULL_ESTOQUE_NAV.href)) return ML_FULL_ESTOQUE_NAV.label;
   // T-0014: idem -- quem esta' na rota passou pelo guard da pagina.
   if (pathname.startsWith(PERFORMANCE_CONTAS_NAV.href)) return PERFORMANCE_CONTAS_NAV.label;
   if (pathname.startsWith(CX_NAV.href)) return CX_NAV.label;
-  for (const section of navSections({ expedicao: true, shopeeFbs: true })) {
+  for (const section of navSections({ expedicao: true })) {
     for (const page of section.pages) {
       if (page.disabled) continue;
       const matches = page.href === "/" ? pathname === "/" : pathname.startsWith(page.href);
