@@ -429,6 +429,9 @@ export function linhaImpacto(
   const rotulo = canal === "ml" ? "Impacto potencial"
     : semVendedor === null ? "Impacto potencial dos sem estoque do vendedor"
     : `Impacto potencial ${semVendedor === 1 ? "do" : "dos"} ${semVendedor.toLocaleString("pt-BR")}`;
+  // Todas com estoque do vendedor: explica o porque, nao "R$ 0" (mesmo padrao da tabela por marca).
+  // Vale mesmo com a rota de impacto fora: o destaque da Shopee so' conta quem nao tem vendedor.
+  if (canal === "shopee" && semVendedor === 0) return { rotulo: "Impacto potencial", valor: "nenhum, o vendedor tem estoque" };
   const c = impactosOk(impacto).find((x) => x.canal === canal);
   if (!c) return { rotulo, valor: "indisponível agora" };
   const v = perdaDestaque(canal, c);

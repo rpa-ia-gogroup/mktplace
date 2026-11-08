@@ -131,8 +131,10 @@ function LinhaCanal({ c, impacto }: { c: ResumoOk; impacto: ImpactoRuptura | nul
         <p className="text-sm text-ink-muted">
           {c.semVendedor === null ? (
             <>Estoque do vendedor: <Ausente motivo="lista de rupturas incompleta" /></>
+          ) : c.semVendedor === 0 ? (
+            "Todas têm estoque do vendedor: a venda segue fora do Full"
           ) : (
-            <><strong className="font-semibold text-ink">{fmtPct(pct(c.semVendedor, c.ruptura))} ({fmtInt(c.semVendedor)})</strong> também sem estoque do vendedor: esses param a venda</>
+            <><strong className="font-semibold text-ink">{fmtPct(pct(c.semVendedor, c.ruptura))} ({fmtInt(c.semVendedor)})</strong> também sem estoque do vendedor: {c.semVendedor === 1 ? "esse para" : "esses param"} a venda</>
           )}
         </p>
       )}
@@ -222,7 +224,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
               {c.status === "ok" ? <LinhaCanal c={c} impacto={impacto} /> : (
                 <>
                   <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-ink">
-                    {NOME_CANAL[c.canal]}: sem dado agora <Chip tom="ausente">sem dado</Chip>
+                    {NOME_CANAL[c.canal]}: <Chip tom="ausente">sem dado agora</Chip>
                   </p>
                   {c.motivo && <p className="text-xs text-ink-muted">{c.motivo}</p>}
                 </>

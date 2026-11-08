@@ -346,6 +346,12 @@ test("linha de impacto: por canal, Shopee so' dos sem vendedor, ausencia nunca v
   assert.equal(txt(linhaImpacto("ml", IMPACTO)), "Impacto potencial: 10,3% do faturamento Full · R$ 13,3 mil/dia");
   assert.equal(txt(linhaImpacto("shopee", IMPACTO, 18)), "Impacto potencial dos 18: 2,8% do faturamento Full · R$ 1,5 mil/dia");
   assert.equal(linhaImpacto("shopee", IMPACTO, null).rotulo, "Impacto potencial dos sem estoque do vendedor");
+  // todas com estoque do vendedor: explicado, nunca "R$ 0" nem "dos 0"
+  const todasComVendedor = txt(linhaImpacto("shopee", IMPACTO, 0))!;
+  assert.equal(todasComVendedor, "Impacto potencial: nenhum, o vendedor tem estoque");
+  assert.ok(!todasComVendedor.includes("R$ 0") && !todasComVendedor.includes("dos 0"));
+  assert.equal(linhaImpacto("shopee", IMPACTO, 1).rotulo, "Impacto potencial do 1");
+  assert.equal(linhaImpacto("shopee", null, 0).rotulo, "Impacto potencial", "nem com a rota fora vira 'dos 0'");
   // impacto fora (rota caiu ou canal indisponivel): "indisponível agora", sem R$
   assert.equal(txt(linhaImpacto("ml", null)), "Impacto potencial: indisponível agora");
   const soML = { ...IMPACTO, shopee: { canal: "shopee" as const, status: "unavailable" as const, motivo: "x" } };
