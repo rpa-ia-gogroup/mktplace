@@ -10,7 +10,7 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { temaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 import { fmtBrlCurto } from "@/lib/formatters";
-import { ticketMedio, type Barra, type CanalTop } from "@/lib/gerencial/top-produtos";
+import { eixoTicket, ticketMedio, type Barra, type CanalTop } from "@/lib/gerencial/top-produtos";
 
 export default function TopProdutoTicket({ barras, canal }: { barras: Barra[]; canal: CanalTop }) {
   const tema = temaDoGrafico(useTema().resolvido);
@@ -21,7 +21,7 @@ export default function TopProdutoTicket({ barras, canal }: { barras: Barra[]; c
       <LineChart data={dados} margin={{ top: 8, right: 4, bottom: 0, left: 4 }}>
         <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} vertical={false} />
         <XAxis dataKey="rotulo" tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} minTickGap={12} />
-        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={72} tickFormatter={(v: number) => fmtBrlCurto(v)} domain={["auto", "auto"]} />
+        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={72} tickFormatter={(v: number) => fmtBrlCurto(v)} {...eixoTicket(dados.map((d) => d.ticket))} />
         <Tooltip
           contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 8, color: tema.tooltipTinta, fontSize: 12 }}
           formatter={(v: number) => [fmtBrlCurto(v), "Ticket médio"]}

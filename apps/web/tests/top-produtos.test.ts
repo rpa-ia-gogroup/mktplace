@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { agrupar, comparacaoValida, rotuloPeriodo, ticketMedio, variacao } from "../src/lib/gerencial/top-produtos.ts";
+import { agrupar, comparacaoValida, eixoTicket, rotuloPeriodo, ticketMedio, variacao } from "../src/lib/gerencial/top-produtos.ts";
 
 test("comparacao: so' hoje contra ontem inteiro nao vale; rotulo diz o periodo", () => {
   const hoje = "2026-11-06";
@@ -59,4 +59,13 @@ test("ticket medio: R$ por peca na barra; sem venda e' ausente, nunca zero", () 
   assert.deepEqual(dias.slice(-3), [40, null, 10]);
   const semana = agrupar([{ dia: "2026-11-05", pecas: 3, receita: 30 }, { dia: "2026-11-03", pecas: 1, receita: 40 }], "2026-11-05", "semana");
   assert.equal(ticketMedio(semana.at(-1)!), 70 / 4, "receita / pecas da semana, nao media dos dias");
+});
+
+test("eixoTicket: preco constante ganha folga redonda; serie que varia fica no auto", () => {
+  assert.deepEqual(eixoTicket([99.9, null, 99.9]), { domain: [95, 105], ticks: [95, 97.5, 100, 102.5, 105] }, "5% de cada lado, passos de 2,50");
+  assert.deepEqual(eixoTicket([99.9, 99.92]).domain, [95, 105], "quase constante tambem");
+  assert.deepEqual(eixoTicket([2, 2]).domain, [1, 3], "minimo de R$ 1");
+  assert.deepEqual(eixoTicket([0.5]).domain, [0, 2], "nunca abaixo de zero");
+  assert.deepEqual(eixoTicket([80, 120]), { domain: ["auto", "auto"] });
+  assert.deepEqual(eixoTicket([null, null]), { domain: ["auto", "auto"] });
 });

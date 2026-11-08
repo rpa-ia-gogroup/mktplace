@@ -154,3 +154,24 @@ export function agrupar(serie: PontoDiario[], fim: string, grao: Grao): Barra[] 
 export function ticketMedio(b: Pick<Barra, "pecas" | "receita">): number | null {
   return b.pecas > 0 ? b.receita / b.pecas : null;
 }
+
+/**
+ * Dominio do eixo do ticket. Preco constante (ou quase) faz o "auto" do recharts
+ * repetir o mesmo rotulo ("R$ 99,90" cinco vezes): ai abre folga de 5% (minimo
+ * R$ 1) em 4 passos redondos (ex.: 95 a 105 de 2,50 em 2,50), com os ticks. Serie que varia
+ * de verdade fica no "auto".
+ */
+export function eixoTicket(valores: readonly (number | null)[]): { domain: [number, number] | ["auto", "auto"]; ticks?: number[] } {
+  const v = valores.filter((x): x is number => x !== null);
+  if (!v.length) return { domain: ["auto", "auto"] };
+  const min = Math.min(...v), max = Math.max(...v);
+  const folga = Math.max(max * 0.05, 1);
+  if (max - min >= folga) return { domain: ["auto", "auto"] };
+  // passo redondo >= folga/2: 4 passos cobrem a folga dos dois lados
+  const ordem = 10 ** Math.floor(Math.log10(folga / 2));
+  const passo = [1, 2, 2.5, 5, 10].map((m) => m * ordem).find((p) => p >= folga / 2)!;
+  const lo = Math.max(0, Math.round((min + max) / 2 / passo) * passo - 2 * passo);
+  // ticks explicitos: com dominio fixo o recharts arredonda o passo (2,5 vira 3)
+  const ticks = [0, 1, 2, 3, 4].map((k) => lo + k * passo);
+  return { domain: [lo, ticks[4]], ticks };
+}
