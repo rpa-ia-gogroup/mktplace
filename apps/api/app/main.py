@@ -9,6 +9,7 @@ from app.routers import (
     alertas,
     b2b_revenda,
     cx_atendimento,
+    cx_site,
     dre,
     expedicao,
     metas,
@@ -55,6 +56,7 @@ app.include_router(b2b_revenda.router)
 app.include_router(account_performance.router)
 # Aba CX (menu principal): `/api/v1/cx/*`, flag `cx_api_enabled` (ligada).
 app.include_router(cx_atendimento.router)
+app.include_router(cx_site.router)
 app.include_router(metas.router)
 app.include_router(alertas.router)
 # Top 5 produtos por marca na Gerencial (base consolidada por NF).
