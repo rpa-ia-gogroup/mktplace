@@ -48,6 +48,8 @@ from app.services.tiktok_order_discounts_service import (
 from app.services import shopee_fbs_service as shopee_fbs_svc
 from app.services import shopee_fbs_stock_service as fbs_stock_svc
 from app.services import ml_full_stock_service as ml_stock_svc
+from app.services import full_impacto_service as impacto_svc
+from app.schemas.full_impacto import ImpactoRupturaResponse
 from app.services.ml_fulfillment_service import (
     MLFulfillmentUnavailable,
     get_ml_fulfillment_block,
@@ -1133,3 +1135,23 @@ def ml_full_estoque(
         )
     except ml_stock_svc.MLFullEstoqueContractError:
         raise HTTPException(503, ERRO_ML_FULL_ESTOQUE_CONTRATO)
+
+
+# ===========================================================================
+# FULL-IMPACTO-1 — impacto POTENCIAL da ruptura no Full (ML + Shopee)
+# ---------------------------------------------------------------------------
+# Cada canal responde a' flag do PROPRIO estoque: desligada, o canal sai
+# `unavailable` sem consulta. Com as duas desligadas nem exigimos sessao.
+# ===========================================================================
+
+@router.get("/full-impacto-ruptura", response_model=ImpactoRupturaResponse)
+def full_impacto_ruptura(db: Session = Depends(get_db)):
+    """Perda POTENCIAL/dia dos itens em ruptura no Full e o % do GMV Full.
+
+    perda/dia = venda media diaria de 28d x preco medio do item. ML: preco de
+    30d do anuncio-ancora (fallback: preco anunciado). Shopee: preco medio do
+    mes por SKU. R$ nunca e' somado entre canais. So' leitura.
+    """
+    ml, shopee = settings.ml_full_stock_api_enabled, settings.shopee_fbs_stock_enabled
+    return impacto_svc.get_impacto_ruptura(
+        _require_db(db) if (ml or shopee) else db, ml_ligado=ml, shopee_ligado=shopee)

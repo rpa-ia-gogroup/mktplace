@@ -579,7 +579,7 @@ test("PF1 escopo: as funcoes sem cache continuam sem cache e fetchMonthly segue 
   assert.ok(/withCache\(`monthly:\$\{marketplace\}`/.test(corpoDe("fetchMonthly")), "fetchMonthly intocada, mesmo sem consumidor");
 });
 
-test("PF1 escopo: as 30 assinaturas publicas de fetchX nao mudaram", () => {
+test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
   const assinaturas = [...CLIENT_SRC.matchAll(/^export (?:async )?function (fetch\w+)/gm)].map((m) => m[1]);
   // 23 -> 24 pelo Gate PMA-3, que acrescentou `fetchMonitoramentoPreco`;
   // 24 -> 25 pelo Gate AVH-4B-S Task 2/2, que acrescentou `fetchAvoeSnapshot`;
@@ -595,15 +595,18 @@ test("PF1 escopo: as 30 assinaturas publicas de fetchX nao mudaram", () => {
   // 29 -> 30 pelo VENDAS-POR-HORA-1, que acrescentou `fetchHojePorHora`
   //   (o "Hoje" padronizado da Gerencial). Sem cache, como `fetchTempoReal`:
   //   o numero muda de hora em hora.
+  // 30 -> 31 pelo FULL-IMPACTO-1, que acrescentou `fetchImpactoRuptura`
+  //   (impacto potencial da ruptura no Full; erro proprio, nunca R$ 0).
   // O pino literal e' proposital: forca revisao consciente a cada funcao nova,
   // em vez de aceitar qualquer superficie publica em silencio.
-  assert.equal(assinaturas.length, 30, "nenhuma funcao publica foi adicionada ou removida");
+  assert.equal(assinaturas.length, 31, "nenhuma funcao publica foi adicionada ou removida");
   assert.ok(assinaturas.includes("fetchMonitoramentoPreco"));
   assert.ok(assinaturas.includes("fetchAvoeSnapshot"));
   assert.ok(assinaturas.includes("fetchMLFulfillment"));
   assert.ok(assinaturas.includes("fetchShopeeFbs"));
   assert.ok(assinaturas.includes("fetchEstoqueFull"));
   assert.ok(assinaturas.includes("fetchMLFullEstoque"));
+  assert.ok(assinaturas.includes("fetchImpactoRuptura"));
 
   // O NUMERO sozinho passaria se alguem removesse um cliente e adicionasse
   // outro no mesmo commit. O conjunto NOMINAL congelado reprova a remocao,
@@ -618,6 +621,7 @@ test("PF1 escopo: as 30 assinaturas publicas de fetchX nao mudaram", () => {
     "fetchExecutiveSummary",
     "fetchFinanceiro",
     "fetchHojePorHora",
+    "fetchImpactoRuptura",
     "fetchInteligencia",
     "fetchMLFulfillment",
     "fetchMLFullEstoque",

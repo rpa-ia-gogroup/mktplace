@@ -75,11 +75,10 @@ import {
   type FiltrosEstoque,
   type ProdutoEstoque,
 } from "@/lib/estoque-full";
+import { brandLabel } from "@/lib/filters/brands";
 
-/** Rotulo humano da marca. A API trabalha em caixa baixa. */
-function tituloMarca(m: string): string {
-  return m.charAt(0).toUpperCase() + m.slice(1);
-}
+/** Rotulo da marca igual ao do resto da Torre ("ÁPICE", "RITUÁRIA"). */
+const tituloMarca = brandLabel;
 
 function Aviso({
   tom,

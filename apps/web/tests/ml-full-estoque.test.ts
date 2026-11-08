@@ -298,7 +298,8 @@ test("QA6: chips com 44px, marca formatada no PARCIAL, sem aviso duplicado", () 
 
   assert.equal(
     motivoParcialLegivel("Sem fotografia no dia: kokeshi, lescent."),
-    "Sem fotografia no dia: Kokeshi, Lescent.",
+    // Rotulo de marca da Torre (brandLabel), igual as outras telas.
+    "Sem fotografia no dia: KOKESHI, LESCENT.",
   );
   assert.equal(motivoParcialLegivel("2 inventário(s) Full sem leitura."), "2 inventário(s) Full sem leitura.");
   assert.ok(CLIENT_SRC.includes(".map(motivoParcialLegivel)"));

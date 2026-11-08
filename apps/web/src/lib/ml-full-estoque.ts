@@ -32,6 +32,7 @@ import {
   fmtInt,
   fmtOpcional,
 } from "./estoque-full.ts";
+import { brandLabel } from "./filters/brands.ts";
 
 export { SEM_DADO, fmtCobertura, fmtData, fmtDecimal, fmtInt, fmtOpcional };
 
@@ -445,8 +446,9 @@ export function fmtFracao(v: number | string | null | undefined): string {
   })}%`;
 }
 
+/** Rotulo da marca igual ao do resto da Torre ("ÁPICE", "RITUÁRIA"). */
 export function tituloMarca(m: string): string {
-  return m.charAt(0).toUpperCase() + m.slice(1);
+  return brandLabel(m);
 }
 
 /**

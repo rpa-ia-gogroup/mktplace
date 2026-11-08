@@ -17,6 +17,7 @@ import type { MLFulfillmentResponse } from "./ml-fulfillment";
 import type { ShopeeFbsPayload } from "./shopee-fbs";
 import type { EstoqueFullResponse } from "./estoque-full";
 import type { MLFullEstoqueResponse } from "./ml-full-estoque";
+import type { ImpactoRuptura } from "./full-visao-geral";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -2576,4 +2577,15 @@ export async function fetchMLFullEstoque(
     );
   }
   return (await res.json()) as MLFullEstoqueResponse;
+}
+
+/**
+ * FULL-IMPACTO-1 — impacto POTENCIAL da ruptura no Full (ML + Shopee). Cada
+ * canal vem `ok` ou `unavailable` com motivo; falha da rota inteira vira erro
+ * e a Visao geral segue sem o R$, nunca com R$ 0.
+ */
+export async function fetchImpactoRuptura(signal?: AbortSignal): Promise<ImpactoRuptura> {
+  const res = await torreFetch(`${API_URL}/api/v1/performance/full-impacto-ruptura`, { signal });
+  if (!res.ok) throw new Error("O impacto no faturamento está indisponível no momento.");
+  return (await res.json()) as ImpactoRuptura;
 }
