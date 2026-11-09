@@ -21,6 +21,24 @@ jobs:
   api:
     name: api (pytest)
     runs-on: ubuntu-latest
+    # Postgres VAZIO e descartavel no endereco padrao do config.py
+    # (postgresql://user:password@localhost:5432/mktplace_control -- credencial
+    # de exemplo do repo, nao segredo). Os testes de rota contam com um banco
+    # que ACEITA conexao (sem ele a conexao recusada estoura como excecao);
+    # nenhum dado e' carregado. Teste que precisa de schema/dado real se pula
+    # pelo proprio skipif (TEST_PG_DSN, PMA_TEST_PG_BIN...) e aparece no -rs.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: mktplace_control
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d mktplace_control"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     defaults:
       run:
         working-directory: apps/api
@@ -38,12 +56,6 @@ jobs:
         # para os testes que importam `pipelines`.
         env:
           PYTHONPATH: ${{ github.workspace }}
-          # Ambiente SEM banco, o que os testes "..._sem_banco_..." declaram: URL
-          # vazia -> engine None -> get_db devolve None -> a rota responde 503.
-          # Sem isto valia o padrao do config (localhost:5432) e a conexao
-          # recusada estourava como excecao. Teste que precisa de banco real
-          # se pula pelo proprio skipif (TEST_PG_DSN, PMA_TEST_PG_BIN...).
-          DATABASE_URL: ""
         # -rfEs: falhas, erros e pulos (com motivo) no resumo do log.
         run: uv run --frozen python -m pytest -q -rfEs
 
