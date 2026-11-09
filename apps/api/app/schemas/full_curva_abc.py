@@ -7,6 +7,24 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+Curva = Literal["AA", "A", "B", "C"]
+#: Por que o item ficou sem curva (com a planilha lida): kit nao tem curva
+#: propria; `sem_ponte` = o codigo do canal nao liga a nenhum SKU da planilha;
+#: `marca_fora` = a marca nao aparece na planilha.
+CurvaMotivo = Literal["kit", "sem_ponte", "marca_fora"]
+
+
+class CurvaMeta(BaseModel):
+    """PR3: curva ABC nas listas de estoque do Full (Shopee e ML)."""
+    #: False = planilha nao lida (sem credencial, falha, formato): todo item
+    #: vem com `curva` None e `curva_motivo` None; o motivo fica aqui. Nunca "C".
+    disponivel: bool
+    motivo: Optional[str] = None
+    lida_em: Optional[datetime] = None
+    itens_com_curva: int = 0
+    itens_total: int = 0
+
+
 class CurvaAbcResponse(BaseModel):
     #: `unavailable`: sem credencial, leitura falhou ou formato mudou. O /full
     #: segue sem curva; nunca vira "C".

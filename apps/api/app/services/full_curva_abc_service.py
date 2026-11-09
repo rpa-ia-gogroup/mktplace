@@ -268,3 +268,66 @@ def get_curva_abc(db: Optional[Session], *, obter=obter_planilha) -> dict:
         "curva_por_sku": por_sku,
         "aviso": motivo,  # leitura nova falhou, mas a anterior segue valendo
     }
+
+
+# ---------------------------------------------------------------------------
+# PR3: curva por item nas listas de estoque do Full (Shopee e ML)
+# ---------------------------------------------------------------------------
+
+#: A ponte custa ~0,26 s no Neon (medido 09/11/2026) e as rotas de estoque a
+#: pedem a cada carga: o mapa fica guardado junto com a planilha, por 1 h.
+_mapa_cache: dict = {"lida_em": None, "em_s": 0.0, "mapa": None}
+
+
+def _mapa_curvas(db: Optional[Session], obter, relogio: Callable[[], float]) -> dict:
+    """`get_curva_abc` com o resultado guardado enquanto a planilha for a mesma (ate' 1 h)."""
+    planilha, motivo = obter()
+    c = _mapa_cache
+    if (planilha is not None and c["mapa"] is not None and c["lida_em"] == planilha.lida_em
+            and relogio() - c["em_s"] < CACHE_SEGUNDOS):
+        return c["mapa"]
+    mapa = get_curva_abc(db, obter=lambda: (planilha, motivo))
+    if mapa["status"] == "ok":
+        c.update(lida_em=planilha.lida_em, em_s=relogio(), mapa=mapa)
+    return mapa
+
+
+def _eh_kit(sku: Optional[str]) -> bool:
+    """Mesma regra do front (`ehKit`): ML "Kit110"/"KIT005"."""
+    return str(sku or "").strip().lower().startswith("kit")
+
+
+def anotar_curva(itens: list, db: Optional[Session], *, sku_de: Callable, kit_de: Callable = lambda i: False,
+                 obter=obter_planilha, relogio: Callable[[], float] = time.monotonic) -> dict:
+    """Preenche `curva`/`curva_motivo` em cada item e devolve o `curva_meta`.
+
+    Planilha nao lida: todos ficam None (nunca "C") e o motivo vai no meta.
+    Erro inesperado aqui tambem vira "indisponivel": a lista de estoque nunca cai por causa da curva.
+    """
+    try:
+        mapa = _mapa_curvas(db, obter, relogio)
+    except Exception:  # noqa: BLE001 -- ponte/planilha nao derrubam o estoque
+        mapa = {"status": "unavailable", "motivo": MOTIVO_LEITURA}
+    if mapa["status"] != "ok":
+        for i in itens:
+            i.curva, i.curva_motivo = None, None
+        return {"disponivel": False, "motivo": mapa.get("motivo") or MOTIVO_LEITURA, "lida_em": None,
+                "itens_com_curva": 0, "itens_total": len(itens)}
+    por_sku: dict = mapa["curva_por_sku"]
+    marcas = {k.split("|", 1)[0] for k in por_sku}
+    com_curva = 0
+    for i in itens:
+        marca, sku = _norm(i.brand), str(sku_de(i) or "").strip()
+        curva = None if kit_de(i) or _eh_kit(sku) or not sku else por_sku.get(_chave(marca, sku))
+        i.curva = curva
+        if curva:
+            i.curva_motivo = None
+            com_curva += 1
+        elif kit_de(i) or _eh_kit(sku):
+            i.curva_motivo = "kit"
+        elif marca not in marcas:
+            i.curva_motivo = "marca_fora"
+        else:
+            i.curva_motivo = "sem_ponte"
+    return {"disponivel": True, "motivo": mapa.get("aviso"), "lida_em": mapa.get("lida_em"),
+            "itens_com_curva": com_curva, "itens_total": len(itens)}

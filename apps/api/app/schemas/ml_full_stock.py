@@ -41,6 +41,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo
+
 MotivoIndisponivel = Literal[
     "feature_flag_desligada",
     "fato_inexistente",
@@ -99,6 +101,11 @@ class InventarioEstoque(BaseModel):
     #: TRUE = o ancora e' uma variacao e o SKU/titulo vem do ITEM (a 014 nao
     #: tem variacao): ambiguo. `None` = sem ancora.
     ancora_e_variacao: Optional[bool] = None
+    #: PR3: curva ABC do item (planilha "Sortimento Gobeaute"). None = sem
+    #: curva; `curva_motivo` diz por que (kit, sem_ponte, marca_fora) ou fica
+    #: None quando a planilha nao foi lida (`curva_meta.motivo`). Nunca "C" por falta.
+    curva: Optional[Curva] = None
+    curva_motivo: Optional[CurvaMotivo] = None
 
 
 class StatusNaoDisponivel(BaseModel):
@@ -225,6 +232,8 @@ class MLFullEstoqueResponse(BaseModel):
     incluiu_fora_do_full: bool = False
     limites: LimitesProvisorios
     limitacoes: list[str]
+    #: PR3: estado da curva ABC nesta lista. None = resposta sem a anotacao.
+    curva_meta: Optional[CurvaMeta] = None
 
 
 class MLFullEstoqueUnavailableResponse(BaseModel):
