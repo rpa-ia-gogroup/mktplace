@@ -35,8 +35,10 @@ type Estado =
   | { tipo: "ok"; dados: PerformanceOficialResponse };
 
 const TOM_SITUACAO: Record<Situacao, "bom" | "critico" | "neutro"> = { ok: "bom", fora: "critico", sem_meta: "neutro" };
-const COR_TERMOMETRO_ML = ["bg-crit", "bg-[#f97316]", "bg-[#facc15]", "bg-[#84cc16]", "bg-ok"];
-const COR_TERMOMETRO_SHOPEE = ["bg-crit", "bg-warn", "bg-[#84cc16]", "bg-ok"];
+// TEMA-ESCURO: o degrade vermelho -> verde da plataforma em TOKENS de estado
+// (hex fixo nao muda com o tema); os degraus do meio sao o mesmo token com alfa.
+const COR_TERMOMETRO_ML = ["bg-crit", "bg-warn", "bg-warn/55", "bg-ok/55", "bg-ok"];
+const COR_TERMOMETRO_SHOPEE = ["bg-crit", "bg-warn", "bg-ok/55", "bg-ok"];
 
 export type EstadoPerformance = Estado;
 
