@@ -622,9 +622,9 @@ export interface Antes {
   texto: string;
 }
 
-function antesDe(atual: number | null, antes: number | null, ref: string): Antes | null {
+function antesDe(atual: number | null, antes: number | null, ref: string, curto = false): Antes | null {
   if (atual === null || antes === null) return null;
-  return { pp: (atual - antes) * 100, texto: `antes ${fmtPct(antes)} · foto de ${diaMes(ref)}` };
+  return { pp: (atual - antes) * 100, texto: curto ? `antes ${fmtPct(antes)} em ${diaMes(ref)}` : `antes ${fmtPct(antes)} · foto de ${diaMes(ref)}` };
 }
 
 /**
@@ -636,7 +636,7 @@ export function antesImpacto(canal: Canal, atual: ImpactoRuptura | null, comAnte
   const c = impactosOk(atual).find((x) => x.canal === canal);
   const d = impactosOk(comAnterior).find((x) => x.canal === canal);
   if (!c || !d?.anterior || d.ref_date !== c.ref_date) return null;
-  return antesDe(pctDestaque(canal, c), pctDestaque(canal, d.anterior), d.anterior.ref_date);
+  return antesDe(pctDestaque(canal, c), pctDestaque(canal, d.anterior), d.anterior.ref_date, true);
 }
 
 /** "Param a venda": % das rupturas sem estoque do vendedor, agora e na foto anterior da Shopee. */
@@ -856,29 +856,33 @@ export function chipFoto(c: ResumoOk): { texto: string; atencao: boolean; titulo
 export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null): {
   valor: string; contexto: string; titulo: string | null;
   porCanal: Partial<Record<Canal, string>>; parcial: boolean; critico: boolean;
+  blocos: Partial<Record<Canal, BlocoCanal>>;
 } | null {
   const ok = oks(canais);
   if (!ok.length) return null;
   const n = ok.reduce((s, c) => s + c.ruptura, 0);
   // O % do sortimento fica no cartao "Sem estoque com demanda" logo abaixo (nada repetido).
   const contexto = `de ${n.toLocaleString("pt-BR")} rupturas com demanda`;
-  if (abc === null) return { valor: "—", contexto: `carregando a curva · ${contexto}`, titulo: null, porCanal: {}, parcial: false, critico: false };
-  if (abc.status !== "ok") return { valor: "—", contexto: `sem curva agora · ${contexto}`, titulo: abc.motivo ?? "curva ABC sem leitura", porCanal: {}, parcial: false, critico: false };
+  if (abc === null) return { valor: "—", contexto: `carregando a curva · ${contexto}`, titulo: null, porCanal: {}, parcial: false, critico: false, blocos: {} };
+  if (abc.status !== "ok") return { valor: "—", contexto: `sem curva agora · ${contexto}`, titulo: abc.motivo ?? "curva ABC sem leitura", porCanal: {}, parcial: false, critico: false, blocos: {} };
   const ranking = rankingRupturas(canais, impacto, abc);
   const aaA = (canal: Canal) => ranking.filter((t) => t.canal === canal && grupoDe(curvaDe(t, abc)) !== "demais").length;
   const porCanal: Partial<Record<Canal, string>> = {};
+  const blocos: Partial<Record<Canal, BlocoCanal>> = {};
   let parcial = false;
   let total = 0;
   for (const c of ok) {
     const k = aaA(c.canal);
     total += k;
     const l = linhaCurvaCanal(c.canal, impacto, abc);
-    if (!ranking.some((t) => t.canal === c.canal)) porCanal[c.canal] = "0 AA/A · nenhuma ruptura";
-    else if (l.estado === "ok") porCanal[c.canal] = `${k} AA/A · ${fmtPct(l.pct)} do impacto potencial`;
-    else if (l.estado === "pouca") { porCanal[c.canal] = `${k} AA/A · ${l.texto}`; parcial = true; }
-    else porCanal[c.canal] = `${k} AA/A`;
+    if (!ranking.some((t) => t.canal === c.canal)) blocos[c.canal] = { n: k, apoio: "nenhuma ruptura", poucaCobertura: false };
+    else if (l.estado === "ok") blocos[c.canal] = { n: k, apoio: `${fmtPct(l.pct)} do impacto potencial`, poucaCobertura: false };
+    else if (l.estado === "pouca") { blocos[c.canal] = { n: k, apoio: l.texto, poucaCobertura: true }; parcial = true; }
+    else blocos[c.canal] = { n: k, apoio: null, poucaCobertura: false };
+    const b = blocos[c.canal]!;
+    porCanal[c.canal] = b.apoio ? `${k} AA/A · ${b.apoio}` : `${k} AA/A`;
   }
-  return { valor: total.toLocaleString("pt-BR"), contexto, titulo: null, porCanal, parcial, critico: total > 0 };
+  return { valor: total.toLocaleString("pt-BR"), contexto, titulo: null, porCanal, parcial, critico: total > 0, blocos };
 }
 
 export const DICA_HEROI_PARCIAL = "AA/A conhecidos: a curva cobre só parte do ML (kits e códigos sem ligação com a planilha ficam sem curva).";
@@ -900,3 +904,94 @@ export function filaPorGrupo(ranking: ItemRuptura[], abc: CurvaAbc | null, abert
     })
     .filter((g) => g.total > 0);
 }
+
+// ---------------------------------------------------------------------------
+// FULL-CARINHO -- blocos de canal no heroi, aviso so' com problema, filtro de
+// canal combinavel com o de curva (na URL) e a celula de impacto da fila.
+// ---------------------------------------------------------------------------
+
+/** Bloco de canal do heroi: "6 AA/A" e uma linha de apoio (% do impacto ou a cobertura). */
+export interface BlocoCanal { n: number; apoio: string | null; poucaCobertura: boolean }
+
+export type FiltroCanal = "todos" | Canal;
+export const FILTROS_CANAL: FiltroCanal[] = ["todos", "ml", "shopee"];
+export const NOME_CANAL_LONGO: Record<Canal, string> = { ml: "Mercado Livre", shopee: "Shopee" };
+
+/** Selo de canal (identidade, nao status): mesma cor da Gerencial. Classes literais para o Tailwind. */
+export const SELO_CANAL: Record<Canal, { ponto: string; pilula: string }> = {
+  ml: { ponto: "bg-canal-ml", pilula: "bg-canal-ml/10 border-canal-ml/30" },
+  shopee: { ponto: "bg-canal-shopee", pilula: "bg-canal-shopee/10 border-canal-shopee/30" },
+};
+
+/**
+ * Aviso do canal SO' quando ha' problema: foto com mais de 1 dia, ou marca
+ * faltando na foto. Foto em dia nao aparece na vista (vai para o ⓘ).
+ */
+export function avisoCanal(c: Pick<ResumoOk, "diasFoto" | "refDate" | "semFoto">): string | null {
+  const partes = [
+    c.semFoto.length ? `Sem ${c.semFoto.join(", ")} nesta foto` : null,
+    (c.diasFoto ?? 0) > 1 ? `Foto de ${diaMes(c.refDate)} · desatualizada` : null,
+  ].filter(Boolean);
+  return partes.length ? partes.join(" · ") : null;
+}
+
+/** ⓘ do heroi: a data de cada foto ("Fotos: ML 09/11, Shopee 09/11"). */
+export function fotosHeroi(canais: ResumoCanal[]): string | null {
+  const ok = oks(canais);
+  return ok.length ? `Fotos: ${ok.map((c) => `${NOME_CANAL[c.canal]} ${diaMes(c.refDate)}`).join(", ")}.` : null;
+}
+
+export function filtrarCanal(itens: ItemRuptura[], canal: FiltroCanal): ItemRuptura[] {
+  return canal === "todos" ? itens : itens.filter((t) => t.canal === canal);
+}
+
+/** Contagem do filtro de canal respeitando o filtro de curva aplicado (e vice-versa via contarFiltros). */
+export function contarCanais(itens: ItemRuptura[], abc: CurvaAbc | null, curva: FiltroCurva): Record<FiltroCanal, number> {
+  const f = itens.filter((t) => passaFiltro(curvaDe(t, abc), curva));
+  return { todos: f.length, ml: f.filter((t) => t.canal === "ml").length, shopee: f.filter((t) => t.canal === "shopee").length };
+}
+
+/** O bloco do heroi fala de AA/A: o clique leva a fila com o canal E a curva AA/A. */
+export function filtroDoBloco(canal: Canal): { canal: FiltroCanal; curva: FiltroCurva } {
+  return { canal, curva: "aa_a" };
+}
+
+const CURVAS_URL: FiltroCurva[] = ["todas", "aa_a", "b", "c", "sem"];
+
+/** Filtros da fila a partir da URL (?canal=ml&curva=aa_a). Valor estranho = o padrao. */
+export function lerFiltrosUrl(params: { get(chave: string): string | null }): { canal: FiltroCanal; curva: FiltroCurva } {
+  const canal = params.get("canal") as FiltroCanal | null;
+  const curva = params.get("curva") as FiltroCurva | null;
+  return {
+    canal: canal && FILTROS_CANAL.includes(canal) ? canal : "todos",
+    curva: curva && CURVAS_URL.includes(curva) ? curva : "todas",
+  };
+}
+
+/** Os filtros na URL, mantendo os outros parametros (a aba do Full); o padrao sai da URL. */
+export function filtrosNaUrl(atual: string, canal: FiltroCanal, curva: FiltroCurva): string {
+  const q = new URLSearchParams(atual);
+  if (canal === "todos") q.delete("canal"); else q.set("canal", canal);
+  if (curva === "todas") q.delete("curva"); else q.set("curva", curva);
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+/**
+ * Celula de impacto da fila. Shopee com estoque do vendedor: "R$ 0" MEDIDO e
+ * explicado ("vendedor tem estoque · a venda segue"), com o bruto no title;
+ * sem preco/sem impacto: ausencia com motivo, nunca zero.
+ */
+export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; titulo?: string; ausente?: string; zeroMedido?: boolean } {
+  if (t.perdaDia === undefined) return { texto: "—", ausente: "impacto do canal indisponível" };
+  if (t.perdaDia === null) return { texto: "—", ausente: t.canal === "shopee" && t.estoqueVendedor === null ? "estoque do vendedor não informado" : "sem preço" };
+  if (t.canal === "shopee" && (t.estoqueVendedor ?? 0) > 0) {
+    return { texto: fmtReais(0), apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
+  }
+  return { texto: fmtReais(t.perdaDia) };
+}
+
+export const DICA_IMPACTO_FILA =
+  "Quanto se deixa de vender por dia enquanto o produto está sem estoque no Full: venda média diária dos últimos 28 dias × preço médio. "
+  + "É potencial: no ML, outros anúncios podem seguir vendendo; na Shopee, só conta quem também está sem estoque do vendedor.";
+

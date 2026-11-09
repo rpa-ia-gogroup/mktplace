@@ -28,6 +28,18 @@ import {
   rotuloGrupo,
   filaPorGrupo,
   fmtFatia,
+  avisoCanal,
+  celulaImpacto,
+  contarCanais,
+  filtrarCanal,
+  filtroDoBloco,
+  filtrosNaUrl,
+  fotosHeroi,
+  lerFiltrosUrl,
+  SELO_CANAL,
+  NOME_CANAL_LONGO,
+  DICA_IMPACTO_FILA,
+  type ItemRuptura,
   type CurvaAbc,
   type Curva,
   type ItemImpacto,
@@ -557,9 +569,10 @@ test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desen
 
 test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de frescor", () => {
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  const linha = src.slice(src.indexOf("function LinhaCanal"), src.indexOf("function ChipFoto"));
-  assert.ok(!linha.includes("c.aviso"), "o aviso nao e' mais linha solta: vai para o chip da foto");
-  assert.ok(src.includes("const f = chipFoto(c);"), "chip da foto com o aviso de cobertura");
+  const bloco = src.slice(src.indexOf("function BlocoCanalHeroi"), src.indexOf("function CelulaImpacto"));
+  assert.ok(bloco.includes("const aviso = avisoCanal(c);") && !bloco.includes("c.aviso"), "aviso do canal so' com problema (avisoCanal)");
+  assert.ok(!src.includes("chipFoto(") && bloco.includes("title={c.frescor}"), "frescor em dia sai da vista: title do bloco e ⓘ do heroi");
+  assert.ok(src.includes("fotosHeroi(canais)"), "datas das fotos no ⓘ do heroi");
   assert.ok(!src.includes("<footer"), "sem rodape de frescor");
   assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
   assert.ok(src.includes("<Heroi") && src.includes('variante="gerencial"') && src.includes("<KpiDrilldownDialog"), "esqueleto da Gerencial");
@@ -584,7 +597,7 @@ test("antes do impacto: p.p. contra a foto anterior, so' com a MESMA foto atual"
   const comAnt = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: { ref_date: "2026-11-03", rupturas: 2, sem_estoque_vendedor: null, perda_dia: 1, perda_dia_sem_vendedor: null, dias_gmv: 28, pct_gmv_full: 0.0931, pct_gmv_full_sem_vendedor: null, motivo_pct: null } } as CanalImpactoOk };
   const a = antesImpacto("ml", IMPACTO, comAnt)!;
   assert.ok(Math.abs(a.pp - 1) < 1e-9, "10,31% contra 9,31% = +1,0 p.p.");
-  assert.equal(a.texto, "antes 9,3% · foto de 03/11");
+  assert.equal(a.texto, "antes 9,3% em 03/11", "no cartao de impacto, o antes curto");
   // sem a 2a chamada, sem anterior ou com outra foto atual: sem pilula (nunca zero)
   assert.equal(antesImpacto("ml", IMPACTO, null), null);
   assert.equal(antesImpacto("ml", IMPACTO, IMPACTO), null);
@@ -804,6 +817,73 @@ test("fila 'Todas': ate' 5 por grupo e os 3 grupos sempre visiveis; 'ver todos' 
   // grupo vazio nao aparece
   assert.deepEqual(filaPorGrupo(rankingRupturas(canais, impactoCom([itemImp("kokeshi", "Kit1", 1)]), abc), abc).map((g) => g.grupo), ["demais"]);
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  assert.ok(src.includes("filaPorGrupo(ranking, abc, abertos)") && src.includes("ver todos (${grupos[g]})"));
+  assert.ok(src.includes("filaPorGrupo(doCanalEscolhido, abc, abertos)") && src.includes("ver todos (${fmtInt(total)})"));
+});
+
+// ---------------------------------------------------------------------------
+// FULL-CARINHO -- blocos de canal, aviso so' com problema, filtro de canal na URL
+// ---------------------------------------------------------------------------
+
+function rup(canal: "ml" | "shopee", codigo: string, extra: Partial<ItemRuptura> = {}): ItemRuptura {
+  return { canal, marca: "kokeshi", nome: `Produto ${codigo}`, sku: codigo, mediaDiaria: 1, perdaDia: 10, codigo, kit: false, ...extra };
+}
+
+test("selo do canal: ponto e pilula da cor do canal (ML ciano, Shopee laranja)", () => {
+  assert.equal(SELO_CANAL.ml.ponto, "bg-canal-ml");
+  assert.equal(SELO_CANAL.shopee.ponto, "bg-canal-shopee");
+  assert.match(SELO_CANAL.ml.pilula, /canal-ml/);
+  assert.match(SELO_CANAL.shopee.pilula, /canal-shopee/);
+  assert.deepEqual(NOME_CANAL_LONGO, { ml: "Mercado Livre", shopee: "Shopee" });
+  const src = readFileSync(new URL("../src/components/full/SeloCanal.tsx", import.meta.url), "utf-8");
+  assert.ok(src.includes("SELO_CANAL[canal]") && src.includes("NOME_CANAL_LONGO[canal]"));
+  const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
+  assert.equal((tela.match(/<SeloCanal canal=\{t\.canal\} \/>/g) ?? []).length, 2, "selo em toda linha: tabela e cartao");
+});
+
+test("aviso do canal so' com foto de mais de 1 dia ou marca faltando; frescor em dia fora da vista", () => {
+  const base = { refDate: "2026-11-07", semFoto: [] as string[] };
+  assert.equal(avisoCanal({ ...base, diasFoto: 0 }), null);
+  assert.equal(avisoCanal({ ...base, diasFoto: 1 }), null, "foto de ontem e' normal");
+  assert.equal(avisoCanal({ ...base, diasFoto: null }), null);
+  assert.equal(avisoCanal({ ...base, diasFoto: 2 }), "Foto de 07/11 · desatualizada");
+  assert.equal(avisoCanal({ ...base, diasFoto: 0, semFoto: ["RITUÁRIA"] }), "Sem RITUÁRIA nesta foto");
+  assert.equal(avisoCanal({ ...base, diasFoto: 3, semFoto: ["RITUÁRIA"] }), "Sem RITUÁRIA nesta foto · Foto de 07/11 · desatualizada");
+  const canais: ResumoCanal[] = [resumoML(ML), resumoShopee(SHOPEE)];
+  assert.match(fotosHeroi(canais) ?? "", /^Fotos: ML \d\d\/\d\d, Shopee \d\d\/\d\d\.$/);
+});
+
+test("celula de impacto: Shopee com estoque do vendedor = R$ 0 medido e explicado; sem preco nunca vira 0", () => {
+  const c = celulaImpacto(rup("shopee", "S1", { estoqueVendedor: 12, perdaDia: 0, perdaBruta: 214.4 }));
+  assert.equal(c.texto.replace(/\s/g, " "), "R$ 0");
+  assert.equal(c.zeroMedido, true);
+  assert.equal(c.apoio, "vendedor tem estoque · a venda segue");
+  assert.match(c.titulo ?? "", /\/dia se contar só o Full$/);
+  assert.equal(celulaImpacto(rup("ml", "M1", { perdaDia: null })).ausente, "sem preço");
+  assert.equal(celulaImpacto(rup("ml", "M1", { perdaDia: undefined })).texto, "—");
+  assert.equal(celulaImpacto(rup("shopee", "S2", { perdaDia: null, estoqueVendedor: null })).ausente, "estoque do vendedor não informado");
+  assert.equal(celulaImpacto(rup("ml", "M1", { perdaDia: 214.4 })).zeroMedido, undefined);
+  assert.match(DICA_IMPACTO_FILA, /É potencial/);
+});
+
+test("filtro canal x curva combinados: cada contagem reflete o outro filtro", () => {
+  const its = [rup("ml", "K1"), rup("ml", "K3"), rup("shopee", "K2"), rup("shopee", "X9"), rup("shopee", "B1", { marca: "barbours" })];
+  assert.deepEqual(contarCanais(its, ABC, "todas"), { todos: 5, ml: 2, shopee: 3 });
+  assert.deepEqual(contarCanais(its, ABC, "aa_a"), { todos: 2, ml: 1, shopee: 1 }, "AA/A: K1 (ML) e K2 (Shopee)");
+  assert.deepEqual(contarFiltros(filtrarCanal(its, "shopee"), ABC), { todas: 3, aa_a: 1, b: 1, c: 0, sem: 1 });
+  assert.deepEqual(contarFiltros(filtrarCanal(its, "ml"), ABC), { todas: 2, aa_a: 1, b: 0, c: 1, sem: 0 });
+  assert.equal(filtrarCanal(its, "todos").length, 5);
+});
+
+test("clique no bloco do heroi: canal + AA/A; filtros na URL vao e voltam", () => {
+  assert.deepEqual(filtroDoBloco("shopee"), { canal: "shopee", curva: "aa_a" });
+  const q = filtrosNaUrl("aba=visao", "ml", "aa_a");
+  assert.equal(q, "?aba=visao&canal=ml&curva=aa_a", "mantem a aba");
+  assert.deepEqual(lerFiltrosUrl(new URLSearchParams(q)), { canal: "ml", curva: "aa_a" });
+  assert.equal(filtrosNaUrl(q.slice(1), "todos", "todas"), "?aba=visao", "padrao sai da URL");
+  assert.equal(filtrosNaUrl("", "todos", "todas"), "");
+  assert.deepEqual(lerFiltrosUrl(new URLSearchParams("canal=tiktok&curva=zz")), { canal: "todos", curva: "todas" }, "valor estranho = padrao");
+  const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
+  assert.ok(tela.includes("filtroDoBloco(c.canal)") && tela.includes("aplicar(canal, \"todas\", true)"), "heroi e faixa levam a fila");
+  assert.ok(tela.includes("por marca →") && tela.includes("Limpar filtros"));
 });
 
