@@ -72,15 +72,15 @@ const METRICAS: { key: MetricaSerie; label: string }[] = [
 const CONTROLE_BASE =
   "min-h-11 px-3 rounded-lg border text-sm " +
   "focus-visible:outline focus-visible:outline-2 " +
-  "focus-visible:outline-offset-2 focus-visible:outline-violet-600";
+  "focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /** Aparencia neutra do controle. NAO sobreponha outra cor de fundo ou de
  *  texto a esta constante: utilities do Tailwind competem pela ordem do
  *  stylesheet gerado, nao pela ordem no atributo `class`. Concatenar
- *  `bg-violet-600 text-white` aqui fazia `bg-white` vencer e `text-white`
+ *  `bg-accent text-accent-on` aqui fazia `bg-surface` vencer e `text-accent-on`
  *  perder, rendendo branco-sobre-branco no botao selecionado. Para variar a
  *  cor, parta de `CONTROLE_BASE` e declare a paleta inteira em cada ramo. */
-const CONTROLE = `${CONTROLE_BASE} border-slate-300 bg-white text-slate-800`;
+const CONTROLE = `${CONTROLE_BASE} border-line-strong bg-surface text-ink`;
 
 function hojeIsoBrt(): string {
   // `sv-SE` devolve YYYY-MM-DD; o fuso e' explicito porque o dia operacional da
@@ -90,7 +90,7 @@ function hojeIsoBrt(): string {
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs leading-relaxed border rounded-lg px-3 py-2 bg-amber-50 border-amber-300 text-amber-900">
+    <p className="text-xs leading-relaxed border rounded-lg px-3 py-2 bg-warn-soft border-warn/40 text-warn-ink">
       {children}
     </p>
   );
@@ -172,8 +172,8 @@ function FullMLPageInner() {
       className={
         "inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full " +
         (frescor.freshness_status === "fresh"
-          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-          : "bg-amber-50 text-amber-900 border border-amber-300")
+          ? "bg-ok-soft text-ok-ink border border-ok/30"
+          : "bg-warn-soft text-warn-ink border border-warn/40")
       }
     >
       {FRESHNESS_LABEL[frescor.freshness_status]} · {LOAD_MODE_LABEL[frescor.load_mode]}
@@ -184,7 +184,7 @@ function FullMLPageInner() {
   const filtros = (
     <div className="flex flex-wrap items-end gap-2">
       <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-de" className="text-xs font-medium text-slate-600">
+        <label htmlFor="full-ml-de" className="text-xs font-medium text-ink-muted">
           De
         </label>
         <input
@@ -197,7 +197,7 @@ function FullMLPageInner() {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-ate" className="text-xs font-medium text-slate-600">
+        <label htmlFor="full-ml-ate" className="text-xs font-medium text-ink-muted">
           Até
         </label>
         <input
@@ -210,7 +210,7 @@ function FullMLPageInner() {
         />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-marca" className="text-xs font-medium text-slate-600">
+        <label htmlFor="full-ml-marca" className="text-xs font-medium text-ink-muted">
           Marca
         </label>
         <select
@@ -227,14 +227,14 @@ function FullMLPageInner() {
         </select>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-slate-600">Períodos</span>
+        <span className="text-xs font-medium text-ink-muted">Períodos</span>
         <div className="flex gap-1" role="group" aria-label="Períodos predefinidos">
           {PERIOD_PRESETS.map((p) => (
             <button
               key={p.days}
               type="button"
               onClick={() => aplicarPreset(p.days)}
-              className={`${CONTROLE} font-medium hover:bg-slate-50`}
+              className={`${CONTROLE} font-medium hover:bg-raised`}
             >
               {p.label}
             </button>
@@ -244,7 +244,7 @@ function FullMLPageInner() {
       <button
         type="button"
         onClick={limpar}
-        className={`${CONTROLE} font-medium text-slate-600 hover:bg-slate-50`}
+        className={`${CONTROLE} font-medium text-ink-muted hover:bg-raised`}
       >
         Limpar filtros
       </button>
@@ -252,7 +252,7 @@ function FullMLPageInner() {
   );
 
   const escopo = (
-    <span className="inline-flex flex-wrap items-center gap-1 text-xs text-slate-600">
+    <span className="inline-flex flex-wrap items-center gap-1 text-xs text-ink-muted">
       {from} a {to}
       {dados?.freshness.source_max_date && (
         <> · fonte até {dados.freshness.source_max_date}</>
@@ -284,7 +284,7 @@ function FullMLPageInner() {
       {erroJanela && (
         <div
           role="alert"
-          className="border border-amber-300 bg-amber-50 rounded-xl px-4 py-3 text-sm text-amber-900"
+          className="border border-warn/40 bg-warn-soft rounded-xl px-4 py-3 text-sm text-warn-ink"
         >
           {erroJanela}
         </div>
@@ -293,7 +293,7 @@ function FullMLPageInner() {
       {!erroJanela && erro && (
         <div
           role="alert"
-          className="border border-red-300 bg-red-50 rounded-xl px-4 py-3 text-sm text-red-800"
+          className="border border-crit/40 bg-crit-soft rounded-xl px-4 py-3 text-sm text-crit-ink"
         >
           {erro}
         </div>
@@ -304,7 +304,7 @@ function FullMLPageInner() {
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="h-24 rounded-xl bg-slate-100 animate-pulse"
+              className="h-24 rounded-xl bg-raised animate-pulse"
               aria-hidden="true"
             />
           ))}
@@ -315,11 +315,11 @@ function FullMLPageInner() {
       )}
 
       {!erroJanela && !erro && !carregando && vazio && (
-        <div className="border border-slate-200 bg-white rounded-xl px-4 py-10 text-center">
-          <p className="text-sm font-medium text-slate-700">
+        <div className="border border-line bg-surface rounded-xl px-4 py-10 text-center">
+          <p className="text-sm font-medium text-ink-muted">
             Nenhum pedido no período e filtro selecionados.
           </p>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-ink-faint mt-1">
             É ausência de venda, não falha de carga.
           </p>
         </div>
@@ -329,7 +329,7 @@ function FullMLPageInner() {
       {!erroJanela && !erro && !carregando && dados && !vazio && (
         <>
           <section aria-labelledby="full-ml-kpis" className="flex flex-col gap-3">
-            <h2 id="full-ml-kpis" className="text-sm font-semibold text-slate-800">
+            <h2 id="full-ml-kpis" className="text-sm font-semibold text-ink">
               Participação do Full
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
@@ -342,19 +342,19 @@ function FullMLPageInner() {
                 label="Share de pedidos Full"
                 value={fmtShare(dados.share_full_orders)}
                 subvalue={`Não-Full: ${fmtCount(naoFull?.paid_orders ?? null)} pedidos`}
-                accent="bg-sky-600"
+                accent="bg-kpi-prazo"
               />
               <KpiCard
                 label="Share de unidades Full"
                 value={fmtShare(dados.share_full_units)}
                 subvalue={`Não-Full: ${fmtCount(naoFull?.paid_units ?? null)} unidades`}
-                accent="bg-teal-600"
+                accent="bg-kpi-atendimento"
               />
               <KpiCard
                 label="Cancelamento Full"
                 value={fmtShare(full?.cancellation_rate ?? null)}
                 subvalue={`Não-Full: ${fmtShare(naoFull?.cancellation_rate ?? null)}`}
-                accent="bg-rose-600"
+                accent="bg-crit"
               />
               <KpiCard
                 label="GMV Full"
@@ -365,19 +365,19 @@ function FullMLPageInner() {
                 label="Pedidos Full"
                 value={fmtCount(full?.paid_orders ?? null)}
                 subvalue={`Total pago: ${fmtCount(dados.paid_orders_total)}`}
-                accent="bg-sky-600"
+                accent="bg-kpi-prazo"
               />
               <KpiCard
                 label="Unidades Full"
                 value={fmtCount(full?.paid_units ?? null)}
                 subvalue={`Total pago: ${fmtCount(dados.paid_units_total)}`}
-                accent="bg-teal-600"
+                accent="bg-kpi-atendimento"
               />
               <KpiCard
                 label="Entrega Full"
                 value={fmtTempo(full?.delivery ?? null)}
                 subvalue={`Não-Full: ${fmtTempo(naoFull?.delivery ?? null)}`}
-                accent="bg-indigo-600"
+                accent="bg-kpi-ticket"
               />
             </div>
           </section>
@@ -385,10 +385,10 @@ function FullMLPageInner() {
           {/* --- Tendencia ------------------------------------------------ */}
           <section
             aria-labelledby="full-ml-trend"
-            className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3"
+            className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="full-ml-trend" className="text-sm font-semibold text-slate-800">
+              <h2 id="full-ml-trend" className="text-sm font-semibold text-ink">
                 Tendência diária do share de Full
               </h2>
               <div className="flex gap-1" role="group" aria-label="Métrica da série">
@@ -401,8 +401,8 @@ function FullMLPageInner() {
                     className={
                       `${CONTROLE_BASE} font-medium ` +
                       (metrica === m.key
-                        ? "border-violet-600 bg-violet-600 text-white"
-                        : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50")
+                        ? "border-accent bg-accent text-accent-on"
+                        : "border-line-strong bg-surface text-ink hover:bg-raised")
                     }
                   >
                     {m.label}
@@ -416,9 +416,9 @@ function FullMLPageInner() {
           {/* --- Decomposicao por classe ---------------------------------- */}
           <section
             aria-labelledby="full-ml-classes"
-            className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3"
+            className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
           >
-            <h2 id="full-ml-classes" className="text-sm font-semibold text-slate-800">
+            <h2 id="full-ml-classes" className="text-sm font-semibold text-ink">
               Decomposição por modalidade
             </h2>
             <div className="overflow-x-auto">
@@ -427,16 +427,16 @@ function FullMLPageInner() {
                   GMV, pedidos, unidades e cancelamento por modalidade logística
                 </caption>
                 <thead>
-                  <tr className="border-b border-slate-200">
-                    <th scope="col" className="text-left py-2 pr-3 font-semibold text-slate-700">Modalidade</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">GMV pago</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Pedidos</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Unidades</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Elegíveis</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Cancelados</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Taxa cancel.</th>
-                    <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">Handling</th>
-                    <th scope="col" className="text-right py-2 pl-3 font-semibold text-slate-700">Entrega</th>
+                  <tr className="border-b border-line">
+                    <th scope="col" className="text-left py-2 pr-3 font-semibold text-ink-muted">Modalidade</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">GMV pago</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Pedidos</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Unidades</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Elegíveis</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Cancelados</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Taxa cancel.</th>
+                    <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">Handling</th>
+                    <th scope="col" className="text-right py-2 pl-3 font-semibold text-ink-muted">Entrega</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -444,8 +444,8 @@ function FullMLPageInner() {
                     const linha = byClass(dados, c);
                     if (!linha) return null;
                     return (
-                      <tr key={c} className="border-b border-slate-100">
-                        <th scope="row" className="text-left py-2 pr-3 font-medium text-slate-800">
+                      <tr key={c} className="border-b border-line">
+                        <th scope="row" className="text-left py-2 pr-3 font-medium text-ink">
                           <span className="inline-flex items-center gap-1">
                             {CLASS_LABEL[c]}
                             <InfoDica texto={CLASS_DESCRICAO[c]} />
@@ -454,11 +454,11 @@ function FullMLPageInner() {
                         <td className="text-right py-2 px-3 tabular-nums">{fmtGmv(linha.paid_gmv)}</td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtCount(linha.paid_orders)}</td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtCount(linha.paid_units)}</td>
-                        <td className="text-right py-2 px-3 tabular-nums text-slate-600">{fmtCount(linha.eligible_orders)}</td>
-                        <td className="text-right py-2 px-3 tabular-nums text-slate-600">{fmtCount(linha.cancelled_orders)}</td>
+                        <td className="text-right py-2 px-3 tabular-nums text-ink-muted">{fmtCount(linha.eligible_orders)}</td>
+                        <td className="text-right py-2 px-3 tabular-nums text-ink-muted">{fmtCount(linha.cancelled_orders)}</td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtShare(linha.cancellation_rate)}</td>
-                        <td className="text-right py-2 px-3 tabular-nums text-slate-600">{fmtTempo(linha.handling)}</td>
-                        <td className="text-right py-2 pl-3 tabular-nums text-slate-600">{fmtTempo(linha.delivery)}</td>
+                        <td className="text-right py-2 px-3 tabular-nums text-ink-muted">{fmtTempo(linha.handling)}</td>
+                        <td className="text-right py-2 pl-3 tabular-nums text-ink-muted">{fmtTempo(linha.delivery)}</td>
                       </tr>
                     );
                   })}
@@ -471,27 +471,27 @@ function FullMLPageInner() {
           {dados.by_logistic_type.length > 0 && (
             <section
               aria-labelledby="full-ml-tipos"
-              className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3"
+              className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
             >
-              <h2 id="full-ml-tipos" className="text-sm font-semibold text-slate-800">
+              <h2 id="full-ml-tipos" className="text-sm font-semibold text-ink">
                 Composição por tipo logístico registrado
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[480px]">
                   <caption className="sr-only">GMV por tipo logístico registrado</caption>
                   <thead>
-                    <tr className="border-b border-slate-200">
-                      <th scope="col" className="text-left py-2 pr-3 font-semibold text-slate-700">Tipo</th>
-                      <th scope="col" className="text-left py-2 px-3 font-semibold text-slate-700">Classe</th>
-                      <th scope="col" className="text-right py-2 px-3 font-semibold text-slate-700">GMV pago</th>
-                      <th scope="col" className="text-right py-2 pl-3 font-semibold text-slate-700">Pedidos</th>
+                    <tr className="border-b border-line">
+                      <th scope="col" className="text-left py-2 pr-3 font-semibold text-ink-muted">Tipo</th>
+                      <th scope="col" className="text-left py-2 px-3 font-semibold text-ink-muted">Classe</th>
+                      <th scope="col" className="text-right py-2 px-3 font-semibold text-ink-muted">GMV pago</th>
+                      <th scope="col" className="text-right py-2 pl-3 font-semibold text-ink-muted">Pedidos</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dados.by_logistic_type.map((t) => (
-                      <tr key={`${t.logistic_type_original}-${t.fulfillment_class}`} className="border-b border-slate-100">
-                        <td className="py-2 pr-3 font-mono text-xs text-slate-800">{t.logistic_type_original}</td>
-                        <td className="py-2 px-3 text-slate-600">{CLASS_LABEL[t.fulfillment_class]}</td>
+                      <tr key={`${t.logistic_type_original}-${t.fulfillment_class}`} className="border-b border-line">
+                        <td className="py-2 pr-3 font-mono text-xs text-ink">{t.logistic_type_original}</td>
+                        <td className="py-2 px-3 text-ink-muted">{CLASS_LABEL[t.fulfillment_class]}</td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtGmv(t.paid_gmv)}</td>
                         <td className="text-right py-2 pl-3 tabular-nums">{fmtCount(t.paid_orders)}</td>
                       </tr>
@@ -505,54 +505,54 @@ function FullMLPageInner() {
           {/* --- Anuncios -------------------------------------------------- */}
           <section
             aria-labelledby="full-ml-anuncios"
-            className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-3"
+            className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-3"
           >
-            <h2 id="full-ml-anuncios" className="text-sm font-semibold text-slate-800">
+            <h2 id="full-ml-anuncios" className="text-sm font-semibold text-ink">
               Anúncios por comportamento
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="border border-slate-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-slate-600 uppercase">Somente Full</p>
-                <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtCount(dados.listings.full_only)}</p>
+              <div className="border border-line rounded-lg p-3">
+                <p className="text-xs font-semibold text-ink-muted uppercase">Somente Full</p>
+                <p className="text-2xl font-bold tabular-nums text-ink">{fmtCount(dados.listings.full_only)}</p>
               </div>
-              <div className="border border-amber-300 bg-amber-50/40 rounded-lg p-3">
-                <p className="text-xs font-semibold text-amber-900 uppercase">Mistos</p>
-                <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtCount(dados.listings.mixed)}</p>
-                <p className="text-xs text-slate-600 mt-1">Full e não-Full na janela</p>
+              <div className="border border-warn/40 bg-warn-soft/40 rounded-lg p-3">
+                <p className="text-xs font-semibold text-warn-ink uppercase">Mistos</p>
+                <p className="text-2xl font-bold tabular-nums text-ink">{fmtCount(dados.listings.mixed)}</p>
+                <p className="text-xs text-ink-muted mt-1">Full e não-Full na janela</p>
               </div>
-              <div className="border border-slate-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-slate-600 uppercase">Somente não-Full</p>
-                <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtCount(dados.listings.non_full_only)}</p>
+              <div className="border border-line rounded-lg p-3">
+                <p className="text-xs font-semibold text-ink-muted uppercase">Somente não-Full</p>
+                <p className="text-2xl font-bold tabular-nums text-ink">{fmtCount(dados.listings.non_full_only)}</p>
               </div>
             </div>
 
             {dados.migration_opportunities.length > 0 && (
               <>
-                <h3 className="text-xs font-semibold text-slate-700 mt-1">
+                <h3 className="text-xs font-semibold text-ink-muted mt-1">
                   Maior GMV fora do Full ({dados.migration_opportunities.length} anúncios)
                 </h3>
-                <div className="max-h-96 overflow-y-auto overflow-x-auto border border-slate-200 rounded-lg">
+                <div className="max-h-96 overflow-y-auto overflow-x-auto border border-line rounded-lg">
                   <table className="w-full text-sm min-w-[560px]">
                     <caption className="sr-only">Anúncios com GMV fora do Full</caption>
-                    <thead className="bg-slate-50 sticky top-0">
+                    <thead className="bg-raised sticky top-0">
                       <tr>
-                        <th scope="col" className="text-left px-3 py-2 font-semibold text-slate-700">Anúncio</th>
-                        <th scope="col" className="text-left px-3 py-2 font-semibold text-slate-700">Marca</th>
-                        <th scope="col" className="text-left px-3 py-2 font-semibold text-slate-700">Comportamento</th>
-                        <th scope="col" className="text-right px-3 py-2 font-semibold text-slate-700">GMV não-Full</th>
-                        <th scope="col" className="text-right px-3 py-2 font-semibold text-slate-700">GMV Full</th>
+                        <th scope="col" className="text-left px-3 py-2 font-semibold text-ink-muted">Anúncio</th>
+                        <th scope="col" className="text-left px-3 py-2 font-semibold text-ink-muted">Marca</th>
+                        <th scope="col" className="text-left px-3 py-2 font-semibold text-ink-muted">Comportamento</th>
+                        <th scope="col" className="text-right px-3 py-2 font-semibold text-ink-muted">GMV não-Full</th>
+                        <th scope="col" className="text-right px-3 py-2 font-semibold text-ink-muted">GMV Full</th>
                       </tr>
                     </thead>
                     <tbody>
                       {dados.migration_opportunities.map((o) => (
-                        <tr key={`${o.brand}-${o.item_id}`} className="border-t border-slate-100">
-                          <td className="px-3 py-2 font-mono text-xs text-slate-800">{o.item_id}</td>
-                          <td className="px-3 py-2 text-slate-700">{o.brand}</td>
-                          <td className="px-3 py-2 text-slate-600">
+                        <tr key={`${o.brand}-${o.item_id}`} className="border-t border-line">
+                          <td className="px-3 py-2 font-mono text-xs text-ink">{o.item_id}</td>
+                          <td className="px-3 py-2 text-ink-muted">{o.brand}</td>
+                          <td className="px-3 py-2 text-ink-muted">
                             {o.listing_class === "mixed" ? "Misto" : "Somente não-Full"}
                           </td>
                           <td className="text-right px-3 py-2 tabular-nums font-medium">{fmtGmv(o.non_full_gmv)}</td>
-                          <td className="text-right px-3 py-2 tabular-nums text-slate-600">{fmtGmv(o.full_gmv)}</td>
+                          <td className="text-right px-3 py-2 tabular-nums text-ink-muted">{fmtGmv(o.full_gmv)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -565,26 +565,26 @@ function FullMLPageInner() {
           {/* --- Qualidade ------------------------------------------------- */}
           <section
             aria-labelledby="full-ml-qualidade"
-            className="bg-white border border-slate-200 rounded-xl p-4 flex flex-col gap-2"
+            className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-2"
           >
-            <h2 id="full-ml-qualidade" className="text-sm font-semibold text-slate-800">
+            <h2 id="full-ml-qualidade" className="text-sm font-semibold text-ink">
               Qualidade
             </h2>
             <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
               <div>
-                <dt className="text-xs text-slate-600">Pedidos sem envio</dt>
+                <dt className="text-xs text-ink-muted">Pedidos sem envio</dt>
                 <dd className="font-semibold tabular-nums">{fmtCount(dados.quality.unknown_logistic_type_orders)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-600">Envios sem itens</dt>
+                <dt className="text-xs text-ink-muted">Envios sem itens</dt>
                 <dd className="font-semibold tabular-nums">{fmtCount(dados.quality.missing_shipping_items)}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-600">Janela completa</dt>
+                <dt className="text-xs text-ink-muted">Janela completa</dt>
                 <dd className="font-semibold">{dados.quality.is_complete ? "Sim" : "Não"}</dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-600">Última carga</dt>
+                <dt className="text-xs text-ink-muted">Última carga</dt>
                 <dd className="font-semibold text-xs">
                   {dados.freshness.refreshed_at?.slice(0, 16).replace("T", " ") ?? SEM_DADO}
                 </dd>

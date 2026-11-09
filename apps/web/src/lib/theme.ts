@@ -84,8 +84,11 @@ export function resolverTema(
  * DRE-UX-1 acrescentou `/dre`, que ja' nasce em tokens.
  *
  * CX-TEMA-ESCURO (08/11/2026) acrescentou `/cx`, depois da identidade Gerencial (#257).
+ * FULL-TEMA-ESCURO (09/11/2026) acrescentou `/full`: os paineis de Full e de
+ * estoque que ela carrega (ML e Shopee) e o grafico de share sairam dos
+ * literais para os tokens.
  */
-export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx"] as const;
+export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full"] as const;
 
 export function rotaTematizada(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

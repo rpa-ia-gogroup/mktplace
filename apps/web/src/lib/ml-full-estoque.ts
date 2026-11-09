@@ -65,14 +65,14 @@ export const CLASS_LABEL_ML: Record<ClassificacaoML, string> = {
 };
 
 export const CLASS_TOM_ML: Record<ClassificacaoML, string> = {
-  RUPTURA_CANDIDATA: "bg-red-50 text-red-700 border-red-200",
-  BAIXO_CANDIDATO: "bg-amber-50 text-amber-700 border-amber-200",
-  EXCESSO_CANDIDATO: "bg-sky-50 text-sky-700 border-sky-200",
-  SEM_GIRO_CANDIDATO: "bg-slate-100 text-slate-600 border-slate-200",
-  SUFICIENTE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  SEM_DEMANDA_MEDIDA: "bg-slate-50 text-slate-500 border-slate-200",
-  SEM_LEITURA: "bg-orange-50 text-orange-800 border-orange-300",
-  FORA_DO_FULL: "bg-slate-50 text-slate-500 border-slate-200",
+  RUPTURA_CANDIDATA: "bg-crit-soft text-crit-ink border-crit/30",
+  BAIXO_CANDIDATO: "bg-warn-soft text-warn-ink border-warn/30",
+  EXCESSO_CANDIDATO: "bg-accent-soft text-accent-ink border-accent/25",
+  SEM_GIRO_CANDIDATO: "bg-raised text-ink-muted border-line",
+  SUFICIENTE: "bg-ok-soft text-ok-ink border-ok/30",
+  SEM_DEMANDA_MEDIDA: "bg-raised text-ink-faint border-line",
+  SEM_LEITURA: "bg-raised text-warn-ink border-warn/40",
+  FORA_DO_FULL: "bg-raised text-ink-faint border-line",
 };
 
 export interface InventarioML {

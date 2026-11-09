@@ -97,8 +97,8 @@ function Aviso({
 }) {
   const cor =
     tom === "alerta"
-      ? "bg-amber-50 border-amber-200 text-amber-900"
-      : "bg-slate-50 border-slate-200 text-slate-700";
+      ? "bg-warn-soft border-warn/30 text-warn-ink"
+      : "bg-raised border-line text-ink-muted";
   return (
     <p className={`text-sm rounded-xl border px-4 py-3 ${cor}`}>{children}</p>
   );
@@ -117,17 +117,17 @@ function PainelIndisponivel({
   return (
     <section
       role="status"
-      className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col gap-3"
+      className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
     >
-      <h3 className="text-lg font-semibold text-slate-900">{titulo}</h3>
-      <p className="text-sm text-slate-600 max-w-2xl">{motivo}</p>
+      <h3 className="text-lg font-semibold text-ink">{titulo}</h3>
+      <p className="text-sm text-ink-muted max-w-2xl">{motivo}</p>
       {passo && (
-        <p className="text-sm text-slate-600 max-w-2xl">
+        <p className="text-sm text-ink-muted max-w-2xl">
           <span className="font-semibold">Próximo passo: </span>
           {passo}
         </p>
       )}
-      <p className="text-sm font-semibold text-slate-900">
+      <p className="text-sm font-semibold text-ink">
         Isto não significa estoque zero.
       </p>
     </section>
@@ -161,7 +161,7 @@ function RegiaoRolavel({
       tabIndex={0}
       role="region"
       aria-label={rotulo}
-      className="min-w-max rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500"
+      className="min-w-max rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
     >
       {children}
     </div>
@@ -171,13 +171,13 @@ function RegiaoRolavel({
 /** Cobertura por marca: com fotografia, sem fotografia (ausencia), leitura. */
 function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
       <TableScrollHint>
         <RegiaoRolavel rotulo="Cobertura por marca (role na horizontal para ver todas as colunas)">
           <table className="w-full text-sm">
             <caption className="sr-only">Cobertura e estoque Full por marca</caption>
             <thead>
-              <tr className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wide border-b border-slate-200">
+              <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
                 <th scope="col" className="px-4 py-3">Marca</th>
                 <th scope="col" className="px-4 py-3">Fotografia</th>
                 <th scope="col" className="px-4 py-3 text-right">Disponível Full</th>
@@ -189,13 +189,13 @@ function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
             </thead>
             <tbody>
               {marcas.map((m) => (
-                <tr key={m.brand} className="border-b border-slate-100 last:border-0">
-                  <td className="px-4 py-3 font-medium text-slate-900">{tituloMarca(m.brand)}</td>
-                  <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                <tr key={m.brand} className="border-b border-line last:border-0">
+                  <td className="px-4 py-3 font-medium text-ink">{tituloMarca(m.brand)}</td>
+                  <td className="px-4 py-3 text-xs text-ink-muted whitespace-nowrap">
                     {m.tem_fotografia_no_dia ? (
                       fmtData(m.ultima_fotografia)
                     ) : (
-                      <span className="text-amber-800">
+                      <span className="text-warn-ink">
                         Sem fotografia no dia
                         {m.ultima_fotografia
                           ? ` (última: ${fmtData(m.ultima_fotografia)})`
@@ -203,37 +203,37 @@ function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
                     {/* Tres estados: sem estoque Full (zero medido, tom neutro),
                         saldo disponivel 0 (com o fisico nao disponivel) e
                         ausencia (travessao). */}
                     {estadoExibicaoMarcaML(m) === "sem_estoque_full" ? (
-                      <span className="font-medium text-slate-600 whitespace-nowrap">
+                      <span className="font-medium text-ink-muted whitespace-nowrap">
                         {ROTULO_SEM_ESTOQUE_FULL_ML}
                       </span>
                     ) : (
                       <>
                         {fmtOpcional(m.disponivel_full)}
                         {subtextoSaldoZeroML(m) && (
-                          <span className="block text-xs font-normal text-slate-500 whitespace-nowrap">
+                          <span className="block text-xs font-normal text-ink-faint whitespace-nowrap">
                             {subtextoSaldoZeroML(m)}
                           </span>
                         )}
                       </>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {m.leitura
                       ? `${fmtInt(m.leitura.inventarios_lidos)} de ${fmtInt(m.leitura.inventarios)}`
                       : SEM_DADO}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {m.leitura ? fmtInt(m.leitura.inventarios_sem_leitura) : SEM_DADO}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmtOpcional(m.inventarios_compartilhados)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmtFracao(m.cobertura_da_alocacao)}
                   </td>
                 </tr>
@@ -248,7 +248,7 @@ function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
 
 function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
+    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
       <TableScrollHint>
         <RegiaoRolavel rotulo="Inventários (role na horizontal para ver todas as colunas)">
           <table className="w-full text-sm">
@@ -256,7 +256,7 @@ function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
               Estoque Full por inventário, ordenado por urgência de reposição
             </caption>
             <thead>
-              <tr className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wide border-b border-slate-200">
+              <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
                 <th scope="col" className="px-4 py-3">Marca</th>
                 <th scope="col" className="px-4 py-3">Identificação</th>
                 <th scope="col" className="px-4 py-3 text-right">
@@ -290,13 +290,13 @@ function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
                 return (
                 <tr
                   key={i.posicao}
-                  className="border-b border-slate-100 last:border-0 align-top"
+                  className="border-b border-line last:border-0 align-top"
                 >
-                  <td className="px-4 py-3 whitespace-nowrap text-slate-600">{tituloMarca(i.brand)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-ink-muted">{tituloMarca(i.brand)}</td>
                   <td className="px-4 py-3 min-w-[14rem] max-w-xs">
                     {/* Rotulo do anuncio-ancora: atributo da linha, nunca soma estoque. */}
                     {ident.identificado ? (
-                      <span className="block text-slate-900 break-words">{ident.texto}</span>
+                      <span className="block text-ink break-words">{ident.texto}</span>
                     ) : (
                       <span className="block text-ink-muted italic">{ident.texto}</span>
                     )}
@@ -304,40 +304,40 @@ function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
                       <span className="block text-xs text-ink-muted">{ident.avisoVariacao}</span>
                     )}
                     {selo && (
-                      <span className="mt-1 inline-block rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                      <span className="mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">
                         {selo}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
                     {/* `null` = sem leitura: travessao, nunca 0. */}
                     {fmtOpcional(i.disponivel)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmtOpcional(i.nao_disponivel)}
                     {i.transfer !== null && i.transfer > 0 && (
-                      <span className="block text-xs text-slate-500">
+                      <span className="block text-xs text-ink-faint">
                         {fmtInt(i.transfer)} em transferência
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmtInt(i.unidades_28d)}
-                    <span className="block text-xs text-slate-500">
+                    <span className="block text-xs text-ink-faint">
                       {fmtDecimal(i.media_diaria_28d)}/dia
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {fmtCobertura(i.cobertura_torre_dias)}
                   </td>
                   <td className="px-4 py-3">
                     <Etiqueta classe={i.classificacao_torre} />
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {/* ASSOCIACAO, nao estoque: nunca multiplica o disponivel. */}
                     {fmtInt(i.anuncios)}
                     {i.compartilhado && (
-                      <span className="block text-xs text-slate-500">compartilhado</span>
+                      <span className="block text-xs text-ink-faint">compartilhado</span>
                     )}
                   </td>
                 </tr>
@@ -457,10 +457,10 @@ export default function MLFullEstoqueClient() {
             type="button"
             aria-pressed={filtros.brands.includes(m)}
             onClick={() => alternarMarca(m)}
-            className={`inline-flex items-center justify-center min-h-11 min-w-11 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`inline-flex items-center justify-center min-h-11 min-w-11 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               filtros.brands.includes(m)
-                ? "bg-violet-600 border-violet-600 text-white font-semibold"
-                : "bg-white border-slate-200 text-slate-600 hover:border-violet-300"
+                ? "bg-accent border-accent text-accent-on font-semibold"
+                : "bg-surface border-line text-ink-muted hover:border-accent/40"
             }`}
           >
             {tituloMarca(m)}
@@ -468,7 +468,7 @@ export default function MLFullEstoqueClient() {
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           Data da fotografia
           <input
             type="date"
@@ -480,17 +480,17 @@ export default function MLFullEstoqueClient() {
             onKeyDown={(e) => {
               if (e.key === "Enter") confirmarData(e.currentTarget.value);
             }}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
             checked={filtros.incluirForaDoFull}
             onChange={(e) =>
               setFiltros((f) => ({ ...f, incluirForaDoFull: e.target.checked }))
             }
-            className="rounded border-slate-300"
+            className="rounded border-line-strong"
           />
           Listar também inventários fora do Full
         </label>
@@ -498,7 +498,7 @@ export default function MLFullEstoqueClient() {
           <button
             type="button"
             onClick={limpar}
-            className="inline-flex items-center min-h-11 px-2 text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+            className="inline-flex items-center min-h-11 px-2 text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
           >
             Limpar filtros
           </button>
@@ -532,17 +532,17 @@ export default function MLFullEstoqueClient() {
       {!carregando && erro && (
         <section
           role="alert"
-          className="bg-white rounded-2xl border border-red-200 p-8 flex flex-col gap-3"
+          className="bg-surface rounded-2xl border border-crit/30 p-8 flex flex-col gap-3"
         >
-          <h3 className="text-lg font-semibold text-slate-900">
+          <h3 className="text-lg font-semibold text-ink">
             Não foi possível carregar o estoque
           </h3>
-          <p className="text-sm text-slate-600">{erro.texto}</p>
+          <p className="text-sm text-ink-muted">{erro.texto}</p>
           {erro.dataFutura ? (
             <button
               type="button"
               onClick={voltarParaUltima}
-              className="self-start inline-flex items-center min-h-11 text-sm font-semibold rounded-lg bg-violet-600 text-white px-4 py-2 hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="self-start inline-flex items-center min-h-11 text-sm font-semibold rounded-lg bg-accent text-accent-on px-4 py-2 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Ver a última fotografia
             </button>
@@ -550,7 +550,7 @@ export default function MLFullEstoqueClient() {
             <button
               type="button"
               onClick={carregar}
-              className="self-start inline-flex items-center min-h-11 text-sm font-semibold rounded-lg bg-violet-600 text-white px-4 py-2 hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="self-start inline-flex items-center min-h-11 text-sm font-semibold rounded-lg bg-accent text-accent-on px-4 py-2 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Tentar novamente
             </button>
@@ -582,14 +582,14 @@ export default function MLFullEstoqueClient() {
           {/* Cobertura e parcialidade SEMPRE visiveis, antes dos numeros (o
               frescor esta no escopo do cabecalho). */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
+            <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-ink-muted">
               {coberturaMarcasLabel(payload.cobertura)}
             </span>
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 text-slate-700">
+            <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-ink-muted">
               {leituraLabel(payload.cobertura.leitura)}
             </span>
             {payload.cobertura.marcas_sem_fotografia.length > 0 && (
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-amber-800">
+              <span className="rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-warn-ink">
                 Sem fotografia:{" "}
                 {payload.cobertura.marcas_sem_fotografia.map(tituloMarca).join(", ")}{" "}
                 — ausência, não zero
@@ -597,13 +597,13 @@ export default function MLFullEstoqueClient() {
             )}
             {/* Zero MEDIDO: tom neutro, nunca o ambar da ausencia. */}
             {marcasSemEstoqueFullML(payload.marcas).length > 0 && (
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-700">
+              <span className="rounded-full border border-line bg-raised px-2.5 py-1 text-ink-muted">
                 {ROTULO_SEM_ESTOQUE_FULL_ML}:{" "}
                 {marcasSemEstoqueFullML(payload.marcas).map(tituloMarca).join(", ")}
               </span>
             )}
             {payload.indicadores.total_parcial && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-900">
+              <span className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 font-semibold text-warn-ink">
                 Total parcial
                 <InfoDica
                   texto={payload.indicadores.motivos_total_parcial
@@ -623,20 +623,20 @@ export default function MLFullEstoqueClient() {
                 marcas: payload.marcas,
                 inventariosFullLidos: payload.indicadores.inventarios_full_lidos,
               })}
-              accent="bg-emerald-500"
+              accent="bg-ok"
             />
             {/* Contagens num total PARCIAL: "0" nao e' "nenhum". */}
             <KpiCard
               label="Exigem ação"
               value={fmtInt(payload.indicadores.inventarios_exigem_acao)}
               subvalue={subvalorContagemML(parcial, "Ruptura + estoque baixo")}
-              accent="bg-red-500"
+              accent="bg-crit"
             />
             <KpiCard
               label="Sem leitura"
               value={fmtInt(payload.indicadores.inventarios_sem_leitura)}
               subvalue={subvalorContagemML(parcial, "Inventários sem quantidade medida")}
-              accent="bg-orange-500"
+              accent="bg-warn/60"
             />
             <KpiCard
               label="Compartilhados"
@@ -645,13 +645,13 @@ export default function MLFullEstoqueClient() {
                 parcial,
                 "Inventários com 2+ anúncios (contados uma vez)",
               )}
-              accent="bg-violet-500"
+              accent="bg-accent"
             />
             <KpiCard
               label="Ruptura"
               value={fmtInt(payload.indicadores.inventarios_ruptura)}
               subvalue={subvalorContagemML(parcial, "Sem disponível, com venda na janela")}
-              accent="bg-red-500"
+              accent="bg-crit"
             />
             <KpiCard
               label="Estoque baixo"
@@ -660,7 +660,7 @@ export default function MLFullEstoqueClient() {
                 parcial,
                 `Abaixo de ${payload.limites.cobertura_baixa_dias} dias de cobertura`,
               )}
-              accent="bg-amber-500"
+              accent="bg-warn"
             />
             <KpiCard
               label="Excesso"
@@ -669,7 +669,7 @@ export default function MLFullEstoqueClient() {
                 parcial,
                 `A partir de ${payload.limites.cobertura_excesso_dias} dias de cobertura`,
               )}
-              accent="bg-sky-500"
+              accent="bg-kpi-prazo"
             />
             <KpiCard
               label="Não disponível Full"
@@ -678,7 +678,7 @@ export default function MLFullEstoqueClient() {
                 parcial,
                 subtituloTransferML(payload.indicadores.transfer_full),
               )}
-              accent="bg-slate-400"
+              accent="bg-ink-faint"
             />
           </div>
 
@@ -687,12 +687,12 @@ export default function MLFullEstoqueClient() {
           {payload.total_no_filtro === 0 ? (
             <section
               role="status"
-              className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col gap-3"
+              className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
             >
-              <h3 className="text-base font-semibold text-slate-900">
+              <h3 className="text-base font-semibold text-ink">
                 Nenhum inventário neste filtro
               </h3>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-muted">
                 {textoVazioML({
                   refDate: payload.frescor.ref_date,
                   inventarios: payload.indicadores.inventarios,

@@ -91,8 +91,8 @@ function Aviso({
 }) {
   const cor =
     tom === "alerta"
-      ? "bg-amber-50 border-amber-200 text-amber-900"
-      : "bg-slate-50 border-slate-200 text-slate-700";
+      ? "bg-warn-soft border-warn/30 text-warn-ink"
+      : "bg-raised border-line text-ink-muted";
   return (
     <p role={role} className={`text-sm rounded-xl border px-4 py-3 ${cor}`}>
       {children}
@@ -118,17 +118,17 @@ function PainelIndisponivel({
   return (
     <section
       role="status"
-      className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col gap-3"
+      className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
     >
-      <h3 className="text-lg font-semibold text-slate-900">{titulo}</h3>
-      <p className="text-sm text-slate-600 max-w-2xl">{motivo}</p>
+      <h3 className="text-lg font-semibold text-ink">{titulo}</h3>
+      <p className="text-sm text-ink-muted max-w-2xl">{motivo}</p>
       {passo && (
-        <p className="text-sm text-slate-600 max-w-2xl">
+        <p className="text-sm text-ink-muted max-w-2xl">
           <span className="font-semibold">Próximo passo: </span>
           {passo}
         </p>
       )}
-      <p className="text-sm font-semibold text-slate-900">
+      <p className="text-sm font-semibold text-ink">
         Isto não significa estoque zero.
       </p>
     </section>
@@ -151,18 +151,18 @@ function Etiqueta({ classe }: { classe: Classificacao }) {
  * `false` nem como zero.
  */
 function PorCD({ produto }: { produto: ProdutoEstoque }) {
-  if (!produto.por_cd.length) return <span className="text-slate-400">{SEM_DADO}</span>;
+  if (!produto.por_cd.length) return <span className="text-ink-faint">{SEM_DADO}</span>;
   return (
     <ul className="flex flex-col gap-0.5">
       {produto.por_cd.map((cd, i) => (
         <li key={`${cd.location_id}-${i}`} className="whitespace-nowrap">
-          <span className="text-slate-500">{rotuloCD(cd.location_id)}: </span>
+          <span className="text-ink-faint">{rotuloCD(cd.location_id)}: </span>
           <span className="tabular-nums">{fmtInt(cd.full_stock)}</span>
           {cd.is_saleable === false && (
-            <span className="text-amber-700"> (não vendável)</span>
+            <span className="text-warn-ink"> (não vendável)</span>
           )}
           {cd.is_saleable === null && (
-            <span className="text-slate-400"> {VENDA_NAO_INFORMADA}</span>
+            <span className="text-ink-faint"> {VENDA_NAO_INFORMADA}</span>
           )}
         </li>
       ))}
@@ -172,13 +172,13 @@ function PorCD({ produto }: { produto: ProdutoEstoque }) {
 
 function Tabela({ produtos }: { produtos: ProdutoEstoque[] }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+    <div className="bg-surface rounded-2xl border border-line overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">
           Estoque Full por produto, ordenado por urgência de reposição
         </caption>
         <thead>
-          <tr className="text-left text-xs font-semibold text-slate-600 uppercase tracking-wide border-b border-slate-200">
+          <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
             <th scope="col" className="px-4 py-3">Conta / marca</th>
             <th scope="col" className="px-4 py-3">SKU e produto</th>
             <th scope="col" className="px-4 py-3 text-right">Estoque Full vendável</th>
@@ -204,39 +204,39 @@ function Tabela({ produtos }: { produtos: ProdutoEstoque[] }) {
           {produtos.map((p) => (
             <tr
               key={`${p.shop_account}-${p.item_id}-${p.model_id}`}
-              className="border-b border-slate-100 last:border-0 align-top"
+              className="border-b border-line last:border-0 align-top"
             >
-              <td className="px-4 py-3 whitespace-nowrap text-slate-600">
+              <td className="px-4 py-3 whitespace-nowrap text-ink-muted">
                 {tituloMarca(p.shop_account)}
               </td>
               <td className="px-4 py-3">
-                <span className="block font-medium text-slate-900">
+                <span className="block font-medium text-ink">
                   {skuExibido(p)}
                 </span>
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-ink-faint">
                   {nomeExibido(p)}
                 </span>
               </td>
-              <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">
+              <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
                 {fmtInt(p.full_stock_saleable)}
                 {p.full_stock_total !== p.full_stock_saleable && (
-                  <span className="block text-xs font-normal text-slate-500">
+                  <span className="block text-xs font-normal text-ink-faint">
                     {fmtInt(p.full_stock_total)} no total
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+              <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                 {fmtInt(p.units_sold_28d)}
-                <span className="block text-xs text-slate-500">
+                <span className="block text-xs text-ink-faint">
                   {fmtDecimal(p.avg_daily_units_28d)}/dia
                 </span>
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-700">
+              <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                 {/* `null` = sem venda na janela. "0 dias" seria o OPOSTO:
                     zero dia e' ruptura, sem venda e' ausencia de urgencia. */}
                 {fmtCobertura(p.cobertura_torre_dias)}
                 {p.cobertura_torre_dias === null && (
-                  <span className="block text-xs text-slate-500">
+                  <span className="block text-xs text-ink-faint">
                     sem venda na janela
                   </span>
                 )}
@@ -244,14 +244,14 @@ function Tabela({ produtos }: { produtos: ProdutoEstoque[] }) {
               <td className="px-4 py-3">
                 <Etiqueta classe={p.classificacao_torre} />
               </td>
-              <td className="px-4 py-3 text-right tabular-nums text-slate-500">
+              <td className="px-4 py-3 text-right tabular-nums text-ink-faint">
                 {/* CONTEXTO, nao estoque Full. */}
                 {fmtOpcional(p.reserved_stock)}
               </td>
-              <td className="px-4 py-3 text-xs text-slate-600">
+              <td className="px-4 py-3 text-xs text-ink-muted">
                 <PorCD produto={p} />
               </td>
-              <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">
+              <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-faint">
                 {fmtData(p.ref_date)}
               </td>
             </tr>
@@ -365,7 +365,7 @@ export default function EstoqueFullClient() {
   const filtrosUI = (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">
           Conta
         </span>
         {contasFiltraveis.map((m) => (
@@ -374,10 +374,10 @@ export default function EstoqueFullClient() {
             type="button"
             aria-pressed={filtros.brands.includes(m)}
             onClick={() => alternarMarca(m)}
-            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               filtros.brands.includes(m)
-                ? "bg-violet-600 border-violet-600 text-white font-semibold"
-                : "bg-white border-slate-200 text-slate-600 hover:border-violet-300"
+                ? "bg-accent border-accent text-accent-on font-semibold"
+                : "bg-surface border-line text-ink-muted hover:border-accent/40"
             }`}
           >
             {tituloMarca(m)}
@@ -386,7 +386,7 @@ export default function EstoqueFullClient() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">
           Classificação
         </span>
         {CLASSIFICACOES.map((c) => (
@@ -395,10 +395,10 @@ export default function EstoqueFullClient() {
             type="button"
             aria-pressed={filtros.classificacoes.includes(c)}
             onClick={() => alternarClasse(c)}
-            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               filtros.classificacoes.includes(c)
-                ? "bg-violet-600 border-violet-600 text-white font-semibold"
-                : "bg-white border-slate-200 text-slate-600 hover:border-violet-300"
+                ? "bg-accent border-accent text-accent-on font-semibold"
+                : "bg-surface border-line text-ink-muted hover:border-accent/40"
             }`}
           >
             {CLASS_LABEL[c]}
@@ -407,24 +407,24 @@ export default function EstoqueFullClient() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           <span className="sr-only">Buscar por SKU ou produto</span>
           <input
             type="search"
             value={buscaDigitada}
             onChange={(e) => setBuscaDigitada(e.target.value)}
             placeholder="Buscar SKU ou produto"
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="rounded-lg border border-line px-3 py-1.5 text-sm w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
+        <label className="flex items-center gap-2 text-sm text-ink-muted">
           <input
             type="checkbox"
             checked={filtros.somenteAcao}
             onChange={(e) =>
               setFiltros((f) => ({ ...f, somenteAcao: e.target.checked }))
             }
-            className="rounded border-slate-300"
+            className="rounded border-line-strong"
           />
           Somente itens que exigem ação
         </label>
@@ -432,7 +432,7 @@ export default function EstoqueFullClient() {
           <button
             type="button"
             onClick={limpar}
-            className="text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+            className="text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
           >
             Limpar filtros
           </button>
@@ -455,7 +455,7 @@ export default function EstoqueFullClient() {
       />
 
       {carregando && (
-        <p role="status" className="text-sm text-slate-500 px-1 py-8">
+        <p role="status" className="text-sm text-ink-faint px-1 py-8">
           Carregando estoque…
         </p>
       )}
@@ -463,17 +463,17 @@ export default function EstoqueFullClient() {
       {!carregando && erro && (
         <section
           role="alert"
-          className="bg-white rounded-2xl border border-red-200 p-8 flex flex-col gap-3"
+          className="bg-surface rounded-2xl border border-crit/30 p-8 flex flex-col gap-3"
         >
-          <h3 className="text-lg font-semibold text-slate-900">
+          <h3 className="text-lg font-semibold text-ink">
             Não foi possível carregar o estoque
           </h3>
-          <p className="text-sm text-slate-600">{erro}</p>
+          <p className="text-sm text-ink-muted">{erro}</p>
           {/* Sem numero nenhum aqui: falha nao pode ser lida como medicao. */}
           <button
             type="button"
             onClick={carregar}
-            className="self-start text-sm font-semibold rounded-lg bg-violet-600 text-white px-4 py-2 hover:bg-violet-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="self-start text-sm font-semibold rounded-lg bg-accent text-accent-on px-4 py-2 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Tentar novamente
           </button>
@@ -510,12 +510,12 @@ export default function EstoqueFullClient() {
                todos os cartoes. Sem numero nenhum aqui, como no indisponivel. */
             <section
               role="status"
-              className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col gap-3"
+              className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
             >
-              <h3 className="text-base font-semibold text-slate-900">
+              <h3 className="text-base font-semibold text-ink">
                 Conta sem fotografia nesta data
               </h3>
-              <p className="text-sm text-slate-600">
+              <p className="text-sm text-ink-muted">
                 {selecionadasSemFotografia.map(tituloMarca).join(", ")} em{" "}
                 {fmtData(payload.frescor.ref_date)}: ausência de dado,
                 não estoque zero.
@@ -523,7 +523,7 @@ export default function EstoqueFullClient() {
               <button
                 type="button"
                 onClick={limpar}
-                className="self-start text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                className="self-start text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
               >
                 Limpar filtros
               </button>
@@ -535,49 +535,49 @@ export default function EstoqueFullClient() {
                   label="Unidades vendáveis"
                   value={fmtInt(payload.indicadores.unidades_vendaveis_operacional)}
                   subvalue={`${fmtInt(payload.indicadores.produtos_total)} produtos na fotografia`}
-                  accent="bg-emerald-500"
+                  accent="bg-ok"
                 />
                 <KpiCard
                   label="Exigem ação"
                   value={fmtInt(payload.indicadores.produtos_exigem_acao)}
                   subvalue="Ruptura + estoque baixo"
-                  accent="bg-red-500"
+                  accent="bg-crit"
                 />
                 <KpiCard
                   label="Ruptura"
                   value={fmtInt(payload.indicadores.produtos_ruptura)}
                   subvalue="Sem estoque vendável, com venda na janela"
-                  accent="bg-red-500"
+                  accent="bg-crit"
                 />
                 <KpiCard
                   label="Estoque baixo"
                   value={fmtInt(payload.indicadores.produtos_baixo)}
                   subvalue={`Abaixo de ${payload.limites.cobertura_baixa_dias} dias de cobertura`}
-                  accent="bg-amber-500"
+                  accent="bg-warn"
                 />
                 <KpiCard
                   label="Excesso"
                   value={fmtInt(payload.indicadores.produtos_excesso)}
                   subvalue={`A partir de ${payload.limites.cobertura_excesso_dias} dias de cobertura`}
-                  accent="bg-sky-500"
+                  accent="bg-kpi-prazo"
                 />
                 <KpiCard
                   label="Sem giro"
                   value={fmtInt(payload.indicadores.produtos_sem_giro)}
                   subvalue="Com estoque, sem venda na janela"
-                  accent="bg-slate-400"
+                  accent="bg-ink-faint"
                 />
                 <KpiCard
                   label="Suficiente"
                   value={fmtInt(payload.indicadores.produtos_suficientes)}
                   subvalue={`Entre ${payload.limites.cobertura_baixa_dias} e ${payload.limites.cobertura_excesso_dias} dias`}
-                  accent="bg-emerald-500"
+                  accent="bg-ok"
                 />
                 <KpiCard
                   label="Kits não conciliados"
                   value={fmtInt(payload.indicadores.produtos_kit_nao_conciliado)}
                   subvalue={`${fmtInt(payload.indicadores.unidades_vendaveis_kits_contexto)} unidades, fora do operacional`}
-                  accent="bg-violet-500"
+                  accent="bg-accent"
                 />
               </div>
 
@@ -594,16 +594,16 @@ export default function EstoqueFullClient() {
                    dado existe. E' diferente de indisponivel. */
                 <section
                   role="status"
-                  className="bg-white rounded-2xl border border-slate-200 p-8 flex flex-col gap-3"
+                  className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
                 >
-                  <h3 className="text-base font-semibold text-slate-900">
+                  <h3 className="text-base font-semibold text-ink">
                     Nenhum produto neste filtro
                   </h3>
                   {temFiltroAtivo(filtros) && (
                     <button
                       type="button"
                       onClick={limpar}
-                      className="self-start text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                      className="self-start text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
                     >
                       Limpar filtros
                     </button>
@@ -611,7 +611,7 @@ export default function EstoqueFullClient() {
                 </section>
               ) : (
                 <>
-                  <p className="text-xs text-slate-500 px-1">
+                  <p className="text-xs text-ink-faint px-1">
                     {fmtInt(payload.produtos.length)} de{" "}
                     {fmtInt(payload.total_no_filtro)} produtos
                     {payload.truncado && " · lista truncada, refine o filtro"}

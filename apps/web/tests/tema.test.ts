@@ -206,7 +206,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
   // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx"]);
+  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -227,6 +227,7 @@ const PAGINA_DA_ROTA: Record<string, string> = {
   "/dre": "app/dre/page.tsx",
   "/metas": "app/metas/page.tsx",
   "/cx": "app/cx/page.tsx",
+  "/full": "app/full/page.tsx",
 };
 
 // A propria fonte da paleta dos graficos (SVG precisa de cor resolvida).
@@ -322,6 +323,16 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
     "src/components/expedicao/ConsolidadoEtapas.tsx",
   ]) {
     assert.ok(exp.includes(esperado), `percurso da /expedicao nao alcancou ${esperado}`);
+  }
+  const full = arvoreDaRota("app/full/page.tsx");
+  for (const esperado of [
+    "app/full-ml/FullMLClient.tsx",
+    "app/full-shopee/FullShopeeClient.tsx",
+    "app/estoque-full/EstoqueFullClient.tsx",
+    "app/estoque-ml-full/MLFullEstoqueClient.tsx",
+    "src/components/MLFulfillmentTrend.tsx",
+  ]) {
+    assert.ok(full.includes(esperado), `percurso da /full nao alcancou ${esperado}`);
   }
   const canais = arvoreDaRota("app/canais/page.tsx");
   assert.ok(canais.includes("src/components/AffiliateCostsPanel.tsx"));

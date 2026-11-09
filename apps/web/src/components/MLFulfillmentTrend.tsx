@@ -11,6 +11,8 @@ import {
 } from "recharts";
 import type { PontoSerie, MetricaSerie } from "@/lib/ml-fulfillment";
 import { SEM_DADO, fmtShare } from "@/lib/ml-fulfillment";
+import { temaDoGrafico } from "@/lib/chart-theme";
+import { useTema } from "@/components/theme/ThemeProvider";
 
 const METRICA_LABEL: Record<MetricaSerie, string> = {
   gmv: "GMV",
@@ -39,16 +41,16 @@ function CustomTooltip({
   const p = payload[0]?.payload;
   if (!p) return null;
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
-      <p className="font-semibold text-slate-900">{p.ref_date}</p>
-      <p className="text-slate-600 mt-1">
+    <div className="bg-surface border border-line rounded-lg shadow-lg px-3 py-2 text-xs">
+      <p className="font-semibold text-ink">{p.ref_date}</p>
+      <p className="text-ink-muted mt-1">
         Share Full ({METRICA_LABEL[metrica]}):{" "}
         <span className="font-semibold tabular-nums">
           {p.share_full === null ? SEM_DADO : fmtShare(p.share_full)}
         </span>
       </p>
       {p.share_full === null && (
-        <p className="text-slate-500 mt-1">Sem venda classificada neste dia.</p>
+        <p className="text-ink-faint mt-1">Sem venda classificada neste dia.</p>
       )}
     </div>
   );
@@ -67,9 +69,11 @@ function CustomTooltip({
  * os pontos inventaria uma queda que nao houve.
  */
 export default function MLFulfillmentTrend({ pontos, metrica }: Props) {
+  // TEMA-ESCURO: SVG precisa de cor resolvida; a paleta vem do tema, como nos outros graficos.
+  const tema = temaDoGrafico(useTema().resolvido);
   if (pontos.length === 0) {
     return (
-      <p className="text-sm text-slate-500 py-8 text-center">
+      <p className="text-sm text-ink-faint py-8 text-center">
         Sem serie diaria para o periodo selecionado.
       </p>
     );
@@ -91,24 +95,24 @@ export default function MLFulfillmentTrend({ pontos, metrica }: Props) {
         }>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={pontos} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+            <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} />
             <XAxis
               dataKey="ref_date"
               tickFormatter={diaCurto}
-              tick={{ fontSize: 12, fill: "#64748b" }}
+              tick={{ fontSize: 12, fill: tema.eixo }}
               minTickGap={24}
             />
             <YAxis
               domain={[0, 1]}
               tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-              tick={{ fontSize: 12, fill: "#64748b" }}
+              tick={{ fontSize: 12, fill: tema.eixo }}
               width={48}
             />
             <Tooltip content={<CustomTooltip metrica={metrica} />} />
             <Line animationDuration={450} animationEasing="ease-out"
               type="monotone"
               dataKey="share_full"
-              stroke="#7c3aed"
+              stroke={tema.series[0]}
               strokeWidth={2}
               dot={false}
               connectNulls={false}
@@ -119,33 +123,33 @@ export default function MLFulfillmentTrend({ pontos, metrica }: Props) {
       </div>
 
       <details className="group">
-        <summary className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-600 rounded min-h-11 flex items-center">
+        <summary className="cursor-pointer text-xs font-medium text-ink-muted hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent rounded min-h-11 flex items-center">
           Ver os valores do gráfico em tabela ({pontos.length} dias)
         </summary>
-        <div className="mt-2 max-h-72 overflow-y-auto overflow-x-auto border border-slate-200 rounded-lg">
+        <div className="mt-2 max-h-72 overflow-y-auto overflow-x-auto border border-line rounded-lg">
           <table className="w-full text-xs">
             <caption className="sr-only">
               Share diário de Full por {METRICA_LABEL[metrica]}
             </caption>
-            <thead className="bg-slate-50 sticky top-0">
+            <thead className="bg-raised sticky top-0">
               <tr>
-                <th scope="col" className="text-left px-3 py-2 font-semibold text-slate-700">Data</th>
-                <th scope="col" className="text-right px-3 py-2 font-semibold text-slate-700">Share Full</th>
-                <th scope="col" className="text-right px-3 py-2 font-semibold text-slate-700">Full</th>
-                <th scope="col" className="text-right px-3 py-2 font-semibold text-slate-700">Não-Full</th>
+                <th scope="col" className="text-left px-3 py-2 font-semibold text-ink-muted">Data</th>
+                <th scope="col" className="text-right px-3 py-2 font-semibold text-ink-muted">Share Full</th>
+                <th scope="col" className="text-right px-3 py-2 font-semibold text-ink-muted">Full</th>
+                <th scope="col" className="text-right px-3 py-2 font-semibold text-ink-muted">Não-Full</th>
               </tr>
             </thead>
             <tbody>
               {pontos.map((p) => (
-                <tr key={p.ref_date} className="border-t border-slate-100">
-                  <td className="px-3 py-1.5 text-slate-700">{p.ref_date}</td>
+                <tr key={p.ref_date} className="border-t border-line">
+                  <td className="px-3 py-1.5 text-ink-muted">{p.ref_date}</td>
                   <td className="px-3 py-1.5 text-right tabular-nums font-medium">
                     {p.share_full === null ? SEM_DADO : fmtShare(p.share_full)}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                  <td className="px-3 py-1.5 text-right tabular-nums text-ink-muted">
                     {metrica === "gmv" ? p.full.toFixed(2) : p.full.toLocaleString("pt-BR")}
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">
+                  <td className="px-3 py-1.5 text-right tabular-nums text-ink-muted">
                     {metrica === "gmv" ? p.non_full.toFixed(2) : p.non_full.toLocaleString("pt-BR")}
                   </td>
                 </tr>
