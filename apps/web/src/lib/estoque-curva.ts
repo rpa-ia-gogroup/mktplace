@@ -79,13 +79,16 @@ const dias = (v: number | string | null | undefined): number | null => {
  */
 export function ordenarPorCurva<T extends ItemComCurva>(
   itens: readonly T[], cobertura: (t: T) => number | string | null | undefined,
+  /** Cards (excesso, sem giro, unidades): maior primeiro; sem valor continua no fim. */
+  desc = false,
 ): T[] {
+  const sinal = desc ? -1 : 1;
   return itens
     .map((t, i) => ({ t, i, g: ORDEM[grupoDe(t.curva ?? null)], d: dias(cobertura(t)) }))
     .sort((a, b) =>
       a.g - b.g
       || (a.d === null ? 1 : 0) - (b.d === null ? 1 : 0)
-      || (a.d ?? 0) - (b.d ?? 0)
+      || sinal * ((a.d ?? 0) - (b.d ?? 0))
       || a.i - b.i)
     .map((x) => x.t);
 }

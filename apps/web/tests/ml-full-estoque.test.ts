@@ -319,25 +319,15 @@ test("QA6: chips com 44px, marca formatada no PARCIAL, sem aviso duplicado", () 
   assert.ok(!CLIENT_SRC.includes("fotografiaVelhaML(payload.frescor)"));
 });
 
-test("QA7: cards de contagem marcam PARCIAL como o card de disponivel", () => {
-  assert.equal(subvalorContagemML(false, "Ruptura + estoque baixo"), "Ruptura + estoque baixo");
-  assert.equal(
-    subvalorContagemML(true, "Ruptura + estoque baixo"),
-    `${PREFIXO_PARCIAL_ML} · Ruptura + estoque baixo`,
-  );
-  assert.ok(PREFIXO_PARCIAL_ML.startsWith("Parcial"));
-  for (const campo of [
-    "inventarios_exigem_acao",
-    "inventarios_sem_leitura",
-    "inventarios_compartilhados",
-    "inventarios_ruptura",
-    "inventarios_baixo",
-    "inventarios_excesso",
-    "nao_disponivel_full",
-  ]) {
-    const card = CLIENT_SRC.split(`payload.indicadores.${campo})`)[1]?.split("/>")[0] ?? "";
-    assert.match(card, /subvalorContagemML\(\s*parcial,/, `${campo} sem marca de parcial`);
-  }
+test("QA7 (CARDS-CLICAVEIS): parcial e' UM aviso no topo; nos cards so' title + leitor de tela", () => {
+  // A funcao continua para quem usa; os cards da aba nao repetem mais o prefixo.
+  assert.equal(subvalorContagemML(true, "x"), `${PREFIXO_PARCIAL_ML} · x`);
+  assert.ok(!CLIENT_SRC.includes("subvalorContagemML("), "cards sem 'Parcial: ver aviso acima'");
+  assert.match(CLIENT_SRC, /parcial=\{!!parcial\}/);
+  assert.equal((CLIENT_SRC.match(/^\s*Total parcial$/gm) ?? []).length, 1, "um aviso so'");
+  const faixa = readFileSync(new URL("../src/components/full/CategoriasEstoque.tsx", import.meta.url), "utf-8");
+  assert.match(faixa, /SR_PARCIAL = "parcial: veja o aviso no topo"/);
+  assert.match(faixa, /contexto=\{parcial \?/);
 });
 
 test("D1: data parcial do input nao vira filtro; vazio limpa", () => {

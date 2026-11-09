@@ -654,10 +654,10 @@ test("conta selecionada sem fotografia esconde os cartoes", () => {
   const [, depois] = CLIENT_SRC.split("selecionadasSemFotografia.length > 0 ? (");
   assert.ok(depois, "falta o desvio para conta selecionada sem fotografia");
   const [ramoAusencia, ramoDados] = depois.split(") : (");
-  assert.ok(!ramoAusencia.includes("KpiCard"));
+  assert.ok(!ramoAusencia.includes("FaixaCategorias"));
   assert.ok(!ramoAusencia.includes("payload.indicadores"));
   assert.match(ramoAusencia, /ausência de dado,\s*não estoque zero/);
-  assert.ok(ramoDados.includes("KpiCard"));
+  assert.ok(ramoDados.includes("<FaixaCategorias"));
 });
 
 // ---------------------------------------------------------------------------

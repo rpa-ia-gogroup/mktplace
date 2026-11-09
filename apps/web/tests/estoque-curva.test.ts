@@ -72,7 +72,7 @@ test("as duas abas: coluna, filtro e ordem so' com a curva lida; resumo de açã
     assert.match(src, /\{comCurva && <FiltroCurvaChips/, f);
     assert.match(src, /ordenarPorCurva\(/, f);
     // o resumo e' o panorama: sem o filtro de curva
-    assert.match(src, /resumoAcao\(payload\.(produtos|inventarios),/, f);
+    assert.match(src, /resumoAcao\(payload\.(produtos|inventarios)[,.]/, f);
     assert.doesNotMatch(src, /resumoAcao\(lista,/, f);
     assert.match(src, /avisoCurvaIndisponivel\(metaCurva\)/, f);
     assert.match(src, /setCurvas\(\[\]\)/, `${f}: Limpar filtros limpa a curva`);

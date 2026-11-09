@@ -56,6 +56,7 @@ export default function KpiTile({
   antes,
   serie,
   granularidade = "day",
+  ativo,
 }: {
   rotulo: ReactNode;
   valor: ReactNode;
@@ -95,12 +96,19 @@ export default function KpiTile({
   serie?: number[];
   /** Unidade de cada ponto da `serie`, para o texto da tendencia ("últimos 7 dias…"). */
   granularidade?: "hour" | "day" | "week" | "month";
+  /**
+   * Com `identidade` e `onAbrir`: o cartao FILTRA a tela em vez de abrir um
+   * dialogo (abas de estoque do /full). Vira botao de alternar: `aria-pressed`
+   * e anel quando ativo. Sem a prop, nada muda.
+   */
+  ativo?: boolean;
 }) {
   if (variante === "gerencial" && identidade) {
     return (
       <KpiCardIdentidade
         rotulo={rotulo} valor={valor} comparacao={comparacao} contexto={contexto} tom={tom} ajuda={ajuda}
         icone={icone} delta={delta} onAbrir={onAbrir} identidade={identidade} antes={antes} serie={serie} granularidade={granularidade}
+        ativo={ativo}
       />
     );
   }
@@ -200,12 +208,13 @@ function KpiGerencial({
  * grafico. Nada inventado.
  */
 function KpiCardIdentidade({
-  rotulo, valor, comparacao, contexto, tom, ajuda, icone: Icone, delta, onAbrir, identidade, antes, serie, granularidade,
+  rotulo, valor, comparacao, contexto, tom, ajuda, icone: Icone, delta, onAbrir, identidade, antes, serie, granularidade, ativo,
 }: {
   rotulo: ReactNode; valor: ReactNode; comparacao?: ReactNode; contexto?: string; tom: Tom; ajuda?: ReactNode;
   icone?: LucideIcon; delta?: ReactNode; onAbrir?: () => void; identidade: IdentidadeKpi; antes?: ReactNode;
-  serie?: number[]; granularidade: "hour" | "day" | "week" | "month";
+  serie?: number[]; granularidade: "hour" | "day" | "week" | "month"; ativo?: boolean;
 }) {
+  const filtra = ativo !== undefined;
   const { tinta, borda, ladrilho } = IDENTIDADE[identidade];
   const t = serie ? tendencia(serie, granularidade) : null;
   const corpo = (
@@ -214,7 +223,7 @@ function KpiCardIdentidade({
         <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
           {rotulo}
           {ajuda}
-          {onAbrir && <span className="sr-only"> (abrir detalhe)</span>}
+          {onAbrir && <span className="sr-only">{filtra ? " (mostrar na tabela)" : " (abrir detalhe)"}</span>}
         </span>
         {Icone && (
           <span
@@ -248,9 +257,10 @@ function KpiCardIdentidade({
       <button
         type="button"
         onClick={onAbrir}
-        aria-haspopup="dialog"
+        aria-haspopup={filtra ? undefined : "dialog"}
+        aria-pressed={filtra ? ativo : undefined}
         title={contexto}
-        className={`card-hover group min-h-11 ${base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
+        className={`card-hover group min-h-11 ${base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${ativo ? "ring-2 ring-accent" : ""}`}
       >
         {corpo}
       </button>
