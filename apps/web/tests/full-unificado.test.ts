@@ -21,6 +21,8 @@ import {
   rankingRupturas,
   contarFiltros,
   dicaCurva,
+  heroiCurva,
+  chipFoto,
   contarGrupos,
   grupoDe,
   rotuloGrupo,
@@ -554,7 +556,8 @@ test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desen
 test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de frescor", () => {
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
   const linha = src.slice(src.indexOf("function LinhaCanal"), src.indexOf("function ChipFoto"));
-  assert.ok(linha.includes("c.aviso"), "aviso no li do canal");
+  assert.ok(!linha.includes("c.aviso"), "o aviso nao e' mais linha solta: vai para o chip da foto");
+  assert.ok(src.includes("const f = chipFoto(c);"), "chip da foto com o aviso de cobertura");
   assert.ok(!src.includes("<footer"), "sem rodape de frescor");
   assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
   assert.ok(src.includes("<Heroi") && src.includes('variante="gerencial"') && src.includes("<KpiDrilldownDialog"), "esqueleto da Gerencial");
@@ -563,7 +566,8 @@ test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de fres
   // CARD-KPI-GERENCIAL: cor de identidade da paleta (impacto = gmv, param a venda = pedidos);
   // API-4: delta e "antes" so' da foto anterior (helpers antes*); serie nunca (nao aprovada).
   assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 1, "um KpiTile de impacto, renderizado por canal");
-  assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 1);
+  assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 2, "Sem estoque com demanda e Param a venda");
+  assert.ok(!src.includes('identidade="ticket"'), "o cartao AA/A saiu da faixa (foi para o heroi)");
   assert.ok(!/serie=\{/.test(src), "sem sparkline: o Full nao tem serie aprovada");
   assert.equal((src.match(/delta=\{a && <Pilula a=\{a\} \/>\}/g) ?? []).length, 2, "pilula so' com o antes medido");
   assert.ok(src.includes("fetchImpactoRuptura(signal, true)"), "o antes vem da 2a chamada, depois do primeiro desenho");
@@ -733,5 +737,50 @@ test("fatia por curva: nao nula nunca '0,0%', quase toda nunca '100,0%'; zero da
   assert.equal(b.perda, 0);
   assert.equal(b.vendedorCobre, true);
   assert.equal(impactoPorCurva("shopee", imp, ABC)!.linhas.find((l) => l.curva === "sem")!.vendedorCobre, false);
+});
+
+// ---------------------------------------------------------------------------
+// CURVA-ABC PR2 -- heroi com a contagem AA/A e o aviso de cobertura no chip
+// ---------------------------------------------------------------------------
+
+test("heroi: contagem AA/A, contexto e uma linha por canal; cobertura baixa sem %", () => {
+  const canais: ResumoCanal[] = [resumoML(ML), resumoShopee(SHOPEE)];
+  // ML: K1 (AA) e K2 (A) cobrem 80% do impacto -> com %
+  const imp = impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "K2", 20), itemImp("kokeshi", "X99", 20)]);
+  const h = heroiCurva(canais, imp, ABC)!;
+  assert.equal(h.valor, "2", "conta so' os AA/A (o Shopee do fixture nao tem curva)");
+  assert.equal(h.contexto, "de 3 rupturas com demanda", "o % do sortimento fica so' no cartao abaixo");
+  assert.equal(h.porCanal.ml, "2 AA/A · 80,0% do impacto potencial");
+  assert.equal(h.critico, true);
+  assert.equal(h.porCanal.shopee, "0 AA/A · nenhuma ruptura", "canal sem ruptura: nem %, nem 'curva em 0 de 0'");
+  assert.equal(h.parcial, false);
+  // cobertura < 50%: sem %, a cobertura escrita, e o heroi avisa que e' parcial
+  const pouca = heroiCurva(canais, impactoCom([itemImp("kokeshi", "K1", 10), itemImp("kokeshi", "X1", 90)]), ABC)!;
+  assert.equal(pouca.porCanal.ml, "1 AA/A · curva em 1 de 2 rupturas");
+  assert.equal(pouca.parcial, true);
+});
+
+test("heroi: leitura da curva em falha vira '—' com o motivo, nunca 0", () => {
+  const canais: ResumoCanal[] = [resumoML(ML), resumoShopee(SHOPEE)];
+  const falha: CurvaAbc = { status: "unavailable", motivo: "Curva ABC indisponível agora: a planilha não respondeu.", fonte: "", duplicadas: [], curva_por_sku: {} };
+  const h = heroiCurva(canais, IMPACTO, falha)!;
+  assert.equal(h.valor, "—");
+  assert.equal(h.contexto, "sem curva agora · de 3 rupturas com demanda");
+  assert.equal(h.titulo, falha.motivo);
+  assert.deepEqual(h.porCanal, {}, "as linhas do meio voltam ao % sem estoque");
+  assert.equal(heroiCurva(canais, IMPACTO, null)!.valor, "—", "carregando: tambem '—'");
+});
+
+test("chip da foto: aviso de cobertura escrito no chip ('sem RITUÁRIA'), o aviso inteiro no title", () => {
+  const semRit = resumoML(ml([inventario("kokeshi", "RUPTURA_CANDIDATA")], [marcaML("kokeshi", 1, 1), { ...marcaML("rituaria", null), estado: null } as MarcaML],
+    { indicadores: { ...ML.indicadores, total_parcial: true, motivos_total_parcial: ["Sem fotografia no dia: RITUÁRIA."] } } as Partial<MLFullEstoqueOk>));
+  if (semRit.status !== "ok") throw new Error("esperava ok");
+  const f = chipFoto(semRit);
+  assert.match(f.texto, /· sem RITUÁRIA$/);
+  assert.equal(f.atencao, true);
+  assert.match(f.titulo, /Total parcial: Sem fotografia no dia: RITUÁRIA\./);
+  const limpo = resumoShopee(SHOPEE);
+  if (limpo.status !== "ok") throw new Error("esperava ok");
+  assert.equal(chipFoto(limpo).texto, "foto de 08/11, hoje");
 });
 

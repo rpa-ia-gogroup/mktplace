@@ -15,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { PackageX, TrendingDown, Trophy, Warehouse } from "lucide-react";
+import { Boxes, PackageX, TrendingDown, Warehouse } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
@@ -57,8 +57,10 @@ import {
   dicaCurva,
   impactoPorCurva,
   fmtFatia,
-  linhaCurvaCanal,
   rankingRupturas,
+  chipFoto,
+  heroiCurva,
+  DICA_HEROI_PARCIAL,
   contarGrupos,
   grupoDe,
   rotuloGrupo,
@@ -76,7 +78,6 @@ import {
   resumoML,
   resumoShopee,
   rupturaPorMarca,
-  seloFrescor,
   topRupturas,
   total,
   type Canal,
@@ -144,27 +145,25 @@ function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedor
 }
 
 /** Linha de um canal no herói: % sem estoque + foto (e o aviso do canal, quando houver). */
-function LinhaCanal({ c }: { c: ResumoOk }) {
+function LinhaCanal({ c, curva }: { c: ResumoOk; curva?: string }) {
   const nome = NOME_CANAL[c.canal];
   const f = fracao(c.ruptura, c.base);
   return (
-    <>
-      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="font-semibold text-ink">
-          {c.ruptura === 0 ? `${nome}: nenhum produto sem estoque` : (
-            <>{nome}: {f ? <Escondido texto={f.texto} detalhe={f.detalhe} /> : <Ausente />} sem estoque</>
-          )}
-        </span>
-        <ChipFoto c={c} />
-      </p>
-      {c.aviso && <p className="text-xs text-warn-ink">{c.aviso}</p>}
-    </>
+    <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="font-semibold text-ink">
+        {curva ? `${nome}: ${curva}` : c.ruptura === 0 ? `${nome}: nenhum produto sem estoque` : (
+          <>{nome}: {f ? <Escondido texto={f.texto} detalhe={f.detalhe} /> : <Ausente />} sem estoque</>
+        )}
+      </span>
+      <ChipFoto c={c} />
+    </p>
   );
 }
 
 /** Frescor da foto do canal: desatualizada escreve a palavra, nao so' a cor; o frescor completo no title. */
 function ChipFoto({ c }: { c: ResumoOk }) {
-  return <Chip tom={c.frescorVelho ? "atencao" : "neutro"} ponto={c.frescorVelho} title={c.frescor}>{seloFrescor(c)}</Chip>;
+  const f = chipFoto(c);
+  return <Chip tom={f.atencao ? "atencao" : "neutro"} ponto={f.atencao} title={f.titulo}>{f.texto}</Chip>;
 }
 
 /** Drilldown do cartao de impacto: marca | % do Full da marca | R$/dia potencial + o ⓘ do canal no rodape. */
@@ -317,30 +316,6 @@ function Pilula({ a }: { a: Antes | null }) {
   return a ? <DeltaBadge pct={a.pp} tone="lower_is_better" unidade="pp" /> : null;
 }
 
-/** Uma linha do cartao "Rupturas da curva AA/A" (molde do ACoS da Gerencial). */
-function LinhaCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoRuptura | null; abc: CurvaAbc | null }) {
-  const l = abc === null ? { estado: "carregando" as const } : linhaCurvaCanal(canal, impacto, abc);
-  const titulo = l.estado === "ok" ? l.detalhe : l.estado === "ausente" ? l.motivo : undefined;
-  return (
-    <span className="flex items-baseline justify-between gap-2" title={titulo}>
-      <span className="text-xs font-normal text-ink-faint">{NOME_CANAL[canal]}</span>
-      {l.estado === "ok" ? (
-        <span className="flex items-baseline gap-1.5">
-          <span className="text-xl font-semibold text-ink">{fmtPct(l.pct)}</span>
-          <span className="text-xs font-normal text-ink-muted">do impacto · {fmtInt(l.itens)} {l.itens === 1 ? "item" : "itens"}</span>
-          <span className="sr-only"> ({l.detalhe})</span>
-        </span>
-      ) : (
-        <span className="flex items-baseline gap-1.5">
-          <span className="text-xl font-semibold text-ink-faint">—</span>
-          <span className="text-xs font-normal text-ink-muted">{l.estado === "carregando" ? "carregando a curva" : l.texto}</span>
-          {l.estado === "ausente" && <span className="sr-only"> ({l.motivo})</span>}
-        </span>
-      )}
-    </span>
-  );
-}
-
 const OPCOES_FILTRO: { valor: FiltroCurva; texto: string }[] = [
   { valor: "todas", texto: "Todas" }, { valor: "aa_a", texto: "AA/A" }, { valor: "b", texto: "B" },
   { valor: "c", texto: "C" }, { valor: "sem", texto: "Sem curva" },
@@ -353,6 +328,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
   const ok = oks(canais);
   const heroi = heroiRuptura(canais);
   const aHeroi = antesHeroi(canais, antes);
+  const curvaH = heroiCurva(canais, impacto, abc);
   // Sem pilula depois da 2a chamada: o motivo vai para title + sr-only (sem texto na tela).
   const motivoHeroi = antes && !aHeroi
     ? semComparacao("ml", antes.impacto) ?? semComparacao("shopee", antes.impacto) ?? "sem comparação: falta a foto anterior de um dos canais"
@@ -389,19 +365,24 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
 
   return (
     <>
-      {/* 1. Heroi: o % sem estoque; o meio quebra por canal com a foto de cada um */}
+      {/* 1. Heroi: quantos produtos-chave (AA/A) estao sem estoque; uma linha por canal com a foto */}
       <Heroi
-        rotulo="Sem estoque no Full com demanda"
-        ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
-        valor={heroi.valor}
-        tom={heroi.critico ? "critico" : "neutro"}
-        delta={aHeroi && <><Pilula a={aHeroi} /><span className="text-ink-faint">{aHeroi.texto}</span></>}
-        contexto={<Escondido texto={heroi.contexto} detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
+        rotulo="Produtos-chave (AA/A) sem estoque no Full"
+        ajuda={<InfoDica texto={DICA_RUPTURA} nota={curvaH?.parcial ? `${DICA_HEROI_PARCIAL} ${NOTA_VENDEDOR}` : NOTA_VENDEDOR} />}
+        valor={curvaH ? <Escondido texto={curvaH.valor} detalhe={curvaH.titulo} /> : "—"}
+        tom={curvaH?.critico ? "critico" : "neutro"}
+        contexto={curvaH ? <Escondido texto={curvaH.contexto} detalhe={curvaH.titulo} /> : undefined}
+        acao={comCurva && (
+          <button type="button" onClick={() => setDrill("curva")} aria-haspopup="dialog"
+            className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            Ver por curva →
+          </button>
+        )}
         meio={
           <ul className="grid grid-cols-1 gap-2">
             {canais.map((c) => (
               <li key={c.canal} className="flex flex-col gap-1">
-                {c.status === "ok" ? <LinhaCanal c={c} /> : (
+                {c.status === "ok" ? <LinhaCanal c={c} curva={curvaH?.porCanal[c.canal]} /> : (
                   <>
                     <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-ink">
                       {NOME_CANAL[c.canal]}: <Chip tom="ausente">sem dado agora</Chip>
@@ -418,6 +399,18 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
 
       {/* 2. Faixa de KPIs: quanto custa (por canal, R$ nunca somado) e quem para a venda */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiTile
+          variante="gerencial"
+          identidade="pedidos"
+          icone={Boxes}
+          rotulo="Sem estoque com demanda"
+          ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
+          valor={heroi.valor}
+          tom={heroi.critico ? "critico" : "neutro"}
+          comparacao={<Escondido texto="do sortimento no Full" detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
+          delta={aHeroi && <Pilula a={aHeroi} />}
+          antes={aHeroi?.texto}
+        />
         {CANAIS.map((canal) => {
           const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
           const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
@@ -458,15 +451,6 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
             />
           );
         })()}
-        <KpiTile
-          variante="gerencial"
-          identidade="ticket"
-          icone={Trophy}
-          rotulo="Rupturas da curva AA/A"
-          ajuda={<InfoDica emControle texto={dicaCurva(abc, impacto)} />}
-          valor={<span className="mt-1 flex flex-col gap-1 tracking-normal">{CANAIS.map((c) => <LinhaCurva key={c} canal={c} impacto={impacto} abc={abc} />)}</span>}
-          onAbrir={() => setDrill("curva")}
-        />
       </div>
       <KpiDrilldownDialog
         open={drill !== null}
