@@ -852,9 +852,9 @@ test("aviso do canal so' com foto de mais de 1 dia ou marca faltando; frescor em
   assert.match(fotosHeroi(canais) ?? "", /^Fotos: ML \d\d\/\d\d, Shopee \d\d\/\d\d\.$/);
 });
 
-test("celula de impacto: Shopee com estoque do vendedor = R$ 0 medido e explicado; sem preco nunca vira 0", () => {
+test("celula de impacto: Shopee com estoque do vendedor = '—' explicado; sem preco nunca vira 0", () => {
   const c = celulaImpacto(rup("shopee", "S1", { estoqueVendedor: 12, perdaDia: 0, perdaBruta: 214.4 }));
-  assert.equal(c.texto.replace(/\s/g, " "), "R$ 0");
+  assert.equal(c.texto, "—", "sem 'R$ 0' em destaque: a venda segue");
   assert.equal(c.zeroMedido, true);
   assert.equal(c.apoio, "vendedor tem estoque · a venda segue");
   assert.match(c.titulo ?? "", /\/dia se contar só o Full$/);
@@ -885,5 +885,18 @@ test("clique no bloco do heroi: canal + AA/A; filtros na URL vao e voltam", () =
   const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
   assert.ok(tela.includes("filtroDoBloco(c.canal)") && tela.includes("aplicar(canal, \"todas\", true)"), "heroi e faixa levam a fila");
   assert.ok(tela.includes("por marca →") && tela.includes("Limpar filtros"));
+});
+
+test("fila: Shopee com estoque do vendedor vai para o fim do grupo, abaixo de quem tem perda", () => {
+  const canais: ResumoCanal[] = [resumoShopee(SHOPEE)];
+  const abc: CurvaAbc = { ...ABC, curva_por_sku: { "kokeshi|S1": "AA", "kokeshi|S2": "AA", "kokeshi|S3": "AA", "kokeshi|S4": "A" } };
+  const imp = impactoCom([], [
+    itemImp("kokeshi", "S1", 0, { estoque_vendedor: 5 }),
+    itemImp("kokeshi", "S2", 50, { estoque_vendedor: 0 }),
+    itemImp("kokeshi", "S3", null, { estoque_vendedor: 0 }),
+    itemImp("kokeshi", "S4", 900, { estoque_vendedor: 0 }),
+  ]);
+  assert.deepEqual(rankingRupturas(canais, imp, abc).map((t) => t.codigo), ["S2", "S3", "S1", "S4"],
+    "AA: com perda, sem preco, e por ultimo quem a venda segue; o grupo A continua abaixo");
 });
 

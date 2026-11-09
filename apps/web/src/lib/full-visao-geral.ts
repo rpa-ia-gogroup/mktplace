@@ -341,12 +341,19 @@ export function topRupturas(
  * desconhecido, nao baixo, entao nunca vai para depois do C). Dentro de cada
  * grupo: impacto R$/dia desc; desempate pela venda/dia.
  */
+/** Shopee com estoque do vendedor: o Full rompeu, mas a venda segue. */
+export function vendedorTemEstoque(t: ItemRuptura): boolean {
+  return t.canal === "shopee" && (t.estoqueVendedor ?? 0) > 0;
+}
+
 export function rankingRupturas(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null = null): ItemRuptura[] {
   const comImpacto = new Map(impactosOk(impacto).map((c) => [c.canal, c]));
   return oks(canais)
     .flatMap((c) => comImpacto.get(c.canal)?.itens.map((i) => itemDoImpacto(c.canal, i)) ?? c.rupturas)
     .sort((a, b) =>
       ORDEM_GRUPO[grupoDe(curvaDe(a, abc))] - ORDEM_GRUPO[grupoDe(curvaDe(b, abc))]
+      // Shopee com estoque do vendedor (a venda segue): fim do grupo, abaixo de quem tem perda.
+      || Number(vendedorTemEstoque(a)) - Number(vendedorTemEstoque(b))
       || (b.perdaDia ?? -1) - (a.perdaDia ?? -1)
       || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome));
 }
@@ -985,8 +992,8 @@ export function filtrosNaUrl(atual: string, canal: FiltroCanal, curva: FiltroCur
 export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; titulo?: string; ausente?: string; zeroMedido?: boolean } {
   if (t.perdaDia === undefined) return { texto: "—", ausente: "impacto do canal indisponível" };
   if (t.perdaDia === null) return { texto: "—", ausente: t.canal === "shopee" && t.estoqueVendedor === null ? "estoque do vendedor não informado" : "sem preço" };
-  if (t.canal === "shopee" && (t.estoqueVendedor ?? 0) > 0) {
-    return { texto: fmtReais(0), apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
+  if (vendedorTemEstoque(t)) {
+    return { texto: "—", apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
   }
   return { texto: fmtReais(t.perdaDia) };
 }
