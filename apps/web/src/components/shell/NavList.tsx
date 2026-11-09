@@ -1,6 +1,5 @@
 import Link from "next/link";
 import {
-  Activity,
   BookMarked,
   Calculator,
   Gauge,
@@ -42,7 +41,6 @@ export const ICONE_DA_ROTA: Record<string, LucideIcon> = {
   "/financeiro": Wallet,
   "/dre": Calculator,
   "/regioes": MapPinned,
-  "/tempo-real": Activity,
   "/pedidos": ShoppingBag,
   "/inteligencia": Lightbulb,
   "/monitoramento-preco": Radar,

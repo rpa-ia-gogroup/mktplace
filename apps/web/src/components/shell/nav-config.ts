@@ -30,7 +30,6 @@ export const NAV_SECTIONS: NavSection[] = [
       // casa por prefixo, e um filho deixaria os dois itens ativos ao mesmo tempo.
       { href: "/dre", label: "DRE" },
       { href: "/regioes", label: "Regiões" },
-      { href: "/tempo-real", label: "Tempo Real" },
     ],
   },
   {

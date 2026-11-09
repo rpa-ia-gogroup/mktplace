@@ -575,7 +575,6 @@ test("PF1 escopo: as funcoes sem cache continuam sem cache e fetchMonthly segue 
     return L.slice(i, fim).join("\n");
   };
   assert.ok(!/withCache/.test(corpoDe("fetchExecutiveSummary")), "resumo executivo segue sem cache");
-  assert.ok(!/withCache/.test(corpoDe("fetchTempoReal")), "Tempo Real segue sem cache: cachear sabotaria o polling");
   assert.ok(/withCache\(`monthly:\$\{marketplace\}`/.test(corpoDe("fetchMonthly")), "fetchMonthly intocada, mesmo sem consumidor");
 });
 
@@ -593,7 +592,7 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
   //   Cliente SEPARADO do `fetchMLFulfillment` (modalidade de envio) e do
   //   `fetchEstoqueFull` (Shopee): estoque fisico do ML, por inventario.
   // 29 -> 30 pelo VENDAS-POR-HORA-1, que acrescentou `fetchHojePorHora`
-  //   (o "Hoje" padronizado da Gerencial). Sem cache, como `fetchTempoReal`:
+  //   (o "Hoje" padronizado da Gerencial). Sem cache:
   //   o numero muda de hora em hora.
   // 30 -> 31 pelo FULL-IMPACTO-1, que acrescentou `fetchImpactoRuptura`
   //   (impacto potencial da ruptura no Full; erro proprio, nunca R$ 0).
@@ -601,7 +600,7 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
   //   planilha de sortimento; falha = sem curva, nunca "C").
   // O pino literal e' proposital: forca revisao consciente a cada funcao nova,
   // em vez de aceitar qualquer superficie publica em silencio.
-  assert.equal(assinaturas.length, 32, "nenhuma funcao publica foi adicionada ou removida");
+  assert.equal(assinaturas.length, 31, "nenhuma funcao publica foi adicionada ou removida");
   assert.ok(assinaturas.includes("fetchMonitoramentoPreco"));
   assert.ok(assinaturas.includes("fetchAvoeSnapshot"));
   assert.ok(assinaturas.includes("fetchMLFulfillment"));
@@ -645,7 +644,6 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
     "fetchRegioesSummary",
     "fetchRegioesTrend",
     "fetchShopeeFbs",
-    "fetchTempoReal",
     "fetchTrend",
   ];
   assert.deepEqual([...assinaturas].sort(), ESPERADAS,
