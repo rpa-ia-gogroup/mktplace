@@ -24,7 +24,7 @@ import type { BrandRow } from "@/lib/api-client";
 import type { Marketplace } from "@/lib/mock-data";
 import { CHANNEL_DOT as PONTO } from "@/lib/gerencial/channel-colors";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
-import { GMV_DO_CANAL, type StatusMeta } from "@/lib/gerencial/meta-progress";
+import { GMV_DO_CANAL, ROTULO_STATUS, type StatusMeta } from "@/lib/gerencial/meta-progress";
 import type { StatusDia } from "@/lib/metas-curva";
 import { MARCAS, fmtCompacto } from "@/lib/metas";
 import { fmtPctBr } from "@/lib/formatters";
@@ -243,12 +243,8 @@ export default function MarcasMeta({
                   <span className={`flex flex-col items-end text-right tabular-nums ${d ? "col-start-2 row-span-2 row-start-1" : ""}`}>
                     <span className="text-sm font-semibold text-ink">{fmtCompacto(valor(b))}</span>
                     {pctFull != null && <span className="text-xs text-ink-muted">{Math.round(pctFull * 100)}% Full</span>}
-                    {/* Com a tendencia do mes, a cor do status (projetado) vai para ela. */}
-                    {p && tende != null ? (
-                      <span className="text-xs text-ink-muted">
-                        {Math.round(p.atingimento * 100)}% {rotuloMeta}
-                      </span>
-                    ) : p ? (
+                    {/* Com a tendencia do mes, o realizado sai da vista e vai para o title do chip dela. */}
+                    {p && tende != null ? null : p ? (
                       <span className={`rounded px-1.5 text-xs font-semibold ${CHIP[p.status]}`}>
                         {Math.round(p.atingimento * 100)}% {rotuloMeta}
                       </span>
@@ -261,23 +257,10 @@ export default function MarcasMeta({
                     <TendenciaDoDia
                       t={tendenciaDoDia?.[b.brand] ? tendenciaNosCanais(tendenciaDoDia[b.brand], canaisDaBarra(b)) : null}
                     />
-                    {tende != null && (
-                      <span
-                        className="flex flex-col items-end gap-x-1 text-xs text-ink-muted sm:flex-row sm:items-center"
-                        title={`Pelo ritmo dos dias com dado até ontem${p ? ", na curva da meta (o mesmo cálculo do total)" : ""}.`}
-                      >
-                        <span className="whitespace-nowrap">
-                          tende a <b className="font-semibold text-ink">{fmtCompacto(tende)}</b>
-                          {p && <span className="hidden sm:inline"> ·</span>}
-                        </span>
-                        {p && (
-                          <span className={`rounded px-1.5 font-semibold ${CHIP[p.status]}`}>
-                            {Math.round((tende / p.meta) * 100)}% da meta
-                          </span>
-                        )}
-                      </span>
-                    )}
+                    {tende != null && <TendenciaDoMes tende={tende} p={p} className="hidden sm:flex" />}
                   </span>
+                  {/* 390: ao lado das barras nao cabe; desce para uma linha propria. */}
+                  {tende != null && <TendenciaDoMes tende={tende} p={p} className="col-span-full flex justify-self-end sm:hidden" />}
                 </Link>
               </li>
             );
@@ -335,7 +318,35 @@ function BarraFull({
           })}
         </span>
       </span>
-      <span className="text-right tabular-nums">{fmtCompacto(total)}</span>
+      <span className="whitespace-nowrap text-right tabular-nums">{fmtCompacto(total)}</span>
+    </span>
+  );
+}
+
+/**
+ * "tende a 105% da meta · R$ 8,68 mi": percentual antes do absoluto, com a cor
+ * do status projetado (rotulo no sr-only: a cor nunca e' a unica pista). O
+ * realizado vai para o title. Sem meta: so' "tende a R$ X".
+ */
+function TendenciaDoMes({ tende, p, className }: { tende: number; p: MetaDaMarca | null; className: string }) {
+  if (!p) {
+    return (
+      <span className={`${className} whitespace-nowrap text-xs text-ink-muted`} title="Pelo ritmo dos dias com dado até ontem. Marca sem meta: só o valor.">
+        tende a <b className="ml-1 font-semibold text-ink">{fmtCompacto(tende)}</b>
+      </span>
+    );
+  }
+  const real = Math.round(p.atingimento * 100);
+  return (
+    <span
+      className={`${className} items-center gap-x-1 whitespace-nowrap text-xs text-ink-muted`}
+      title={`Realizado: ${real}% da meta até ontem. Tendência pelo ritmo dos dias com dado, na curva da meta (o mesmo cálculo do total).`}
+    >
+      <span className={`rounded px-1.5 font-semibold ${CHIP[p.status]}`}>
+        tende a {Math.round((tende / p.meta) * 100)}% da meta
+        <span className="sr-only"> ({ROTULO_STATUS[p.status as StatusMeta] ?? ""}; realizado {real}% da meta até ontem)</span>
+      </span>
+      · {fmtCompacto(tende)}
     </span>
   );
 }
