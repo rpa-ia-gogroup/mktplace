@@ -87,10 +87,16 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
 // DeltaBadge e Sparkline sairam da KpiBand para ui/ sem mudar o markup.
 // ---------------------------------------------------------------------------
 
-/** Trecho de um arquivo na main (sem git, como num CI raso: `null` e o teste se apoia nas classes). */
-function naMain(rel: string): string | null {
+/**
+ * Baseline FIXO: a main logo antes do #265 (a extracao do DeltaBadge/Sparkline).
+ * Comparar com `origin/main` quebrava depois do merge, porque a main ja' nao
+ * tem o trecho extraido. Sem git (CI raso, commit ausente): `null` e o teste se
+ * apoia nas classes.
+ */
+const BASELINE_ANTES_DO_265 = "b41ad80";
+function naBaseline(rel: string): string | null {
   try {
-    return execFileSync("git", ["show", `origin/main:apps/web/${rel}`], { encoding: "utf-8" }).replace(/\r\n/g, "\n");
+    return execFileSync("git", ["show", `${BASELINE_ANTES_DO_265}:apps/web/${rel}`], { encoding: "utf-8", stdio: ["ignore", "pipe", "ignore"] }).replace(/\r\n/g, "\n");
   } catch {
     return null;
   }
@@ -105,7 +111,7 @@ test("KpiBand: o card, o DeltaBadge e a Sparkline tem o mesmo markup de antes da
   assert.ok(!band.includes("function DeltaBadge") && !band.includes("function Sparkline") && !band.includes("function LinhaDeTendencia"));
   assert.ok(delta.includes("inline-flex w-fit items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${pele}"));
   for (const pele of ['"bg-raised text-ink-muted"', '"bg-ok-soft text-ok-ink"', '"bg-crit-soft text-crit-ink"']) assert.ok(delta.includes(pele), pele);
-  const antes = naMain("src/components/gerencial/KpiBand.tsx");
+  const antes = naBaseline("src/components/gerencial/KpiBand.tsx");
   if (!antes) return;
   // o corpo da Sparkline e da LinhaDeTendencia, texto a texto
   assert.equal(trecho(spark, "  // `useId` traz", "\n}\n"), trecho(antes, "  // `useId` traz", "\n}\n"));
@@ -116,7 +122,7 @@ test("KpiBand: o card, o DeltaBadge e a Sparkline tem o mesmo markup de antes da
 });
 
 test("KpiTile 'gerencial' sem identidade: o render de antes, texto a texto", () => {
-  const antes = naMain("src/components/ui/KpiTile.tsx");
+  const antes = naBaseline("src/components/ui/KpiTile.tsx");
   if (!antes) return;
   assert.equal(trecho(KPI, "function KpiGerencial(", "\n}\n"), trecho(antes, "function KpiGerencial(", "\n}\n"));
 });
