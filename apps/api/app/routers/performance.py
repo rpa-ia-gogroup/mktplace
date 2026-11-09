@@ -1153,7 +1153,11 @@ def ml_full_estoque(
 # ===========================================================================
 
 @router.get("/full-impacto-ruptura", response_model=ImpactoRupturaResponse)
-def full_impacto_ruptura(db: Session = Depends(get_db)):
+def full_impacto_ruptura(
+    anterior: bool = Query(
+        False, description="Soma a foto anterior de cada canal (o 'antes'). Mais lento."),
+    db: Session = Depends(get_db),
+):
     """Perda POTENCIAL/dia dos itens em ruptura no Full e o % do GMV Full.
 
     perda/dia = venda media diaria de 28d x preco medio do item. ML: preco de
@@ -1162,4 +1166,5 @@ def full_impacto_ruptura(db: Session = Depends(get_db)):
     """
     ml, shopee = settings.ml_full_stock_api_enabled, settings.shopee_fbs_stock_enabled
     return impacto_svc.get_impacto_ruptura(
-        _require_db(db) if (ml or shopee) else db, ml_ligado=ml, shopee_ligado=shopee)
+        _require_db(db) if (ml or shopee) else db, ml_ligado=ml, shopee_ligado=shopee,
+        com_anterior=anterior)

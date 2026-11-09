@@ -104,8 +104,9 @@ class Sessao:
         }[n]()
 
 
-def _bloco(sessao=None, ml=True, shopee=True):
-    return svc.get_impacto_ruptura(sessao or Sessao(), ml_ligado=ml, shopee_ligado=shopee)
+def _bloco(sessao=None, ml=True, shopee=True, anterior=False):
+    return svc.get_impacto_ruptura(sessao or Sessao(), ml_ligado=ml, shopee_ligado=shopee,
+                                   com_anterior=anterior)
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ def test_gmv_incompleto_nao_vira_percentual():
 def test_foto_anterior_com_o_mesmo_recorte_vem_com_a_data():
     ant_ml, ant_sh = date(2026, 11, 3), date(2026, 11, 7)
     s = Sessao(ant_ml=ant_ml, ant_sh=ant_sh)
-    b = _bloco(s)
+    b = _bloco(s, anterior=True)
     assert b["ml"]["anterior"]["ref_date"] == ant_ml and b["ml"]["motivo_anterior"] is None
     assert b["shopee"]["anterior"]["ref_date"] == ant_sh
     assert set(b["shopee"]["anterior"]) == set(svc.CAMPOS_ANTERIOR), "so' os totais, sem itens"
@@ -174,14 +175,31 @@ def test_foto_anterior_com_o_mesmo_recorte_vem_com_a_data():
 
 
 def test_sem_foto_anterior_ou_recorte_diferente_nao_tem_antes():
-    b = _bloco()
+    b = _bloco(anterior=True)
     assert b["ml"]["anterior"] is None and b["ml"]["motivo_anterior"] == svc.MOTIVO_SEM_FOTO_ANTERIOR
     # foto do ML de hoje sem uma marca que a anterior tinha: nada de variacao falsa
     ant = date(2026, 11, 3)
     s = Sessao(ant_ml=ant, recortes={("ml", REF_ML): ["barbours"], ("ml", ant): ["barbours", "kokeshi"]})
-    ml = _bloco(s)["ml"]
+    ml = _bloco(s, anterior=True)["ml"]
     assert ml["anterior"] is None and ml["motivo_anterior"] == svc.MOTIVO_RECORTE_DIFERENTE
     assert not [p for n, p in s.params if n == "SQL_ML_RUPTURAS" and p["ref_date"] == ant], "nao calcula o que nao vai usar"
+
+
+def test_sem_o_parametro_a_rota_nao_calcula_a_foto_anterior():
+    """`anterior` e' opcional: a chamada padrao mantem o tempo de antes."""
+    s = Sessao(ant_ml=date(2026, 11, 3), ant_sh=date(2026, 11, 7))
+    b = _bloco(s)
+    assert "anterior" not in b["ml"] and "anterior" not in b["shopee"]
+    assert not [n for n in s.comandos if "ANTERIOR" in n or "RECORTE" in n]
+
+
+def test_rota_so_soma_o_anterior_quando_pedido(cliente):
+    s = Sessao(ant_ml=date(2026, 11, 3), ant_sh=date(2026, 11, 7))
+    padrao = cliente(s).get("/api/v1/performance/full-impacto-ruptura").json()
+    assert padrao["shopee"]["anterior"] is None, "sem o parametro: campo vazio, nada calculado"
+    com = cliente(Sessao(ant_ml=date(2026, 11, 3), ant_sh=date(2026, 11, 7))).get(
+        "/api/v1/performance/full-impacto-ruptura", params={"anterior": "true"}).json()
+    assert com["shopee"]["anterior"]["ref_date"] == "2026-11-07"
 
 
 def test_r_nunca_e_somado_entre_canais():

@@ -24,6 +24,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
+import DeltaBadge from "@/components/ui/DeltaBadge";
 import KpiTile from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
@@ -45,6 +46,9 @@ import {
   fracao,
   subtituloRuptura,
   impactosOk,
+  antesHeroi,
+  antesImpacto,
+  antesParamVenda,
   heroiRuptura,
   impactoPorMarca,
   kpiImpacto,
@@ -64,6 +68,7 @@ import {
   type ImpactoRuptura,
   type ResumoCanal,
   type ResumoOk,
+  type Antes,
 } from "@/lib/full-visao-geral";
 import { tituloMarca, validarPayloadML } from "@/lib/ml-full-estoque";
 
@@ -189,12 +194,16 @@ export default function VisaoGeralFull() {
   // `null` = impacto nao carregou: a tela segue sem R$, nunca com R$ 0.
   const [impacto, setImpacto] = useState<ImpactoRuptura | null>(null);
   const [tentativa, setTentativa] = useState(0);
+  // API-4: o "antes" chega DEPOIS do primeiro desenho (2a chamada, mais lenta).
+  // `null` enquanto carrega ou se falhar: o card fica sem pilula, nunca "0".
+  const [antes, setAntes] = useState<FotoAnterior | null>(null);
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
 
   useEffect(() => {
     const ctrl = new AbortController();
     setCanais(null);
     setImpacto(null);
+    setAntes(null);
     Promise.allSettled([
       fetchMLFullEstoque(QUERY_ML, ctrl.signal).then((r) => resumoML(validarPayloadML(r))),
       fetchEstoqueFull(QUERY_SHOPEE, ctrl.signal).then(resumoShopee),
@@ -204,6 +213,7 @@ export default function VisaoGeralFull() {
       setCanais([ml, shopee].map((r, i) =>
         r.status === "fulfilled" ? r.value : { canal: CANAIS[i], status: "erro" as const, motivo: motivoErro(r.reason) }));
       setImpacto(imp.status === "fulfilled" ? imp.value : null);
+      if (imp.status === "fulfilled") void buscarAnterior(ctrl.signal).then((a) => { if (!ctrl.signal.aborted) setAntes(a); });
     });
     return () => ctrl.abort();
   }, [tentativa]);
@@ -214,17 +224,48 @@ export default function VisaoGeralFull() {
       {canais === null ? (
         <StateBlock tipo="carregando" titulo="Carregando o estoque Full do ML e da Shopee" />
       ) : (
-        <Conteudo canais={canais} impacto={impacto} recarregar={recarregar} />
+        <Conteudo canais={canais} impacto={impacto} antes={antes} recarregar={recarregar} />
       )}
     </PageContainer>
   );
 }
 
-function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; recarregar: () => void }) {
+/** API-4: a 2a chamada (impacto com a foto anterior) e os estoques NAQUELES dias. */
+interface FotoAnterior {
+  impacto: ImpactoRuptura;
+  shopee: ResumoCanal | null;
+  ml: ResumoCanal | null;
+}
+
+/**
+ * Busca o "antes" depois do primeiro desenho. O estoque da Shopee na foto
+ * anterior alimenta o "Param a venda"; o do ML so' e' buscado com os DOIS
+ * canais com foto anterior (o heroi so' compara o total dos dois). Falha =
+ * `null`: sem pilula.
+ */
+async function buscarAnterior(signal: AbortSignal): Promise<FotoAnterior | null> {
+  const impacto = await fetchImpactoRuptura(signal, true).catch(() => null);
+  if (!impacto) return null;
+  const ant = (c: ImpactoRuptura["ml"]) => (c.status === "ok" ? c.anterior ?? null : null);
+  const sh = ant(impacto.shopee), ml = ant(impacto.ml);
+  const [shopee, mlResumo] = await Promise.all([
+    sh ? fetchEstoqueFull(`${QUERY_SHOPEE}&ref_date=${sh.ref_date}`, signal).then(resumoShopee).catch(() => null) : null,
+    sh && ml ? fetchMLFullEstoque(`${QUERY_ML}&ref_date=${ml.ref_date}`, signal).then((r) => resumoML(validarPayloadML(r))).catch(() => null) : null,
+  ]);
+  return { impacto, shopee, ml: mlResumo };
+}
+
+/** Pilula + "antes X% · foto de dd/mm". Risco subindo e' ruim: lower_is_better, em p.p. */
+function Pilula({ a }: { a: Antes | null }) {
+  return a ? <DeltaBadge pct={a.pp} tone="lower_is_better" unidade="pp" /> : null;
+}
+
+function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; recarregar: () => void }) {
   // Um so' dialogo na pagina para os drilldowns (identidade Gerencial).
   const [drill, setDrill] = useState<Canal | null>(null);
   const ok = oks(canais);
   const heroi = heroiRuptura(canais);
+  const aHeroi = antesHeroi(canais, antes);
   const shopee = canais.find((c) => c.canal === "shopee");
   const semVendedor = shopee?.status === "ok" ? shopee.semVendedor : null;
   const tot = total(canais);
@@ -256,6 +297,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
         ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
         valor={heroi.valor}
         tom={heroi.critico ? "critico" : "neutro"}
+        delta={aHeroi && <><Pilula a={aHeroi} /><span className="text-ink-faint">{aHeroi.texto}</span></>}
         contexto={<Escondido texto={heroi.contexto} detalhe={heroi.detalhe} />}
         meio={
           <ul className="grid grid-cols-1 gap-2">
@@ -280,6 +322,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CANAIS.map((canal) => {
           const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
+          const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
           return (
             <KpiTile
               key={canal}
@@ -290,12 +333,15 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
               ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
               valor={k.valor}
               comparacao={<Escondido texto={k.comparacao} detalhe={k.detalhe} />}
+              delta={a && <Pilula a={a} />}
+              antes={a?.texto}
               onAbrir={() => setDrill(canal)}
             />
           );
         })}
         {(() => {
           const k = kpiParamVenda(shopee);
+          const a = antesParamVenda(shopee, antes?.shopee ?? null);
           return (
             <KpiTile
               variante="gerencial"
@@ -305,6 +351,8 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
               ajuda={<InfoDica texto={NOTA_VENDEDOR} />}
               valor={<Escondido texto={k.valor} detalhe={k.detalhe} />}
               comparacao={k.comparacao}
+              delta={a && <Pilula a={a} />}
+              antes={a?.texto}
             />
           );
         })()}

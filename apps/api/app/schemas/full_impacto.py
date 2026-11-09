@@ -70,8 +70,9 @@ class CanalImpactoOk(BaseModel):
     motivo_pct: Optional[str] = None
     marcas: list[MarcaImpacto]
     itens: list[ItemImpacto]
-    #: API-4: a foto anterior com o mesmo recorte. `None` = sem "antes" (sem
-    #: foto anterior ou recorte diferente; o motivo vem em `motivo_anterior`).
+    #: API-4 (so' com `?anterior=true`): a foto anterior com o mesmo recorte.
+    #: `None` sem o parametro, ou sem "antes" (sem foto anterior ou recorte
+    #: diferente; nesses dois casos o motivo vem em `motivo_anterior`).
     anterior: Optional[ImpactoAnterior] = None
     motivo_anterior: Optional[str] = None
 

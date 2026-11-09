@@ -290,7 +290,7 @@ def _ausente(canal: str, motivo: str) -> dict:
     return {"canal": canal, "status": "unavailable", "motivo": motivo}
 
 
-def _ml(db: Session) -> dict:
+def _ml(db: Session, com_anterior: bool = False) -> dict:
     tabelas = db.execute(SQL_TABELAS_EXISTEM, {
         "a": ml_stock_svc.INVENTORY_TABLE, "b": ML_LISTING_SALES_TABLE,
         "c": ML_GMV_TABLE}).scalar()
@@ -303,6 +303,8 @@ def _ml(db: Session) -> dict:
     if ref is None:
         return _ausente("ml", MOTIVO_SEM_FOTO)
     atual = _ml_na_foto(db, marcas, ref)
+    if not com_anterior:
+        return atual
     ant = db.execute(SQL_ML_FOTO_ANTERIOR, {"brands": marcas, "ref_date": ref}).scalar()
     return _com_anterior(db, atual, ant, SQL_ML_RECORTE, {"brands": marcas},
                          lambda d: _ml_na_foto(db, marcas, d))
@@ -327,7 +329,7 @@ def _ml_na_foto(db: Session, marcas: list[str], ref: date) -> dict:
     return _montar_canal("ml", ref, itens, gmv, fallback)
 
 
-def _shopee(db: Session) -> dict:
+def _shopee(db: Session, com_anterior: bool = False) -> dict:
     tabelas = db.execute(SQL_TABELAS_EXISTEM, {
         "a": fbs_stock_svc.FACT_TABLE, "b": SHOPEE_PRICE_TABLE,
         "c": SHOPEE_GMV_TABLE}).scalar()
@@ -337,6 +339,8 @@ def _shopee(db: Session) -> dict:
     if ref is None:
         return _ausente("shopee", MOTIVO_SEM_FOTO)
     atual = _shopee_na_foto(db, ref)
+    if not com_anterior:
+        return atual
     ant = db.execute(SQL_SHOPEE_FOTO_ANTERIOR, {"ref_date": ref}).scalar()
     return _com_anterior(db, atual, ant, SQL_SHOPEE_RECORTE, {},
                          lambda d: _shopee_na_foto(db, d))
@@ -377,13 +381,19 @@ def _com_anterior(db: Session, atual: dict, ant: Optional[date], sql_recorte,
     return {**atual, "anterior": {k: antes[k] for k in CAMPOS_ANTERIOR}, "motivo_anterior": None}
 
 
-def get_impacto_ruptura(db: Session, *, ml_ligado: bool, shopee_ligado: bool) -> dict:
-    """Bloco dos dois canais. Um canal ausente nao derruba o outro."""
+def get_impacto_ruptura(db: Session, *, ml_ligado: bool, shopee_ligado: bool,
+                        com_anterior: bool = False) -> dict:
+    """Bloco dos dois canais. Um canal ausente nao derruba o outro.
+
+    `com_anterior` (API-4, `?anterior=true`): soma a foto anterior de cada
+    canal. Opcional porque custa ~50% a mais na rota: a tela desenha com a
+    chamada padrao e pede o "antes" depois, numa segunda chamada.
+    """
     if ml_ligado or shopee_ligado:
         db.execute(SQL_SOMENTE_LEITURA)
     return {
-        "ml": _ml(db) if ml_ligado else _ausente("ml", MOTIVO_FLAG_ML),
-        "shopee": _shopee(db) if shopee_ligado else _ausente("shopee", MOTIVO_FLAG_SHOPEE),
+        "ml": _ml(db, com_anterior) if ml_ligado else _ausente("ml", MOTIVO_FLAG_ML),
+        "shopee": _shopee(db, com_anterior) if shopee_ligado else _ausente("shopee", MOTIVO_FLAG_SHOPEE),
         "janela_gmv_dias": JANELA_GMV_DIAS,
         "limitacoes": LIMITACOES,
     }

@@ -10,6 +10,9 @@ import {
   heroiRuptura,
   kpiImpacto,
   janelaDeslocada,
+  antesImpacto,
+  antesParamVenda,
+  antesHeroi,
   kpiParamVenda,
   impactoPorMarca,
   mediana,
@@ -544,9 +547,46 @@ test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de fres
   assert.equal((src.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um so' dialogo na pagina");
   assert.ok(!src.includes("selo="), "sem selo: nao ha' limite de negocio para ruptura");
   // CARD-KPI-GERENCIAL: cor de identidade da paleta (impacto = gmv, param a venda = pedidos);
-  // sem delta, "antes" nem serie enquanto nao houver foto anterior real (API-4).
+  // API-4: delta e "antes" so' da foto anterior (helpers antes*); serie nunca (nao aprovada).
   assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 1, "um KpiTile de impacto, renderizado por canal");
   assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 1);
-  assert.ok(!/(delta|antes|serie)=\{/.test(src), "nada inventado: sem periodo anterior nem serie");
+  assert.ok(!/serie=\{/.test(src), "sem sparkline: o Full nao tem serie aprovada");
+  assert.equal((src.match(/delta=\{a && <Pilula a=\{a\} \/>\}/g) ?? []).length, 2, "pilula so' com o antes medido");
+  assert.ok(src.includes("fetchImpactoRuptura(signal, true)"), "o antes vem da 2a chamada, depois do primeiro desenho");
   assert.ok(!/min-w-\[/.test(src), "nenhuma tabela com largura minima (390 sem rolagem)");
 });
+
+// ---------------------------------------------------------------------------
+// API-4 -- o "antes" dos cartoes vem da foto anterior (2a chamada)
+// ---------------------------------------------------------------------------
+
+test("antes do impacto: p.p. contra a foto anterior, so' com a MESMA foto atual", () => {
+  const comAnt = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: { ref_date: "2026-11-03", rupturas: 2, sem_estoque_vendedor: null, perda_dia: 1, perda_dia_sem_vendedor: null, dias_gmv: 28, pct_gmv_full: 0.0931, pct_gmv_full_sem_vendedor: null, motivo_pct: null } } as CanalImpactoOk };
+  const a = antesImpacto("ml", IMPACTO, comAnt)!;
+  assert.ok(Math.abs(a.pp - 1) < 1e-9, "10,31% contra 9,31% = +1,0 p.p.");
+  assert.equal(a.texto, "antes 9,3% · foto de 03/11");
+  // sem a 2a chamada, sem anterior ou com outra foto atual: sem pilula (nunca zero)
+  assert.equal(antesImpacto("ml", IMPACTO, null), null);
+  assert.equal(antesImpacto("ml", IMPACTO, IMPACTO), null);
+  const outraFoto = { ...comAnt, ml: { ...(comAnt.ml as CanalImpactoOk), ref_date: "2026-11-09" } };
+  assert.equal(antesImpacto("ml", IMPACTO, outraFoto), null, "foto nova entre as chamadas");
+  // Shopee: o destaque (so' quem para a venda)
+  const sh = { ...IMPACTO, shopee: { ...IMPACTO.shopee, anterior: { ref_date: "2026-11-07", rupturas: 1, sem_estoque_vendedor: 1, perda_dia: 1, perda_dia_sem_vendedor: 1, dias_gmv: 28, pct_gmv_full: 0.2, pct_gmv_full_sem_vendedor: 0.0384 } } as CanalImpactoOk };
+  assert.ok(Math.abs(antesImpacto("shopee", IMPACTO, sh)!.pp - -1) < 1e-9);
+});
+
+test("antes do 'param a venda' e do heroi: so' com os dois lados medidos", () => {
+  const agora = resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA", 1, 0, 0), produto("apice", "RUPTURA_CANDIDATA", 1, 0, 5)]));
+  const ant = resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA", 1, 0, 5), produto("apice", "RUPTURA_CANDIDATA", 1, 0, 5)], { ref_date: "2026-11-07" } as Partial<EstoqueFullOk>));
+  const a = antesParamVenda(agora, ant)!;
+  assert.equal(a.pp, 50);
+  assert.equal(antesParamVenda(agora, null), null);
+  assert.equal(antesParamVenda(agora, { canal: "shopee", status: "indisponivel", motivo: "sem foto" }), null);
+  // heroi: exige ML e Shopee com foto anterior
+  const canais: ResumoCanal[] = [resumoML(ML), resumoShopee(SHOPEE)];
+  assert.equal(antesHeroi(canais, { ml: null, shopee: resumoShopee(SHOPEE) }), null, "ML sem foto anterior: sem delta");
+  const h = antesHeroi(canais, { ml: resumoML(ML), shopee: resumoShopee(SHOPEE) })!;
+  assert.equal(h.pp, 0);
+  assert.match(h.texto, /^antes 37,5% · fotos de \d\d\/\d\d \(ML\) e \d\d\/\d\d \(Shopee\)$/);
+});
+
