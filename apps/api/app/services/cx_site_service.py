@@ -26,17 +26,21 @@ Sem PII: nenhuma consulta seleciona nome, e-mail, pedido ou comentario.
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Optional
 
 from app.schemas.account_performance import MarcaFora
-from app.schemas.cx_atendimento import Janela
+from app.schemas.cx_atendimento import Janela, SemComparacao
 from app.schemas.cx_site import (
     BlocoNps,
     BlocoReenvio,
     BlocoReviews,
     CxSiteResponse,
     NpsMarca,
+    PontoNps,
+    PontoReviews,
+    PontoSafra,
     ReenvioMarca,
     ReviewsMarca,
     ReviewsProduto,
@@ -44,8 +48,11 @@ from app.schemas.cx_site import (
 from app.services.cx_atendimento_service import (
     MARCAS_PERMITIDAS,
     MOTIVO_ERRO,
+    SEM_FONTE_ERRO,
     Consultar,
+    _dia,
     _rodar,
+    _rodar_juntas,
     _utc,
     calcular_janela,
     consultar_datamart,
@@ -326,6 +333,234 @@ def _bloco_reviews(consultar: Consultar, marcas: list[str], janela: Janela, agor
     )
 
 
+# ---------------------------------------------------------------------------
+# API-3 (09/11/2026): periodo anterior e serie
+# ---------------------------------------------------------------------------
+#: Primeiro dia da fonte `cx_nps` em todas as marcas da Torre (medido em 08/11/2026;
+#: a `base_nps` antiga parou em 31/08). Janela anterior antes disso = sem medida.
+NPS_DESDE = date(2026, 8, 28)
+
+SQL_NPS_DIA = """
+SELECT respondido_dia_brt AS dia,
+       COUNT(*) AS respostas,
+       COUNT(*) FILTER (WHERE rating >= 9) AS promotores,
+       COUNT(*) FILTER (WHERE rating <= 6) AS detratores
+  FROM gold.fct_nps_respostas_gobeaute
+ WHERE fonte = 'cx_nps'
+   AND marca_slug = ANY(:marcas)
+   AND rating IS NOT NULL
+   AND respondido_dia_brt >= :inicio
+   AND respondido_dia_brt <= :fim
+ GROUP BY 1
+"""
+
+SQL_REVIEWS_DIA = """
+SELECT (created_at AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
+       COUNT(*) AS reviews,
+       COUNT(*) FILTER (WHERE rating <= 3) AS baixas
+  FROM silver.fct_judgeme_reviews
+ WHERE brand = ANY(:marcas)
+   AND COALESCE(curated, '') <> 'spam'
+   AND rating IS NOT NULL
+   AND created_at >= :inicio_ts
+   AND created_at < :fim_ts
+ GROUP BY 1
+"""
+
+# Mesmas regras de `SQL_REENVIO` / `SQL_FATURAMENTO_SITE`, por safra (mes).
+SQL_REENVIO_SAFRA = """
+WITH r AS (
+    SELECT translate(lower(marca), 'áàâãéêíóôõúç''', 'aaaaeeiooouc') AS marca,
+           date_trunc('month', data_pedido_original_coorte)::date AS safra,
+           tipo,
+           valor_nf_tratado AS valor
+      FROM gold.fct_reenvio_reembolso_gobeaute
+     WHERE tipo IN ('REENVIO', 'REEMBOLSO')
+       AND data_pedido_original_coorte >= :safra_inicio
+       AND data_pedido_original_coorte <= :safra_fim
+)
+SELECT marca, safra,
+       COUNT(*) AS linhas,
+       COALESCE(SUM(valor) FILTER (WHERE tipo = 'REENVIO'), 0) AS valor_reenvio,
+       COALESCE(SUM(valor) FILTER (WHERE tipo = 'REEMBOLSO'), 0) AS valor_reembolso
+  FROM r
+ WHERE marca = ANY(:marcas)
+ GROUP BY 1, 2
+"""
+
+SQL_FATURAMENTO_SAFRA = """
+SELECT marca, date_trunc('month', data_mes)::date AS safra, SUM(receita_total) AS faturamento
+  FROM gold.agg_gobeaute_base_vendas
+ WHERE canal = 'ecommerce'
+   AND tipo_operacao = 'normal'
+   AND marca = ANY(:marcas)
+   AND data_mes >= :safra_inicio
+   AND data_mes <= :safra_fim
+ GROUP BY 1, 2
+"""
+
+
+def _meses_antes(inicio: date, n: int) -> tuple[date, date]:
+    """As `n` safras (meses) imediatamente antes de `inicio` (dia 1)."""
+    fim = inicio - timedelta(days=1)
+    ini = fim.replace(day=1)
+    for _ in range(n - 1):
+        ini = (ini - timedelta(days=1)).replace(day=1)
+    return ini, fim
+
+
+def _n_safras(janela: Janela) -> int:
+    return max(janela.dias // 30, 1)
+
+
+def _dias(janela: Janela):
+    return [janela.inicio + timedelta(days=i) for i in range(janela.dias)]
+
+
+def _dia_carga(bloco) -> Optional[date]:
+    """Carga parada: o ultimo dia medido e' o da carga (BRT). Em dia: sem corte."""
+    if not bloco.aviso_frescor or bloco.atualizado_em is None:
+        return None
+    return bloco.atualizado_em.astimezone(TZ_OPERACIONAL).date()
+
+
+def _sem_carga_parada(bloco) -> SemComparacao:
+    dia = _dia_carga(bloco)
+    return SemComparacao(motivo=f"carga parada desde {dia.strftime('%d/%m')}" if dia else "carga parada",
+                         a_partir_de=None, detalhe=bloco.aviso_frescor)
+
+
+def _comparar_nps(bloco: BlocoNps, linhas: Optional[list[dict]], janela: Janela,
+                  anterior: Janela) -> BlocoNps:
+    if bloco.estado != "dado":
+        return bloco
+    if linhas is None:
+        return bloco.model_copy(update={"sem_anterior": SEM_FONTE_ERRO})
+    por_dia = {_dia(l.get("dia")): l for l in linhas}
+    corte = _dia_carga(bloco)
+
+    def soma(dias) -> tuple[float, float, float]:
+        ls = [por_dia[d] for d in dias if d in por_dia]
+        return tuple(sum(_num(l.get(k)) for l in ls) for k in ("respostas", "promotores", "detratores"))
+
+    serie = []
+    for d in _dias(janela):
+        if d < NPS_DESDE or (corte and d > corte):
+            serie.append(PontoNps(dia=d))
+            continue
+        n, prom, detr = soma([d])
+        serie.append(PontoNps(dia=d, respostas=int(n), promotores=int(prom), detratores=int(detr),
+                              nps=round((prom - detr) / n * 100, 1) if n else None))
+    upd: dict[str, Any] = {"serie": serie}
+    if anterior.inicio < NPS_DESDE:
+        upd["sem_anterior"] = SemComparacao(
+            motivo=f"nps desde {NPS_DESDE.strftime('%d/%m')}",
+            a_partir_de=NPS_DESDE + timedelta(days=2 * janela.dias),
+            detalhe="A fonte de NPS (cx_nps) começa em 28/08/2026: o período anterior ainda não está coberto.")
+    elif corte:
+        upd["sem_anterior"] = _sem_carga_parada(bloco)
+    else:
+        n, prom, detr = soma(_dias(anterior))
+        if n:
+            upd.update(respostas_anterior=int(n), nps_anterior=round((prom - detr) / n * 100, 1),
+                       promotores_pct_anterior=_pct(prom, n), detratores_pct_anterior=_pct(detr, n))
+        else:
+            upd["sem_anterior"] = SemComparacao(motivo="sem respostas", a_partir_de=None,
+                                                detalhe="Nenhuma resposta de NPS no período anterior.")
+    return bloco.model_copy(update=upd)
+
+
+def _comparar_reviews(bloco: BlocoReviews, linhas: Optional[list[dict]], janela: Janela,
+                      anterior: Janela) -> BlocoReviews:
+    if bloco.estado != "dado":
+        return bloco
+    if linhas is None:
+        return bloco.model_copy(update={"sem_anterior": SEM_FONTE_ERRO})
+    por_dia = {_dia(l.get("dia")): l for l in linhas}
+    corte = _dia_carga(bloco)
+
+    def soma(dias) -> tuple[int, int]:
+        ls = [por_dia[d] for d in dias if d in por_dia]
+        return int(sum(_num(l.get("reviews")) for l in ls)), int(sum(_num(l.get("baixas")) for l in ls))
+
+    serie = []
+    for d in _dias(janela):
+        if corte and d > corte:
+            serie.append(PontoReviews(dia=d))  # depois da carga: nao medido
+            continue
+        n, baixas = soma([d])
+        serie.append(PontoReviews(dia=d, reviews=n, baixas=baixas, baixas_pct=_pct(baixas, n)))
+    upd: dict[str, Any] = {"serie": serie}
+    if corte:  # periodo atual incompleto: delta seria falso
+        upd["sem_anterior"] = _sem_carga_parada(bloco)
+    else:
+        n, baixas = soma(_dias(anterior))
+        if n:
+            upd.update(reviews_anterior=n, baixas_pct_anterior=_pct(baixas, n))
+        else:
+            upd["sem_anterior"] = SemComparacao(motivo="sem reviews", a_partir_de=None,
+                                                detalhe="Nenhuma review no período anterior.")
+    return bloco.model_copy(update=upd)
+
+
+def _comparar_reenvio(bloco: BlocoReenvio, linhas: Optional[list[dict]], fat: Optional[list[dict]],
+                      safras_ant: tuple[date, date]) -> BlocoReenvio:
+    upd: dict[str, Any] = {"safra_anterior_inicio": safras_ant[0], "safra_anterior_fim": safras_ant[1]}
+    if bloco.estado != "dado":
+        return bloco.model_copy(update=upd)
+    if linhas is None or fat is None:
+        return bloco.model_copy(update={**upd, "sem_anterior": SEM_FONTE_ERRO})
+    reenv = {(str(l["marca"]), _dia(l.get("safra"))): l for l in linhas if int(l.get("linhas") or 0) > 0}
+    fat_m = {(str(l["marca"]), _dia(l.get("safra"))): _num(l.get("faturamento"))
+             for l in fat if _num(l.get("faturamento")) > 0}
+    # o mesmo recorte da taxa atual: marcas com reenvio/reembolso E faturamento
+    recorte = {m.marca for m in bloco.marcas if m.faturamento}
+
+    def taxas(meses: list[date]) -> tuple[Optional[float], Optional[float]]:
+        """None se alguma marca do recorte nao tiver dado nesses meses (serie parcial)."""
+        if not recorte:
+            return None, None
+        com = {m for m in recorte if any((m, s) in reenv for s in meses)
+               and any((m, s) in fat_m for s in meses)}
+        if com != recorte:
+            return None, None
+        den = sum(fat_m.get((m, s), 0) for m in recorte for s in meses)
+        num = [sum(_num(reenv.get((m, s), {}).get(k)) for m in recorte for s in meses)
+               for k in ("valor_reenvio", "valor_reembolso")]
+        return _pct(num[0], den), _pct(num[1], den)
+
+    meses, s = [], safras_ant[0]
+    while s <= bloco.safra_fim:
+        meses.append(s)
+        s = (s + timedelta(days=32)).replace(day=1)
+    serie = [PontoSafra(safra=m, **dict(zip(("taxa_reenvio_pct", "taxa_reembolso_pct"), taxas([m]))))
+             for m in meses]
+    ant = taxas([m for m in meses if m <= safras_ant[1]])
+    if ant[0] is None:
+        return bloco.model_copy(update={**upd, "serie": serie, "sem_anterior": SemComparacao(
+            motivo="safra anterior incompleta", a_partir_de=None,
+            detalhe="Alguma marca do recorte não tem reenvio/reembolso ou faturamento nas safras anteriores.")})
+    return bloco.model_copy(update={**upd, "serie": serie, "taxa_reenvio_pct_anterior": ant[0],
+                                    "taxa_reembolso_pct_anterior": ant[1]})
+
+
+def _tarefas_site(consultar: Consultar, marcas: list[str], janela: Janela, anterior: Janela,
+                  safras_ant: tuple[date, date], safra_fim: date) -> dict:
+    reviews = [m for m in marcas if m not in FORA_REVIEWS]
+    reenvio = [m for m in marcas if m not in FORA_REENVIO]
+    t = {"site_nps_dia": (consultar, SQL_NPS_DIA, {"marcas": marcas, "inicio": anterior.inicio, "fim": janela.fim})}
+    if reviews:
+        t["site_reviews_dia"] = (consultar, SQL_REVIEWS_DIA, {
+            "marcas": reviews,
+            "inicio_ts": datetime.combine(anterior.inicio, time(), TZ_OPERACIONAL),
+            "fim_ts": datetime.combine(janela.fim + timedelta(days=1), time(), TZ_OPERACIONAL)})
+    if reenvio:
+        p = {"marcas": reenvio, "safra_inicio": safras_ant[0], "safra_fim": safra_fim}
+        t["site_reenvio_safra"] = (consultar, SQL_REENVIO_SAFRA, p)
+        t["site_faturamento_safra"] = (consultar, SQL_FATURAMENTO_SAFRA, p)
+    return t
+
+
 def montar_cx_site(*, brands: Optional[list[str]] = None, dias: int = JANELA_PADRAO_DIAS,
                    consultar: Optional[Consultar] = None,
                    agora: Optional[datetime] = None) -> CxSiteResponse:
@@ -333,9 +568,20 @@ def montar_cx_site(*, brands: Optional[list[str]] = None, dias: int = JANELA_PAD
     agora = agora or datetime.now(timezone.utc)
     marcas = list(brands) if brands else list(MARCAS_PERMITIDAS)
     janela = calcular_janela(dias, agora)
+    anterior = Janela(inicio=janela.inicio - timedelta(days=dias), fim=janela.inicio - timedelta(days=1), dias=dias)
+    safra_inicio, safra_fim = calcular_safra(janela)
+    safras_ant = _meses_antes(safra_inicio, _n_safras(janela))
+    # API-3: as consultas da comparacao correm em paralelo com as dos blocos
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        futuro = pool.submit(_rodar_juntas, _tarefas_site(consultar, marcas, janela, anterior, safras_ant, safra_fim))
+        nps = _bloco_nps(consultar, marcas, janela, agora)
+        reenvio = _bloco_reenvio(consultar, marcas, janela, agora)
+        reviews = _bloco_reviews(consultar, marcas, janela, agora)
+        res = futuro.result()
     return CxSiteResponse(
-        gerado_em=agora, janela=janela,
-        nps=_bloco_nps(consultar, marcas, janela, agora),
-        reenvio_reembolso=_bloco_reenvio(consultar, marcas, janela, agora),
-        reviews=_bloco_reviews(consultar, marcas, janela, agora),
+        gerado_em=agora, janela=janela, janela_anterior=anterior,
+        nps=_comparar_nps(nps, res.get("site_nps_dia"), janela, anterior),
+        reenvio_reembolso=_comparar_reenvio(reenvio, res.get("site_reenvio_safra"),
+                                            res.get("site_faturamento_safra"), safras_ant),
+        reviews=_comparar_reviews(reviews, res.get("site_reviews_dia"), janela, anterior),
     )

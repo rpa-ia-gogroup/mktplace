@@ -142,6 +142,9 @@ class NaoLidas(BaseModel):
     #: Primeira resposta medida (a coleta comecou em 05/11/2026).
     respostas_desde: Optional[datetime] = None
     tempo_resposta_fonte: Optional[Literal["mediana", "media_seller_centre"]] = None
+    #: API-3: conversas (7 ou 30 dias, as mesmas do atual) na foto de `agora - dias`.
+    #: None = a coleta ainda nao cobre (comecou em 04/11/2026) ou janela de 90 dias.
+    conversas_anterior: Optional[int] = None
 
 
 class LinhaDevolucao(BaseModel):
@@ -154,6 +157,9 @@ class LinhaDevolucao(BaseModel):
     canceladas: Optional[int] = None
     #: Soma de `refund_amount` (R$) so' das aceitas.
     reembolsado: Optional[float] = None
+    #: API-3: o mesmo na `janela_anterior`. None = janela anterior comeca antes da coleta.
+    aceitas_anterior: Optional[int] = None
+    reembolsado_anterior: Optional[float] = None
 
 
 class DevolucoesShopee(BaseModel):
@@ -177,6 +183,13 @@ class DevolucoesShopee(BaseModel):
         return self
 
 
+class ContaCx(ContaOficial):
+    """Conta da Saude da Conta na aba CX, com a comparacao da API-3."""
+    #: Taxa de resposta do chat (shopee_11) na foto de `dia - dias`. NAO e' o
+    #: `metricas[].anterior` (o `last_period` da Shopee = foto do dia anterior).
+    resposta_anterior_pct: Optional[float] = None
+
+
 class ChatShopee(BaseModel):
     """Metricas de atendimento da Saude da Conta (fotografia diaria oficial).
 
@@ -187,11 +200,38 @@ class ChatShopee(BaseModel):
     estado: EstadoCanal
     motivo: Optional[str] = None
     fonte: str
-    contas: list[ContaOficial] = []
+    contas: list[ContaCx] = []
     sem_foto: list[ContaSemFoto] = []
     #: Conversas nao lidas (coleta propria, a cada 2 h).
     nao_lidas_estado: EstadoBloco = "sem_fonte"
     nao_lidas: list[NaoLidas] = []
+
+
+IndicadorCx = Literal["contact_rate", "resposta", "cancelamento", "reembolso"]
+
+
+class SemComparacao(BaseModel):
+    """API-3: por que falta o periodo anterior (ou a serie) e quando passa a existir."""
+    #: Curto e minusculo: "coleta desde 04/11".
+    motivo: str
+    #: Primeiro dia em que o MESMO recorte (dias e marcas) fica coberto; None = nunca/indefinido.
+    a_partir_de: Optional[date] = None
+    #: Texto longo, para o title do card.
+    detalhe: Optional[str] = None
+
+
+class PontoDiaShopee(BaseModel):
+    """Um dia de uma loja. O front agrega as lojas com a regra do card; loja
+    None no dia = ponto do dia None (serie parcial nao vira sparkline)."""
+    dia: date
+    marca: str
+    pedidos: Optional[int] = None
+    cancelamentos: Optional[int] = None
+    #: Devolucoes ACEITAS abertas no dia e o `refund_amount` delas (R$).
+    devolucoes_aceitas: Optional[int] = None
+    reembolsado: Optional[float] = None
+    #: shopee_11 na foto capturada no dia.
+    resposta_pct: Optional[float] = None
 
 
 class CxShopeeResponse(BaseModel):
@@ -202,6 +242,12 @@ class CxShopeeResponse(BaseModel):
     devolucoes: DevolucoesShopee
     #: Os `dias` antes de `janela` (D-60..D-31 na de 30), base de `*_anterior`.
     janela_anterior: Optional[Janela] = None
+    #: API-3: um ponto por dia da janela x loja Shopee do recorte. Campo None = nao medido.
+    serie_diaria: list[PontoDiaShopee] = []
+    #: Indicador (contact_rate, resposta, cancelamento, reembolso) -> por que falta
+    #: o anterior (ou a serie) de alguma loja do recorte. Sem a chave = completo.
+    sem_anterior: dict[IndicadorCx, SemComparacao] = {}
+    sem_serie: dict[IndicadorCx, SemComparacao] = {}
 
 
 # ---------------------------------------------------------------------------
