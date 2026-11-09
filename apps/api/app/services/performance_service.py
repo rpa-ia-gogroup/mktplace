@@ -13,7 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.deps.period import EffectivePeriod
+from app.deps.period import EffectivePeriod, today_brt
 
 TIKTOK_ID = 1
 ML_ID = 2
@@ -115,6 +115,36 @@ def _tk_content_divergence(content_base: float, commercial_gmv: float) -> float 
     if content_base <= 0:
         return None
     return _pct(content_base - commercial_gmv, commercial_gmv)
+
+
+# ---------------------------------------------------------------------------
+# TikTok — GMV em maturacao (T-0074; regra em docs/tiktok_gmv_maturacao.md)
+# ---------------------------------------------------------------------------
+# O GMV TikTok de um dia ainda pode CAIR enquanto o dia nao completa 35 dias:
+# cancelamentos chegam ate ~D+30. Isto e' SO' ROTULO — nenhum valor muda.
+TIKTOK_MATURACAO_JANELA_DIAS = 35
+TIKTOK_MATURACAO_MOTIVO = "cancelamentos ate ~D+30; valor pode cair"
+
+
+def tiktok_maturacao_desde(today: date) -> date:
+    """Primeiro dia (inclusive) ainda em maturacao: `today - 35`. O dia de
+    fronteira entra no rotulo de proposito — rotular um dia a mais e' mais
+    seguro que apresentar como fechado um dia que ainda pode cair."""
+    return today - timedelta(days=TIKTOK_MATURACAO_JANELA_DIAS)
+
+
+def tiktok_maturacao_info(mkt_ids: list[int], today: date | None = None) -> dict | None:
+    """Bloco aditivo `tiktok_maturacao` das respostas de GMV. `None` quando o
+    TikTok esta fora do escopo pedido: sem canal, nao ha o que rotular.
+    `today` e' injetavel para teste; o default e' o dia em America/Sao_Paulo."""
+    if TIKTOK_ID not in mkt_ids:
+        return None
+    today = today or today_brt()
+    return {
+        "em_maturacao_desde": tiktok_maturacao_desde(today),
+        "janela_dias": TIKTOK_MATURACAO_JANELA_DIAS,
+        "motivo": TIKTOK_MATURACAO_MOTIVO,
+    }
 
 
 def _pct_from_source(value) -> float | None:
@@ -564,6 +594,7 @@ def get_brands(
     brand_keys: list[str] | None = None,
     period: EffectivePeriod | None = None,
     compare_period: EffectivePeriod | None = None,
+    today: date | None = None,
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     if period is not None:
@@ -671,6 +702,7 @@ def get_brands(
         "compare_date_to": pend,
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
+        "tiktok_maturacao": tiktok_maturacao_info(mkt_ids, today),
     }
 
 
@@ -678,10 +710,14 @@ def get_brands(
 # Monthly
 # ---------------------------------------------------------------------------
 
-def get_monthly(db: Session, marketplace: str, months_back: int = 6) -> dict:
+def get_monthly(
+    db: Session, marketplace: str, months_back: int = 6, *, today: date | None = None,
+) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
-    today = date.today()
-    year, month = today.year, today.month
+    maturacao = tiktok_maturacao_info(mkt_ids, today)
+    # A janela consultada segue com o relogio de antes: o rotulo nao muda numero.
+    hoje = date.today()
+    year, month = hoje.year, hoje.month
     for _ in range(months_back):
         year, month = _prev_month(year, month)
     start = date(year, month, 1)
@@ -711,12 +747,20 @@ def get_monthly(db: Session, marketplace: str, months_back: int = 6) -> dict:
                 "mes_label": f"{MES_LABELS[mes_dt.month]}/{str(mes_dt.year)[2:]}",
                 "barbours": 0.0, "kokeshi": 0.0, "apice": 0.0,
                 "lescent": 0.0, "rituaria": 0.0,
+                # Mes com ao menos um dia em maturacao (fim do mes >= fronteira).
+                "tiktok_em_maturacao": (
+                    _month_bounds(mes_dt.year, mes_dt.month)[1] >= maturacao["em_maturacao_desde"]
+                    if maturacao is not None else None
+                ),
             }
         brand = r["brand_key"]
         if brand in months[key]:
             months[key][brand] = months[key][brand] + _f(r["gmv"])
 
-    return {"data": sorted(months.values(), key=lambda x: x["mes"])}
+    return {
+        "data": sorted(months.values(), key=lambda x: x["mes"]),
+        "tiktok_maturacao": maturacao,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -856,8 +900,10 @@ def get_trend(
 def get_daily(
     db: Session, brand: str, marketplace: str, days_back: int = 60, *,
     period: EffectivePeriod | None = None,
+    today: date | None = None,
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
+    maturacao = tiktok_maturacao_info(mkt_ids, today)
     if period is not None:
         date_from, date_to = period.start, period.end
     else:
@@ -922,9 +968,15 @@ def get_daily(
             "orders": orders,
             "avg_ticket": total / orders if orders > 0 else None,
             "ad_spend": v["ad_spend"],
+            "tiktok_em_maturacao": (
+                d >= maturacao["em_maturacao_desde"] if maturacao is not None else None
+            ),
         })
 
-    return {"brand": brand, "marketplace": marketplace, "data": result}
+    return {
+        "brand": brand, "marketplace": marketplace, "data": result,
+        "tiktok_maturacao": maturacao,
+    }
 
 
 # ---------------------------------------------------------------------------

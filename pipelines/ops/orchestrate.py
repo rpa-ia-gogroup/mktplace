@@ -90,6 +90,7 @@ O Task Scheduler continua Disabled; a ativacao fica para um gate futuro
 Uso:
     python -m pipelines.ops.orchestrate --pipeline full_daily
     python -m pipelines.ops.orchestrate --pipeline shopee_manual_refresh
+    python -m pipelines.ops.orchestrate --pipeline tiktok_weekly_reprocess   # T-0074, semanal
 """
 from __future__ import annotations
 
@@ -597,6 +598,55 @@ PIPELINES["daily_chain"] = DAILY_CHAIN_STEPS
 
 DAILY_CHAIN_STEP_TIMEOUT_BUDGET_SECONDS = sum(
     step.timeout_seconds for step in PIPELINES["daily_chain"])
+
+
+# ---------------------------------------------------------------------------
+# T-0074 — `tiktok_weekly_reprocess`: GMV TikTok regravado uma vez por semana
+#
+# O defeito medido (T-0072, 09/11/2026): o `daily_tiktok` regrava so' D-11..D-1.
+# Um pedido cancelado depois de D+11 continua contado na fato para sempre:
+# +0,86% (ago), +1,17% (set) e +0,86% (out/26) no GMV TikTok da Torre. A maior
+# parte dos cancelamentos tardios cai entre D+11 e D+30; depois disso e' residual.
+#
+# POR QUE `daily_performance --mode backfill` E NAO `refresh_tiktok_daily_contract`
+# - Mesmo caminho do diario: `fato_diaria_lock`, `audit.source_sync_run`,
+#   checks de qualidade e a segunda defesa de dia fechado. O refresh e' manutencao
+#   manual (backup local obrigatorio, `LOCK TABLE` na fato inteira, recusa por
+#   marca/dia ausente) e declara no proprio modulo que nao deve ser agendado.
+# - O DELETE do refresh nao e' necessario para ESTE defeito: a consulta do
+#   conector agrega `raw_daily` com TODOS os status (o filtro comercial fica no
+#   SUM, nao no WHERE). Um (dia, marca) com todos os pedidos cancelados continua
+#   produzindo linha, com gmv=0, e o UPSERT a sobrescreve. Chave orfa so' surge
+#   se a Raw PERDER todas as linhas do (dia, marca) — nao e' maturacao de status,
+#   e o dry-run do refresh mede isso (`chaves_removidas_orfas`).
+#
+# JANELA: `--days 35` vira `closed_window(35)` = D-36..D-1 (36 dias fechados).
+# Com cadencia semanal, cada dia e' regravado pela ultima vez com idade entre 30
+# e 36 dias: o piso garantido e' D+30, que cobre a faixa medida.
+#
+# Pipeline PROPRIO, fora do `daily_chain`, para ter agenda propria (semanal) sem
+# condicional de dia da semana dentro da cadeia. Sem health_check: ele cobra
+# fontes alheias a este passo (mesma razao do `serving_refresh`).
+#
+# 900 s: mesmo envelope do `daily_tiktok`. Medicao registrada acima (18/08/2026):
+# o fetch de 17 dias levou 43 s; 36 dias ficam na ordem de 90-100 s, ~10x abaixo
+# do envelope. O upsert sao ~180 linhas (36 dias x 5 marcas).
+# ---------------------------------------------------------------------------
+
+#: Largura pedida ao `daily_performance --mode backfill` (D-36..D-1).
+TIKTOK_WEEKLY_REPROCESS_DAYS = 35
+
+TIKTOK_WEEKLY_REPROCESS_STEPS: tuple[Step, ...] = (
+    Step("tiktok_weekly_reprocess", "pipelines.ingestion.daily_performance",
+         ("--source", "tiktok", "--mode", "backfill",
+          "--days", str(TIKTOK_WEEKLY_REPROCESS_DAYS)),
+         timeout_seconds=900, preflight_source="tiktok_daily", critical=True),
+)
+
+PIPELINES["tiktok_weekly_reprocess"] = TIKTOK_WEEKLY_REPROCESS_STEPS
+
+TIKTOK_WEEKLY_REPROCESS_STEP_TIMEOUT_BUDGET_SECONDS = sum(
+    step.timeout_seconds for step in PIPELINES["tiktok_weekly_reprocess"])
 
 
 class DryRunUnsupportedError(RuntimeError):

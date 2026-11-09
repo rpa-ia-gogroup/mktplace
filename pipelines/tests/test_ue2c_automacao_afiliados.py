@@ -598,9 +598,11 @@ def test_nenhum_pipeline_novo():
     # Gate PMA-2C5B acrescentou `pma_refresh`. O ponto deste teste e'
     # que UE2-C nao criou pipeline — nao que o inventario seja eterno.
     # OPS-AUTOMATION-2 acrescentou `daily_chain` (composicao, sem step novo).
+    # T-0074 acrescentou `tiktok_weekly_reprocess` (reprocesso semanal TikTok).
     assert sorted(orch.PIPELINES) == ["daily_chain", "full_daily", "pma_refresh",
                                       "serving_refresh",
-                                      "shopee_manual_refresh"]
+                                      "shopee_manual_refresh",
+                                      "tiktok_weekly_reprocess"]
 
 
 # ===========================================================================

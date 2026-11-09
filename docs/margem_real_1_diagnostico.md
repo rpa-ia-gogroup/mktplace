@@ -255,8 +255,9 @@ Serve para rateio agregado, não para frete por canal.
 | 5. Lucro líquido | nível 4 − impostos − demais custos | ❌ | ❌ | ❌ |
 
 **Nota sobre o nível 2. [FATO]** O GMV oficial da Torre já é ratificado **sem frete, sem cancelado e sem
-devolvido** — no TikTok pela allowlist de status do conector (`COMPLETED/DELIVERED/IN_TRANSIT`, ver
-`docs/gold_vs_marts_matrix.md` §0.1), na Shopee pela seleção de pedidos ativos
+devolvido** — no TikTok pela allowlist de status do conector (5 status:
+`COMPLETED/DELIVERED/IN_TRANSIT/AWAITING_COLLECTION/AWAITING_SHIPMENT`, ver `docs/tiktok_gmv_maturacao.md`;
+no TikTok o valor é `total_amount`, **com** o frete pago pelo comprador), na Shopee pela seleção de pedidos ativos
 (`pipelines/connectors/shopee/_parser.py`, variável `active`).
 **[INFERÊNCIA]** Os níveis 1 e 2 portanto colapsam na prática. Não está provado que a exclusão é completa nos
 três canais: `refunded_orders` é NULL em todos, e `returned_orders` só existe na Shopee — ou seja, não há como

@@ -271,11 +271,14 @@ def test_pipelines_disponiveis_sao_exatamente_os_quatro_conhecidos():
     OPS-AUTOMATION-2 (2026-10-16): daily_chain, full_daily + PMA em sequencia
     sob o mesmo lock, para acabar com a disputa entre as duas tarefas.
 
-    O inventario continua FECHADO: nenhum sexto pipeline, e nenhuma task
+    T-0074 (2026-11-09): tiktok_weekly_reprocess, o reprocesso semanal de 35
+    dias do GMV TikTok (cancelamentos depois de D+11).
+
+    O inventario continua FECHADO: nenhum setimo pipeline, e nenhuma task
     Shopee, de serving ou de PMA agendada por engano."""
     assert set(orch.PIPELINES) == {
         "full_daily", "shopee_manual_refresh", "serving_refresh", "pma_refresh",
-        "daily_chain",
+        "daily_chain", "tiktok_weekly_reprocess",
     }
 
 
