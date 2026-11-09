@@ -29,6 +29,7 @@ import {
   type ResultadoAvaliacoes,
 } from "@/lib/cx-avaliacoes";
 import { nota, pct } from "@/lib/cx-site";
+import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
 import { brandLabel } from "@/lib/filters/brands";
 import { torreFetch } from "@/lib/torre-fetch";
 
@@ -45,6 +46,7 @@ const TD = "whitespace-nowrap px-2 py-2 text-right tabular-nums text-ink-muted";
 
 export default function AvaliacoesProduto({ filtros }: { filtros: FiltrosCx }) {
   const { marca } = filtros;
+  const [repetindo, setRepetindo] = useState(false);
   const [r, setR] = useState<ResultadoAvaliacoes | null>(null);
   const [ordem, setOrdem] = useState<OrdemProdutos>("pior");
   const [todos, setTodos] = useState(false);
@@ -52,7 +54,9 @@ export default function AvaliacoesProduto({ filtros }: { filtros: FiltrosCx }) {
   const carregar = useCallback(() => {
     let vivo = true;
     setR(null);
-    carregarAvaliacoes({ marca }, torreFetch as typeof fetch).then((x) => {
+    setRepetindo(false);
+    const aoRepetir = () => vivo && setRepetindo(true);
+    carregarAvaliacoes({ marca }, torreFetch as typeof fetch, undefined, undefined, aoRepetir).then((x) => {
       if (vivo) setR(x);
     });
     return () => {
@@ -62,7 +66,9 @@ export default function AvaliacoesProduto({ filtros }: { filtros: FiltrosCx }) {
 
   useEffect(() => carregar(), [carregar]);
 
-  if (!r) return <StateBlock tipo="carregando" titulo={`Carregando ${TITULO}`} />;
+  if (!r) {
+    return <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : `Carregando ${TITULO}`} />;
+  }
   if (!r.ok) {
     return <StateBlock tipo="erro" compacto titulo={`Não foi possível carregar ${TITULO}`} descricao={r.motivo} acao={<RetryButton onClick={() => carregar()} />} />;
   }

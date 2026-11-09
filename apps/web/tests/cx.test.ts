@@ -133,7 +133,7 @@ test("aba CX busca pelo navegador (torreFetch), nunca no servidor", () => {
   assert.doesNotMatch(pagina, /carregarCxShopee/);
   const conteudo = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
   assert.match(conteudo, /^"use client";/);
-  assert.match(conteudo, /carregarCxShopee\(\{ marca, dias \}, torreFetch as typeof fetch\)/);
+  assert.match(conteudo, /carregarCxShopee\(\{ marca, dias \}, torreFetch as typeof fetch[,)]/);
 });
 
 // ---------------------------------------------------------------------------

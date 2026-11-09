@@ -626,3 +626,19 @@ test("repetirSeEstourar: so' o motivo de timeout dispara a 2a busca", async () =
   await repetirSeEstourar(async () => ({ ok: false as const, motivo: "Não foi possível contatar a API.", n: ++n }));
   assert.equal(n, 1);
 });
+
+test("repetirSeEstourar: aoRepetir so' no estouro, antes da 2a busca; nunca em sucesso nem em erro comum", async () => {
+  const ordem: string[] = [];
+  let n = 0;
+  await repetirSeEstourar(async () => {
+    ordem.push(`busca ${++n}`);
+    return n === 1 ? { ok: false as const, motivo: MOTIVO_TIMEOUT } : { ok: true as const };
+  }, () => ordem.push("aoRepetir"));
+  assert.deepEqual(ordem, ["busca 1", "aoRepetir", "busca 2"]);
+
+  let chamado = 0;
+  await repetirSeEstourar(async () => ({ ok: true as const }), () => chamado++);
+  await repetirSeEstourar(async () => ({ ok: false as const, motivo: "A API respondeu 500." }), () => chamado++);
+  await repetirSeEstourar(async () => ({ ok: false as const, motivo: "Não foi possível contatar a API." }), () => chamado++);
+  assert.equal(chamado, 0);
+});

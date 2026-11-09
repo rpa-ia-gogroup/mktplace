@@ -73,9 +73,15 @@ export function problemaNoPayloadAvaliacoes(json: unknown): string | null {
 /** Nunca lanca: qualquer falha volta como `{ ok: false }`. */
 /** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarAvaliacoes(
-  ...args: Parameters<typeof carregarAvaliacoesUmaVez>
+  filtros: Parameters<typeof carregarAvaliacoesUmaVez>[0],
+  fetchImpl?: typeof fetch,
+  base?: string,
+  timeoutMs?: number,
+  /** Chamado antes da 2a tentativa (so' quando a 1a estoura o tempo). */
+  aoRepetir?: () => void,
 ): ReturnType<typeof carregarAvaliacoesUmaVez> {
-  return repetirSeEstourar(() => carregarAvaliacoesUmaVez(...args));
+  // `undefined` nos opcionais cai no padrao do `UmaVez` (fetch, API_URL, 15 s)
+  return repetirSeEstourar(() => carregarAvaliacoesUmaVez(filtros, fetchImpl, base, timeoutMs), aoRepetir);
 }
 
 async function carregarAvaliacoesUmaVez(

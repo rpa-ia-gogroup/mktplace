@@ -73,6 +73,7 @@ import {
 } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
+import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import AvaliacoesProduto from "./AvaliacoesProduto";
@@ -80,11 +81,14 @@ import AvaliacoesProduto from "./AvaliacoesProduto";
 export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
+  const [repetindo, setRepetindo] = useState(false);
 
   const carregar = useCallback(() => {
     let vivo = true;
     setResultado(null);
-    carregarCxShopee({ marca, dias }, torreFetch as typeof fetch).then((r) => {
+    setRepetindo(false);
+    const aoRepetir = () => vivo && setRepetindo(true);
+    carregarCxShopee({ marca, dias }, torreFetch as typeof fetch, undefined, undefined, aoRepetir).then((r) => {
       if (vivo) setResultado(r);
     });
     return () => {
@@ -120,7 +124,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
       {!resultado ? (
         <>
           <Heroi rotulo={ROTULO_INDICADOR.resposta} valor="—" carregando meio={null} />
-          <StateBlock tipo="carregando" titulo="Carregando a aba CX" />
+          <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX"} />
           {avaliacoes}
         </>
       ) : !resultado.ok ? (
