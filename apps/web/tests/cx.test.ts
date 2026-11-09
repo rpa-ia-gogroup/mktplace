@@ -18,6 +18,7 @@ import {
   montarAvaliacaoLoja,
   montarPedidosMotivo,
   montarStatusMarcas,
+  simbolosMeta,
   reais,
   chipsCx,
   avisoColetaChat,
@@ -297,7 +298,7 @@ test("status por marca: nivel oficial, metrica fora da meta em alerta, pior prim
   assert.equal(rit.tom, "atencao");
   assert.equal(rit.rotulo, "Bom");
   assert.equal(rit.alertas.length, 1);
-  assert.match(rit.alertas[0], /^Taxa de resposta do chat 45,3% \(meta >= 60\)$/);
+  assert.match(rit.alertas[0], /^Taxa de resposta do chat 45,3% \(meta ≥ 60%\)$/, "mesmo texto de meta da fila");
   const apice = s[1];
   assert.deepEqual([apice.tom, apice.alertas, apice.aguardando, apice.cancelamento, apice.devolucoes], ["bom", [], "3", "2,0%", "10"]);
   const lescent = s[2];
@@ -779,4 +780,29 @@ test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalh
   assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias = DIAS\)/, "Gerencial segue com 30 dias por padrao");
+});
+
+// ---------------------------------------------------------------------------
+// Texto de meta: ">=" e "<=" da Shopee viram "≥" e "≤" (CX e Gerencial)
+// ---------------------------------------------------------------------------
+test("meta: sinais matematicos em todo texto de meta da CX e da Gerencial", () => {
+  assert.equal(simbolosMeta("Meta >= 60"), "Meta ≥ 60");
+  assert.equal(simbolosMeta("meta <= 2 dias"), "meta ≤ 2 dias");
+  assert.equal(simbolosMeta("meta > 4,5"), "meta > 4,5", "sinal estrito fica como esta'");
+  // Gerencial (card CX) usa metaCurta: o formato conhecido e o que cai no texto cru
+  assert.equal(metaCurta("Meta >= 60"), "meta ≥ 60%");
+  assert.equal(metaCurta("Meta <= 2 dias"), "meta ≤ 2 dias", "minusculo como o formato curto");
+  // detalhe da marca, celula da tabela e fila: nenhum ">=" sobra
+  const p = comConversas(30);
+  const textos = [
+    ...montarStatusMarcas(p, rotulo).flatMap((x) => x.alertas),
+    ...montarAtendimentoCx(p, rotulo).linhas.flatMap((l) => [l.respondido?.meta, l.nota?.meta]),
+    ...itensAtencaoCx(p, resumoCxGerencial(p, rotulo), rotulo).map((i) => `${i.titulo} ${i.detalhe ?? ""}`),
+    resumoCxGerencial(p, rotulo).respostaMeta,
+  ].filter((t): t is string => !!t);
+  assert.ok(textos.length > 3);
+  for (const t of textos) assert.doesNotMatch(t, />=|<=/, t);
+  const sem = { ...metrica("x", "Prazo", 3, "fora", "Meta <= 2"), meta: null, unidade: "dias" as const };
+  const s = montarStatusMarcas({ ...p, chat: { ...p.chat, contas: [{ ...p.chat.contas[0], metricas: [sem] }] } }, rotulo);
+  assert.match(s.find((x) => x.chave === "apice")!.alertas[0], /\(meta ≤ 2\)$/, "sem numero de meta: o rotulo da Shopee, com o sinal certo");
 });

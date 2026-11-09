@@ -340,8 +340,9 @@ function SaudePorMarca({ itens, abrir }: { itens: StatusMarca[]; abrir: (marca: 
               title={s.alertas.join(" · ") || undefined}
               className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
+              {/* borda em ink-faint: line-strong ficava abaixo de 3:1 no vidro (1,9 no escuro) */}
               {s.tom === "ausente" ? (
-                <span className="inline-flex items-center whitespace-nowrap rounded-md border border-dashed border-line-strong px-2 py-1 text-xs font-medium text-ink-faint hover:bg-raised">
+                <span className="inline-flex items-center whitespace-nowrap rounded-md border border-dashed border-ink-faint px-2 py-1 text-xs font-medium text-ink-faint hover:bg-raised">
                   {s.marca} · {s.rotulo}
                 </span>
               ) : (

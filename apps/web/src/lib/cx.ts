@@ -319,7 +319,7 @@ export function valorOficial(m: Pick<MetricaCx, "codigo" | "valor" | "unidade">)
 function celulaMeta(conta: ContaOficial | undefined, codigo: string): CelulaMeta | null {
   const m = conta?.metricas.find((x) => x.codigo === codigo);
   if (!m) return null;
-  return { valor: valorOficial(m), fora: m.situacao === "fora", meta: m.rotulo_meta ?? null };
+  return { valor: valorOficial(m), fora: m.situacao === "fora", meta: metaDaMetrica(m) };
 }
 
 export function montarAtendimentoCx(
@@ -545,7 +545,10 @@ export function montarStatusMarcas(
       }
       const alertas = conta.metricas
         .filter((x) => x.situacao === "fora")
-        .map((x) => `${x.rotulo} ${valorOficial(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
+        .map((x) => {
+          const meta = metaDaMetrica(x);
+          return `${x.rotulo} ${valorOficial(x)}${meta ? ` (${meta})` : ""}`;
+        });
       // Tom e' o da propria Shopee (nivel); metrica fora da meta nunca fica verde.
       const tom: TomStatus = alertas.length && conta.tom === "bom" ? "atencao" : conta.tom;
       return { ...base, tom, rotulo: conta.nivel ?? "Sem nível", alertas };
@@ -891,10 +894,18 @@ export function pctCx(v: number | null | undefined): string {
   return pct(v);
 }
 
+/**
+ * ">=" vira "≥" e "<=" vira "≤" em todo texto de meta que chega da Shopee
+ * (`rotulo_meta`): a tela inteira escreve o sinal matematico.
+ */
+export function simbolosMeta(texto: string): string {
+  return texto.replace(/>=/g, "≥").replace(/<=/g, "≤");
+}
+
 /** "Meta >= 60" (Shopee) -> "meta ≥ 60%"; outro formato fica como veio. */
 export function metaCurta(rotulo: string): string {
   const m = /^meta\s*(>=|<=|>|<)\s*([\d.,]+)\s*%?$/i.exec(rotulo.trim());
-  if (!m) return rotulo;
+  if (!m) return simbolosMeta(rotulo).replace(/^Meta /, "meta "); // minusculo como o formato curto
   const sinal = { ">=": "≥", "<=": "≤", ">": ">", "<": "<" }[m[1]] ?? m[1];
   return `meta ${sinal} ${m[2]}%`;
 }
@@ -1124,7 +1135,7 @@ function metaDaMetrica(m: ContaOficial["metricas"][number]): string | null {
   if (m.meta != null && Number.isFinite(m.meta)) {
     return `meta ${SINAL_META[m.comparador ?? ""] ?? m.comparador ?? ""} ${valorMetrica({ valor: m.meta, unidade: m.unidade })}`.replace(/\s+/g, " ");
   }
-  return m.rotulo_meta ? m.rotulo_meta.toLowerCase() : null;
+  return m.rotulo_meta ? simbolosMeta(m.rotulo_meta.toLowerCase()) : null;
 }
 
 /**
