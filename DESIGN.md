@@ -448,14 +448,14 @@ Contraste medido (WCAG) do ícone e do gráfico. "Vidro" é a superfície com o 
 | Token | Claro: superfície · ladrilho · vidro | Escuro: superfície · ladrilho · vidro |
 |---|---|---|
 | `kpi-gmv` | 7,1 · 6,0 · 5,5 | 6,2 · 5,3 · 4,3 |
-| `kpi-pedidos` | 3,2 · **2,9 · 2,7** | 10,2 · 8,4 · 6,3 |
+| `kpi-pedidos` | 3,9 · 3,5 · 3,2 | 10,2 · 8,4 · 6,3 |
 | `kpi-ticket` | 6,3 · 5,4 · 4,9 | 5,7 · 4,9 · 4,0 |
 | `kpi-ads` | 4,7 · 4,1 · 3,7 | 6,9 · 5,9 · 4,6 |
 | `kpi-roas` | 3,8 · 3,3 · 3,1 | 8,8 · 7,5 · 5,7 |
 | `kpi-prazo` | 5,2 · 4,5 · 4,1 | 6,7 · 5,7 · 4,5 |
 | `kpi-atendimento` | 5,5 · 4,8 · 4,4 | 9,1 · 7,7 · 5,8 |
 
-**Pendência:** o âmbar `kpi-pedidos` (217 119 6) fica abaixo de 3:1 no tema claro, sobre o ladrilho e no canto do brilho. O token é o mesmo da faixa da Gerencial e não mudou aqui. Escurecê-lo (por exemplo, para o âmbar 700, 180 83 9) muda a Gerencial e precisa de decisão à parte.
+No tema claro, o âmbar (`kpi-pedidos` e `warn`) é 194 106 5 (#c26a05) desde 09/11. O tom anterior, 217 119 6, dava 2,77:1 no canvas, 2,86 no ladrilho e 2,87 no raised (ponto ou barra warn); o novo dá 3,41, 3,48 e 3,54, e 3,92 na superfície. O tema escuro não mudou.
 
 ## 6. Do's and Don'ts
 

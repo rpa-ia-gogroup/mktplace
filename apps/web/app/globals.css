@@ -46,7 +46,8 @@
     --tc-ok: 5 150 105;
     --tc-ok-soft: 232 247 240;
     --tc-ok-ink: 5 96 62;
-    --tc-warn: 217 119 6;
+    /* AA no claro (Prumo, 09/11): 217 119 6 dava 2,87:1 no raised; 194 106 5 da 3,54. */
+    --tc-warn: 194 106 5;
     --tc-warn-soft: 253 243 227;
     --tc-warn-ink: 138 71 8;
     --tc-crit: 225 29 72;
@@ -67,7 +68,8 @@
        bom/ruim continua so' em ok/warn/crit. Tons 600 no claro para o icone e
        o grafico passarem de 3:1 sobre o branco. */
     --tc-kpi-gmv: 109 40 217;
-    --tc-kpi-pedidos: 217 119 6;
+    /* AA no claro: 217 119 6 dava 2,77:1 no canvas e 2,86 no ladrilho; 194 106 5 da 3,41 e 3,48. */
+    --tc-kpi-pedidos: 194 106 5;
     --tc-kpi-ticket: 79 70 229;
     --tc-kpi-ads: 192 38 211;
     --tc-kpi-roas: 5 150 105;
