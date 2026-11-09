@@ -94,7 +94,7 @@ export default function KpiTile({
   /** Com `identidade`: a serie do periodo, na ordem. Mini grafico so' com >= 4 pontos reais. */
   serie?: number[];
   /** Unidade de cada ponto da `serie`, para o texto da tendencia ("últimos 7 dias…"). */
-  granularidade?: "day" | "week" | "month";
+  granularidade?: "hour" | "day" | "week" | "month";
 }) {
   if (variante === "gerencial" && identidade) {
     return (
@@ -204,7 +204,7 @@ function KpiCardIdentidade({
 }: {
   rotulo: ReactNode; valor: ReactNode; comparacao?: ReactNode; contexto?: string; tom: Tom; ajuda?: ReactNode;
   icone?: LucideIcon; delta?: ReactNode; onAbrir?: () => void; identidade: IdentidadeKpi; antes?: ReactNode;
-  serie?: number[]; granularidade: "day" | "week" | "month";
+  serie?: number[]; granularidade: "hour" | "day" | "week" | "month";
 }) {
   const { tinta, borda, ladrilho } = IDENTIDADE[identidade];
   const t = serie ? tendencia(serie, granularidade) : null;

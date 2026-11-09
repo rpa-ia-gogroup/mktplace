@@ -107,6 +107,13 @@ test("tendencia em periodo curto usa metade contra metade, e sem ponto suficient
   assert.equal(tendencia([100, 100, 100.2, 100.2], "day")!.direcao, "flat");
 });
 
+test("tendencia horaria (Expedicao): 'últimas N horas', nunca 'dias'", () => {
+  const t = tendencia([...Array(7).fill(20), ...Array(7).fill(30)], "hour")!;
+  assert.equal(t.rotulo, "últimas 7 horas vs 7 anteriores");
+  assert.equal(t.direcao, "up");
+  assert.equal(tendencia([5, 5, 4, 4], "hour")!.rotulo, "últimas 2 horas vs 2 anteriores");
+});
+
 test("ticket ponto a ponto e' GMV / pedidos, so' onde ha' pedido", () => {
   assert.deepEqual(ticketPorPonto([100, 50, null, 30], [2, 0, 3, 3]), [50, null, null, 10]);
 });
