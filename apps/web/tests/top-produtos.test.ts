@@ -126,3 +126,21 @@ test("comparar: tabela so' com colunas dos canais da marca e traco para ausencia
   const card = readFileSync(new URL("../src/components/gerencial/TopProdutosMarca.tsx", import.meta.url), "utf8");
   assert.match(card, /canal === "todos" \? modoEscolhido : "ranking"/, "um canal so' volta ao ranking");
 });
+
+test("comparar: busca de novo uma vez se falhar; cancelada nao repete", async () => {
+  const { buscarComparacao } = await import("../src/lib/gerencial/top-produtos.ts");
+  const q = new URLSearchParams({ date_from: "2026-10-10", date_to: "2026-11-08" });
+  let n = 0;
+  const vazio = { inicio: "2026-10-10", fim: "2026-11-08", marcas: [] };
+  const falhaUmaVez = async () => { n += 1; if (n === 1) throw new Error("503"); return vazio; };
+  assert.deepEqual(await buscarComparacao(q, new AbortController().signal, falhaUmaVez), vazio);
+  assert.equal(n, 2);
+  n = 0;
+  await assert.rejects(buscarComparacao(q, new AbortController().signal, async () => { n += 1; throw new Error("503"); }));
+  assert.equal(n, 2, "so' uma nova tentativa");
+  n = 0;
+  const ac = new AbortController();
+  ac.abort();
+  await assert.rejects(buscarComparacao(q, ac.signal, async () => { n += 1; throw new DOMException("x", "AbortError"); }));
+  assert.equal(n, 1, "cancelada nao repete");
+});

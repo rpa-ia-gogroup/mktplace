@@ -278,20 +278,20 @@ def get_detalhe(
 # diferentes; o TikTok por seller SKU soma ~95% do GMV da gold).
 # ---------------------------------------------------------------------------
 TOP_COMPARAR = 20
-#: Janela para os apelidos do TikTok (codigo antigo e novo no mesmo product_id).
+#: Janela para os pares do TikTok (codigo antigo e novo no mesmo product_id).
 DIAS_APELIDOS = 180
 
 # Cada consulta devolve (marca, sku, chave, nome, receita): `sku` e' o seller
 # SKU cru (nulo quando o anuncio nao tem); `chave` e' o codigo da rota de detalhe.
 SQL_COMPARAR = {
+    # TikTok pelo gold por produto (100% do GMV, o mesmo do Ranking). Antes era
+    # line_items x orders: a juncao lia os 2,3 GB de itens (31-39 s a frio).
+    # O seller SKU vem dos pares abaixo (`sku` nulo aqui).
     "tiktok": """
-        SELECT o.brand AS marca, NULLIF(li.seller_sku, '') AS sku, li.product_id AS chave,
-               MAX(li.product_name) AS nome, SUM(li.sale_price) AS receita
-          FROM silver.stg_tiktok_line_items li
-          JOIN silver.stg_tiktok_orders o ON o.order_id = li.order_id
-         WHERE o.brand = ANY(:marcas) AND o.paid_at >= :ini AND o.paid_at < :fim_excl
-           AND o.order_status <> 'CANCELLED' AND NOT COALESCE(o.is_sample_order, false)
-           AND NOT COALESCE(li.is_gift, false)
+        SELECT brand AS marca, NULL::text AS sku, product_id AS chave,
+               MAX(product_name) AS nome, SUM(gmv) AS receita
+          FROM gold.fct_tiktok_product_daily
+         WHERE brand = ANY(:marcas) AND date BETWEEN :ini AND :fim
          GROUP BY 1, 2, 3""",
     "ml": """
         SELECT o.brand AS marca, NULLIF(i.seller_sku, '') AS sku,
@@ -320,9 +320,17 @@ SQL_COMPARAR = {
 SQL_APELIDOS = """
     SELECT DISTINCT li.product_id AS produto, li.seller_sku AS sku
       FROM silver.stg_tiktok_line_items li
-      JOIN silver.stg_tiktok_orders o ON o.order_id = li.order_id
-     WHERE o.brand = ANY(:marcas) AND o.paid_at >= :ini_apelidos AND o.paid_at < :fim_excl
+     WHERE li.brand = ANY(:marcas) AND li.updated_at >= :desde
        AND NULLIF(li.seller_sku, '') IS NOT NULL"""
+
+# Em producao cada consulta entra na fila do Metabase; com a Gerencial
+# carregando (~16 chamadas), 4 consultas separadas esperavam 4 vagas (medido:
+# 19-55 s a frio). Os 3 canais do periodo vao numa consulta so' (`parte` diz o
+# canal). Os pares nao dependem do periodo: consulta a parte, com parametros
+# fixos no dia, que o cache da leitura reaproveita para qualquer periodo e marca.
+SQL_COMPARAR_UNICA = "\nUNION ALL\n".join(
+    f"SELECT '{c}' AS parte, * FROM ({SQL_COMPARAR[c]}\n) {c}" for c in CANAIS
+)
 
 _NAO_ALFANUM = re.compile(r"[^A-Z0-9]")
 _V_ANTES_DE_NUMERO = re.compile(r"^V(?=\d)")
@@ -382,6 +390,9 @@ def montar_comparacao(linhas: dict[str, list[dict]], apelidos: list[dict], marca
                     continue
                 total[canal] = total.get(canal, 0.0) + receita
                 s = normalizar_sku(l.get("sku"))
+                if s is None and canal == "tiktok":
+                    # gold por produto: qualquer SKU dos pares serve (ja' estao unidos)
+                    s = min(por_produto_tk.get(str(l["chave"]), {None}) - {None}, default=None)
                 if s is None:
                     continue  # sem seller SKU nao casa com outro canal: so' entra na cobertura
                 com_sku[canal] = com_sku.get(canal, 0.0) + receita
@@ -415,17 +426,18 @@ def montar_comparacao(linhas: dict[str, list[dict]], apelidos: list[dict], marca
 
 
 def get_comparar_canais(
-    consultar: Consultar, inicio: date, fim: date, marcas: Optional[list[str]],
+    consultar: Consultar, inicio: date, fim: date, marcas: Optional[list[str]], hoje: Optional[date] = None,
 ) -> CompararCanaisResponse:
     escopo = [m for m in (marcas or BRANDS_IN_SCOPE) if m in BRANDS_IN_SCOPE]
-    params = {"marcas": escopo, "ini": inicio, "fim": fim, "fim_excl": fim + timedelta(days=1),
-              "ini_apelidos": fim - timedelta(days=DIAS_APELIDOS)}
-    tarefas = [(c, SQL_COMPARAR[c]) for c in CANAIS] + [("apelidos", SQL_APELIDOS)]
     if not escopo:
         return CompararCanaisResponse(inicio=inicio, fim=fim, marcas=[])
-    # Uma consulta por canal + apelidos, em paralelo: a resposta espera a mais lenta.
-    with ThreadPoolExecutor(max_workers=len(tarefas)) as pool:
-        respostas = list(pool.map(lambda t: consultar(t[1], params), tarefas))
-    por_nome = {nome: r for (nome, _), r in zip(tarefas, respostas)}
-    apelidos = por_nome.pop("apelidos")
-    return CompararCanaisResponse(inicio=inicio, fim=fim, marcas=montar_comparacao(por_nome, apelidos, escopo))
+    params = {"marcas": escopo, "ini": inicio, "fim": fim, "fim_excl": fim + timedelta(days=1)}
+    pares = {"marcas": list(BRANDS_IN_SCOPE), "desde": (hoje or date.today()) - timedelta(days=DIAS_APELIDOS)}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        periodo = pool.submit(consultar, SQL_COMPARAR_UNICA, params)
+        apelidos = pool.submit(consultar, SQL_APELIDOS, pares)
+        linhas, apelidos = periodo.result(), apelidos.result()
+    por_parte: dict[str, list[dict]] = {c: [] for c in CANAIS}
+    for linha in linhas:
+        por_parte[linha.pop("parte")].append(linha)
+    return CompararCanaisResponse(inicio=inicio, fim=fim, marcas=montar_comparacao(por_parte, apelidos, escopo))
