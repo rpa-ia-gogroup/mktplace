@@ -55,6 +55,7 @@ import {
   curvaDe,
   dicaCurva,
   impactoPorCurva,
+  fmtFatia,
   linhaCurvaCanal,
   rankingRupturas,
   type CurvaAbc,
@@ -171,8 +172,10 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
   const linha = (l: (typeof t.linhas)[number], total = false) => (
     <tr key={total ? "total" : l.curva} className={total ? "font-semibold" : undefined}>
       <th scope="row" className="py-2 pr-2 text-left font-medium text-ink">{total ? "Total" : NOME_CURVA[l.curva]}</th>
-      <td className="px-2 py-2 text-right tabular-nums">{l.pct === null ? <Ausente motivo="sem impacto potencial medido" /> : fmtPct(l.pct)}</td>
-      <td className="px-2 py-2 text-right tabular-nums">{`${fmtReais(l.perda)}/dia`}</td>
+      <td className="px-2 py-2 text-right tabular-nums">{l.pct === null ? <Ausente motivo="sem impacto potencial medido" /> : total ? fmtPct(l.pct) : fmtFatia(l.pct)}</td>
+      <td className="px-2 py-2 text-right tabular-nums">
+        <Escondido texto={`${fmtReais(l.perda)}/dia`} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />
+      </td>
       <td className="py-2 pl-2 text-right tabular-nums">{fmtInt(l.rupturas)}</td>
     </tr>
   );

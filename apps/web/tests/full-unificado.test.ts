@@ -21,6 +21,7 @@ import {
   rankingRupturas,
   contarFiltros,
   dicaCurva,
+  fmtFatia,
   type CurvaAbc,
   type ItemImpacto,
   kpiParamVenda,
@@ -699,5 +700,18 @@ test("drilldown por curva: % e R$/dia por curva + total; ⓘ cita as duplicatas 
   assert.equal(t.total.rupturas, 4);
   assert.match(dicaCurva(ABC, imp), /A fonte tem 2 SKUs repetidos \(vale a linha de maior faturamento\)/);
   assert.match(dicaCurva(ABC, imp), /ML: curva em 2 de 4 rupturas/);
+});
+
+test("fatia por curva: nao nula nunca '0,0%', quase toda nunca '100,0%'; zero da Shopee coberto pelo vendedor e' marcado", () => {
+  assert.equal(fmtFatia(0.0003), "<0,1%");
+  assert.equal(fmtFatia(0), "0,0%");
+  assert.equal(fmtFatia(0.9997), ">99,9%");
+  assert.equal(fmtFatia(1), "100,0%");
+  assert.equal(fmtFatia(0.25), "25,0%");
+  const imp = impactoCom([], [itemImp("barbours", "B1", 40, { estoque_vendedor: 3 }), itemImp("barbours", "X1", 40, { estoque_vendedor: 0 })]);
+  const b = impactoPorCurva("shopee", imp, ABC)!.linhas.find((l) => l.curva === "B")!;
+  assert.equal(b.perda, 0);
+  assert.equal(b.vendedorCobre, true);
+  assert.equal(impactoPorCurva("shopee", imp, ABC)!.linhas.find((l) => l.curva === "sem")!.vendedorCobre, false);
 });
 

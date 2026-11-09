@@ -752,7 +752,11 @@ export function linhaCurvaCanal(canal: Canal, impacto: ImpactoRuptura | null, ab
   return { estado: "ok", pct: aaA.reduce((s, t) => s + valor(t), 0) / total, itens: aaA.length, detalhe: `${quantas} · ${fmtPct(cobertura)} do impacto` };
 }
 
-export interface LinhaPorCurva { curva: Curva | "sem"; pct: number | null; perda: number; rupturas: number }
+export interface LinhaPorCurva {
+  curva: Curva | "sem"; pct: number | null; perda: number; rupturas: number;
+  /** Shopee: R$ 0 MEDIDO porque o vendedor tem estoque (a venda segue fora do Full). */
+  vendedorCobre?: boolean;
+}
 
 /** Drilldown: R$/dia potencial por curva (AA, A, B, C, sem curva) e o total do canal. */
 export function impactoPorCurva(canal: Canal, impacto: ImpactoRuptura | null, abc: CurvaAbc | null): { linhas: LinhaPorCurva[]; total: LinhaPorCurva } | null {
@@ -763,7 +767,8 @@ export function impactoPorCurva(canal: Canal, impacto: ImpactoRuptura | null, ab
   const linhas = ([...CURVAS, "sem"] as const).map((cv) => {
     const g = its.filter((t) => (curvaDe(t, abc) ?? "sem") === cv);
     const perda = g.reduce((s, t) => s + valor(t), 0);
-    return { curva: cv, pct: total > 0 ? perda / total : null, perda, rupturas: g.length };
+    const vendedorCobre = canal === "shopee" && perda === 0 && g.length > 0 && g.every((t) => (t.estoqueVendedor ?? 0) > 0);
+    return { curva: cv, pct: total > 0 ? perda / total : null, perda, rupturas: g.length, vendedorCobre };
   });
   return { linhas, total: { curva: "sem", pct: total > 0 ? 1 : null, perda: total, rupturas: its.length } };
 }
@@ -785,3 +790,12 @@ export function dicaCurva(abc: CurvaAbc | null, impacto: ImpactoRuptura | null):
     + `Sem curva: kit, código sem ligação com a planilha ou marca fora dela; nunca vira "C". `
     + `O % é do impacto potencial R$/dia do canal; R$ não é somado entre canais.${dup}`;
 }
+
+/** % de uma fatia: nao nula que arredonda a 0 = "<0,1%"; abaixo de 100 que arredonda a 100 = ">99,9%" (regra do #279). */
+export function fmtFatia(v: number): string {
+  const t = fmtPct(v);
+  if (v > 0 && t === fmtPct(0)) return "<0,1%";
+  if (v < 1 && t === fmtPct(1)) return ">99,9%";
+  return t;
+}
+
