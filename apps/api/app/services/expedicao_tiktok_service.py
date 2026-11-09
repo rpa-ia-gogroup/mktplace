@@ -229,15 +229,22 @@ def obter_serie(
     # Le mais datas de PAGAMENTO do que a janela de vencimento, senao as
     # coortes empurradas por feriado ficam de fora justamente no dia ruim.
     pag_desde = venc_desde - timedelta(days=FOLGA_PAGAMENTO_DIAS)
+    # API-2: a janela ANTERIOR, do mesmo tamanho, vem na MESMA consulta (so' o
+    # inicio das datas de pagamento recua); o resto da resposta usa so' as
+    # linhas da janela atual, exatamente como antes.
+    ant_ate = venc_desde - timedelta(days=1)
+    ant_desde = ant_ate - timedelta(days=dias)
+    ant_pag_desde = ant_desde - timedelta(days=FOLGA_PAGAMENTO_DIAS)
 
-    linhas = [
+    todas = [
         dict(r) for r in db.execute(
-            text(SERIE_SQL), {"canal": CANAL, "desde": pag_desde, "ate": venc_ate}
+            text(SERIE_SQL), {"canal": CANAL, "desde": ant_pag_desde, "ate": venc_ate}
         ).mappings()
     ]
     if brands:
         alvo = {b.strip().lower() for b in brands}
-        linhas = [x for x in linhas if str(x["brand"]).lower() in alvo]
+        todas = [x for x in todas if str(x["brand"]).lower() in alvo]
+    linhas = [x for x in todas if x["paid_date"] >= pag_desde]
     if not linhas:
         return _indisponivel(UNAVAILABLE_NO_DATA)
 
@@ -309,6 +316,10 @@ def obter_serie(
         "incident_start": inicio,
         "incident_end": fim,
         "daily": ldr_diario,
+        "previous": ldr_anterior(
+            todas, ev, ant_desde, ant_ate, dias,
+            marcas={str(x["brand"]) for x in na_janela},
+        ),
     }
 
     # ----- FLUXO POR DATA DE PAGAMENTO: as colunas da planilha da gestao ----
@@ -388,6 +399,38 @@ def obter_serie(
             effective_at=snapshot["effective_at"], agora=agora,
         ),
     }
+
+
+def ldr_anterior(linhas: list[dict], ev: str, desde: date, ate: date, dias: int,
+                 *, marcas: set[str]) -> dict:
+    """API-2 — LDR da janela anterior, com o MESMO recorte da atual.
+
+    So' as marcas da janela atual (uma loja nova ou fechada nao muda a base).
+    Sem historico que alcance o inicio da janela para TODA marca, com algum
+    vencimento ainda aberto ou sem base: taxa `None` e o motivo. Nunca 0.
+    """
+    janela = {"from": desde, "to": ate, "days": dias, "rate": None, "base": None,
+              "late": None, "mature_due_days": 0, "reason": None}
+    do_recorte = [x for x in linhas if str(x["brand"]) in marcas]
+    # Cada marca precisa de pagamento lido ate' o inicio da janela: sem isso a
+    # base anterior seria parcial e o delta compararia recortes diferentes.
+    alcance: dict[str, date] = {}
+    for x in do_recorte:
+        b = str(x["brand"])
+        alcance[b] = min(alcance.get(b, x["paid_date"]), x["paid_date"])
+    if not marcas or any(alcance.get(b) is None or alcance[b] > desde for b in marcas):
+        return {**janela, "reason": "sem_historico"}
+    na_janela = [x for x in do_recorte if desde <= _deadline(x, ev) <= ate]
+    if any(not _madura(x, ev) for x in na_janela):
+        return {**janela, "reason": "nao_fechada"}
+    base = sum(_base(x, ev) for x in na_janela)
+    late = sum(_atrasados(x, ev) for x in na_janela)
+    taxa = _taxa(late, base)
+    if taxa is None:
+        return {**janela, "reason": "sem_base"}
+    dias_vencimento = len({_deadline(x, ev) for x in na_janela})
+    return {**janela, "rate": taxa, "base": base, "late": late,
+            "mature_due_days": dias_vencimento}
 
 
 # ---------------------------------------------------------------------------

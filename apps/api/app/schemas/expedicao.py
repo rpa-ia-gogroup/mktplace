@@ -415,6 +415,27 @@ class TikTokFluxoDia(BaseModel):
     is_mature: bool
 
 
+class TikTokLdrAnterior(BaseModel):
+    """CARDS-KPIBAND (API-2): a LDR da janela ANTERIOR, do mesmo tamanho e do
+    mesmo recorte de marcas, para o delta do card "LDR da janela".
+
+    `from`/`to` sempre vem (o front escreve "vs ..."). Sem a janela inteira
+    medida, `rate`/`base`/`late` sao `None` e `reason` diz por que — nunca 0.
+    """
+
+    from_: date = Field(alias="from")
+    to: date
+    days: int
+    rate: Optional[float] = None
+    base: Optional[int] = None
+    late: Optional[int] = None
+    mature_due_days: int = 0
+    #: `None` com a janela medida; senao "sem_historico", "nao_fechada" ou "sem_base".
+    reason: Optional[str] = None
+
+    model_config = {"populate_by_name": True}
+
+
 class TikTokLdr(BaseModel):
     """LDR OPERACIONAL — vencimentos na janela. A metrica oficial."""
 
@@ -434,6 +455,8 @@ class TikTokLdr(BaseModel):
     incident_start: Optional[date] = None
     incident_end: Optional[date] = None
     daily: list[TikTokLdrDia] = Field(default_factory=list)
+    #: Aditivo e opcional (API-2): a janela anterior do mesmo tamanho.
+    previous: Optional[TikTokLdrAnterior] = None
 
     model_config = {"populate_by_name": True}
 

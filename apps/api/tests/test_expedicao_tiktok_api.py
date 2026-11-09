@@ -470,7 +470,9 @@ def test_janela_absurda_e_limitada_em_vez_de_derrubar_a_consulta():
     s = SessaoFake(linhas=[linha(date(2026, 9, 20))])
     svc.obter_serie(s, dias=9999, agora=AGORA)
     _sql, params = next(c for c in s.consultas if "expedicao_tiktok" in c[0])
-    assert params["desde"] >= HOJE - timedelta(days=svc.JANELA_MAX_DIAS + 30)
+    # API-2: a consulta le tambem a janela ANTERIOR (mesmo tamanho), entao o
+    # teto dobra — mas continua limitado.
+    assert params["desde"] >= HOJE - timedelta(days=2 * svc.JANELA_MAX_DIAS + 1 + 30)
 
 
 def test_from_reflete_o_vencimento_existente_e_nao_o_intervalo_pedido():
@@ -489,3 +491,61 @@ def test_o_servico_nunca_escreve():
     baixo = svc.SERIE_SQL.lower()
     for proibido in ("insert", "update ", "delete", "drop", "truncate"):
         assert proibido not in baixo, proibido
+
+
+# ---------------------------------------------------------------------------
+# API-2 — LDR da janela anterior (mesmo tamanho, mesmo recorte)
+# ---------------------------------------------------------------------------
+def _dias_pagos(inicio: date, fim: date, brand: str = "kokeshi", **kw) -> list[dict]:
+    """Uma linha por dia de pagamento, coleta vencendo 2 dias depois."""
+    out, d = [], inicio
+    while d <= fim:
+        out.append(linha(d, brand, **kw))
+        d += timedelta(days=1)
+    return out
+
+
+def test_janela_anterior_tem_o_mesmo_tamanho_e_vem_logo_antes():
+    # dias=7: atual vence de 17/09 a 24/09; anterior de 09/09 a 16/09.
+    linhas = _dias_pagos(date(2026, 8, 25), date(2026, 9, 14), col_atras=5)  # anterior: 5%
+    linhas += _dias_pagos(date(2026, 9, 15), date(2026, 9, 21), col_atras=2)  # atual: 2%
+    r = serie(linhas, dias=7)
+    ant = r["ldr"]["previous"]
+    assert (ant["from"], ant["to"], ant["days"]) == (date(2026, 9, 9), date(2026, 9, 16), 7)
+    assert ant["reason"] is None
+    assert ant["rate"] == pytest.approx(0.05)
+    assert ant["base"] == 800 and ant["late"] == 40
+    # A janela atual nao muda por ter lido o passado.
+    assert r["ldr"]["rate"] == pytest.approx(0.02)
+    assert r["ldr"]["from"] == date(2026, 9, 17)
+
+
+def test_sem_historico_ate_o_inicio_da_janela_anterior_e_nulo_nunca_zero():
+    linhas = _dias_pagos(date(2026, 9, 12), date(2026, 9, 21))
+    ant = serie(linhas, dias=7)["ldr"]["previous"]
+    assert ant["reason"] == "sem_historico"
+    assert ant["rate"] is None and ant["base"] is None and ant["late"] is None
+
+
+def test_janela_anterior_usa_o_mesmo_recorte_de_marcas():
+    """Marca que so' existia antes nao entra; marca nova sem passado anula."""
+    base = _dias_pagos(date(2026, 8, 25), date(2026, 9, 21))
+    so_antes = _dias_pagos(date(2026, 8, 25), date(2026, 9, 5), "barbours", col_atras=50)
+    ant = serie(base + so_antes, dias=7)["ldr"]["previous"]
+    assert ant["rate"] == pytest.approx(0.0) and ant["base"] == 800  # so' kokeshi
+    nova = _dias_pagos(date(2026, 9, 12), date(2026, 9, 21), "lescent")
+    assert serie(base + nova, dias=7)["ldr"]["previous"]["reason"] == "sem_historico"
+
+
+def test_janela_anterior_com_vencimento_aberto_nao_tem_taxa():
+    linhas = _dias_pagos(date(2026, 8, 25), date(2026, 9, 21))
+    linhas[15] = linha(linhas[15]["paid_date"], tts_mature=False, col_pend_prazo=10)
+    ant = serie(linhas, dias=7)["ldr"]["previous"]
+    assert ant["reason"] == "nao_fechada" and ant["rate"] is None
+
+
+def test_janela_anterior_segue_o_filtro_de_marca():
+    linhas = _dias_pagos(date(2026, 8, 25), date(2026, 9, 21), col_atras=1)
+    linhas += _dias_pagos(date(2026, 8, 25), date(2026, 9, 21), "apice", col_atras=9)
+    ant = serie(linhas, dias=7, brands=["apice"])["ldr"]["previous"]
+    assert ant["rate"] == pytest.approx(0.09)
