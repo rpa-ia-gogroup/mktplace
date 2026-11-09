@@ -182,10 +182,10 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
       <KpiTile
         rotulo={
           i === "resposta" ? (
-            // "Taxa de resposta" quebra em 390 px e desalinha a fileira; o nome inteiro esta' no aria-label
+            // O nome inteiro quebra em 390 px e desalinha a fileira; ele fica no aria-label
             <>
               <span className="sm:hidden">Resposta</span>
-              <span className="hidden sm:inline">Taxa de resposta</span>
+              <span className="hidden sm:inline">{ROTULO_INDICADOR[i]}</span>
             </>
           ) : (
             ROTULO_INDICADOR[i]
