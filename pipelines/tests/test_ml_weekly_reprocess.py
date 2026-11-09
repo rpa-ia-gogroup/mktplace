@@ -11,8 +11,9 @@ As perguntas que estes testes respondem:
   3. `--days 35` chega ao conector como D-36..D-1?
   4. o caminho regrava por UPSERT, sem DELETE, inclusive o dia com gmv=0?
   5. preflight bloqueado, timeout e lock ocupado saem FAILED/BLOCKED com exit 1?
-  6. `--days` no incremental: vale no ML, nas demais fontes e' ignorado com aviso?
-  7. janela exata: linha fora da janela bloqueia antes do upsert?
+  6. `--days` no incremental: sem efeito em TODAS as fontes, com aviso (R141)?
+  7. janela exata: no ML, linha fora da janela bloqueia antes do upsert; nas
+     demais fontes, so' aviso (R141)?
 
 Fakes em tudo: nenhum subprocess, nenhum banco.
 """
@@ -323,34 +324,26 @@ def test_ml_incremental_sem_days_usa_a_janela_do_conector(monkeypatch, sessao):
     assert chamadas == [{}]
 
 
-def test_ml_incremental_com_days_passa_a_valer(monkeypatch, sessao):
-    """O `dia_ml --days 2 --incluir-hoje` do Airflow cobria a janela padrao
-    (D-3..D0) em silencio; agora cobre D-2..D0, como o comentario dele diz."""
+@pytest.mark.parametrize("source, conector, days", [
+    ("ml", "ml_connector", "2"),          # o `dia_ml --days 2` do Airflow
+    ("tiktok", "tiktok_connector", "10"),
+])
+def test_incremental_com_days_nao_passa_days_back_e_avisa(monkeypatch, sessao, caplog,
+                                                          source, conector, days):
+    """R141: no incremental `--days` continua SEM efeito em todas as fontes,
+    como antes da T-0077. A unica diferenca e' o aviso no log."""
     chamadas = []
-    monkeypatch.setattr(daily_performance.ml_connector, "fetch_incremental",
-                        lambda **kw: chamadas.append(kw) or [])
-    daily_performance.run(**_kwargs_do_cli(
-        ("--source", "ml", "--mode", "incremental", "--days", "2")))
-    assert chamadas == [{"days_back": 2}]
-
-
-def test_ml_incremental_days_chega_a_janela_do_conector(monkeypatch):
-    capturado = {}
-    monkeypatch.setattr(ml, "fetch", lambda a, b: capturado.setdefault("j", (a, b)) and [])
-    ml.fetch_incremental(**daily_performance._fetch_kwargs("ml", "incremental", 2))
-    inicio, fim = capturado["j"]
-    assert fim == last_closed_date() and fim - inicio == timedelta(days=2)
-
-
-def test_outras_fontes_incremental_ignoram_days_com_aviso(monkeypatch, sessao, caplog):
-    chamadas = []
-    monkeypatch.setattr(daily_performance.tiktok_connector, "fetch_incremental",
+    monkeypatch.setattr(getattr(daily_performance, conector), "fetch_incremental",
                         lambda **kw: chamadas.append(kw) or [])
     with caplog.at_level(logging.WARNING):
         daily_performance.run(**_kwargs_do_cli(
-            ("--source", "tiktok", "--mode", "incremental", "--days", "10")))
+            ("--source", source, "--mode", "incremental", "--days", days)))
     assert chamadas == [{}]
-    assert any("--days 10 ignorado" in m for m in caplog.messages)
+    assert any(f"--days {days} ignorado" in m and source in m for m in caplog.messages)
+
+
+def test_constante_de_days_no_incremental_nao_existe_mais():
+    assert not hasattr(daily_performance, "FONTES_DAYS_NO_INCREMENTAL")
 
 
 @pytest.mark.parametrize("days, esperado", [(None, 3), (35, 35), (0, 0)])
@@ -370,6 +363,36 @@ def test_linha_fora_da_janela_bloqueia_antes_do_upsert(monkeypatch, sessao):
         daily_performance.run(source="ml", mode="backfill",
                               date_from=df.isoformat(), date_to=dt.isoformat())
     assert _escritas(sessao) == []
+
+
+def _linha_tiktok(d):
+    return {
+        "date": d, "brand": "apice",
+        "gmv": Decimal("100.00"), "orders": 4, "avg_ticket": Decimal("25.00"),
+        "content_orders": 6, "units_sold": 5, "unique_buyers": 3,
+        "visitors": None, "conversion_rate": None,
+        "canceled_orders": 1, "cancel_rate_pct": Decimal("20.00"),
+        "returned_orders": None, "refunded_orders": None, "problem_rate": None,
+        "delivered_orders": 2, "avg_delivery_hours": Decimal("30.00"),
+        "gmv_video": Decimal("10.00"), "gmv_live": Decimal("5.00"),
+        "gmv_card": Decimal("1.00"),
+        "total_settlement": Decimal("90.00"), "total_fees": Decimal("10.00"),
+    }
+
+
+def test_barreira_de_janela_so_bloqueia_no_ml_em_tiktok_e_aviso(monkeypatch, sessao, caplog):
+    """R141: a `WindowViolation` vale so' para `source="ml"`. No TikTok a linha
+    fora da janela nao levanta: so' aviso, e a carga segue como antes."""
+    df, dt = date(2026, 7, 1), date(2026, 7, 31)
+    fora = dt + timedelta(days=1)
+    monkeypatch.setattr(daily_performance.tiktok_connector, "fetch",
+                        lambda a, b: [_linha_tiktok(df), _linha_tiktok(fora)])
+    with caplog.at_level(logging.WARNING):
+        r = daily_performance.run(source="tiktok", mode="backfill",
+                                  date_from=df.isoformat(), date_to=dt.isoformat())
+    assert r["status"] == "success"
+    assert any("fora da janela pedida" in m for m in caplog.messages)
+    assert {p["date"] for _, p in _escritas(sessao)} == {df, fora}
 
 
 def test_janela_exata_escreve_so_a_janela_e_devolve_o_desfecho(monkeypatch, sessao):

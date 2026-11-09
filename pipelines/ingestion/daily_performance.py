@@ -370,11 +370,14 @@ FONTES_HOJE_POR_PADRAO = ("shopee", "shopee-stats", "shopee-ads")
 #: historico do argparse era 3, e o backfill sempre o recebeu).
 BACKFILL_DAYS_PADRAO = 3
 
-#: T-0077: fontes em que `--days` vale TAMBEM no modo incremental. Antes o
-#: incremental ignorava `--days` para todas as fontes (o `dia_ml --days 2` do
-#: Airflow cobria a janela padrao do conector, nao D-2..D0). No ML o argumento
-#: passa a valer; nas demais o comportamento nao muda e o descarte vira aviso.
-FONTES_DAYS_NO_INCREMENTAL = ("ml",)
+#: T-0077 (R141): no modo incremental `--days` NAO tem efeito em nenhuma fonte,
+#: como sempre foi — vale a janela propria do conector. O que mudou e' que o
+#: descarte, antes silencioso (o `dia_ml --days 2` do Airflow cobria a janela
+#: padrao, nao D-2..D0), agora vira aviso no log.
+
+#: Fonte em que a barreira de janela exata (`WindowViolation`) BLOQUEIA. Nas
+#: demais, linha fora da janela vira so' aviso (R141: escopo da T-0077 e' o ML).
+FONTES_BARREIRA_JANELA = ("ml",)
 
 
 class WindowViolation(ValueError):
@@ -382,7 +385,8 @@ class WindowViolation(ValueError):
 
     O reparo do ML promete escrever SO' dentro da janela. A consulta do conector
     ja filtra pela janela; esta barreira faz disso uma propriedade do caminho de
-    escrita, e nao so' do SQL. Bloqueia, nao filtra.
+    escrita, e nao so' do SQL. Bloqueia, nao filtra — so' em
+    `FONTES_BARREIRA_JANELA`; nas demais fontes e' aviso.
     """
 
 
@@ -393,27 +397,28 @@ def _assert_canonical_rows_in_window(rows: list[dict], window: tuple[date, date]
                    and not (window[0] <= r["date"] <= window[1])})
     if not fora:
         return
-    raise WindowViolation(
+    detalhe = (
         f"source={source!r}: {len(fora)} data(s) fora da janela pedida "
         f"{window[0].isoformat()}..{window[1].isoformat()} — primeiras: "
-        f"{', '.join(d.isoformat() for d in fora[:5])}. Carregamento bloqueado "
-        "ANTES do upsert."
+        f"{', '.join(d.isoformat() for d in fora[:5])}."
     )
+    if source not in FONTES_BARREIRA_JANELA:
+        logger.warning("%s Carga segue sem mudanca de comportamento.", detalhe)
+        return
+    raise WindowViolation(f"{detalhe} Carregamento bloqueado ANTES do upsert.")
 
 
 def _fetch_kwargs(source: str, mode: str, days_back: int | None) -> dict:
     """kwargs do `fetch_incremental`/`fetch_backfill` (caminho sem janela exata).
 
     - backfill: `days_back`, ou `BACKFILL_DAYS_PADRAO` sem `--days`;
-    - incremental em `FONTES_DAYS_NO_INCREMENTAL`: `days_back` quando veio;
-    - incremental nas demais: nada (janela do conector), com aviso se veio.
+    - incremental, qualquer fonte: nada (janela do conector), com aviso se
+      `--days` veio.
     """
     if mode == "backfill":
         return {"days_back": BACKFILL_DAYS_PADRAO if days_back is None else days_back}
     if days_back is None:
         return {}
-    if source in FONTES_DAYS_NO_INCREMENTAL:
-        return {"days_back": days_back}
     logger.warning(
         "--days %s ignorado no modo incremental para source=%s: vale a janela "
         "propria do conector. Use --mode backfill para uma janela por --days.",
@@ -697,8 +702,8 @@ def build_parser() -> argparse.ArgumentParser:
     # --days continua em 3; incremental sem --days usa a janela do conector.
     parser.add_argument("--days", type=int, default=None,
                         help="Quantos dias para trás além de D-1. backfill: default 3. "
-                             "incremental: vale só para --source ml; nas demais "
-                             "fontes é ignorado (com aviso) e vale a janela do conector.")
+                             "incremental: ignorado em todas as fontes (com aviso); "
+                             "vale a janela do conector.")
     parser.add_argument("--date-from", default=None, metavar="YYYY-MM-DD",
                         help="Data inicial exata (só --mode backfill; source em tiktok/shopee-stats/ml)")
     parser.add_argument("--date-to", default=None, metavar="YYYY-MM-DD",

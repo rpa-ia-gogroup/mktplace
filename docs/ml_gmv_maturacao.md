@@ -117,23 +117,25 @@ python -m pipelines.ops.refresh_ml_daily_contract --date-from 2026-07-01 --date-
 
 ### 3.3 `--days` no modo incremental
 
-Antes, o `daily_performance` ignorava `--days` no modo incremental, para todas as
-fontes. Por isso o `dia_ml --days 2 --incluir-hoje` do Airflow cobria a janela
-padrão do conector, e não D-2..D0 como diz o comentário dele.
+O `daily_performance` ignora `--days` no modo incremental, em **todas** as
+fontes, e continua assim. Por isso o `dia_ml --days 2 --incluir-hoje` do Airflow
+cobre a janela padrão do conector (D-3..D0), e não D-2..D0 como diz o comentário
+dele.
 
-Decisão: **fazer valer no ML**, e só nele.
-- `--days` passou a ter default `None`. Sem `--days`, nada muda: o incremental
-  usa a janela do conector, e o backfill continua em 3.
-- `--source ml --mode incremental --days N` agora regrava D-N-1..D-1, ou até D0
-  com `--incluir-hoje`.
-- Nas outras fontes, o incremental continua ignorando `--days` e agora registra
-  um aviso no log.
-- Remover o argumento quebraria o `dia_ml` de produção (argparse sai com exit 2).
-  Fazer valer em todas as fontes mudaria janelas que ninguém pediu.
+Decisão (revisão R141): **o comportamento não muda; o descarte deixa de ser
+silencioso.**
+- `--days` passou a ter default `None`, para distinguir "não veio" de "veio 3".
+  Sem `--days`, nada muda: o incremental usa a janela do conector, e o backfill
+  continua em 3 (`BACKFILL_DAYS_PADRAO`).
+- Com `--mode incremental --days N`, em qualquer fonte, o valor não chega ao
+  conector e o log registra `--days N ignorado no modo incremental`.
+- Quem precisa de uma janela por `--days` usa `--mode backfill`, como o
+  reprocesso semanal (§3.1).
 
-**Efeito em produção:** o `dia_ml` de hora em hora passa a regravar D-2..D0, em
-vez de D-3..D0. A maturação não depende dele: o `daily_ml` (D-4..D-1) e o
-reprocesso semanal cobrem o passado.
+**Barreira de janela exata (`WindowViolation`):** com `--date-from/--date-to`,
+uma linha fora da janela pedida bloqueia a carga antes do upsert **só no ML**.
+Nas demais fontes (TikTok, `shopee-stats`), a mesma situação gera apenas um aviso
+no log, e a carga segue como antes.
 
 ## 4. O rótulo "em maturação" (API e tela)
 
@@ -194,7 +196,7 @@ fora.
 |---|---|
 | Dono do número | Mário |
 | Carga diária | `daily_ml`, D-4..D-1 |
-| Hora a hora | `dia_ml --days 2 --incluir-hoje`, D-2..D0 (desde a T-0077) |
+| Hora a hora | `dia_ml --days 2 --incluir-hoje`: o `--days` é ignorado, cobre D-3..D0 (§3.3) |
 | Reprocesso | semanal, 35 dias (`ML_WEEKLY_REPROCESS_STEPS`; falta registrar e agendar) |
 | Reparo | único, 01/07..hoje−5 (`refresh_ml_daily_contract`) |
 | Rótulo | calculado a cada requisição |
