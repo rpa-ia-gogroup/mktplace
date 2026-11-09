@@ -57,6 +57,8 @@ export default function KpiTile({
   serie,
   granularidade = "day",
   ativo,
+  acaoFalada,
+  folgaRodape,
 }: {
   rotulo: ReactNode;
   valor: ReactNode;
@@ -102,12 +104,21 @@ export default function KpiTile({
    * e anel quando ativo. Sem a prop, nada muda.
    */
   ativo?: boolean;
+  /**
+   * Com `identidade` + `onAbrir`: o que o clique faz, para o leitor de tela.
+   * Padrao "abrir detalhe" (abre dialogo, aria-haspopup). Outro texto (ex.:
+   * "ver na fila") = acao na propria pagina, sem aria-haspopup.
+   */
+  acaoFalada?: string;
+  /** Reserva uma linha no rodape para um link posto por fora do botao (ex.: "por marca ->"). */
+  folgaRodape?: boolean;
 }) {
   if (variante === "gerencial" && identidade) {
     return (
       <KpiCardIdentidade
         rotulo={rotulo} valor={valor} comparacao={comparacao} contexto={contexto} tom={tom} ajuda={ajuda}
-        icone={icone} delta={delta} onAbrir={onAbrir} identidade={identidade} antes={antes} serie={serie} granularidade={granularidade}
+        icone={icone} delta={delta} onAbrir={onAbrir} identidade={identidade} antes={antes} serie={serie} granularidade={granularidade} folgaRodape={folgaRodape}
+        acaoFalada={acaoFalada}
         ativo={ativo}
       />
     );
@@ -208,11 +219,14 @@ function KpiGerencial({
  * grafico. Nada inventado.
  */
 function KpiCardIdentidade({
-  rotulo, valor, comparacao, contexto, tom, ajuda, icone: Icone, delta, onAbrir, identidade, antes, serie, granularidade, ativo,
+  rotulo, valor, comparacao, contexto, tom, ajuda, icone: Icone, delta, onAbrir, identidade, antes, serie, granularidade,
+  ativo,
+  acaoFalada = "abrir detalhe",
+  folgaRodape = false,
 }: {
   rotulo: ReactNode; valor: ReactNode; comparacao?: ReactNode; contexto?: string; tom: Tom; ajuda?: ReactNode;
   icone?: LucideIcon; delta?: ReactNode; onAbrir?: () => void; identidade: IdentidadeKpi; antes?: ReactNode;
-  serie?: number[]; granularidade: "hour" | "day" | "week" | "month"; ativo?: boolean;
+  serie?: number[]; granularidade: "hour" | "day" | "week" | "month"; acaoFalada?: string; folgaRodape?: boolean; ativo?: boolean;
 }) {
   const filtra = ativo !== undefined;
   const { tinta, borda, ladrilho } = IDENTIDADE[identidade];
@@ -223,7 +237,7 @@ function KpiCardIdentidade({
         <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
           {rotulo}
           {ajuda}
-          {onAbrir && <span className="sr-only">{filtra ? " (mostrar na tabela)" : " (abrir detalhe)"}</span>}
+          {onAbrir && <span className="sr-only">{filtra ? " (mostrar na tabela)" : ` (${acaoFalada})`}</span>}
         </span>
         {Icone && (
           <span
@@ -251,13 +265,13 @@ function KpiCardIdentidade({
       </span>
     </>
   );
-  const base = `w-full min-w-0 h-full text-left bg-surface border rounded-xl p-3.5 flex flex-col gap-1 ${borda}`;
+  const base = `w-full min-w-0 h-full text-left bg-surface border rounded-xl p-3.5 flex flex-col gap-1 ${borda}${folgaRodape ? " pb-11" : ""}`;
   if (onAbrir) {
     return (
       <button
         type="button"
         onClick={onAbrir}
-        aria-haspopup={filtra ? undefined : "dialog"}
+        aria-haspopup={!filtra && acaoFalada === "abrir detalhe" ? "dialog" : undefined}
         aria-pressed={filtra ? ativo : undefined}
         title={contexto}
         className={`card-hover group min-h-11 ${base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${ativo ? "ring-2 ring-accent" : ""}`}
