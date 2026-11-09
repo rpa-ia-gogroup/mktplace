@@ -205,7 +205,8 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // migracao vira "quem lembrar".
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas"]);
+  // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
+  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -224,6 +225,7 @@ const PAGINA_DA_ROTA: Record<string, string> = {
   "/financeiro": "app/financeiro/page.tsx",
   "/dre": "app/dre/page.tsx",
   "/metas": "app/metas/page.tsx",
+  "/cx": "app/cx/page.tsx",
 };
 
 // A propria fonte da paleta dos graficos (SVG precisa de cor resolvida).
@@ -300,6 +302,16 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
     "src/components/gerencial/EvolutionChart.tsx",
   ]) {
     assert.ok(gerencial.includes(esperado), `percurso nao alcancou ${esperado}`);
+  }
+  const cx = arvoreDaRota("app/cx/page.tsx");
+  for (const esperado of [
+    "app/cx/CxConteudo.tsx",
+    "app/cx/CxSite.tsx",
+    "src/components/KpiDrilldownDialog.tsx",
+    "src/components/gerencial/CxDrilldown.tsx",
+    "src/components/ui/Heroi.tsx",
+  ]) {
+    assert.ok(cx.includes(esperado), `percurso da /cx nao alcancou ${esperado}`);
   }
   const canais = arvoreDaRota("app/canais/page.tsx");
   assert.ok(canais.includes("src/components/AffiliateCostsPanel.tsx"));
