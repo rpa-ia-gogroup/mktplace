@@ -409,6 +409,20 @@ chart and the LDR by shop share the next row.
 - Series colour comes from position or channel identity, never status.
 - Every chart has a title and the period in its header.
 
+### Identidade Gerencial nas abas principais (IDENTIDADE-GERENCIAL)
+
+CX, Expedição e Full seguem o esqueleto da Gerencial (`app/page.tsx`), sem que a Gerencial mude:
+
+0. **Cabeçalho**: `PageHeader` (ícone da rota, título; frescor/período como chips em `meta`).
+1. **Herói** (`ui/Heroi`): UM número dominante (`text-3xl` bold, tabular), rótulo uppercase em cima, 1 linha de contexto, aviso de dado colado no número, `meio` para barra ou quebra por canal, selo de status à direita **só com regra de negócio**. Tom só na tinta do número, nunca no fundo.
+2. **Faixa de KPIs**: 3–5 `KpiTile variante="gerencial"` (vidro neutro, ladrilho de ícone, valor `text-2xl`; com `onAbrir` vira botão que abre o `KpiDrilldownDialog` único da página). Não repete o herói. 2 colunas no mobile.
+3. **"O que exige atenção agora"**: `ui/FilaAtencao` (selo Crítico/Atenção/Informativo) ou tabela curta quando cada linha tem valor.
+4. **Evolução | Onde** (7/12 | 5/12 a partir de `lg`). Sem série de verdade, o bloco de evolução não existe.
+5. **Detalhe**: a tabela principal da aba.
+6. **Mais detalhes** (`ui/MaisDetalhes`, fechado): indicadores secundários, qualidade do dado, frescor por fonte.
+
+Regras: cartão = rótulo · valor · no máximo 1 linha; ressalva no ⓘ; "x de y" fora da vista (`title` + `sr-only`); ausência é "—" com motivo; "Desatualizada" escrito e visível sem hover. `KpiTile` sem `variante` continua idêntico (faixa padrão).
+
 ## 6. Do's and Don'ts
 
 **Do**
