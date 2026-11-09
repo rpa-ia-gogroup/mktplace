@@ -21,6 +21,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo
+
 
 class EstoquePorCD(BaseModel):
     """Onde o estoque esta'. `location_id` e' o CD da Shopee."""
@@ -48,6 +50,11 @@ class ProdutoEstoque(BaseModel):
     full_stock_total: int
     location_count: int
     por_cd: list[EstoquePorCD] = Field(default_factory=list)
+    #: PR3: curva ABC do item (planilha "Sortimento Gobeaute"). None = sem
+    #: curva; `curva_motivo` diz por que (kit, sem_ponte, marca_fora) ou fica
+    #: None quando a planilha nao foi lida (`curva_meta.motivo`). Nunca "C" por falta.
+    curva: Optional[Curva] = None
+    curva_motivo: Optional[CurvaMotivo] = None
 
     #: Demanda OPERACIONAL: so' status com pagamento comprovado. `unpaid` fora.
     units_sold_28d: int
@@ -122,6 +129,8 @@ class EstoqueFullResponse(BaseModel):
     contas_cobertas: list[str]
     marcas_nao_cobertas: list[str]
     limitacoes: list[str]
+    #: PR3: estado da curva ABC nesta lista. None = resposta sem a anotacao.
+    curva_meta: Optional[CurvaMeta] = None
 
 
 class EstoqueFullUnavailableResponse(BaseModel):

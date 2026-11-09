@@ -51,7 +51,7 @@ from app.services import ml_full_stock_service as ml_stock_svc
 from app.services import full_impacto_service as impacto_svc
 from app.schemas.full_impacto import ImpactoRupturaResponse
 from app.services import full_curva_abc_service as curva_abc_svc
-from app.schemas.full_curva_abc import CurvaAbcResponse
+from app.schemas.full_curva_abc import CurvaAbcResponse, CurvaMeta
 from app.services.ml_fulfillment_service import (
     MLFulfillmentUnavailable,
     get_ml_fulfillment_block,
@@ -1031,7 +1031,7 @@ def shopee_fbs_estoque(
         raise HTTPException(422, ERRO_ML_FULL_ESTOQUE_DATA_FUTURA)
 
     try:
-        return fbs_stock_svc.get_estoque_full_block(
+        resp = fbs_stock_svc.get_estoque_full_block(
             _require_db(db),
             hoje=hoje,
             ref_date=ref_date,
@@ -1042,6 +1042,10 @@ def shopee_fbs_estoque(
             somente_acao=somente_acao,
             limite=limite,
         )
+        # PR3: curva ABC por produto (mesma leitura e cache do /full-curva-abc)
+        resp.curva_meta = CurvaMeta(**curva_abc_svc.anotar_curva(
+            resp.produtos, db, sku_de=lambda p: p.item_sku, kit_de=lambda p: p.is_kit))
+        return resp
     except fbs_stock_svc.FiltroInvalido as invalido:
         # Filtro fora da allowlist. AQUI o 422 e' correto: mudar a requisicao
         # resolve. A mensagem e' montada so' com constantes do servidor -- o
@@ -1124,7 +1128,7 @@ def ml_full_estoque(
         raise HTTPException(422, ERRO_ML_FULL_ESTOQUE_DATA_FUTURA)
 
     try:
-        return ml_stock_svc.get_ml_full_estoque_block(
+        resp = ml_stock_svc.get_ml_full_estoque_block(
             _require_db(db),
             hoje=hoje,
             brands=brands,
@@ -1132,6 +1136,9 @@ def ml_full_estoque(
             incluir_fora_do_full=incluir_fora_do_full,
             limite=limite,
         )
+        # PR3: curva ABC por inventario (SKU do anuncio-ancora)
+        resp.curva_meta = CurvaMeta(**curva_abc_svc.anotar_curva(resp.inventarios, db, sku_de=lambda i: i.sku))
+        return resp
     except ml_stock_svc.FiltroInvalido as invalido:
         # Mensagem so' com constantes: o valor recebido nao volta no corpo.
         raise HTTPException(422, invalido.mensagem_segura)
