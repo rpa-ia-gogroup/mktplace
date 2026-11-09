@@ -29,6 +29,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchShopeeFbs, ShopeeFbsError } from "@/lib/api-client";
+import { brandLabel } from "@/lib/filters/brands";
 import { MOTIVO_DESLIGADA } from "@/lib/shopee-fbs-flag";
 import {
   AVISO_COBERTURA,
@@ -249,9 +250,9 @@ function FullShopeeInner() {
           )}
           {dados && (
             <>
-              <span>Contas: {dados.meta.observed_accounts.join(", ") || SEM_DADO}</span>
+              <span>Contas: {dados.meta.observed_accounts.map(brandLabel).join(", ") || SEM_DADO}</span>
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium border bg-warn-soft text-warn-ink border-warn/40">
-                Cobertura parcial · fora da API: {dados.meta.brands_not_covered.join(", ")}
+                Cobertura parcial · fora da API: {dados.meta.brands_not_covered.map(brandLabel).join(", ")}
                 <InfoDica texto={AVISO_COBERTURA} />
               </span>
             </>

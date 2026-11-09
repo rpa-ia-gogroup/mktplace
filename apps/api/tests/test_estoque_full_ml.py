@@ -622,7 +622,7 @@ def test_marca_sem_full_lido_tem_disponivel_nulo():
     assert rit.tem_fotografia_no_dia is True
     assert rit.disponivel_full is None, "nenhum Full lido: ausencia, nao 0"
     assert rit.leitura.inventarios_sem_leitura == 1
-    assert any("rituaria" in m for m in r.indicadores.motivos_total_parcial)
+    assert any("RITUÁRIA" in m for m in r.indicadores.motivos_total_parcial)
 
 
 def test_marca_sem_fotografia_no_dia_e_ausencia():
@@ -635,7 +635,7 @@ def test_marca_sem_fotografia_no_dia_e_ausencia():
     assert kok.disponivel_full is None and kok.inventarios is None
     # O 7 de kokeshi da fotografia anterior NAO entra no total do dia.
     assert r.indicadores.disponivel_full == 570
-    assert any("kokeshi" in m for m in r.indicadores.motivos_total_parcial)
+    assert any("KOKESHI" in m for m in r.indicadores.motivos_total_parcial)
 
 
 def test_indicadores_do_escopo():
@@ -843,7 +843,7 @@ def test_marca_ausente_continua_ausencia_sem_estado():
     assert r.cobertura.marcas_sem_fotografia == ["kokeshi"]
     assert r.indicadores.total_parcial is True
     assert r.indicadores.motivos_total_parcial == [
-        "Sem fotografia no dia: kokeshi."]
+        "Sem fotografia no dia: KOKESHI."]
 
 
 def test_todas_sem_estoque_full_total_zero_nao_parcial():
@@ -868,7 +868,7 @@ def test_uma_ausente_e_outra_sem_estoque_e_parcial():
     assert r.cobertura.marcas_sem_fotografia == ["barbours"]
     assert r.indicadores.total_parcial is True
     assert r.indicadores.motivos_total_parcial == [
-        "Sem fotografia no dia: barbours."]
+        "Sem fotografia no dia: BARBOURS."]
     assert r.indicadores.disponivel_full == 200
 
     # So' sem estoque + ausente: o total e' o que foi medido, e PARCIAL.
@@ -876,7 +876,7 @@ def test_uma_ausente_e_outra_sem_estoque_e_parcial():
     assert r2.indicadores.disponivel_full == 0
     assert r2.indicadores.total_parcial is True
     assert r2.indicadores.motivos_total_parcial == [
-        "Sem fotografia no dia: barbours, rituaria."]
+        "Sem fotografia no dia: BARBOURS, RITUÁRIA."]
 
 
 def test_filtro_so_da_marca_sem_estoque_full():

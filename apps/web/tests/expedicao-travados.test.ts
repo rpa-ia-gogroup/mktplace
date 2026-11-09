@@ -258,6 +258,8 @@ test("consolidado por etapa: % sobre o TOTAL da lista, da maior para a menor, 'S
   assert.equal(itens[2].rotulo, "Sem etapa");
   assert.equal(pctDaEtapa(1420, 1465), "96,9%");
   assert.equal(pctDaEtapa(1465, 1465), "100%");
+  // Casa decimal so' quando ela existe: 674 de 688 (97,97%) e' "98%", nunca "98,0%".
+  assert.equal(pctDaEtapa(674, 688), "98%");
   // Producao 09/11 (TikTok, vence ter 10/11): 20.505 e 7 de 20.512.
   assert.equal(pctDaEtapa(20505, 20512), ">99,9%");
   assert.equal(pctDaEtapa(7, 20512), "<0,1%");

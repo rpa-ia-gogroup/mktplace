@@ -75,6 +75,8 @@ from typing import Optional, Sequence
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services.gold_service import BRAND_LABELS
+
 INVENTORY_TABLE = "marts.fact_ml_full_stock_inventory_daily"
 STATUS_TABLE = "marts.fact_ml_full_stock_status_daily"
 BRAND_TABLE = "marts.fact_ml_full_stock_brand_daily"
@@ -688,16 +690,20 @@ def get_ml_full_estoque_block(
         return sum(c["por_classificacao"].get(classe, 0)
                    for c in contagens.values())
 
+    # Texto que vai para a tela: o nome de exibicao da marca, nunca o slug.
+    def rotulos(ms: list[str]) -> str:
+        return ", ".join(BRAND_LABELS.get(m, m.title()) for m in ms)
+
     motivos_parcial = []
     if sem_foto:
         motivos_parcial.append(
-            "Sem fotografia no dia: " + ", ".join(sem_foto) + ".")
+            "Sem fotografia no dia: " + rotulos(sem_foto) + ".")
     # Sem estoque Full tem disponivel 0 medido: nao e' "sem Full lido".
     sem_full_lido = [m for m in com_foto
                      if qtd_marca(m, "disponivel_full") is None]
     if sem_full_lido:
         motivos_parcial.append(
-            "Sem inventário Full lido: " + ", ".join(sem_full_lido) + ".")
+            "Sem inventário Full lido: " + rotulos(sem_full_lido) + ".")
     full_sem_leitura = total("full_sem_leitura")
     if full_sem_leitura:
         motivos_parcial.append(
