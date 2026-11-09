@@ -963,5 +963,6 @@ test("periodo da Gerencial: 7, 30 e 90 dias fechados ate' ontem viram a janela d
 test("Gerencial: card Reembolso com o % no numero e o R$ embaixo, como na /cx", () => {
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /card\("reembolso", SPAN_BASE, r\.reembolsoPct \?\? "—", r\.reembolsado !== "—" \?/);
-  assert.match(resumo, /\{r\.reembolsado\} reembolsado/);
+  assert.match(resumo, /`\$\{r\.reembolsado\} reembolsado`/);
+  assert.doesNotMatch(resumo, /whitespace-nowrap">\{r\.reembolsado\}/, "sem nowrap: o texto quebra em vez de passar por baixo do grafico");
 });
