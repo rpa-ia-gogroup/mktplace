@@ -276,7 +276,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
       />
 
       {/* 2. Faixa de KPIs: quanto custa (por canal, R$ nunca somado) e quem para a venda */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CANAIS.map((canal) => {
           const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
           return (
