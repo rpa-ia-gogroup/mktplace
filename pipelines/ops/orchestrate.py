@@ -91,6 +91,7 @@ Uso:
     python -m pipelines.ops.orchestrate --pipeline full_daily
     python -m pipelines.ops.orchestrate --pipeline shopee_manual_refresh
     python -m pipelines.ops.orchestrate --pipeline tiktok_weekly_reprocess   # T-0074, semanal
+    python -m pipelines.ops.orchestrate --pipeline ml_weekly_reprocess       # T-0077, semanal
 """
 from __future__ import annotations
 
@@ -679,11 +680,6 @@ TIKTOK_WEEKLY_REPROCESS_STEP_TIMEOUT_BUDGET_SECONDS = sum(
 # (`refresh_ml_daily_contract`) e' a medicao: se ela passar de ~600 s, este
 # passo deve ser dividido (ver docs/ml_gmv_maturacao.md). Um passo so' porque
 # os argumentos do Step sao estaticos: `--days` e' a unica forma relativa a hoje.
-#
-# NAO registrado em PIPELINES nesta entrega: o inventario de pipelines e'
-# conferido literalmente por testes fora do escopo travado da T-0077
-# (test_ops_s3_wiring, test_ue2c_automacao_afiliados). Registrar e' uma linha:
-#   PIPELINES["ml_weekly_reprocess"] = ML_WEEKLY_REPROCESS_STEPS
 # ---------------------------------------------------------------------------
 
 #: Largura pedida ao `daily_performance --mode backfill` (D-36..D-1).
@@ -695,6 +691,8 @@ ML_WEEKLY_REPROCESS_STEPS: tuple[Step, ...] = (
           "--days", str(ML_WEEKLY_REPROCESS_DAYS)),
          timeout_seconds=900, preflight_source="ml_daily", critical=True),
 )
+
+PIPELINES["ml_weekly_reprocess"] = ML_WEEKLY_REPROCESS_STEPS
 
 ML_WEEKLY_REPROCESS_STEP_TIMEOUT_BUDGET_SECONDS = sum(
     step.timeout_seconds for step in ML_WEEKLY_REPROCESS_STEPS)

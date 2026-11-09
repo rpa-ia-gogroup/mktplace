@@ -599,7 +599,9 @@ def test_nenhum_pipeline_novo():
     # que UE2-C nao criou pipeline — nao que o inventario seja eterno.
     # OPS-AUTOMATION-2 acrescentou `daily_chain` (composicao, sem step novo).
     # T-0074 acrescentou `tiktok_weekly_reprocess` (reprocesso semanal TikTok).
-    assert sorted(orch.PIPELINES) == ["daily_chain", "full_daily", "pma_refresh",
+    # T-0077 acrescentou `ml_weekly_reprocess` (reprocesso semanal ML).
+    assert sorted(orch.PIPELINES) == ["daily_chain", "full_daily",
+                                      "ml_weekly_reprocess", "pma_refresh",
                                       "serving_refresh",
                                       "shopee_manual_refresh",
                                       "tiktok_weekly_reprocess"]
