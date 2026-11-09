@@ -98,6 +98,15 @@ export default function TopProdutosComparar({
       </div>
 
       {/* Abaixo de sm: nome na largura toda; os % dos canais embaixo, com selo e Kit na mesma linha. */}
+      {/* Legenda: no celular o canal nao pode ficar so' na cor do ponto. */}
+      <p className="flex flex-wrap gap-x-3 text-xs text-ink-muted sm:hidden" aria-hidden="true">
+        {canais.map((c) => (
+          <span key={c} className="inline-flex items-center gap-1">
+            <span className={`h-2 w-2 rounded-full ${CHANNEL_DOT[c]}`} />
+            {CANAL_CURTO[c]}
+          </span>
+        ))}
+      </p>
       <ul className="flex flex-col sm:hidden" aria-label="Produtos da marca com a fatia em cada canal">
         {visiveis.map((p) => (
           <ItemMovel key={p.chave} p={p} canais={canais} abrir={abrir} />
@@ -194,6 +203,7 @@ function ItemMovel({
               return (
                 <span key={c} className="inline-flex min-h-11 items-center gap-1 px-0.5 text-sm text-ink-faint" title={`Sem venda ${noCanal(c)} no período`}>
                   {rotulo}
+                  <span className="sr-only">{CANAL_CURTO[c]}:</span>
                   <span aria-hidden="true">—</span>
                   <span className="sr-only">sem venda {noCanal(c)} no período</span>
                 </span>
@@ -209,6 +219,7 @@ function ItemMovel({
                 className="inline-flex min-h-11 items-center gap-1 rounded-lg px-0.5 hover:bg-accent-soft/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 {rotulo}
+                <span className="sr-only">{CANAL_CURTO[c]}:</span>
                 <span className={`tabular-nums text-sm ${f === maior ? "font-semibold text-ink" : "text-ink-muted"}`}>{fmtFatia(f)}</span>
               </button>
             );
