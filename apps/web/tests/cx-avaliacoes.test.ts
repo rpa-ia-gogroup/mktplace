@@ -79,9 +79,9 @@ test("url so' leva a marca; payload sem listas e' invalido", async () => {
   assert.deepEqual(await carregarAvaliacoes({ marca: null }, falso, ""), { ok: false, motivo: "A API respondeu 503." });
 });
 
-test("aba CX: avaliacoes entre 'Atendimento por loja' e o CX do site, nos tres estados", () => {
+test("aba CX: avaliacoes depois de 'Atendimento por loja', nos tres estados", () => {
   const src = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf-8");
-  assert.match(src, /<AvaliacoesProduto filtros=\{filtros\} \/>\s*<CxSite filtros=\{filtros\} \/>/);
+  assert.match(src, /const avaliacoes = <AvaliacoesProduto filtros=\{filtros\} \/>;/);
   const corpo = src.slice(src.indexOf("function Corpo"));
-  assert.ok(corpo.indexOf("<AtendimentoPorLoja") < corpo.indexOf("{site}"));
+  assert.ok(corpo.indexOf("<AtendimentoPorLoja") < corpo.indexOf("{avaliacoes}"));
 });

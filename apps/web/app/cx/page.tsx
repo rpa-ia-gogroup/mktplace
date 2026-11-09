@@ -5,7 +5,7 @@
  * CX-IDENTIDADE (08/11/2026): mesma identidade da Gerencial. Cabecalho com
  * chips → heroi (taxa de resposta) → faixa de KPIs → "O que exige atencao
  * agora" → por que (Pareto | problemas por marca) → atendimento por loja →
- * CX do site → Mais detalhes.
+ * avaliacoes de produto → Mais detalhes. (O CX do site saiu em 09/11.)
  *
  * O servidor so' le os filtros da URL; o cabecalho (cujos chips dependem da
  * resposta) e os dados vivem em `CxConteudo`, buscados pelo navegador (a API
