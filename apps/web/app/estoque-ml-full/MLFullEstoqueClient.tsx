@@ -270,7 +270,7 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
               <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
                 <th scope="col" className="px-4 py-3">Marca</th>
                 <th scope="col" className="px-4 py-3">Identificação</th>
-                {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
+                {comCurva && <th scope="col" className="hidden px-4 py-3 sm:table-cell">Curva</th>}
                 <th scope="col" className="px-4 py-3 text-right">
                   <span className="inline-flex items-center gap-1">
                     Disponível
@@ -307,10 +307,17 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                   <td className="px-4 py-3 whitespace-nowrap text-ink-muted">{tituloMarca(i.brand)}</td>
                   <td className="px-4 py-3 min-w-[14rem] max-w-xs">
                     {/* Rotulo do anuncio-ancora: atributo da linha, nunca soma estoque. */}
+                    {/* Celular: a curva na 1a dobra, antes do texto (a coluna fica escondida). */}
                     {ident.identificado ? (
-                      <span className="block text-ink break-words">{ident.texto}</span>
+                      <span className="block text-ink break-words">
+                        {comCurva && <span className="mr-1.5 inline-flex align-middle sm:hidden"><CelulaCurva item={i} /></span>}
+                        {ident.texto}
+                      </span>
                     ) : (
-                      <span className="block text-ink-muted italic">{ident.texto}</span>
+                      <span className="block text-ink-muted italic">
+                        {comCurva && <span className="mr-1.5 inline-flex align-middle not-italic sm:hidden"><CelulaCurva item={i} /></span>}
+                        {ident.texto}
+                      </span>
                     )}
                     {ident.avisoVariacao && (
                       <span className="block text-xs text-ink-muted">{ident.avisoVariacao}</span>
@@ -322,7 +329,7 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                     )}
                   </td>
                   {comCurva && (
-                    <td className="px-4 py-3">
+                    <td className="hidden px-4 py-3 sm:table-cell">
                       <CelulaCurva item={i} />
                     </td>
                   )}
@@ -741,7 +748,7 @@ export default function MLFullEstoqueClient() {
             <>
               {comCurva && (
                 <div className="flex flex-col gap-0.5 px-1">
-                  <p className="text-sm font-medium text-ink">{resumoAcao(lista, exigeAcaoML)}</p>
+                  <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios, exigeAcaoML)}</p>
                   {avisoCoberturaCurva(metaCurva) && (
                     <p className="text-xs text-ink-muted">{avisoCoberturaCurva(metaCurva)}</p>
                   )}

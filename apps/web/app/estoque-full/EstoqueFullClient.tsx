@@ -646,7 +646,8 @@ export default function EstoqueFullClient() {
                 <>
                   {comCurva && (
                     <p className="text-sm font-medium text-ink px-1">
-                      {resumoAcao(lista, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
+                      {/* Panorama: sem o filtro de curva (os da API ja' valem na lista). */}
+                      {resumoAcao(payload.produtos, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
                     </p>
                   )}
                   <p className="text-xs text-ink-faint px-1">

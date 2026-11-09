@@ -68,13 +68,18 @@ test("as duas abas: coluna, filtro e ordem so' com a curva lida; resumo de açã
   for (const f of ["app/estoque-full/EstoqueFullClient.tsx", "app/estoque-ml-full/MLFullEstoqueClient.tsx"]) {
     const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     assert.match(src, /const comCurva = curvaNaTela\(metaCurva\)/, f);
-    assert.match(src, /\{comCurva && <th scope="col" className="px-4 py-3">Curva<\/th>\}/, f);
+    assert.match(src, /\{comCurva && <th scope="col" className="(hidden )?px-4 py-3( sm:table-cell)?">Curva<\/th>\}/, f);
     assert.match(src, /\{comCurva && <FiltroCurvaChips/, f);
     assert.match(src, /ordenarPorCurva\(/, f);
-    assert.match(src, /resumoAcao\(lista,/, f);
+    // o resumo e' o panorama: sem o filtro de curva
+    assert.match(src, /resumoAcao\(payload\.(produtos|inventarios),/, f);
+    assert.doesNotMatch(src, /resumoAcao\(lista,/, f);
     assert.match(src, /avisoCurvaIndisponivel\(metaCurva\)/, f);
     assert.match(src, /setCurvas\(\[\]\)/, `${f}: Limpar filtros limpa a curva`);
   }
   const ml = readFileSync(new URL("../app/estoque-ml-full/MLFullEstoqueClient.tsx", import.meta.url), "utf8");
   assert.match(ml, /avisoCoberturaCurva\(metaCurva\)/);
+  // ML abaixo de sm: chip na linha 1 da Identificacao e coluna escondida
+  assert.match(ml, /className="hidden px-4 py-3 sm:table-cell">Curva<\/th>/);
+  assert.equal((ml.match(/sm:hidden"><CelulaCurva item=\{i\} \/>/g) ?? []).length, 2);
 });
