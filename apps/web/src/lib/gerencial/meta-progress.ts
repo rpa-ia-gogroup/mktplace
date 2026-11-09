@@ -211,6 +211,17 @@ function ontem(hoje: string): string {
   return t.toISOString().slice(0, 10);
 }
 
+/**
+ * Dias do mes ja' contados na projecao: o ultimo dia com venda (ou ontem, sem
+ * a serie diaria). Hoje, ainda incompleto, nunca entra. Mes encerrado = todos.
+ */
+export function diasComDadoNoMes(mes: string, hoje: string, ultimoDia: string | null): number {
+  const n = diasNoMes(mes);
+  if (hoje > fimDoMes(mes)) return n;
+  const referencia = ultimoDia && ultimoDia.slice(0, 7) === mes ? ultimoDia : ontem(hoje);
+  return referencia.slice(0, 7) === mes ? Math.min(diaDe(referencia), n) : 0;
+}
+
 export function progressoMeta(args: {
   meta: number | null;
   realizado: number | null;
@@ -231,13 +242,7 @@ export function progressoMeta(args: {
   const n = diasNoMes(mes);
   const encerrado = hoje > fimDoMes(mes);
 
-  let diasComDado: number;
-  if (encerrado) {
-    diasComDado = n;
-  } else {
-    const referencia = args.ultimoDia && args.ultimoDia.slice(0, 7) === mes ? args.ultimoDia : ontem(hoje);
-    diasComDado = referencia.slice(0, 7) === mes ? Math.min(diaDe(referencia), n) : 0;
-  }
+  const diasComDado = diasComDadoNoMes(mes, hoje, args.ultimoDia);
   const diasRestantes = encerrado ? 0 : n - diasComDado;
   // Ritmo contra o PLANO: quem vendeu o que a curva esperava ate' aqui termina
   // o mes na meta. No linear, fracao = dias/n e a projecao e' a de sempre.

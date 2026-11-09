@@ -8,6 +8,7 @@ import {
   avisoQueAfetaOGmv,
   celulasDoEscopo,
   diaDaMeta,
+  diasComDadoNoMes,
   diasNoMes,
   mesDaMeta,
   metaDoEscopo,
@@ -216,6 +217,16 @@ test("porDiaNecessario pela curva = falta / peso dos dias restantes (Nova meta d
   assert.ok(Math.abs(metaDiaNormalDoEscopo(celulas, "2026-11") - 1_000_000 / 39.26) < 1e-6);
 });
 
+
+test("diasComDadoNoMes: hoje incompleto nunca conta; sem serie, ontem; mes fechado, todos", () => {
+  // Tendencia do mes por marca usa o mesmo corte do heroi.
+  assert.equal(diasComDadoNoMes("2026-11", "2026-11-09", "2026-11-08"), 8);
+  assert.equal(diasComDadoNoMes("2026-11", "2026-11-09", null), 8);
+  assert.equal(diasComDadoNoMes("2026-11", "2026-11-01", null), 0);
+  assert.equal(diasComDadoNoMes("2026-10", "2026-11-09", "2026-10-20"), 31);
+  const p = progressoMeta({ meta: 1, realizado: 1, mes: "2026-11", hoje: "2026-11-09", ultimoDia: null })!;
+  assert.equal(p.diasComDado, 8);
+});
 
 test("fullDaMarca: divide cada canal pela proporcao; TikTok e' sem Full; canal sem proporcao e' sem dado", async () => {
   const { fullDaMarca } = await import("../src/lib/gerencial/divisao-full.ts");

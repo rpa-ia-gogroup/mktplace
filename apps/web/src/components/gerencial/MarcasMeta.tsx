@@ -50,6 +50,8 @@ export interface MetaDaMarca {
   status: StatusMeta | StatusDia;
   /** Canais que entram no realizado (os que tem meta). */
   canais: Marketplace[];
+  /** Projecao do mes pelo ritmo (so' a meta mensal tem). */
+  projecao?: number | null;
 }
 
 interface Props {
@@ -65,6 +67,8 @@ interface Props {
   brandHref: (brand: string) => string;
   /** Com "Hoje": a tendencia de fechamento de cada marca, aberta por canal. */
   tendenciaDoDia?: Record<string, MarcaTendencia> | null;
+  /** Com o mes atual: o fechamento projetado de cada marca (R$), o mesmo metodo do heroi. */
+  tendenciaDoMes?: Record<string, number> | null;
   /** Proporcao Full por marca e canal; ausente = uma barra so', sem divisao. */
   fullPorMarca?: Record<string, { ml?: number | null; shopee?: number | null }> | null;
 }
@@ -79,6 +83,7 @@ export default function MarcasMeta({
   error,
   brandHref,
   tendenciaDoDia: tendenciaDaPagina = null,
+  tendenciaDoMes: tendenciaDoMesDaPagina = null,
   fullPorMarca = null,
 }: Props) {
   // Filtro de canal SO' DESTE CARD: a pagina continua no filtro global.
@@ -89,6 +94,7 @@ export default function MarcasMeta({
   // Meta e tendencia valem para o conjunto de canais: com um canal so', saem.
   const progressoPorMarca = filtrado ? {} : progressoDaPagina;
   const tendenciaDoDia = filtrado ? null : tendenciaDaPagina;
+  const tendenciaDoMes = filtrado ? null : tendenciaDoMesDaPagina;
 
   // Marca com meta e sem linha em `/brands` (nada vendido no recorte) entra
   // com tudo zerado: mostrar 0% da meta e' o ponto, nao esconder a marca.
@@ -189,6 +195,7 @@ export default function MarcasMeta({
             const d = divisao(b);
             const comFull = d ? soma(d.full) + soma(d.semFull) : 0;
             const pctFull = d && comFull > 0 ? soma(d.full) / comFull : null;
+            const tende = tendenciaDoMes?.[b.brand] ?? null;
             return (
               <li key={b.brand} className="border-t border-line first:border-t-0">
                 <Link
@@ -236,7 +243,12 @@ export default function MarcasMeta({
                   <span className={`flex flex-col items-end text-right tabular-nums ${d ? "col-start-2 row-span-2 row-start-1" : ""}`}>
                     <span className="text-sm font-semibold text-ink">{fmtCompacto(valor(b))}</span>
                     {pctFull != null && <span className="text-xs text-ink-muted">{Math.round(pctFull * 100)}% Full</span>}
-                    {p ? (
+                    {/* Com a tendencia do mes, a cor do status (projetado) vai para ela. */}
+                    {p && tende != null ? (
+                      <span className="text-xs text-ink-muted">
+                        {Math.round(p.atingimento * 100)}% {rotuloMeta}
+                      </span>
+                    ) : p ? (
                       <span className={`rounded px-1.5 text-xs font-semibold ${CHIP[p.status]}`}>
                         {Math.round(p.atingimento * 100)}% {rotuloMeta}
                       </span>
@@ -249,6 +261,22 @@ export default function MarcasMeta({
                     <TendenciaDoDia
                       t={tendenciaDoDia?.[b.brand] ? tendenciaNosCanais(tendenciaDoDia[b.brand], canaisDaBarra(b)) : null}
                     />
+                    {tende != null && (
+                      <span
+                        className="flex flex-wrap items-center justify-end gap-x-1 text-xs text-ink-muted"
+                        title={`Pelo ritmo dos dias com dado até ontem${p ? ", na curva da meta (o mesmo cálculo do total)" : ""}.`}
+                      >
+                        <span>
+                          tende a <b className="font-semibold text-ink">{fmtCompacto(tende)}</b>
+                          {p && " ·"}
+                        </span>
+                        {p && (
+                          <span className={`rounded px-1.5 font-semibold ${CHIP[p.status]}`}>
+                            {Math.round((tende / p.meta) * 100)}% da meta
+                          </span>
+                        )}
+                      </span>
+                    )}
                   </span>
                 </Link>
               </li>
