@@ -95,16 +95,22 @@ export function useCategoriaNaUrl(validas: readonly string[]) {
  * Depois do clique no card: rola ate' o chip (abaixo da barra fixa de filtros)
  * e poe o foco nele. So' quando o clique pediu (`pedido`), nunca ao abrir a URL.
  */
-export function useRolarAteChip(chip: RefObject<HTMLButtonElement | null>, ativa: string | null, pronto: boolean) {
+export function useRolarAteChip(
+  alvo: RefObject<HTMLElement | null>, ativa: string | null, pronto: boolean,
+  /** Quem recebe o foco, se nao for o proprio alvo (ex.: o chip de Classificação marcado). */
+  focar?: () => HTMLElement | null,
+) {
   const pedido = useRef(false);
+  const focarRef = useRef(focar);
+  focarRef.current = focar;
   useEffect(() => {
-    if (!pedido.current || !ativa || !pronto || !chip.current) return;
+    if (!pedido.current || !ativa || !pronto || !alvo.current) return;
     pedido.current = false;
     const barra = document.querySelector(".tc-barra-vidro");
-    chip.current.style.scrollMarginTop = `${(barra?.getBoundingClientRect().height ?? 0) + 16}px`;
+    alvo.current.style.scrollMarginTop = `${(barra?.getBoundingClientRect().height ?? 0) + 16}px`;
     const suave = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    chip.current.scrollIntoView({ block: "start", behavior: suave ? "smooth" : "auto" });
-    chip.current.focus({ preventScroll: true });
-  }, [ativa, pronto, chip]);
+    alvo.current.scrollIntoView({ block: "start", behavior: suave ? "smooth" : "auto" });
+    (focarRef.current?.() ?? alvo.current).focus({ preventScroll: true });
+  }, [ativa, pronto, alvo]);
   return pedido;
 }

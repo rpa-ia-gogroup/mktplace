@@ -86,7 +86,7 @@ import {
   type ProdutoEstoque,
 } from "@/lib/estoque-full";
 import { brandLabel } from "@/lib/filters/brands";
-import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, textoChip } from "@/lib/estoque-categorias";
+import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, classeDaCategoria, textoChip } from "@/lib/estoque-categorias";
 
 const CHAVES_CATEGORIA = CATEGORIAS_SHOPEE.map((c) => c.chave);
 
@@ -358,19 +358,38 @@ export default function EstoqueFullClient() {
         : [...f.brands, m],
     }));
 
-  const alternarClasse = (c: Classificacao) =>
-    setFiltros((f) => ({
-      ...f,
-      classificacoes: f.classificacoes.includes(c)
-        ? f.classificacoes.filter((x) => x !== c)
-        : [...f.classificacoes, c],
-    }));
-
   // CARDS-CLICAVEIS: a categoria do card vive na URL e corta a tabela da aba.
   const [chaveCategoria, setCategoria] = useCategoriaNaUrl(CHAVES_CATEGORIA);
   const categoria = categoriaPorChave(CATEGORIAS_SHOPEE, chaveCategoria);
+  // Card com chip de Classificação equivalente: o chip e' o controle de verdade.
+  const classeDoCard = classeDaCategoria(chaveCategoria);
+  const alvoRef = useRef<HTMLElement | null>(null);
   const chipRef = useRef<HTMLButtonElement | null>(null);
-  const pedidoRolagem = useRolarAteChip(chipRef, chaveCategoria, !carregando && !!payload && queryCarregada === query);
+  const pedidoRolagem = useRolarAteChip(
+    alvoRef, chaveCategoria, !carregando && !!payload && queryCarregada === query,
+    () => (classeDoCard ? document.querySelector<HTMLElement>(`[data-classe="${classeDoCard}"]`) : chipRef.current),
+  );
+
+  // URL -> chip de Classificação (abrir o link, voltar do navegador): a categoria
+  // marca a classificação dela; ao sair, desmarca se ela ainda for a unica.
+  const categoriaAnterior = useRef<string | null>(null);
+  useEffect(() => {
+    const antes = classeDaCategoria(categoriaAnterior.current);
+    categoriaAnterior.current = chaveCategoria;
+    const agora = classeDaCategoria(chaveCategoria);
+    const so = (f: FiltrosEstoque, c: Classificacao) => f.classificacoes.length === 1 && f.classificacoes[0] === c;
+    if (agora) setFiltros((f) => (so(f, agora) ? f : { ...f, classificacoes: [agora] }));
+    else if (antes) setFiltros((f) => (so(f, antes) ? { ...f, classificacoes: [] } : f));
+  }, [chaveCategoria]);
+
+  const alternarClasse = (c: Classificacao) => {
+    const proximas = filtros.classificacoes.includes(c)
+      ? filtros.classificacoes.filter((x) => x !== c)
+      : [...filtros.classificacoes, c];
+    // Desmarcar (ou mudar) a classificação do card desfaz o card.
+    if (classeDoCard && !(proximas.length === 1 && proximas[0] === classeDoCard)) setCategoria(null);
+    setFiltros((f) => ({ ...f, classificacoes: proximas }));
+  };
 
   const limpar = () => {
     setBuscaDigitada("");
@@ -383,7 +402,8 @@ export default function EstoqueFullClient() {
   const escolherCategoria = (chave: string) => {
     if (chave === chaveCategoria) return setCategoria(null);
     setBuscaDigitada("");
-    setFiltros((f) => ({ ...FILTROS_VAZIOS, brands: f.brands }));
+    const classe = classeDaCategoria(chave);
+    setFiltros((f) => ({ ...FILTROS_VAZIOS, brands: f.brands, classificacoes: classe ? [classe] : [] }));
     setCurvas([]);
     pedidoRolagem.current = true;
     setCategoria(chave);
@@ -450,6 +470,7 @@ export default function EstoqueFullClient() {
           <button
             key={c}
             type="button"
+            data-classe={c}
             aria-pressed={filtros.classificacoes.includes(c)}
             onClick={() => alternarClasse(c)}
             className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
@@ -613,13 +634,14 @@ export default function EstoqueFullClient() {
                 /* Vazio POR FILTRO: os cartoes acima continuam de pe', porque o
                    dado existe. E' diferente de indisponivel. */
                 <section
+                  ref={(el) => { alvoRef.current = el; }}
                   role="status"
                   className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
                 >
                   <h3 className="text-base font-semibold text-ink">
                     Nenhum produto neste filtro
                   </h3>
-                  {categoria && (
+                  {categoria && !classeDoCard && (
                     <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
                   )}
                   {algumFiltro && (
@@ -634,19 +656,20 @@ export default function EstoqueFullClient() {
                 </section>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+                  <div ref={(el) => { alvoRef.current = el; }} className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
                     {comCurva && (
                       <p className="text-sm font-medium text-ink">
                         {/* Panorama: sem o filtro de curva (os da API ja' valem na lista). */}
                         {resumoAcao(payload.produtos, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
                       </p>
                     )}
-                    {categoria && (
+                    {/* So' para cards sem chip de Classificação (Exigem ação, Unidades). */}
+                    {categoria && !classeDoCard && (
                       <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
                     )}
                   </div>
                   <p className="text-xs text-ink-faint px-1">
-                    {categoria
+                    {categoria && !classeDoCard
                   ? `${fmtInt(lista.length)} na categoria · `
                   : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
                     {fmtInt(payload.produtos.length)} de{" "}

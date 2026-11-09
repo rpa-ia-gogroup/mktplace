@@ -6,7 +6,7 @@
  * do grupo, o criterio da categoria.
  */
 import { ordenarPorCurva, type ItemComCurva } from "./estoque-curva.ts";
-import { EXIGEM_ACAO, type ProdutoEstoque } from "./estoque-full.ts";
+import { EXIGEM_ACAO, type Classificacao, type ProdutoEstoque } from "./estoque-full.ts";
 import type { InventarioML } from "./ml-full-estoque.ts";
 
 export interface Categoria<T> {
@@ -64,6 +64,17 @@ export const CATEGORIAS_ML: Categoria<InventarioML>[] = [
     criterio: (i) => i.nao_disponivel, desc: true, unidades: (i) => i.nao_disponivel ?? 0,
   },
 ];
+
+/**
+ * Shopee: categorias que JA' existem como chip de Classificação. O card marca o
+ * chip (um controle de verdade, filtro da API) em vez de mostrar "Mostrando: …".
+ */
+const CLASSE_DA_CATEGORIA: Record<string, Classificacao> = {
+  ruptura: "RUPTURA_CANDIDATA", baixo: "BAIXO_CANDIDATO", excesso: "EXCESSO_CANDIDATO",
+  "sem-giro": "SEM_GIRO_CANDIDATO", suficiente: "SUFICIENTE", kits: "KIT_NAO_CONCILIADO",
+};
+export const classeDaCategoria = (chave: string | null | undefined): Classificacao | null =>
+  (chave && CLASSE_DA_CATEGORIA[chave]) || null;
 
 export function categoriaPorChave<T>(lista: readonly Categoria<T>[], chave: string | null | undefined): Categoria<T> | null {
   return lista.find((c) => c.chave === chave) ?? null;

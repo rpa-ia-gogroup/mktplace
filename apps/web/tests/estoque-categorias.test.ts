@@ -142,3 +142,19 @@ test("parcial: UM aviso no topo das abas; nenhum card repete o prefixo", () => {
   assert.match(kpi, /aria-pressed=\{filtra \? ativo : undefined\}/);
   assert.match(kpi, /aria-haspopup=\{filtra \? undefined : "dialog"\}/);
 });
+
+test("Shopee: card com chip de Classificação equivalente marca o chip e não mostra 'Mostrando'", async () => {
+  const { classeDaCategoria } = await import("../src/lib/estoque-categorias.ts");
+  assert.equal(classeDaCategoria("excesso"), "EXCESSO_CANDIDATO");
+  assert.equal(classeDaCategoria("ruptura"), "RUPTURA_CANDIDATA");
+  assert.equal(classeDaCategoria("kits"), "KIT_NAO_CONCILIADO");
+  for (const sem of ["exigem-acao", "unidades", "compartilhados", "sem-leitura", null]) assert.equal(classeDaCategoria(sem), null);
+  const sh = ler("app/estoque-full/EstoqueFullClient.tsx");
+  // o clique marca a classificação (filtro real da API) e o chip "Mostrando" so' existe sem ela
+  assert.match(sh, /classificacoes: classe \? \[classe\] : \[\]/);
+  assert.equal((sh.match(/categoria && !classeDoCard && \(\s*<ChipCategoria/g) ?? []).length, 2);
+  // desmarcar a classificação do card desfaz o card; URL -> chip ao abrir/voltar
+  assert.match(sh, /if \(classeDoCard && !\(proximas\.length === 1 && proximas\[0\] === classeDoCard\)\) setCategoria\(null\)/);
+  assert.match(sh, /if \(agora\) setFiltros/);
+  assert.match(sh, /data-classe=\{c\}/);
+});
