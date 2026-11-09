@@ -176,11 +176,15 @@ export function textoSafra(inicio: string, fim: string): string {
   return inicio.slice(0, 7) === fim.slice(0, 7) ? `safra ${m(fim)}/${ano}` : `safras ${m(inicio)} a ${m(fim)}/${ano}`;
 }
 
-/** Selo de frescor de um bloco: carga parada vira tom critico, nunca some. */
-export function seloFrescor(nome: string, b: BlocoBase): { texto: string; tom: "neutro" | "critico"; title: string } {
+/**
+ * Frescor de um bloco, para o ⓘ do card (SITE-SEM-CHIPS, 09/11): a hora da
+ * carga e a fonte. Carga parada (`parada`) tambem vira o selo "Desatualizado"
+ * no proprio card: nunca some.
+ */
+export function frescorDoBloco(b: BlocoBase): { texto: string; parada: boolean } {
   const quando = formatarInstante(b.atualizado_em ?? null);
-  if (b.aviso_frescor) return { texto: `${nome}: carga parada`, tom: "critico", title: `${b.aviso_frescor} Fonte: ${b.fonte}` };
-  return { texto: quando ? `${nome}: ${quando}` : `${nome}: sem data de carga`, tom: "neutro", title: `Fonte: ${b.fonte}` };
+  if (b.aviso_frescor) return { texto: `${b.aviso_frescor} Fonte: ${b.fonte}.`, parada: true };
+  return { texto: `${quando ? `Atualizado em ${quando}` : "Sem data de carga"}. Fonte: ${b.fonte}.`, parada: false };
 }
 
 // ---------------------------------------------------------------------------

@@ -880,6 +880,10 @@ export interface ResumoCx {
   semChat: string[];
   /** Cancelamento contra a janela anterior, nas marcas com historico; null = sem historico. */
   cancelamentoDelta: DeltaCx | null;
+  /** O mesmo delta em numero (p.p.), para a pilula do card; null = sem historico. */
+  cancelamentoDeltaPp: number | null;
+  /** Cancelamento da janela anterior ("2,5%"), nas marcas com historico; null = sem historico. */
+  cancelamentoAntes: string | null;
   /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
   semHistoricoCancelamento: string[];
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
@@ -1043,6 +1047,8 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
     semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
     cancelamentoDelta: delta,
+    cancelamentoDeltaPp: delta && cancAtual != null && cancAnt != null ? cancAtual - cancAnt : null,
+    cancelamentoAntes: delta ? pct(cancAnt) : null,
     semHistoricoCancelamento,
     cancelamentoBase: delta && semHistoricoCancelamento.length ? { anterior: pct(cancAnt), atual: pct(cancAtual) } : null,
     totais,

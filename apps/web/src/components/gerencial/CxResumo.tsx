@@ -18,10 +18,11 @@
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { MessageCircle } from "lucide-react";
+import { Ban, MessageCircle, MessagesSquare, Repeat2, Undo2, type LucideIcon } from "lucide-react";
 
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
+import DeltaBadge from "@/components/ui/DeltaBadge";
+import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
@@ -34,7 +35,6 @@ import {
   carregarCxShopee,
   hrefCx,
   resumoCxGerencial,
-  type DeltaCx,
   type IndicadorCx,
   type ResultadoCx,
   type ResumoCx,
@@ -47,13 +47,23 @@ const SEM_HISTORICO_CHAT = "Sem comparação ainda: a coleta do chat começou em
 const SEM_HISTORICO_DEVOLUCAO = "Sem comparação ainda: as devoluções são coletadas desde 05/10.";
 
 /** Classes literais (o Tailwind so' gera o que encontra escrito). */
-const COR_DELTA: Record<DeltaCx["sentido"], string> = {
-  piorou: "font-semibold text-crit-ink",
-  melhorou: "font-semibold text-ok-ink",
-  estavel: "text-ink-muted",
-};
 const PONTO_TOM = { atencao: "bg-warn", critico: "bg-crit" } as const;
 const TINTA_TOM = { atencao: "text-warn-ink", critico: "text-crit-ink" } as const;
+
+/**
+ * Pilula do cancelamento (p.p., subir e' pior; estavel sem cor de juizo) e o
+ * "antes X%" da janela anterior (ou "sem MARCA", quando a seta exclui marcas
+ * sem historico). Sem historico nenhum, nada: nunca inventado.
+ */
+export function deltaCancelamento(r: ResumoCx): { delta?: ReactNode; antes?: ReactNode } {
+  if (r.cancelamentoDeltaPp == null || !r.cancelamentoAntes) return {};
+  const estavel = r.cancelamentoDelta?.sentido === "estavel";
+  return {
+    delta: <DeltaBadge pct={estavel ? 0 : r.cancelamentoDeltaPp} unidade="pp" tone={estavel ? "neutral" : "lower_is_better"} />,
+    // base sem as marcas sem historico: "antes X" ao lado do valor de todas as marcas enganaria; a conta fica no ⓘ
+    antes: r.cancelamentoBase ? `sem ${r.semHistoricoCancelamento.join(", ")}` : `antes ${r.cancelamentoAntes}`,
+  };
+}
 
 /**
  * As ressalvas de cada card: o ⓘ do card e o rodape do detalhe dizem o mesmo.
@@ -168,10 +178,17 @@ const CARD = "min-w-0 rounded-xl [&>div]:h-full [&>div]:justify-start";
 /** Sem linha de comparacao: reserva a altura dela (todos os cards iguais). */
 const SEM_LINHA = <span aria-hidden="true">&nbsp;</span>;
 
-function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
-  const delta = r.cancelamentoDelta;
+const IDENT: Record<IndicadorCx, { identidade: IdentidadeKpi; icone: LucideIcon }> = {
+  contactRate: { identidade: "atendimento", icone: MessagesSquare },
+  resposta: { identidade: "ticket", icone: MessageCircle },
+  cancelamento: { identidade: "ads", icone: Ban },
+  reembolso: { identidade: "gmv", icone: Undo2 },
+};
 
-  const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode) => (
+function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
+  // CARDS-KPI (09/11): a cor de identidade da /cx; a resposta em kpi-ticket para nao repetir o contact rate ao lado
+
+  const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode, extra: { delta?: ReactNode; antes?: ReactNode } = {}) => (
     <button
       type="button"
       onClick={() => abrir(i)}
@@ -180,6 +197,11 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
       className={`${CARD} card-hover w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span}`}
     >
       <KpiTile
+        variante="gerencial"
+        identidade={IDENT[i].identidade}
+        icone={IDENT[i].icone}
+        delta={extra.delta}
+        antes={extra.antes}
         // Rotulo em UMA linha (truncate): um nome que quebre empurraria o valor
         // para baixo dos vizinhos. O nome inteiro fica no title, no aria-label
         // do botao e no ⓘ.
@@ -196,7 +218,8 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
           </span>
         }
         valor={valor}
-        comparacao={linha ?? SEM_LINHA}
+        tom={valor === "—" ? "ausente" : "neutro"}
+        comparacao={linha ?? (extra.delta ? undefined : SEM_LINHA)}
         // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
         ajuda={
           <InfoDica
@@ -212,21 +235,13 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo">
       {card("contactRate", SPAN_TOPO, r.contactRate, null)}
       {card("resposta", SPAN_TOPO, r.resposta, null)}
-      {card(
-        "cancelamento",
-        SPAN_TOPO,
-        r.cancelamento,
-        delta ? (
-          <span className={`whitespace-nowrap ${COR_DELTA[delta.sentido]}`}>
-            {delta.texto}
-            {/* no celular a linha so' cabe a seta: "vs 30 dias antes" fica no detalhe */}
-            <span className="hidden font-normal text-ink-faint sm:inline"> vs 30 dias antes</span>
-          </span>
-        ) : null,
-      )}
+      {card("cancelamento", SPAN_TOPO, r.cancelamento, null, deltaCancelamento(r))}
       {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null)}
       <div className={`col-span-2 ${CARD} ${SPAN_BASE}`}>
         <KpiTile
+          variante="gerencial"
+          identidade="ads"
+          icone={Repeat2}
           rotulo="Reenvio"
           tom="ausente"
           valor="Sem fonte"
