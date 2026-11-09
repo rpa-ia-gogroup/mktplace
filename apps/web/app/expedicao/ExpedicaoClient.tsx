@@ -146,8 +146,18 @@ import {
   urlComDias,
   valorDoSeletor,
 } from "@/lib/expedicao-janela";
-import { formatarHoraBrt, horaPropriaDaConta, montarEvolucaoPorMarca } from "@/lib/expedicao-evolucao";
-import { formatarInteiro } from "@/lib/expedicao-formato";
+import {
+  formatarHoraBrt,
+  haQuantoTempo,
+  horaPropriaDaConta,
+  montarEvolucaoPorMarca,
+  serieDaFila,
+  type MedidaDoCard,
+  type SerieDoCard,
+} from "@/lib/expedicao-evolucao";
+import DeltaBadge from "@/components/ui/DeltaBadge";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
+import { formatarDecimal, formatarInteiro } from "@/lib/expedicao-formato";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { AJUDA_CANAL_SEM_PRAZO, chaveDoKpiDaFila, type ChaveMetrica } from "@/lib/expedicao-definicoes";
 
@@ -244,6 +254,22 @@ const ICONE_DA_MEDIDA: Partial<Record<string, LucideIcon>> = {
   over48h: Hourglass,
   stalled: PauseCircle,
 };
+
+/**
+ * CARDS-KPIBAND — cor de IDENTIDADE de cada medida (a mesma em toda aba; nao
+ * diz bom ou ruim) e a coluna da serie horaria que alimenta o card.
+ */
+const IDENTIDADE_DA_MEDIDA: Partial<Record<string, IdentidadeKpi>> = {
+  due_soon: "prazo",
+  over48h: "pedidos",
+  stalled: "ads",
+};
+const MEDIDA_DA_SERIE: Partial<Record<string, MedidaDoCard>> = {
+  overdue: "overdue_count",
+  over48h: "over_48h_count",
+  stalled: "stalled_count",
+};
+const SEM_SERIE: SerieDoCard = { serie: undefined, deltaPp: null, antesPct: null };
 
 /** Titulo do dialogo aberto por um item de "O que exige atenção agora". */
 const ROTULO_DA_LISTA: Record<TipoLista, string> = {
@@ -342,6 +368,7 @@ function CelulaKpi({
       destaque={destaque || numeroGrande}
       variante="gerencial"
       icone={ICONE_DA_MEDIDA[kpi.chave]}
+      identidade={IDENTIDADE_DA_MEDIDA[kpi.chave]}
     />
   );
 }
@@ -1082,6 +1109,25 @@ export default function ExpedicaoClient({
       </ul>
     </div>
   ) : undefined;
+  // CARDS-KPIBAND — tendencia do card: "% da fila" por hora da serie que o
+  // "Backlog por marca" ja' carrega. Com a divisao vendedor x FBS o card e' da
+  // fila do VENDEDOR e a serie e' da fila publicada (com FBS): bases
+  // diferentes, entao sem serie e sem delta, nunca uma comparacao inventada.
+  const contasDaSerie = recorte.contas.map((a) => a.shop_account);
+  const serieDoCard = (chave: string): SerieDoCard => {
+    const medida = MEDIDA_DA_SERIE[chave];
+    if (!medida || divisao || !temSerieNaTendencia || !tendencia) return SEM_SERIE;
+    return serieDaFila(tendencia.points, contasDaSerie, medida);
+  };
+  const deltaDoCard = (s: SerieDoCard) =>
+    s.deltaPp !== null ? (
+      // "+0,0 p.p." nao e' piora: sem cor de juizo quando arredonda para zero.
+      <DeltaBadge pct={s.deltaPp} unidade="pp" tone={Math.abs(s.deltaPp) < 0.05 ? "neutral" : "lower_is_better"} />
+    ) : undefined;
+  const antesDoCard = (s: SerieDoCard) =>
+    s.antesPct !== null ? `antes ${formatarDecimal(s.antesPct, 1)}% · ${haQuantoTempo(janela)}` : undefined;
+  const serieHeroi = valorHeroi !== null ? serieDoCard(chaveDestaque) : SEM_SERIE;
+
   const heroi = (
     <Heroi
       rotulo={temPrazo ? "Vencidos" : "Acima de 48 h"}
@@ -1095,10 +1141,16 @@ export default function ExpedicaoClient({
       }
       tom={valorHeroi === null || valorHeroi === 0 ? "neutro" : temPrazo ? "critico" : "atencao"}
       aviso={avisoHeroi}
+      delta={deltaDoCard(serieHeroi)}
       contexto={
         avisoRecorte ??
         (valorHeroi !== null && backlogRisco !== null
-          ? `${numero(valorHeroi)} ${valorHeroi === 1 ? "pedido" : "pedidos"} de ${numero(backlogRisco)} em fila`
+          ? [
+              `${numero(valorHeroi)} ${valorHeroi === 1 ? "pedido" : "pedidos"} de ${numero(backlogRisco)} em fila`,
+              antesDoCard(serieHeroi),
+            ]
+              .filter(Boolean)
+              .join(" · ")
           : undefined)
       }
       meio={meioHeroi}
@@ -1136,11 +1188,17 @@ export default function ExpedicaoClient({
     // "Perto de vencer" vem da fila publicada mesmo com a divisao vendedor x FBS.
     const base = divisao && k.chave === "due_soon" ? recorte.totais?.backlog_count : totaisRisco?.backlog_count;
     const pct = !ausente && base != null ? percentualDaFila(v ?? 0, base) : null;
+    const s = ausente ? SEM_SERIE : serieDoCard(k.chave);
     return (
       <KpiComAjuda
         key={k.chave}
         variante="gerencial"
         icone={ICONE_DA_MEDIDA[k.chave]}
+        identidade={IDENTIDADE_DA_MEDIDA[k.chave]}
+        serie={s.serie}
+        granularidade="hour"
+        delta={deltaDoCard(s)}
+        antes={antesDoCard(s)}
         ajuda={chaveDoKpiDaFila(filtros.channel, k.chave)}
         // Com a divisao, "perto de vencer" e' da fila publicada (com FBS): a
         // base fica escrita, porque a do heroi e' so' a do vendedor.
@@ -1172,6 +1230,7 @@ export default function ExpedicaoClient({
         <KpiComAjuda
           variante="gerencial"
           icone={Hourglass}
+          identidade="pedidos"
           ajuda={AJUDA_CANAL_SEM_PRAZO.maisAntigo}
           rotulo="Pedido mais antigo em fila"
           valor={envelhecimento?.maisAntigo ? formatarHoras(envelhecimento.maisAntigo.horas) : "—"}

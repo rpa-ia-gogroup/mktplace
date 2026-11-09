@@ -342,3 +342,61 @@ export function dominioHorizontal(series: SerieMarca[]): [number, number] | null
   if (!ts.length) return null;
   return [Math.min(...ts), Math.max(...ts)];
 }
+
+// ---------------------------------------------------------------------------
+// CARDS-KPIBAND — "% da fila" por hora para o card (sparkline + delta)
+// ---------------------------------------------------------------------------
+export type MedidaDoCard = "overdue_count" | "over_48h_count" | "stalled_count";
+
+export interface SerieDoCard {
+  /** % da fila por hora completa, na ordem. So' com >= 4 horas completas. */
+  serie: number[] | undefined;
+  /** Ultima hora menos a PRIMEIRA da janela, em p.p. So' com as duas completas. */
+  deltaPp: number | null;
+  /** % da fila na primeira hora da janela (o "antes"). */
+  antesPct: number | null;
+}
+
+/**
+ * Soma as contas da MESMA hora (mesmo instante, contas diferentes: nao conta
+ * pedido duas vezes) e divide pelo backlog somado. Hora em que falta alguma
+ * conta de `contas` nao entra: nunca soma parcial. Sem a primeira ou a ultima
+ * hora completa, sem delta; com menos de 4 horas completas, sem serie.
+ */
+export function serieDaFila(
+  pontos: readonly PontoTendencia[],
+  contas: readonly string[],
+  medida: MedidaDoCard,
+): SerieDoCard {
+  const vazio: SerieDoCard = { serie: undefined, deltaPp: null, antesPct: null };
+  if (!contas.length || !pontos.length) return vazio;
+  const porHora = new Map<string, { contas: Set<string>; parte: number; base: number }>();
+  for (const p of pontos) {
+    const h = porHora.get(p.snapshot_hour) ?? { contas: new Set<string>(), parte: 0, base: 0 };
+    if (!h.contas.has(p.shop_account)) {
+      h.contas.add(p.shop_account);
+      h.parte += p[medida] ?? 0;
+      h.base += p.backlog_count ?? 0;
+    }
+    porHora.set(p.snapshot_hour, h);
+  }
+  const horas = [...porHora.keys()].sort();
+  const pct = (hora: string): number | null => {
+    const h = porHora.get(hora)!;
+    return contas.every((c) => h.contas.has(c)) && h.base > 0 ? (h.parte / h.base) * 100 : null;
+  };
+  const completos = horas.map(pct).filter((v): v is number => v !== null);
+  const primeiro = pct(horas[0]);
+  const ultimo = pct(horas[horas.length - 1]);
+  const comDelta = horas.length >= 2 && primeiro !== null && ultimo !== null;
+  return {
+    serie: completos.length >= 4 ? completos : undefined,
+    deltaPp: comDelta ? ultimo - primeiro : null,
+    antesPct: comDelta ? primeiro : null,
+  };
+}
+
+/** "há 72 h" do "antes": a janela escolhida no topo (em dias). */
+export function haQuantoTempo(dias: number): string {
+  return dias === 1 ? "há 24 h" : dias === 3 ? "há 72 h" : `há ${dias} dias`;
+}

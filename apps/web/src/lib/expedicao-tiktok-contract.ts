@@ -200,7 +200,36 @@ export type TikTokLdr = {
   incident_start: string | null;
   incident_end: string | null;
   daily: TikTokLdrDia[];
+  /** API-2: a janela anterior do mesmo tamanho; ausente na API antiga. */
+  previous?: TikTokLdrAnterior | null;
 };
+
+/** CARDS-KPIBAND (API-2): `rate`/`base`/`late` nulos = janela nao medida (`reason`). */
+export type TikTokLdrAnterior = {
+  from: string;
+  to: string;
+  days: number;
+  rate: number | null;
+  base: number | null;
+  late: number | null;
+  mature_due_days: number;
+  reason: string | null;
+};
+
+/** Sparkline do card "LDR da janela": so' os vencimentos FECHADOS com taxa, em ordem. */
+export function serieDaLdr(daily: readonly TikTokLdrDia[]): number[] {
+  return [...daily]
+    .filter((d) => d.is_mature && d.rate !== null)
+    .sort((a, b) => a.due_date.localeCompare(b.due_date))
+    .map((d) => (d.rate as number) * 100);
+}
+
+/** Delta em p.p. contra a janela anterior; sem as duas taxas, nada. */
+export function deltaDaLdr(ldr: Pick<TikTokLdr, "rate" | "previous">): { pp: number; antes: number } | null {
+  const ant = ldr.previous?.rate;
+  if (ldr.rate == null || ant == null) return null;
+  return { pp: (ldr.rate - ant) * 100, antes: ant * 100 };
+}
 
 export type TikTokMarca = {
   brand: string;

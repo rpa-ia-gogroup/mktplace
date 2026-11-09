@@ -24,7 +24,7 @@ import { CLASSE_CABECALHO, CLASSE_TABELA, EstadoSecao } from "@/components/exped
 import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
+import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import { formatarHoras } from "@/lib/expedicao-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -399,12 +399,16 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
     n: number | undefined,
     icone: typeof Clock,
     alerta: boolean,
+    // CARDS-KPIBAND: cor de identidade (a mesma da Shopee/ML). Sem serie nem
+    // periodo anterior para os abertos: sem sparkline e sem delta.
+    identidade: IdentidadeKpi,
     extra = "",
   ) => (
     <KpiTile
       key={lista}
       variante="gerencial"
       icone={icone}
+      identidade={identidade}
       rotulo={rotulo}
       valor={t && n !== undefined ? pct(n, t.open) : "—"}
       comparacao={t && n !== undefined ? `${formatarInteiro(n)} pedidos${extra}` : undefined}
@@ -415,9 +419,9 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
   );
   return (
     <>
-      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true)}
-      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, " · próximo dia útil")}
-      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true)}
+      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true, "prazo")}
+      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, "prazo", " · próximo dia útil")}
+      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true, "pedidos")}
     </>
   );
 }
