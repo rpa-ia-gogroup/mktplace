@@ -13,6 +13,7 @@ import { previousEquivalentRange } from "@/lib/filters/presets";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "@/lib/brand-daily-summary";
+import { tiktokMaturacaoRotulo, TIKTOK_MATURACAO_DICA } from "@/lib/tiktok-maturacao";
 import DailyChart from "@/components/DailyChart";
 import KpiCard from "@/components/KpiCard";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
@@ -423,6 +424,9 @@ function BrandPageInner() {
   const hasTiktok = showTk && daily.some((r) => r.tiktok_gmv != null);
   const hasMl = showMl && daily.some((r) => r.ml_gmv != null);
   const hasShopee = showSh && daily.some((r) => r.shopee_gmv != null);
+  // T-0074: so' rotulo, vindo da API ao vivo. Serie de exemplo e API antiga
+  // (sem o campo) nao mostram nada.
+  const maturacaoTk = isLive && hasTiktok ? tiktokMaturacaoRotulo(daily) : null;
 
   // Projeta os canais nao selecionados para null e recalcula total_gmv pela
   // soma dos canais selecionados (Gate U3, Finding 2).
@@ -582,6 +586,12 @@ function BrandPageInner() {
                 <p className="text-xs font-semibold text-amber-800 mb-1">série de exemplo</p>
               )}
               <DailyChart data={projectedDaily} hasTiktok={hasTiktok} hasMl={hasMl} hasShopee={hasShopee} />
+              {maturacaoTk && (
+                <p className="flex w-fit items-center gap-1.5 text-xs text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 mt-2 mb-2">
+                  {maturacaoTk.texto} · valor pode cair
+                  <InfoDica texto={TIKTOK_MATURACAO_DICA} />
+                </p>
+              )}
             </div>
             <div className={`bg-white border rounded-2xl shadow-sm px-4 py-4 ${isLive ? "border-violet-100" : "border-amber-200"}`}>
               <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 mb-3">

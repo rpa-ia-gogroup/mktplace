@@ -12,6 +12,8 @@ export interface DailyRow {
   orders: number;
   avg_ticket: number | null;
   ad_spend: number | null;
+  /** T-0074: GMV TikTok do dia ainda pode cair. Ausente em API antiga e no mock. */
+  tiktok_em_maturacao?: boolean | null;
 }
 
 // Totais mensais por brand (TikTok) — últimos 60 dias abrange mai e abr/26

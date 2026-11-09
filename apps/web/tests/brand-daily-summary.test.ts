@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "../src/lib/brand-daily-summary.ts";
 import type { DailyRow } from "../src/lib/mock-daily.ts";
+import { tiktokMaturacaoRotulo, TIKTOK_MATURACAO_DICA } from "../src/lib/tiktok-maturacao.ts";
 
 function row(overrides: Partial<DailyRow>): DailyRow {
   return {
@@ -168,4 +169,44 @@ test("projectDailyRowsBySelection: nao regride isOrdersReliable/summarize — GM
     const summarized = summarize(MIXED_ROWS, filter as string[]);
     assert.equal(projectedGmvTotal, summarized.gmv, `divergencia para filtro ${filter.join(",")}`);
   }
+});
+
+// T-0074 — helper do rótulo "em maturação" do GMV TikTok
+// (src/lib/tiktok-maturacao.ts). Só rótulo: nenhum número muda.
+
+test("dias marcados pela API viram rótulo com o primeiro dia em maturação", () => {
+  const r = tiktokMaturacaoRotulo([
+    { date: "2026-10-04", tiktok_em_maturacao: false },
+    { date: "2026-11-08", tiktok_em_maturacao: true },
+    { date: "2026-10-05", tiktok_em_maturacao: true },
+  ]);
+  assert.deepEqual(r, { desde: "2026-10-05", dias: 2, texto: "TikTok em maturação desde 05/10" });
+});
+
+test("nenhum dia em maturação: sem rótulo", () => {
+  assert.equal(
+    tiktokMaturacaoRotulo([
+      { date: "2026-09-01", tiktok_em_maturacao: false },
+      { date: "2026-09-02", tiktok_em_maturacao: false },
+    ]),
+    null,
+  );
+});
+
+test("API antiga (campo ausente) não quebra e não rotula", () => {
+  assert.equal(tiktokMaturacaoRotulo([{ date: "2026-11-08" }, { date: "2026-11-07" }]), null);
+});
+
+test("TikTok fora do escopo (campo null): sem rótulo", () => {
+  assert.equal(tiktokMaturacaoRotulo([{ date: "2026-11-08", tiktok_em_maturacao: null }]), null);
+});
+
+test("lista vazia: sem rótulo", () => {
+  assert.equal(tiktokMaturacaoRotulo([]), null);
+});
+
+test("a dica explica o motivo e a janela", () => {
+  assert.match(TIKTOK_MATURACAO_DICA, /cancelados até ~30 dias/);
+  assert.match(TIKTOK_MATURACAO_DICA, /pode cair/);
+  assert.match(TIKTOK_MATURACAO_DICA, /35 dias/);
 });
