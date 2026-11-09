@@ -48,8 +48,8 @@ ML_RUPTURAS = [
     {"brand": "barbours", "media": Decimal("3"), "sku": None, "titulo": None,
      "preco_vendas": None, "preco_anuncio": None},
 ]
-ML_GMV = [{"brand": "kokeshi", "gmv": Decimal("28000"), "dias": 28},
-          {"brand": "barbours", "gmv": Decimal("56000"), "dias": 28}]
+ML_GMV = [{"brand": "kokeshi", "gmv": Decimal("28000"), "dias": 28, "fim": date(2026, 11, 3)},
+          {"brand": "barbours", "gmv": Decimal("56000"), "dias": 28, "fim": date(2026, 11, 3)}]
 
 SH_RUPTURAS = [
     {"brand": "apice", "sku": "A1", "titulo": "A1", "media": Decimal("1"),
@@ -62,7 +62,7 @@ SH_RUPTURAS = [
     {"brand": "barbours", "sku": "B1", "titulo": "B1", "media": Decimal("1"),
      "estoque_vendedor": 0, "preco": None, "mes_preco": None},
 ]
-SH_GMV = [{"brand": "apice", "gmv": Decimal("2800"), "dias": 28}]
+SH_GMV = [{"brand": "apice", "gmv": Decimal("2800"), "dias": 28, "fim": date(2026, 11, 7)}]
 
 
 class Sessao:
@@ -152,6 +152,34 @@ def test_r_nunca_e_somado_entre_canais():
     b = _bloco()
     assert set(b) == {"ml", "shopee", "janela_gmv_dias", "limitacoes"}
     assert b["ml"]["ref_date"] != b["shopee"]["ref_date"]
+
+
+def test_janela_do_pct_termina_no_ultimo_dia_com_faturamento():
+    # Foto do ML de 04/11 e o faturamento so' ate' 02/11 (D-1 atrasado): a janela
+    # desloca (06/10 a 02/11), continua com 28 dias completos e o % existe.
+    s = Sessao(ml_gmv=[{"brand": "kokeshi", "gmv": Decimal("28000"), "dias": 28, "fim": date(2026, 11, 2)}])
+    ml = _bloco(s)["ml"]
+    assert (ml["janela_gmv_inicio"], ml["janela_gmv_fim"]) == (date(2026, 10, 6), date(2026, 11, 2))
+    assert ml["pct_gmv_full"] is not None and ml["motivo_pct"] is None
+    # na vespera da foto, a janela e' a de antes: os 28 dias antes da foto
+    sh = _bloco()["shopee"]
+    assert (sh["janela_gmv_inicio"], sh["janela_gmv_fim"]) == (date(2026, 10, 11), date(2026, 11, 7))
+
+
+def test_janela_deslocada_continua_sem_inflar():
+    s = Sessao(ml_gmv=[{"brand": "kokeshi", "gmv": Decimal("2000"), "dias": 20, "fim": date(2026, 11, 2)}])
+    ml = _bloco(s)["ml"]
+    assert ml["pct_gmv_full"] is None and ml["motivo_pct"] == svc.MOTIVO_GMV_INCOMPLETO
+    assert ml["janela_gmv_fim"] == date(2026, 11, 2), "a janela usada continua dita"
+    sem = _bloco(Sessao(ml_gmv=[]))["ml"]
+    assert sem["janela_gmv_inicio"] is None and sem["janela_gmv_fim"] is None and sem["pct_gmv_full"] is None
+
+
+def test_janela_vem_do_ultimo_dia_carregado_ate_a_vespera_da_foto():
+    for nome in ("SQL_ML_GMV", "SQL_SHOPEE_GMV"):
+        sql = " ".join(str(getattr(svc, nome)).split())
+        assert "SELECT MAX(ref_date) AS d" in sql and "ref_date < :ref_date" in sql, nome
+        assert f"ref_date > fim.d - {svc.JANELA_GMV_DIAS}" in sql and "ref_date <= fim.d" in sql, nome
 
 
 # ---------------------------------------------------------------------------

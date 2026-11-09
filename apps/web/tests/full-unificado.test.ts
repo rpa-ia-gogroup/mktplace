@@ -9,6 +9,7 @@ import {
   fmtPct,
   heroiRuptura,
   kpiImpacto,
+  janelaDeslocada,
   kpiParamVenda,
   impactoPorMarca,
   mediana,
@@ -361,6 +362,25 @@ test("cartao de impacto: % no valor, R$ na comparacao, por canal; ausencia nunca
   // pct ausente: o R$ vira o valor; perda ausente: "—" sem preco
   const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk };
   assert.equal(sp(kpiImpacto("ml", semPct).valor), "R$ 13,3 mil/dia");
+  // % nulo nao tem cara de erro: motivo curto (1 linha) e a conta no detalhe (title + sr-only)
+  const comDias = (dias: number, motivo: string | null = null) =>
+    ({ ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null, gmv_full_dia: null, dias_gmv: dias, motivo_pct: motivo } as CanalImpactoOk });
+  const k27 = kpiImpacto("ml", comDias(27));
+  assert.equal(k27.comparacao, "falta 1 dia de faturamento Full para o %");
+  assert.equal(k27.detalhe, "27 de 28 dias de faturamento Full na janela da foto");
+  assert.equal(kpiImpacto("ml", comDias(25)).comparacao, "faltam 3 dias de faturamento Full para o %");
+  assert.equal(kpiImpacto("ml", comDias(0)).comparacao, "sem faturamento Full para o %");
+  // janela completa e % nulo por outro motivo: nunca "28 de 28"; usa o motivo da API
+  const outro = kpiImpacto("ml", comDias(28, "GMV Full zerado na janela."));
+  assert.equal(outro.comparacao, "GMV Full zerado na janela.");
+  assert.equal(outro.detalhe, undefined);
+  assert.equal(kpiImpacto("ml", comDias(28)).comparacao, "% do faturamento indisponível");
+  // janela do % deslocada (faturamento atrasado): o subtitulo diz o recorte; na vespera da foto, nao
+  const desloc = { ...IMPACTO, ml: { ...IMPACTO.ml, janela_gmv_inicio: "2026-10-06", janela_gmv_fim: "2026-11-02" } as CanalImpactoOk };
+  assert.equal(sp(kpiImpacto("ml", desloc).comparacao), "R$ 13,3 mil/dia do faturamento Full · % de 06/10 a 02/11");
+  const vespera = { ...IMPACTO, ml: { ...IMPACTO.ml, janela_gmv_inicio: "2026-10-07", janela_gmv_fim: "2026-11-03" } as CanalImpactoOk };
+  assert.equal(sp(kpiImpacto("ml", vespera).comparacao), "R$ 13,3 mil/dia do faturamento Full");
+  assert.equal(janelaDeslocada({ ref_date: "2026-11-08", janela_gmv_inicio: null, janela_gmv_fim: null }), "", "sem janela: nada");
   const semPerda = { ...IMPACTO, ml: { ...IMPACTO.ml, perda_dia: null } as CanalImpactoOk };
   assert.deepEqual(kpiImpacto("ml", semPerda), { valor: "—", comparacao: "sem preço" });
   for (const c of [kpiImpacto("ml", null), kpiImpacto("shopee", soML, 18), kpiImpacto("ml", semPerda)]) {

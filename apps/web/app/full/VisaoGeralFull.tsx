@@ -289,7 +289,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
               rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
               ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
               valor={k.valor}
-              comparacao={k.comparacao}
+              comparacao={<Escondido texto={k.comparacao} detalhe={k.detalhe} />}
               onAbrir={() => setDrill(canal)}
             />
           );
