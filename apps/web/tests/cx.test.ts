@@ -796,6 +796,10 @@ test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalh
   assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias = DIAS\)/, "Gerencial segue com 30 dias por padrao");
+  // Linha "Atenção" (390 px): o "·" fecha o item ANTERIOR, dentro do mesmo bloco
+  // inquebravel; a linha nova comeca pelo ponto da marca, nunca por "· ●".
+  assert.doesNotMatch(resumo, /idx > 0 && <span aria-hidden="true" className="text-ink-faint">·<\/span>/);
+  assert.match(resumo, /\{a\.referencia\}<\/span>\s*<\/span>[\s\S]{0,200}?\{idx < r\.alertas\.length - 1 && <span aria-hidden="true" className="text-ink-faint">·<\/span>\}\s*<\/span>/);
 });
 
 // ---------------------------------------------------------------------------

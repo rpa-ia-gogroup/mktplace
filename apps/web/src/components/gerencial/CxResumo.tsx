@@ -259,12 +259,14 @@ function LinhaAtencao({ r }: { r: ResumoCx }) {
           <span className="font-semibold text-ink">Atenção:</span>
           {r.alertas.map((a, idx) => (
             <span key={a.chave} className="inline-flex items-center gap-1.5">
-              {idx > 0 && <span aria-hidden="true" className="text-ink-faint">·</span>}
               <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_TOM[a.tom]}`} />
               <span className={`font-semibold ${TINTA_TOM[a.tom]}`}>{a.marca}</span>
               <span className="tabular-nums">
                 {ROTULO_CURTO[a.indicador]} {a.valor} <span className="text-ink-faint">{a.referencia}</span>
               </span>
+              {/* O "·" fecha o item ANTERIOR: na quebra (390 px) a linha nova
+                  comeca pelo ponto da marca, nunca por um separador solto. */}
+              {idx < r.alertas.length - 1 && <span aria-hidden="true" className="text-ink-faint">·</span>}
             </span>
           ))}
         </>
