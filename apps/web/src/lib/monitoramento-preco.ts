@@ -73,23 +73,25 @@ export function canalComPreposicao(m: Marketplace | string): string {
 }
 
 /**
- * CAPACIDADE do canal no frontend. FAIL-CLOSED.
+ * CAPACIDADE do canal no frontend. LIGADA POR PADRAO (T-0071).
  *
- * O Mercado Livre e' publicado e nao tem flag. Shopee e TikTok dependem de
- * DUAS chaves independentes: esta, que decide se o botao existe, e a do
- * backend (`PMA_SHOPEE_ENABLED` / `PMA_TIKTOK_ENABLED`), que decide se ha o que
- * servir. Ligar so' uma das duas nao expoe o canal — ligar so' o frontend
- * mostraria um botao que devolve envelope `unavailable`, e ligar so' o backend
- * nao cria botao nenhum. A ativacao e' COORDENADA, de proposito.
+ * O Mercado Livre e' publicado e nao tem flag. Shopee e TikTok tambem estao
+ * publicados e, por decisao do Mario (09/11/2026), ficam ligados no codigo: a
+ * env do projeto Vercel novo nao estava acessivel para liga-los. A variavel
+ * so' serve para DESLIGAR: ausente ou qualquer valor diferente da string
+ * exata `"false"` liga; `"false"` desliga (rollback = env + redeploy).
  *
- * Ausencia da variavel resolve `false`. So' a string exata `"true"` liga.
+ * O backend tem a sua propria chave (`PMA_SHOPEE_ENABLED` /
+ * `PMA_TIKTOK_ENABLED`); se ela estiver desligada, o botao existe mas devolve
+ * envelope `unavailable`, que a tela explica com `avisoCanalIndisponivel`.
+ *
  * As referencias a `process.env` sao literais porque o Next as substitui em
  * tempo de build; uma leitura dinamica nao chegaria ao bundle do navegador.
  */
 export function canalHabilitado(m: Marketplace): boolean {
   if (m === "ml") return true;
-  if (m === "shopee") return process.env.NEXT_PUBLIC_PMA_SHOPEE_ENABLED === "true";
-  if (m === "tiktok") return process.env.NEXT_PUBLIC_PMA_TIKTOK_ENABLED === "true";
+  if (m === "shopee") return process.env.NEXT_PUBLIC_PMA_SHOPEE_ENABLED !== "false";
+  if (m === "tiktok") return process.env.NEXT_PUBLIC_PMA_TIKTOK_ENABLED !== "false";
   return false;
 }
 

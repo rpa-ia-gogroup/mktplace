@@ -896,6 +896,13 @@ das duas sozinha expõe o canal. Este gate não tocou `.env`, Render nem Vercel.
 Com tudo desligado — o estado de produção — a tela é exatamente a de antes:
 Mercado Livre, sem seletor, sem coluna de tipo, sem filtro de conta.
 
+**Decisão 09/11/2026 (Mário, T-0071):** Shopee e TikTok passam a ficar ligados
+por padrão no frontend. `NEXT_PUBLIC_PMA_SHOPEE_ENABLED` /
+`NEXT_PUBLIC_PMA_TIKTOK_ENABLED` só servem para desligar: ausente ou qualquer
+valor diferente da string exata `"false"` liga. Motivo: env do projeto Vercel
+novo inacessível e dados publicados/frescos. Rollback:
+`NEXT_PUBLIC_PMA_<CANAL>_ENABLED=false` + redeploy, ou reverter o PR.
+
 ## Duas políticas de data na tela
 
 | | Mercado Livre | Shopee e TikTok |
