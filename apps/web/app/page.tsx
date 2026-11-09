@@ -87,6 +87,7 @@ import {
   avisoQueAfetaOGmv,
   celulasDoEscopo,
   diaDaMeta,
+  diasComDadoNoMes,
   mesDaMeta,
   metaDoEscopo,
   progressoMeta,
@@ -455,6 +456,18 @@ function GerencialInner() {
     }
     return mapa;
   }, [progressoDia, metaAplicavel, mesMeta, metaEscopo.porMarca, realizadoEscopo, celulasEscopo, hoje, ultimoDia]);
+  // Mes atual: o fechamento de cada marca pela MESMA projecao do heroi (com
+  // meta). Marca sem meta: o GMV dos canais filtrados no ritmo linear, sem %.
+  const tendenciaDoMes = useMemo(() => {
+    if (!metaAplicavel || !mesMeta || mesMeta !== hoje.slice(0, 7)) return null;
+    const mapa: Record<string, number> = {};
+    const linear = fracaoDoEscopo([], mesMeta)(diasComDadoNoMes(mesMeta, hoje, ultimoDia));
+    for (const b of brands) {
+      if (linear > 0 && b.total_gmv > 0 && !(b.brand in metaEscopo.porMarca)) mapa[b.brand] = b.total_gmv / linear;
+    }
+    for (const [id, p] of Object.entries(progressoPorMarca)) if (p?.projecao != null) mapa[id] = p.projecao;
+    return mapa;
+  }, [metaAplicavel, mesMeta, hoje, ultimoDia, brands, metaEscopo.porMarca, progressoPorMarca]);
   // A meta so' e' lida com `/brands`: enquanto ele carrega (ou falha), o bloco
   // diz isso em vez de "nenhuma meta definida".
   const metasStatusTela: "loading" | "error" | "fresh" =
@@ -678,6 +691,7 @@ function GerencialInner() {
             error={sources.brands.status.error}
             brandHref={brandHref}
             tendenciaDoDia={tendenciaDoDia}
+            tendenciaDoMes={tendenciaDoMes}
             fullPorMarca={fullPorMarca}
           />
         </div>
