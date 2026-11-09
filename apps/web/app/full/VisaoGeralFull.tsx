@@ -284,6 +284,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
             <KpiTile
               key={canal}
               variante="gerencial"
+              identidade="gmv"
               icone={TrendingDown}
               rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
               ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
@@ -298,6 +299,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
           return (
             <KpiTile
               variante="gerencial"
+              identidade="pedidos"
               icone={PackageX}
               rotulo="Param a venda · Shopee"
               ajuda={<InfoDica texto={NOTA_VENDEDOR} />}
