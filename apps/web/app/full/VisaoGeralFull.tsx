@@ -2,9 +2,9 @@
 
 /**
  * FULL-UNIFICADO-1 — "Visão geral" do Full, em ordem piramidal:
- * manchete (com o frescor de cada foto colado nela) → ruptura por canal →
- * demais indicadores lado a lado → ruptura por marca → rupturas mais urgentes
- * → frescor de cada fonte.
+ * titulo (% sem estoque) → uma linha por canal (ruptura, foto, impacto
+ * potencial; ressalvas no ⓘ) → outros indicadores → ruptura por marca →
+ * rupturas mais urgentes → frescor de cada fonte.
  *
  * Usa as duas rotas de estoque que ja' existem; as regras moram em
  * `src/lib/full-visao-geral.ts`. Ausencia nunca vira zero: canal fora,
@@ -19,7 +19,6 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
@@ -31,9 +30,10 @@ import {
   QUERY_SHOPEE,
   fmtPct,
   fmtReais,
+  dicaImpacto,
   impactosOk,
+  linhaImpacto,
   manchete,
-  mancheteImpacto,
   pctDestaque,
   perdaDestaque,
   mediana,
@@ -49,21 +49,16 @@ import {
   type MarcaCanal,
   type ImpactoRuptura,
   type ResumoCanal,
-  type Totais,
+  type ResumoOk,
 } from "@/lib/full-visao-geral";
 import { tituloMarca, validarPayloadML } from "@/lib/ml-full-estoque";
 
 const DICA_RUPTURA =
-  "Sem saldo no Full com demanda: venda nos últimos 28 dias e saldo Full disponível igual a 0. " +
+  "Sem estoque no Full com demanda: venda nos últimos 28 dias e saldo Full disponível igual a 0. " +
   "Grão: no ML conta inventário (vários anúncios podem dividir um inventário); na Shopee conta item. " +
   "Fora do total: kits da Shopee (não conciliados), a Kokeshi na Shopee (sem conta na esteira de estoque) e a Ápice no ML.";
 const NOTA_VENDEDOR =
   "Ruptura no Full não quer dizer venda parada: na Shopee o vendedor pode ter estoque próprio e seguir vendendo fora do Full.";
-const DICA_IMPACTO =
-  "Impacto POTENCIAL, não perda medida: venda média diária de 28 dias × preço médio do item, somado por canal. " +
-  "ML: preço de 30 dias do anúncio-âncora; sem venda no período, usa o preço anunciado. " +
-  "Shopee: preço médio do MÊS por SKU (a fonte é mensal); o destaque conta só os itens sem estoque do vendedor. " +
-  "% sobre o GMV Full/dia dos 28 dias antes da foto. R$ não é somado entre canais (datas e grãos diferentes).";
 const NOTA_IMPACTO =
   "No ML, anúncios do mesmo inventário fora do Full podem seguir vendendo. Item sem preço fica fora da soma.";
 const DICA_COBERTURA =
@@ -112,6 +107,51 @@ function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedor
   );
 }
 
+/** Linha de um canal medido no topo: ruptura + foto, (Shopee) vendedor, impacto potencial. */
+function LinhaCanal({ c, impacto }: { c: ResumoOk; impacto: ImpactoRuptura | null }) {
+  const nome = NOME_CANAL[c.canal];
+  if (c.ruptura === 0) {
+    return (
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-ink">
+        {nome}: nenhum produto sem estoque <ChipFoto c={c} />
+      </p>
+    );
+  }
+  const li = linhaImpacto(c.canal, impacto, c.canal === "shopee" ? c.semVendedor : null);
+  return (
+    <>
+      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-semibold text-ink">
+          {nome}: {fmtPct(pct(c.ruptura, c.base))} sem estoque
+          <span className="font-normal text-ink-faint"> ({fmtInt(c.ruptura)} de {fmtInt(c.base)})</span>
+        </span>
+        <ChipFoto c={c} />
+      </p>
+      {c.canal === "shopee" && (
+        <p className="text-sm text-ink-muted">
+          {c.semVendedor === null ? (
+            <>Estoque do vendedor: <Ausente motivo="lista de rupturas incompleta" /></>
+          ) : c.semVendedor === 0 ? (
+            "Todas têm estoque do vendedor: a venda segue fora do Full"
+          ) : (
+            <><strong className="font-semibold text-ink">{fmtPct(pct(c.semVendedor, c.ruptura))} ({fmtInt(c.semVendedor)})</strong> também sem estoque do vendedor: {c.semVendedor === 1 ? "esse para" : "esses param"} a venda</>
+          )}
+        </p>
+      )}
+      {/* ⓘ no fluxo do texto: quebra junto da ultima palavra, nao sozinho */}
+      <p className="text-sm text-ink-muted">
+        {li.rotulo}: {li.valor === null ? <Ausente motivo="sem preço" /> : li.valor}{" "}
+        <InfoDica texto={dicaImpacto(c.canal, impacto)} nota={c.canal === "ml" ? NOTA_IMPACTO : NOTA_VENDEDOR} className="align-middle" />
+      </p>
+    </>
+  );
+}
+
+/** Frescor da foto do canal: desatualizada escreve a palavra, nao so' a cor. */
+function ChipFoto({ c }: { c: ResumoOk }) {
+  return <Chip tom={c.frescorVelho ? "atencao" : "neutro"} ponto={c.frescorVelho} title={c.frescor}>{seloFrescor(c)}</Chip>;
+}
+
 export default function VisaoGeralFull() {
   const [canais, setCanais] = useState<ResumoCanal[] | null>(null);
   // `null` = impacto nao carregou: a tela segue sem R$, nunca com R$ 0.
@@ -152,16 +192,10 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
   const ok = oks(canais);
   const m = manchete(canais);
   const tot = total(canais);
-  const shopee = ok.find((c) => c.canal === "shopee");
   const marcas = rupturaPorMarca(canais, impacto);
   const pior = marcas[0]?.maiorPerda || marcas[0]?.taxa ? marcas[0] : null;
   const top = topRupturas(canais, 10, impacto);
   const imp = impactosOk(impacto);
-  const impShopee = imp.find((c) => c.canal === "shopee");
-  const frase = mancheteImpacto(impacto);
-  const semPreco = imp.reduce((s, c) => s + c.sem_preco, 0);
-  const fallbackML = imp.find((c) => c.canal === "ml")?.preco_fallback ?? 0;
-  const impactoFora = impacto ? [impacto.ml, impacto.shopee].filter((c) => c.status !== "ok") : null;
   const algumaIncompleta = ok.some((c) => !c.rupturasCompletas);
   const falhou = canais.some((c) => c.status === "erro");
 
@@ -178,74 +212,29 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
 
   return (
     <>
-      {/* a. Manchete, com o frescor de cada foto colado nela */}
-      <section aria-labelledby="full-manchete" className="flex flex-col gap-2 rounded-xl border border-line bg-surface px-4 py-3.5">
+      {/* a. Titulo + uma linha por canal (ressalvas tecnicas no ⓘ de cada canal) */}
+      <section aria-labelledby="full-manchete" className="flex flex-col gap-3 rounded-xl border border-line bg-surface px-4 py-3.5">
         <div className="flex items-start gap-2">
-          <h3 id="full-manchete" className={`text-xl font-bold leading-snug ${m.critico ? "text-crit-ink" : "text-ink"}`}>
-            {m.texto}
-            {frase && <> · {frase}</>}
-          </h3>
+          <h3 id="full-manchete" className={`text-xl font-bold leading-snug ${m.critico ? "text-crit-ink" : "text-ink"}`}>{m.texto}</h3>
           <InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} className="mt-1" />
         </div>
-        {shopee && shopee.ruptura > 0 && (
-          <p className="text-sm text-ink-muted">
-            Shopee: {fmtInt(shopee.ruptura)} em ruptura no Full ·{" "}
-            {shopee.semVendedor === null ? (
-              <Ausente motivo="lista de rupturas incompleta" />
-            ) : (
-              <strong className="font-semibold text-ink">{fmtInt(shopee.semVendedor)} também sem estoque do vendedor</strong>
-            )}{" "}
-            (essas param a venda)
-            {impShopee && impShopee.perda_dia !== null && (
-              <> · {fmtReais(impShopee.perda_dia)}/dia se contar os que têm estoque do vendedor</>
-            )}
-          </p>
-        )}
-        {(semPreco > 0 || fallbackML > 0 || impacto === null || impactoFora?.length) && (
-          <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-            {impacto === null ? "Impacto no faturamento indisponível agora." : (
-              <>
-                {impactoFora?.map((c) => `${NOME_CANAL[c.canal]}: impacto indisponível. `)}
-                {semPreco > 0 && `${fmtInt(semPreco)} sem preço ficaram fora da soma. `}
-                {fallbackML > 0 && `ML: ${fmtInt(fallbackML)} com preço anunciado (sem venda em 30 dias).`}
-              </>
-            )}
-            <InfoDica texto={DICA_IMPACTO} nota={NOTA_IMPACTO} />
-          </p>
-        )}
-        <div className="flex flex-wrap gap-1.5">
-          {ok.map((c) => (
-            <Chip key={c.canal} tom={c.frescorVelho ? "atencao" : "neutro"} ponto={c.frescorVelho} title={c.frescor}>
-              {seloFrescor(c)}{c.frescorVelho ? " · desatualizada" : ""}
-            </Chip>
+        <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {canais.map((c) => (
+            <li key={c.canal} className="flex flex-col gap-1">
+              {c.status === "ok" ? <LinhaCanal c={c} impacto={impacto} /> : (
+                <>
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-ink">
+                    {NOME_CANAL[c.canal]}: <Chip tom="ausente">sem dado agora</Chip>
+                  </p>
+                  {c.motivo && <p className="text-xs text-ink-muted">{c.motivo}</p>}
+                </>
+              )}
+            </li>
           ))}
-          {canais.filter((c) => c.status !== "ok").map((c) => (
-            <Chip key={c.canal} tom="ausente">{NOME_CANAL[c.canal]}: sem dado</Chip>
-          ))}
-        </div>
+        </ul>
       </section>
 
-      {/* b. Ruptura por canal, depois os demais indicadores lado a lado */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {[...canais, null].map((c) => {
-          const rotulo = c ? `Ruptura · ${NOME_CANAL[c.canal]}` : "Ruptura · Total";
-          const dado: Totais | null = c ? (c.status === "ok" ? c : null) : tot;
-          const motivo = c ? (c.status === "ok" ? undefined : c.motivo) : "o total só aparece com os dois canais medidos";
-          return (
-            <KpiTile
-              key={rotulo}
-              rotulo={rotulo}
-              destaque={!c}
-              tom={dado ? (dado.ruptura > 0 ? "critico" : "neutro") : "ausente"}
-              valor={dado ? fmtPct(pct(dado.ruptura, dado.base)) : "—"}
-              comparacao={dado ? `${fmtInt(dado.ruptura)} de ${fmtInt(dado.base)} no Full` : motivo}
-              ajuda={!c ? <InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} /> : undefined}
-            />
-          );
-        })}
-      </div>
-
-      <Panel titulo="Indicadores por canal" semPadding>
+      <Panel titulo="Outros indicadores por canal" semPadding>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[520px] text-sm">
             <caption className="sr-only">Indicadores do estoque Full por canal</caption>
@@ -259,7 +248,6 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
             </thead>
             <tbody className="divide-y divide-line">
               {([
-                ["Sem saldo no Full com demanda", "ruptura"],
                 ["Estoque baixo", "baixo"],
                 ["Excesso", "excesso"],
               ] as const).map(([rotulo, k]) => (
@@ -293,14 +281,6 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
                   );
                 })}
               </tr>
-              <tr>
-                <th scope="row" className="px-4 py-2 text-left font-medium text-ink">Ruptura também sem estoque do vendedor</th>
-                <td className="px-4 py-2 text-right"><Ausente motivo="não se aplica ao ML" /></td>
-                <td className="px-4 py-2 text-right tabular-nums">
-                  {shopee ? <Fracao parte={shopee.semVendedor} base={shopee.ruptura} motivo="lista de rupturas incompleta" /> : <Ausente />}
-                </td>
-                <td className="px-4 py-2 text-right"><Ausente motivo="só a Shopee informa o estoque do vendedor" /></td>
-              </tr>
             </tbody>
           </table>
         </div>
@@ -309,18 +289,9 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
       {/* c. Ruptura por marca */}
       <Panel
         titulo="Ruptura por marca"
-        descricao={pior ? (
-          pior.maiorPerda !== null ? (
-            <>Maior impacto: <strong className="font-semibold text-crit-ink">{tituloMarca(pior.marca)}</strong>, {fmtReais(pior.maiorPerda)}/dia potencial
-              {CANAIS.filter((c) => pior.impacto[c] && perdaDestaque(c, pior.impacto[c]!) === pior.maiorPerda).map((c) => {
-                const pc = pctDestaque(c, pior.impacto[c]!);
-                return <span key={c}> {c === "ml" ? "no ML" : "na Shopee"}{pc !== null ? ` (${fmtPct(pc)} do Full da marca)` : ""}</span>;
-              })}
-            </>
-          ) : (
-            <>Pior: <strong className="font-semibold text-crit-ink">{tituloMarca(pior.marca)}</strong>, {fmtPct(pior.taxa)} em ruptura ({fmtInt(pior.ruptura)} de {fmtInt(pior.base)})</>
-          )
-        ) : undefined}
+        descricao={marcas.some((l) => l.maiorPerda !== null)
+          ? "Da maior para a menor perda potencial por dia. R$ não é somado entre canais."
+          : "Da maior para a menor taxa de ruptura."}
         semPadding
       >
         <div className="overflow-x-auto">
@@ -341,7 +312,7 @@ function Conteudo({ canais, impacto, recarregar }: { canais: ResumoCanal[]; impa
                   <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined}>
                     <th scope="row" className="px-4 py-2 text-left font-medium text-ink">
                       {tituloMarca(l.marca)}
-                      {ehPior && <span className="ml-2 text-xs font-semibold text-crit-ink">pior</span>}
+                      {ehPior && <span className="ml-2 text-xs font-semibold text-crit-ink">{l.maiorPerda !== null ? "maior impacto" : "pior"}</span>}
                     </th>
                     {CANAIS.map((canal) => {
                       const cel: MarcaCanal | undefined = l.celulas[canal];
