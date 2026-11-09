@@ -523,5 +523,10 @@ test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de fres
   assert.ok(src.includes("<Heroi") && src.includes('variante="gerencial"') && src.includes("<KpiDrilldownDialog"), "esqueleto da Gerencial");
   assert.equal((src.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um so' dialogo na pagina");
   assert.ok(!src.includes("selo="), "sem selo: nao ha' limite de negocio para ruptura");
+  // CARD-KPI-GERENCIAL: cor de identidade da paleta (impacto = gmv, param a venda = pedidos);
+  // sem delta, "antes" nem serie enquanto nao houver foto anterior real (API-4).
+  assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 1, "um KpiTile de impacto, renderizado por canal");
+  assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 1);
+  assert.ok(!/(delta|antes|serie)=\{/.test(src), "nada inventado: sem periodo anterior nem serie");
   assert.ok(!/min-w-\[/.test(src), "nenhuma tabela com largura minima (390 sem rolagem)");
 });
