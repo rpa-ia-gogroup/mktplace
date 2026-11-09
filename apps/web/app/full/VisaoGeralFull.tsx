@@ -407,7 +407,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
           ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
           valor={heroi.valor}
           tom={heroi.critico ? "critico" : "neutro"}
-          comparacao={<Escondido texto={heroi.contexto} detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
+          comparacao={<Escondido texto="do sortimento no Full" detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
           delta={aHeroi && <Pilula a={aHeroi} />}
           antes={aHeroi?.texto}
         />

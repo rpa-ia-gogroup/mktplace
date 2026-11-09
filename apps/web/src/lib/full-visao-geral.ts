@@ -860,8 +860,8 @@ export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null
   const ok = oks(canais);
   if (!ok.length) return null;
   const n = ok.reduce((s, c) => s + c.ruptura, 0);
-  const base = ok.reduce((s, c) => s + c.base, 0);
-  const contexto = `de ${n.toLocaleString("pt-BR")} rupturas com demanda · ${fmtPct(pct(n, base))} do sortimento`;
+  // O % do sortimento fica no cartao "Sem estoque com demanda" logo abaixo (nada repetido).
+  const contexto = `de ${n.toLocaleString("pt-BR")} rupturas com demanda`;
   if (abc === null) return { valor: "—", contexto: `carregando a curva · ${contexto}`, titulo: null, porCanal: {}, parcial: false, critico: false };
   if (abc.status !== "ok") return { valor: "—", contexto: `sem curva agora · ${contexto}`, titulo: abc.motivo ?? "curva ABC sem leitura", porCanal: {}, parcial: false, critico: false };
   const ranking = rankingRupturas(canais, impacto, abc);

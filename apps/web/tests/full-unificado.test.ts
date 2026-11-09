@@ -749,7 +749,7 @@ test("heroi: contagem AA/A, contexto e uma linha por canal; cobertura baixa sem 
   const imp = impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "K2", 20), itemImp("kokeshi", "X99", 20)]);
   const h = heroiCurva(canais, imp, ABC)!;
   assert.equal(h.valor, "2", "conta so' os AA/A (o Shopee do fixture nao tem curva)");
-  assert.equal(h.contexto, "de 3 rupturas com demanda · 37,5% do sortimento");
+  assert.equal(h.contexto, "de 3 rupturas com demanda", "o % do sortimento fica so' no cartao abaixo");
   assert.equal(h.porCanal.ml, "2 AA/A · 80,0% do impacto potencial");
   assert.equal(h.critico, true);
   assert.equal(h.porCanal.shopee, "0 AA/A · nenhuma ruptura", "canal sem ruptura: nem %, nem 'curva em 0 de 0'");
@@ -765,7 +765,7 @@ test("heroi: leitura da curva em falha vira '—' com o motivo, nunca 0", () => 
   const falha: CurvaAbc = { status: "unavailable", motivo: "Curva ABC indisponível agora: a planilha não respondeu.", fonte: "", duplicadas: [], curva_por_sku: {} };
   const h = heroiCurva(canais, IMPACTO, falha)!;
   assert.equal(h.valor, "—");
-  assert.match(h.contexto, /^sem curva agora · de 3 rupturas/);
+  assert.equal(h.contexto, "sem curva agora · de 3 rupturas com demanda");
   assert.equal(h.titulo, falha.motivo);
   assert.deepEqual(h.porCanal, {}, "as linhas do meio voltam ao % sem estoque");
   assert.equal(heroiCurva(canais, IMPACTO, null)!.valor, "—", "carregando: tambem '—'");
