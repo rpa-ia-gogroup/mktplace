@@ -17,7 +17,8 @@
  *   3. "O que exige atencao agora";
  *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
  *   5. atendimento por loja;
- *   6. avaliacoes de produto da Shopee e CX do site (blocos proprios, falham sozinhos);
+ *   6. avaliacoes de produto da Shopee (bloco proprio, falha sozinho);
+ *      o CX do site (DTC) saiu da aba em 09/11, a pedido do usuario;
  *   7. Mais detalhes: fila do chat por espera e notas da coleta.
  * Um dialogo unico (`KpiDrilldownDialog`) para todos os detalhes.
  */
@@ -75,7 +76,6 @@ import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import AvaliacoesProduto from "./AvaliacoesProduto";
-import CxSite from "./CxSite";
 
 export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
   const { marca, dias } = filtros;
@@ -95,13 +95,8 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
   useEffect(() => carregar(), [carregar]);
 
   const chips = resultado?.ok ? chipsCx(resultado.dados) : null;
-  // Avaliacoes de produto e CX do site: buscas proprias, falham sozinhas
-  const site = (
-    <>
-      <AvaliacoesProduto filtros={filtros} />
-      <CxSite filtros={filtros} />
-    </>
-  );
+  // Avaliacoes de produto: busca propria, falha sozinha
+  const site = <AvaliacoesProduto filtros={filtros} />;
 
   return (
     <>

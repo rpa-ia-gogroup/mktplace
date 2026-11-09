@@ -128,25 +128,10 @@ test("carga parada vira selo critico; safra em texto curto", () => {
   assert.equal(textoSafra("2026-08-01", "2026-10-31"), "safras ago a out/26");
 });
 
-test("bloco entra na aba CX por uma linha", () => {
+test("o CX do site saiu da aba /cx (pedido do usuario, 09/11); o lib e a API ficam", () => {
   const fonte = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(fonte, /<CxSite filtros=\{filtros\} \/>/);
-  const bloco = readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8");
-  assert.match(bloco, /CX do site \(DTC\)/);
-  assert.match(bloco, /\{RESSALVA_REENVIO\}/);
-  assert.match(bloco, /avisoRecorte\(dias\)/);
-});
-
-test("sem chips no topo do bloco: periodo no subtitulo, frescor e Vision CX no ⓘ, carga parada so' no card", () => {
-  const bloco = readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8");
-  assert.match(bloco, /descricao=\{textoJanela\(d\.janela\)\}/);
-  assert.doesNotMatch(bloco, /<Chip>\{textoJanela/);
-  assert.doesNotMatch(bloco, /Reenvio: \{textoSafra/, "a safra ja' esta' no card");
-  assert.doesNotMatch(bloco, /realizado bruto, não bate com o Vision CX<\/Chip>/);
-  assert.match(bloco, /<InfoDica titulo="Reenvio e reembolso" texto=\{RESSALVA_REENVIO\} \/>/);
-  assert.match(bloco, /frescorDoBloco\(blocoDoCard\[t\.rotulo\]\)\.texto/);
-  assert.match(bloco, /<Chip tom="critico" ponto>Desatualizado<\/Chip>/);
-  assert.doesNotMatch(bloco, /text-crit-ink" data-testid="cx-site-aviso-reviews"/, "sem a linha vermelha solta");
+  assert.doesNotMatch(fonte, /CxSite/);
+  assert.throws(() => readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8"));
 });
 
 // ---------------------------------------------------------------------------

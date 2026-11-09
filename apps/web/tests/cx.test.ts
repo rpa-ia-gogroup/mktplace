@@ -845,10 +845,6 @@ test("cards com cor de identidade: faixa da /cx, CX do site e card CX da Gerenci
   assert.match(tela, /tile\("contactRate", "atendimento"/);
   assert.match(tela, /tile\("cancelamento", "ads", Ban, r\.cancelamento, null, rodapeComparacao\(r, "cancelamento"\)\)/);
   assert.match(tela, /tile\("reembolso", "gmv"/);
-  const site = readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8");
-  for (const par of ['"NPS do site": { identidade: "atendimento"', '"Taxa de reenvio": { identidade: "ads"', '"Taxa de reembolso": { identidade: "gmv"', '"Reviews 1–3 ★": { identidade: "pedidos"']) {
-    assert.ok(site.includes(par), par);
-  }
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /resposta: \{ identidade: "ticket"/, "na Gerencial a resposta e' kpi-ticket (nao repete o contact rate)");
   assert.match(resumo, /identidade="ads"\s+icone=\{Repeat2\}\s+rotulo="Reenvio"\s+tom="ausente"/);

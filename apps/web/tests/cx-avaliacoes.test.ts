@@ -81,7 +81,7 @@ test("url so' leva a marca; payload sem listas e' invalido", async () => {
 
 test("aba CX: avaliacoes entre 'Atendimento por loja' e o CX do site, nos tres estados", () => {
   const src = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf-8");
-  assert.match(src, /<AvaliacoesProduto filtros=\{filtros\} \/>\s*<CxSite filtros=\{filtros\} \/>/);
+  assert.match(src, /const site = <AvaliacoesProduto filtros=\{filtros\} \/>;/);
   const corpo = src.slice(src.indexOf("function Corpo"));
   assert.ok(corpo.indexOf("<AtendimentoPorLoja") < corpo.indexOf("{site}"));
 });

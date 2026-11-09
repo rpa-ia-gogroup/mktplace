@@ -307,7 +307,6 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
   const cx = arvoreDaRota("app/cx/page.tsx");
   for (const esperado of [
     "app/cx/CxConteudo.tsx",
-    "app/cx/CxSite.tsx",
     "src/components/KpiDrilldownDialog.tsx",
     "src/components/gerencial/CxDrilldown.tsx",
     "src/components/ui/Heroi.tsx",
