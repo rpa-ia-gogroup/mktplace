@@ -44,6 +44,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.services import slack_blocks as sb
+from app.services.canal_preposicao import do_canal
 from app.services.expedicao_service import FILA, RUN
 
 #: Limite de negocio: acima disto (estritamente) o canal entra em alerta.
@@ -295,7 +296,7 @@ def montar_blocos(leitura: Leitura, evento: str) -> list[dict]:
                       f"*{_rotulo_marca(m)}*  {_pct(x.fracao or 0.0)}  ·  "
                       f"{_inteiro(x.vencidos)} de {_inteiro(x.backlog)}" for m, x in marcas]
             blocos.append(sb.secao("*Por marca*\n" + "\n".join(linhas)))
-    blocos.append(sb.atalhos(sb.botao(f"Ver fila da {canal}",
+    blocos.append(sb.atalhos(sb.botao(f"Ver fila {do_canal(leitura.canal, canal)}",
                                       sb.url_expedicao(leitura.canal, detalhe=True), "primary")))
     return blocos
 

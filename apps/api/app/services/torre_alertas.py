@@ -32,6 +32,7 @@ from sqlalchemy import text
 from app.services import expedicao_service
 from app.services import expedicao_shopee_ldr_service as shopee_ldr
 from app.services import expedicao_tiktok_service as tiktok
+from app.services.canal_preposicao import do_canal, no_canal
 from app.services import ml_ldr_service as ml_ldr
 from app.services import performance_oficial_service as perf_oficial
 from app.services import shopee_ldr_dm_service as shopee_dm
@@ -55,7 +56,7 @@ META_TETO: dict[str, tuple[float, float]] = {
 
 ROTULO_CANAL = {"shopee": "Shopee", "mercadolivre": "Mercado Livre", "tiktokshop": "TikTok Shop"}
 #: "na Shopee", "no Mercado Livre", "no TikTok Shop".
-NO_CANAL = {"shopee": "na Shopee", "mercadolivre": "no Mercado Livre", "tiktokshop": "no TikTok Shop"}
+NO_CANAL = {k: no_canal(k, v) for k, v in ROTULO_CANAL.items()}
 
 #: Contas por canal (mesma cobertura da faixa). Fora daqui nao e' avaliado.
 CONTAS_POR_CANAL: dict[str, tuple[str, ...]] = {
@@ -504,7 +505,7 @@ def _bloco_vencidos(v: "LeituraVencidos") -> list[dict]:
         bola = ":red_circle:" if (m.fracao or 0) > LIMIAR_VENCIDOS else ":large_green_circle:"
         linhas.append(f"{bola} *{rotulo_marca(m.marca)}*  {pct(m.fracao or 0)}  ·  "
                       f"{inteiro(m.vencidos)} de {inteiro(m.fila)}")
-    return [sb.secao("\n".join(linhas), sb.botao(f"Ver fila do {canal}",
+    return [sb.secao("\n".join(linhas), sb.botao(f"Ver fila {do_canal(v.canal, canal)}",
                                                   sb.url_expedicao(v.canal, detalhe=True)))]
 
 
