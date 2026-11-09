@@ -117,7 +117,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
       />
       {!resultado ? (
         <>
-          <Heroi rotulo="Taxa de resposta" valor="—" carregando meio={null} />
+          <Heroi rotulo={ROTULO_INDICADOR.resposta} valor="—" carregando meio={null} />
           <StateBlock tipo="carregando" titulo="Carregando a aba CX" />
           {site}
         </>
@@ -174,8 +174,8 @@ function Corpo({ dados, filtros, site }: { dados: CxShopeeResponse; filtros: Fil
   return (
     <>
       <Heroi
-        rotulo="Taxa de resposta"
-        ajuda={<InfoDica titulo="Taxa de resposta" texto={notasDoTile(r, "resposta", filtros.dias).join(" ")} />}
+        rotulo={ROTULO_INDICADOR.resposta}
+        ajuda={<InfoDica titulo={ROTULO_INDICADOR.resposta} texto={notasDoTile(r, "resposta", filtros.dias).join(" ")} />}
         valor={r.resposta}
         tom={r.resposta === "—" ? "ausente" : "neutro"}
         contexto={heroi.contexto}
@@ -599,7 +599,7 @@ function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimento
                 <ThAjuda ajuda={AJUDA_CX.conversas} dica={v.rotuloConversas}>Conversas</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
-                <ThAjuda dica={metaResposta}>Taxa de resposta</ThAjuda>
+                <ThAjuda dica={metaResposta}>{ROTULO_INDICADOR.resposta}</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.avaliacao} dica={metaNota}>Nota</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.tempoResposta}>Tempo resp.</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.contactRate}>Contact rate</ThAjuda>

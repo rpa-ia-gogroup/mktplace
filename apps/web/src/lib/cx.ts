@@ -308,10 +308,6 @@ function tempoDaLoja(n: NaoLidas | undefined): { tempo: string; detalhe: string 
 
 type MetricaCx = ContaOficial["metricas"][number];
 
-/** Um nome so' para a mesma metrica oficial na aba (heroi, fila, tabela): "Taxa de resposta". */
-export function rotuloOficial(m: Pick<MetricaCx, "codigo" | "rotulo">): string {
-  return m.codigo === COD_RESPONDIDO ? "Taxa de resposta" : m.rotulo;
-}
 
 /** % com 1 casa, como o resto da aba; nota com 2 (com uma, 4,77 e 4,83 viram o mesmo 4,8 e a pior some). */
 export function valorOficial(m: Pick<MetricaCx, "codigo" | "valor" | "unidade">): string {
@@ -549,7 +545,7 @@ export function montarStatusMarcas(
       }
       const alertas = conta.metricas
         .filter((x) => x.situacao === "fora")
-        .map((x) => `${rotuloOficial(x)} ${valorOficial(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
+        .map((x) => `${x.rotulo} ${valorOficial(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
       // Tom e' o da propria Shopee (nivel); metrica fora da meta nunca fica verde.
       const tom: TomStatus = alertas.length && conta.tom === "bom" ? "atencao" : conta.tom;
       return { ...base, tom, rotulo: conta.nivel ?? "Sem nível", alertas };
@@ -747,7 +743,8 @@ export type IndicadorCx = "contactRate" | "resposta" | "cancelamento" | "reembol
 export const INDICADORES_CX: readonly IndicadorCx[] = ["contactRate", "resposta", "cancelamento", "reembolso"];
 export const ROTULO_INDICADOR: Record<IndicadorCx, string> = {
   contactRate: "Contact rate",
-  resposta: "Taxa de resposta",
+  // NOME-UNICO: o nome da Saude da Conta (shopee_11), o mesmo da API e do Seller Centre.
+  resposta: "Taxa de resposta do chat",
   cancelamento: "Cancelamento",
   reembolso: "Reembolso",
 };
@@ -769,7 +766,7 @@ export const MAX_ALERTAS = 2;
 /** Nome curto do indicador na linha "Atenção". */
 export const ROTULO_CURTO: Record<IndicadorCx, string> = {
   contactRate: "contact rate",
-  resposta: "resposta",
+  resposta: "resposta do chat",
   cancelamento: "cancelamento",
   reembolso: "reembolso",
 };
@@ -777,7 +774,7 @@ export const MIN_MARCAS_RISCO = 3;
 /** shortcut: resposta 0% teria excesso infinito; o teto so' ordena, trocar se 0% virar caso real. */
 const TETO_EXCESSO = 10;
 export const AJUDA_RISCO =
-  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais. Taxa de resposta abaixo da meta oficial da Shopee deixa a marca vermelha e em primeiro, mostrando a meta no lugar da mediana.";
+  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta do chat fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais. Taxa de resposta do chat abaixo da meta oficial da Shopee deixa a marca vermelha e em primeiro, mostrando a meta no lugar da mediana.";
 
 /** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
 export function medianaRisco(vals: number[]): number | null {
@@ -966,7 +963,7 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     }
     if (i === "resposta") {
       if (semFoto.has(m)) return semFoto.get(m)!;
-      return contas.has(m) ? "A Saúde da Conta não trouxe a taxa de resposta." : "Sem Saúde da Conta da Shopee.";
+      return contas.has(m) ? "A Saúde da Conta não trouxe a taxa de resposta do chat." : "Sem Saúde da Conta da Shopee.";
     }
     if (i === "cancelamento") return linhas.has(m) ? semPedidos : "Pedidos indisponíveis nesta carga.";
     if (!devOk) return dev?.motivo_indisponivel ?? "Devoluções indisponíveis nesta carga.";
@@ -1149,7 +1146,7 @@ export function itensAtencaoCx(
       itens.push({
         chave: `${s.chave}:${m.codigo}`,
         severidade: "critico",
-        titulo: `${s.marca}: ${rotuloOficial(m)} ${valorOficial(m)}`,
+        titulo: `${s.marca}: ${m.rotulo} ${valorOficial(m)}`,
         detalhe: metaDaMetrica(m),
         abre: { marca: s.chave },
       });
