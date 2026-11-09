@@ -699,6 +699,8 @@ test("fila em grupos: AA barato acima de A caro e de C caro; sem curva junto com
 });
 
 test("fila: filtro corta antes do top 10 e cabecalho de grupo so' em 'Todas'", () => {
+  assert.equal(descricaoTop([], true, false, true), "Produtos-chave primeiro (AA, depois A); dentro do grupo, pelo impacto potencial por dia");
+  assert.equal(descricaoTop([], true, false, false), "Rupturas de maior impacto potencial por dia", "sem curva, a descricao de antes");
   const canais: ResumoCanal[] = [resumoML(ML)];
   const muitos = Array.from({ length: 12 }, (_, i) => itemImp("kokeshi", `Z${i}`, 1000 - i));
   const imp2 = impactoCom([...muitos, itemImp("kokeshi", "K3", 1)]);

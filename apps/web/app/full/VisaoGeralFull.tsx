@@ -494,7 +494,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
       {/* 3. O que exige atencao agora: 2 colunas (marca, canal e venda na linha 2 do produto) */}
       <Panel
         titulo="O que exige atenção agora"
-        descricao={descricaoTop(top, comImpacto, algumaIncompleta)}
+        descricao={descricaoTop(top, comImpacto, algumaIncompleta, comCurva)}
         acao={
           <span className="flex flex-wrap gap-3 text-sm">
             {ok.map((c) => (

@@ -366,9 +366,13 @@ export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; com
 }
 
 /** Descricao do top: o que ordena, "todos do ML" quando a lista e' de um canal so', e se esta' incompleta. */
-export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean): string {
+export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean, comCurva = false): string {
   const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
-  return `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}${unico}${incompleta ? " · lista incompleta" : ""}`;
+  // Com a curva, a ordem e' por grupo (AA, A, demais): a descricao diz isso.
+  const base = comCurva && comImpacto
+    ? "Produtos-chave primeiro (AA, depois A); dentro do grupo, pelo impacto potencial por dia"
+    : `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}`;
+  return `${base}${unico}${incompleta ? " · lista incompleta" : ""}`;
 }
 
 /** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
