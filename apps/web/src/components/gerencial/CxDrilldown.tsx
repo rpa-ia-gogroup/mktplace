@@ -30,13 +30,20 @@ export default function CxDrilldownContent({
   notas,
   geradoEm,
   cxHref,
+  periodo = "Últimos 30 dias até ontem",
+  dias = 30,
 }: {
   indicador: IndicadorCx;
   resumo: ResumoCx;
   /** Ressalvas do tile (as mesmas do ⓘ), uma por linha. */
   notas: string[];
   geradoEm: string | null;
-  cxHref: string;
+  /** Saida para a aba completa; sem ela (dentro da propria aba CX), sem link. */
+  cxHref?: string;
+  /** Recorte escrito no contexto; a Gerencial usa o padrao (30 dias). */
+  periodo?: string;
+  /** Janela da seta do cancelamento ("vs N dias antes"). */
+  dias?: number;
 }) {
   const linhas = linhasDrilldownCx(r, indicador);
   const mediana = r.medianas[indicador];
@@ -53,10 +60,10 @@ export default function CxDrilldownContent({
             <span className="pb-0.5 text-sm font-semibold tabular-nums text-ink-muted">{r.reembolsado}</span>
           )}
           {indicador === "cancelamento" && r.cancelamentoDelta && (
-            <span className="pb-0.5 text-sm text-ink-muted">{r.cancelamentoDelta.texto} vs 30 dias antes</span>
+            <span className="pb-0.5 text-sm text-ink-muted">{r.cancelamentoDelta.texto} vs {dias} dias antes</span>
           )}
         </div>
-        <DrilldownContextLine leading="Shopee" periodLabel="Últimos 30 dias até ontem" refreshedAt={geradoEm} />
+        <DrilldownContextLine leading="Shopee" periodLabel={periodo} refreshedAt={geradoEm} />
         <p className="text-xs text-ink-muted">
           Mediana das marcas: <span className="font-semibold tabular-nums text-ink">{mediana == null ? "—" : pctCx(mediana)}</span>
           {mediana == null && " (menos de 3 marcas medidas)"}
@@ -91,7 +98,7 @@ export default function CxDrilldownContent({
         </ul>
       )}
 
-      <DrilldownCta href={cxHref}>Abrir CX completo →</DrilldownCta>
+      {cxHref && <DrilldownCta href={cxHref}>Abrir CX completo →</DrilldownCta>}
     </div>
   );
 }

@@ -9,51 +9,74 @@
  * (04/11/2026: "Não foi possível contatar a API"), por isso a busca e' aqui,
  * com `torreFetch`.
  *
- * Dois blocos, um por entrega da planilha de CX (04/11/2026):
- *   1. Atendimento — nº de chats, em aberto, % respondido, tempo de resposta,
- *      contact rate;
- *   2. Pareto dos problemas — motivos + quanto reembolsamos, reenviamos e
- *      cancelamos.
- * O que falta vira uma nota curta no rodape do bloco (ausencia nunca e' zero).
+ * CX-IDENTIDADE (08/11/2026, spec do Prumo): o esqueleto da Gerencial.
+ *   0. cabecalho com chips (canal, janela, captura da Saude da Conta);
+ *   1. heroi: taxa de resposta, selo da meta oficial, Saude da Conta por marca;
+ *   2. faixa: contact rate, cancelamento, reembolso, reenvio (os do card CX
+ *      da Gerencial, no periodo do filtro);
+ *   3. "O que exige atencao agora";
+ *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
+ *   5. atendimento por loja;
+ *   6. CX do site (bloco proprio, falha sozinho);
+ *   7. Mais detalhes: fila do chat por espera e notas da coleta.
+ * Um dialogo unico (`KpiDrilldownDialog`) para todos os detalhes.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import TableScrollHint from "@/components/TableScrollHint";
+import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
+import { notasDoTile } from "@/components/gerencial/CxResumo";
+import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
+import FilaAtencao from "@/components/ui/FilaAtencao";
+import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
+import KpiTile from "@/components/ui/KpiTile";
+import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
 import {
   AJUDA_CX,
+  AJUDA_RISCO,
+  ROTULO_INDICADOR,
+  avisoColetaChat,
   carregarCxShopee,
   carregarPedidosMotivo,
+  chipsCx,
   csvPedidosMotivo,
-  montarPedidosMotivo,
-  nomeDoCsvPedidos,
-  tipoDoItem,
-  type ItemPareto,
-  type LinhaFilaCx,
-  type ResultadoPedidos,
+  heroiCx,
+  itensAtencaoCx,
   montarAtendimentoCx,
   montarAvaliacaoLoja,
   montarPareto,
+  montarPedidosMotivo,
   montarStatusMarcas,
-  type AvaliacaoLojaCx,
+  nomeDoCsvPedidos,
+  resumoCxGerencial,
+  tipoDoItem,
   type CelulaMeta,
+  type CxShopeeResponse,
   type DeltaCx,
-  type StatusMarca,
   type FiltrosCx,
+  type IndicadorCx,
+  type ItemPareto,
+  type LinhaFilaCx,
   type ResultadoCx,
+  type ResultadoPedidos,
+  type ResumoCx,
+  type StatusMarca,
   type VisaoAtendimentoCx,
   type VisaoPareto,
 } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
-import { formatarInstante } from "@/lib/performance-contas";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import CxSite from "./CxSite";
 
-export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
+export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
 
@@ -70,38 +93,155 @@ export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
 
   useEffect(() => carregar(), [carregar]);
 
-  if (!resultado) {
-    return <StateBlock tipo="carregando" titulo="Carregando a aba CX" />;
-  }
-  if (!resultado.ok) {
-    return (
-      <StateBlock
-        tipo="erro"
-        titulo="Não foi possível carregar a aba CX"
-        descricao={resultado.motivo}
-        acao={
-          <button
-            type="button"
-            onClick={() => carregar()}
-            className="mt-1 inline-flex min-h-11 items-center rounded-lg border border-current/30 px-3 text-xs font-semibold hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            Tentar novamente
-          </button>
-        }
-      />
-    );
-  }
-
-  const { dados } = resultado;
-  const escopo = `${textoJanela(dados.janela)} · gerado em ${formatarInstante(dados.gerado_em) ?? dados.gerado_em}`;
+  const chips = resultado?.ok ? chipsCx(resultado.dados) : null;
+  const site = <CxSite filtros={filtros} />;
 
   return (
     <>
-      <p className="text-xs text-ink-muted" data-testid="cx-escopo">{escopo}</p>
-      {!marca && <StatusMarcas itens={montarStatusMarcas(dados, brandLabel)} />}
-      <Atendimento v={montarAtendimentoCx(dados, brandLabel)} avaliacao={montarAvaliacaoLoja(dados, brandLabel)} />
-      <Pareto v={montarPareto(dados, brandLabel)} filtros={filtros} />
-      <CxSite filtros={filtros} />
+      <PageHeader
+        title="CX"
+        icon={MessageCircle}
+        filters={barra}
+        meta={
+          <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
+            <Chip>Shopee</Chip>
+            {chips && (
+              <Chip title={chips.geradoEm}>
+                {chips.janela}
+                <span className="sr-only"> · {chips.geradoEm}</span>
+              </Chip>
+            )}
+            {chips?.saudeDaConta && <Chip>{chips.saudeDaConta}</Chip>}
+          </span>
+        }
+      />
+      {!resultado ? (
+        <>
+          <Heroi rotulo="Taxa de resposta" valor="—" carregando meio={null} />
+          <StateBlock tipo="carregando" titulo="Carregando a aba CX" />
+          {site}
+        </>
+      ) : !resultado.ok ? (
+        <>
+          <StateBlock
+            tipo="erro"
+            titulo="Não foi possível carregar a aba CX"
+            descricao={resultado.motivo}
+            acao={
+              <button
+                type="button"
+                onClick={() => carregar()}
+                className="mt-1 inline-flex min-h-11 items-center rounded-lg border border-current/30 px-3 text-xs font-semibold hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Tentar novamente
+              </button>
+            }
+          />
+          {site}
+        </>
+      ) : (
+        <Corpo dados={resultado.dados} filtros={filtros} site={site} />
+      )}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Corpo: um dialogo unico para todos os detalhes
+// ---------------------------------------------------------------------------
+type Dialogo = { marca: string } | { indicador: IndicadorCx };
+
+function Corpo({ dados, filtros, site }: { dados: CxShopeeResponse; filtros: FiltrosCx; site: ReactNode }) {
+  const v = montarAtendimentoCx(dados, brandLabel);
+  const r = resumoCxGerencial(dados, brandLabel);
+  const status = montarStatusMarcas(dados, brandLabel);
+  const pareto = montarPareto(dados, brandLabel);
+  const heroi = heroiCx(v);
+  const aviso = avisoColetaChat(dados);
+  const atencao = itensAtencaoCx(dados, r, brandLabel);
+  const janela = textoJanela(dados.janela);
+  const [dialogo, setDialogo] = useState<Dialogo | null>(null);
+  // trocar de filtro fecha o detalhe (ele seria de outro recorte)
+  useEffect(() => setDialogo(null), [filtros.marca, filtros.dias]);
+
+  const marcaAberta = dialogo && "marca" in dialogo ? status.find((s) => s.chave === dialogo.marca) ?? null : null;
+  const titulo = !dialogo
+    ? ""
+    : "indicador" in dialogo
+      ? `${ROTULO_INDICADOR[dialogo.indicador]} por marca · Shopee`
+      : `${marcaAberta?.marca ?? brandLabel(dialogo.marca)} · Saúde da Conta`;
+
+  return (
+    <>
+      <Heroi
+        rotulo="Taxa de resposta"
+        ajuda={<InfoDica titulo="Taxa de resposta" texto={notasDoTile(r, "resposta", filtros.dias).join(" ")} />}
+        valor={r.resposta}
+        tom={r.resposta === "—" ? "ausente" : "neutro"}
+        contexto={heroi.contexto}
+        aviso={aviso ? <Chip>{aviso}</Chip> : undefined}
+        selo={heroi.selo ?? undefined}
+        erro={v.estado === "erro" ? (v.motivo ?? "Atendimento indisponível nesta carga.") : undefined}
+        meio={status.length ? <SaudePorMarca itens={status} abrir={(m) => setDialogo({ marca: m })} /> : undefined}
+      />
+
+      <Faixa r={r} dias={filtros.dias} abrir={(i) => setDialogo({ indicador: i })} />
+
+      <FilaAtencao
+        titulo={
+          <span className="inline-flex items-center gap-1.5">
+            O que exige atenção agora
+            <InfoDica titulo="Fora da curva" texto={AJUDA_RISCO} />
+          </span>
+        }
+        itens={atencao.map((x) => ({
+          chave: x.chave,
+          severidade: x.severidade,
+          titulo: x.titulo,
+          detalhe: x.detalhe ?? undefined,
+          onAbrir: () => setDialogo(x.abre),
+        }))}
+        vazio="Nenhuma loja fora da meta nem conversa esperando há mais de 24 h."
+      />
+
+      {/* Por que: 7/12 (dominante) | 5/12 (ranking), como a 2a dobra da Gerencial */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+        <div className="min-w-0 lg:col-span-7">
+          <Pareto v={pareto} filtros={filtros} />
+        </div>
+        <div className="min-w-0 lg:col-span-5">
+          <ProblemasPorMarca v={pareto} />
+        </div>
+      </div>
+
+      <AtendimentoPorLoja v={v} metaResposta={r.respostaMeta} metaNota={montarAvaliacaoLoja(dados, brandLabel)?.meta ?? null} />
+
+      {site}
+
+      <MaisDetalhes resumo="fila do chat por tempo de espera e notas da coleta">
+        {v.fila.length > 0 ? (
+          <FilaChat linhas={v.fila} />
+        ) : (
+          <p className="text-xs text-ink-faint">Fila do chat: sem a leitura das faixas de espera nesta carga.</p>
+        )}
+        <Notas notas={[...new Set([...v.notas, ...pareto.notas])]} />
+      </MaisDetalhes>
+
+      <KpiDrilldownDialog open={dialogo != null} onClose={() => setDialogo(null)} title={titulo}>
+        {dialogo && "indicador" in dialogo && (
+          <CxDrilldownContent
+            indicador={dialogo.indicador}
+            resumo={r}
+            notas={notasDoTile(r, dialogo.indicador, filtros.dias)}
+            geradoEm={dados.gerado_em}
+            periodo={janela}
+            dias={filtros.dias}
+          />
+        )}
+        {dialogo && "marca" in dialogo && (
+          <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} janela={janela} />
+        )}
+      </KpiDrilldownDialog>
     </>
   );
 }
@@ -109,23 +249,6 @@ export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
 // ---------------------------------------------------------------------------
 // Pecas
 // ---------------------------------------------------------------------------
-/** [rotulo, valor, ajuda do "ⓘ"] */
-function Numeros({ itens }: { itens: [string, string, string?][] }) {
-  return (
-    <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {itens.map(([rotulo, valor, ajuda]) => (
-        <div key={rotulo} className="rounded-lg border border-line bg-surface p-3">
-          <dt className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            {rotulo}
-            {ajuda && <InfoDica texto={ajuda} titulo={rotulo} />}
-          </dt>
-          <dd className="mt-1 break-words text-2xl font-semibold tabular-nums text-ink">{valor}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
 function Notas({ notas }: { notas: string[] }) {
   if (!notas.length) return null;
   return (
@@ -137,20 +260,37 @@ function Notas({ notas }: { notas: string[] }) {
   );
 }
 
+/** Classes da tabela (DESIGN.md §5 Tables): cabeca em `raised`, numeros a direita. */
+const THEAD = "bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint";
 const TH = "whitespace-nowrap px-2 py-2 text-right";
+const TH_MARCA = "px-2 py-2 text-left";
+const TD = "whitespace-nowrap px-2 py-2 text-right tabular-nums text-ink-muted";
+const TR = "border-t border-line hover:bg-raised/60";
+const TR_TOTAL = "border-t-2 border-line-strong bg-raised font-semibold";
 
-/** Cabecalho de coluna com "ⓘ". */
-function ThAjuda({ children, ajuda }: { children: string; ajuda: string }) {
+/** Cabecalho de coluna com "ⓘ" e/ou dica em title + sr-only. */
+function ThAjuda({ children, ajuda, dica }: { children: string; ajuda?: string; dica?: string | null }) {
   return (
-    <th scope="col" className={TH}>
+    <th scope="col" className={TH} title={dica ?? undefined}>
       <span className="inline-flex items-center justify-end gap-1">
         {children}
-        <InfoDica texto={ajuda} titulo={children} />
+        {dica && <span className="sr-only"> ({dica})</span>}
+        {ajuda && <InfoDica texto={ajuda} titulo={children} />}
       </span>
     </th>
   );
 }
-const TD = "whitespace-nowrap px-2 py-2 text-right tabular-nums text-ink-muted";
+
+/** Um numero por celula; o detalhe fica no title e no texto so' para leitor de tela. */
+function Celula({ valor, dica, children }: { valor: string; dica?: string | null; children?: ReactNode }) {
+  return (
+    <td className={TD} title={dica ?? undefined}>
+      <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
+      {children}
+      {dica && <span className="sr-only"> ({dica})</span>}
+    </td>
+  );
+}
 
 /** Valor oficial com a meta da Shopee; fora da meta em vermelho. */
 function ComMeta({ c }: { c: CelulaMeta | null }) {
@@ -161,20 +301,8 @@ function ComMeta({ c }: { c: CelulaMeta | null }) {
       className={c.fora ? "rounded-md bg-crit-soft px-1.5 py-0.5 font-bold text-crit-ink ring-1 ring-crit/30" : "text-ink"}
     >
       {c.valor}
+      {c.fora && <span className="sr-only"> (fora da meta)</span>}
     </span>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 1. Atendimento
-// ---------------------------------------------------------------------------
-/** Numero com a contagem embaixo, pequena (ausencia segue "—"). */
-function ComContagem({ valor, contagem }: { valor: string; contagem: string }) {
-  return (
-    <>
-      <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
-      {contagem !== "—" && <span className="block text-xs text-ink-faint">{contagem}</span>}
-    </>
   );
 }
 
@@ -184,97 +312,330 @@ const COR_DELTA: Record<DeltaCx["sentido"], string> = {
   estavel: "text-ink-faint",
 };
 
-/** "Avaliação da loja": uma linha, da pior para a melhor, a pior em destaque. */
-function AvaliacaoLoja({ a }: { a: AvaliacaoLojaCx }) {
+/** "3 cancelamentos · Antes: 1,0%" — "—" nao entra (ausencia nunca vira texto de zero). */
+function dica(...partes: (string | null | false)[]): string | null {
+  const ok = partes.filter((p): p is string => !!p);
+  return ok.length ? ok.join(" · ") : null;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Heroi: Saude da Conta por marca (o "meio")
+// ---------------------------------------------------------------------------
+function SaudePorMarca({ itens, abrir }: { itens: StatusMarca[]; abrir: (marca: string) => void }) {
   return (
-    <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-ink-muted" data-testid="cx-avaliacao">
-      <span className="font-semibold text-ink">Avaliação da loja por marca</span>
-      {a.meta && <span className="text-ink-faint">({a.meta})</span>}
-      <InfoDica titulo="Avaliação da loja" texto={AJUDA_CX.avaliacao} />
-      {a.itens.map((x, idx) => (
-        <span key={x.chave} className="inline-flex items-center gap-1 tabular-nums">
-          {idx > 0 && <span aria-hidden="true" className="text-ink-faint">·</span>}
-          <span
-            className={
-              x.fora
-                ? "rounded-md bg-crit-soft px-1.5 py-0.5 font-bold text-crit-ink ring-1 ring-crit/30"
-                : x.pior
-                  ? "rounded-md bg-raised px-1.5 py-0.5 font-semibold text-ink ring-1 ring-line-strong"
-                  : ""
-            }
-          >
-            {x.marca} {x.nota}
-            {x.pior && <span className="font-normal"> (pior)</span>}
-            {x.fora && <span className="font-normal"> (fora da meta)</span>}
-          </span>
+    <div data-testid="cx-status-marcas">
+      <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        Saúde da Conta por marca
+        <span className="inline-flex normal-case tracking-normal">
+          <InfoDica texto={AJUDA_CX.status} titulo="Saúde da Conta" />
         </span>
-      ))}
-    </p>
+      </p>
+      <ul className="flex flex-wrap gap-x-1.5" aria-label="Saúde da Conta por marca, da pior para a melhor">
+        {itens.map((s) => (
+          <li key={s.chave}>
+            <button
+              type="button"
+              onClick={() => abrir(s.chave)}
+              aria-haspopup="dialog"
+              title={s.alertas.join(" · ") || undefined}
+              className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              {s.tom === "ausente" ? (
+                <span className="inline-flex items-center whitespace-nowrap rounded-md border border-dashed border-line-strong px-2 py-1 text-xs font-medium text-ink-faint hover:bg-raised">
+                  {s.marca} · {s.rotulo}
+                </span>
+              ) : (
+                <Chip tom={s.tom} ponto>
+                  <span className="font-semibold">{s.marca}</span> · {s.rotulo}
+                </Chip>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function Atendimento({ v, avaliacao }: { v: VisaoAtendimentoCx; avaliacao: AvaliacaoLojaCx | null }) {
+/** Detalhe da marca: o cartao do antigo "Status por marca", inteiro. */
+function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaFilaCx | null; janela: string }) {
+  if (!s) return <p className="text-sm text-ink-faint">Sem dados desta loja no recorte.</p>;
+  const numeros: [string, string][] = [
+    ["Aguardando", s.aguardando],
+    ["Cancel.", s.cancelamento],
+    ["Devol.", s.devolucoes],
+  ];
+  if (fila) numeros.push(["Há mais de 24 h", fila.mais24h], ["Mais antiga", fila.maisAntiga]);
   return (
-    <Panel titulo="Atendimento" descricao="Chat da Shopee por loja" aria-label="Atendimento">
-      {v.estado !== "dado" ? (
-        <StateBlock
-          tipo={v.estado === "erro" ? "erro" : "indisponivel"}
-          compacto
-          titulo={v.estado === "erro" ? "Atendimento indisponível nesta carga" : "Sem dados de atendimento"}
-          descricao={v.motivo ?? undefined}
-        />
+    <div className="flex flex-col gap-4 text-sm" data-testid="cx-detalhe-marca">
+      <div className="flex flex-wrap items-center gap-2">
+        {s.tom === "ausente" ? <Chip tom="ausente">{s.rotulo}</Chip> : <Chip tom={s.tom} ponto>{s.rotulo}</Chip>}
+        <span className="text-xs text-ink-faint">Shopee · {janela}</span>
+      </div>
+      {s.tom === "ausente" ? (
+        <p className="text-sm text-ink-muted">{s.alertas[0] ?? "Sem fotografia da Saúde da Conta."}</p>
+      ) : s.alertas.length ? (
+        <ul className="flex flex-col gap-1 text-sm font-medium text-crit-ink">
+          {s.alertas.map((a) => (
+            <li key={a}>{a}</li>
+          ))}
+        </ul>
       ) : (
-        <div className="flex flex-col gap-4" data-testid="cx-atendimento">
-          <Numeros
-            itens={[
-              [v.rotuloConversas, v.totais.conversas, AJUDA_CX.conversas],
-              ["Aguardando resposta", v.totais.aguardando, AJUDA_CX.aguardando],
-              ["Esperando há mais de 24 h", v.totais.mais24h, AJUDA_CX.mais24h],
-              ["Lojas fora da meta", v.totais.foraDaMeta.length ? v.totais.foraDaMeta.join(", ") : "Nenhuma"],
-            ]}
-          />
-          {avaliacao && <AvaliacaoLoja a={avaliacao} />}
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <caption className="sr-only">Atendimento do chat por loja Shopee</caption>
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                  <th scope="col" className="py-2 pr-3">Marca</th>
-                  <ThAjuda ajuda={AJUDA_CX.conversas}>Conversas</ThAjuda>
-                  <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
-                  <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
-                  <th scope="col" className={TH}>% respondido</th>
-                  <th scope="col" className={TH}>Nota</th>
-                  <ThAjuda ajuda={AJUDA_CX.tempoResposta}>Tempo resp.</ThAjuda>
-                  <ThAjuda ajuda={AJUDA_CX.contactRate}>Contact rate</ThAjuda>
-                </tr>
-              </thead>
-              <tbody>
-                {v.linhas.map((l) => (
-                  <tr key={l.chave} className="border-b border-line last:border-b-0">
-                    <th scope="row" className="py-2 pr-3 text-left font-semibold text-ink">{l.marca}</th>
-                    <td className={TD}>{l.conversas}</td>
-                    <td className={TD}><ComContagem valor={l.aguardandoPct} contagem={l.aguardando} /></td>
-                    <td className={TD}>{l.naoLidas}</td>
-                    <td className={TD}><ComMeta c={l.respondido} /></td>
-                    <td className={TD}><ComMeta c={l.nota} /></td>
-                    <td className={`${TD} ${l.tempoResposta === "—" ? "text-ink-faint" : ""}`} title={l.tempoDetalhe ?? undefined}>
-                      {l.tempoResposta}
-                    </td>
-                    <td className={TD}>{l.contactRate}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <p className="text-sm text-ok-ink">Todas as métricas na meta</p>
+      )}
+      <dl className="grid grid-cols-3 gap-3 border-t border-line pt-3">
+        {numeros.map(([rot, val]) => (
+          <div key={rot} className="min-w-0">
+            <dt className="text-xs text-ink-faint">{rot}</dt>
+            <dd className={`font-semibold tabular-nums ${val === "—" ? "text-ink-faint" : "text-ink"}`}>{val}</dd>
           </div>
-          {v.fila.length > 0 && <FilaChat linhas={v.fila} />}
-          <Notas notas={v.notas} />
+        ))}
+      </dl>
+      <p className="text-xs text-ink-faint">{AJUDA_CX.status}</p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 2. Faixa de KPIs: os do card CX da Gerencial, menos a resposta (heroi) e o
+//    Reenvio sem fonte (cartao sem numero nao entra na 1a dobra; a nota esta'
+//    em Mais detalhes)
+// ---------------------------------------------------------------------------
+function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: IndicadorCx) => void }) {
+  const tile = (i: IndicadorCx, icone: typeof Ban, valor: string, comparacao: ReactNode, delta?: ReactNode) => (
+    <KpiTile
+      variante="gerencial"
+      icone={icone}
+      rotulo={ROTULO_INDICADOR[i]}
+      valor={valor}
+      tom={valor === "—" ? "ausente" : "neutro"}
+      delta={delta}
+      comparacao={comparacao}
+      // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
+      ajuda={<InfoDica emControle texto={notasDoTile(r, i, dias).join(" ")} />}
+      onAbrir={() => abrir(i)}
+    />
+  );
+  const delta = r.cancelamentoDelta;
+  return (
+    <section aria-label="Indicadores do período">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
+        {tile("contactRate", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null)}
+        {tile(
+          "cancelamento",
+          Ban,
+          r.cancelamento,
+          delta ? <span className="whitespace-nowrap text-ink-faint">vs {dias} dias antes</span> : null,
+          delta ? <span className={`whitespace-nowrap ${COR_DELTA[delta.sentido]}`}>{delta.texto}</span> : undefined,
+        )}
+        {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
+        {tile("reembolso", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null)}
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 4a. Pareto dos problemas (7/12)
+// ---------------------------------------------------------------------------
+/** Classes LITERAIS: o Tailwind so' gera o que encontra escrito. */
+const COR_TIPO: Record<string, string> = {
+  "Devolução": "bg-canal-shopee",
+  Cancelamento: "bg-accent",
+};
+
+/** "10 devoluções" ou, sem medida, "devoluções: —" (ausencia nunca vira zero). */
+function parte(valor: string, rotulo: string): string {
+  return valor === "—" ? `${rotulo}: —` : `${valor} ${rotulo}`;
+}
+
+function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
+  const [aberto, setAberto] = useState<ItemPareto | null>(null);
+  // trocar de filtro fecha a lista (ela seria de outro recorte)
+  useEffect(() => {
+    setAberto(null);
+  }, [filtros.marca, filtros.dias]);
+  return (
+    <Panel
+      titulo="Pareto dos problemas"
+      descricao={
+        <span className="tabular-nums" data-testid="cx-pareto-totais">
+          {[parte(v.totais.devolucoes, "devoluções"), parte(v.totais.cancelamentos, "cancelamentos"), parte(v.totais.reembolsado, "reembolsado")].join(" · ")}
+        </span>
+      }
+      aria-label="Pareto dos problemas"
+      className="h-full"
+    >
+      <div className="flex flex-col gap-4" data-testid="cx-pareto">
+        {v.estado !== "dado" ? (
+          <StateBlock
+            tipo={v.estado === "erro" ? "erro" : v.estado === "vazio_legitimo" ? "vazio" : "indisponivel"}
+            compacto
+            titulo={v.motivo ?? "Sem dados"}
+          />
+        ) : (
+          <ol className="flex min-w-0 flex-col gap-2.5" aria-label="Motivos, do maior para o menor">
+            {v.itens.map((i) => (
+              <li key={i.chave}>
+                <button
+                  type="button"
+                  onClick={() => setAberto(aberto?.chave === i.chave ? null : i)}
+                  aria-expanded={aberto?.chave === i.chave}
+                  aria-controls="cx-pedidos-motivo"
+                  title={`Acumulado ${i.acumulado} · ver os pedidos deste motivo`}
+                  className={`flex min-h-11 w-full flex-col justify-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                    aberto?.chave === i.chave ? "bg-raised ring-1 ring-line-strong" : ""
+                  }`}
+                >
+                  <div className="flex w-full items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 break-words text-ink">
+                      {i.rotulo}
+                      {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">(sem tradução)</span>}
+                      <span className="ml-1.5 text-xs text-ink-faint">{i.tipo} · {i.natureza}</span>
+                    </span>
+                    <span className="shrink-0 tabular-nums text-ink-muted">
+                      {i.pct} <span className="text-xs">· {i.quantidade}</span>
+                      <span className="sr-only"> · acumulado {i.acumulado}</span>
+                    </span>
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-raised" aria-hidden="true">
+                    <div className={`h-full rounded-full ${COR_TIPO[i.tipo] ?? "bg-accent"}`} style={{ width: `${i.largura}%` }} />
+                  </div>
+                </button>
+              </li>
+            ))}
+            {v.resto && <li className="text-xs text-ink-faint">{v.resto}</li>}
+          </ol>
+        )}
+        {aberto && <PedidosDoMotivo item={aberto} filtros={filtros} fechar={() => setAberto(null)} />}
+      </div>
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 4b. Problemas por marca (5/12): um numero por celula, total em raised
+// ---------------------------------------------------------------------------
+function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
+  const t = v.total;
+  return (
+    <Panel titulo="Problemas por marca" aria-label="Problemas por marca" semPadding>
+      {v.linhas.length === 0 ? (
+        <div className="p-4">
+          <StateBlock tipo="indisponivel" compacto titulo="Sem pedidos por marca nesta carga" />
         </div>
+      ) : (
+        <TableScrollHint>
+          <table className="w-full min-w-[420px] border-collapse text-sm" data-testid="cx-problemas-marca">
+            <caption className="sr-only">Problemas por marca</caption>
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col" className={TH_MARCA}>Marca</th>
+                <th scope="col" className={TH}>Pedidos</th>
+                <ThAjuda ajuda={AJUDA_CX.cancelamentosMarca}>Cancel.</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.devolucoesMarca}>Devol.</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.reembolsadoMarca}>Reembolsado</ThAjuda>
+              </tr>
+            </thead>
+            <tbody>
+              {v.linhas.map((l) => (
+                <tr key={l.chave} className={TR}>
+                  <th scope="row" className="px-2 py-2 text-left font-medium text-ink">{l.marca}</th>
+                  <td className={TD}>{l.pedidos}</td>
+                  <Celula
+                    valor={l.cancelamentosPct}
+                    dica={dica(l.cancelamentos !== "—" && `${l.cancelamentos} cancelamentos`, l.cancelamentoAntes && `Antes: ${l.cancelamentoAntes}`)}
+                  >
+                    {l.cancelamentoDelta && <span className={`ml-1 text-xs ${COR_DELTA[l.cancelamentoDelta.sentido]}`}>{l.cancelamentoDelta.texto}</span>}
+                  </Celula>
+                  <Celula valor={l.devolucoesPct} dica={dica(l.devolucoes !== "—" && `${l.devolucoes} devoluções`)} />
+                  <Celula valor={l.reembolsado} dica={dica(l.reembolsoPct && `${l.reembolsoPct} aceitas/pedidos`)} />
+                </tr>
+              ))}
+              <tr className={TR_TOTAL}>
+                <th scope="row" className="px-2 py-2 text-left text-ink">Total</th>
+                <td className={TD}>{t.pedidos}</td>
+                <Celula
+                  valor={t.cancelamentosPct}
+                  dica={dica(v.totais.cancelamentos !== "—" && `${v.totais.cancelamentos} cancelamentos`, t.cancelamentoAntes && `Antes: ${t.cancelamentoAntes}`)}
+                >
+                  {t.cancelamentoDelta && <span className={`ml-1 text-xs ${COR_DELTA[t.cancelamentoDelta.sentido]}`}>{t.cancelamentoDelta.texto}</span>}
+                </Celula>
+                <Celula valor={t.devolucoesPct} dica={dica(t.devolucoes !== "—" && `${t.devolucoes} devoluções`)} />
+                <Celula valor={t.reembolsado} dica={dica(t.reembolsoPct && `${t.reembolsoPct} aceitas/pedidos`)} />
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollHint>
       )}
     </Panel>
   );
 }
 
+// ---------------------------------------------------------------------------
+// 5. Atendimento por loja: pior nota primeiro
+// ---------------------------------------------------------------------------
+function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimentoCx; metaResposta: string | null; metaNota: string | null }) {
+  // A antiga "(pior)" da avaliacao virou a ordem: nota mais baixa primeiro, sem nota no fim.
+  const linhas = [...v.linhas].sort((a, b) => (a.notaNum ?? Infinity) - (b.notaNum ?? Infinity));
+  return (
+    <Panel titulo="Atendimento por loja" aria-label="Atendimento por loja" semPadding>
+      {v.estado !== "dado" ? (
+        <div className="p-4">
+          <StateBlock
+            tipo={v.estado === "erro" ? "erro" : "indisponivel"}
+            compacto
+            titulo={v.estado === "erro" ? "Atendimento indisponível nesta carga" : "Sem dados de atendimento"}
+            descricao={v.motivo ?? undefined}
+          />
+        </div>
+      ) : (
+        <TableScrollHint>
+          <table className="w-full min-w-[760px] border-collapse text-sm" data-testid="cx-atendimento">
+            <caption className="sr-only">Atendimento do chat por loja Shopee, da pior nota para a melhor</caption>
+            <thead className={THEAD}>
+              <tr>
+                <th scope="col" className={TH_MARCA}>Marca</th>
+                <ThAjuda ajuda={AJUDA_CX.conversas} dica={v.rotuloConversas}>Conversas</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
+                <ThAjuda dica={metaResposta}>Taxa de resposta</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.avaliacao} dica={metaNota}>Nota</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.tempoResposta}>Tempo resp.</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.contactRate}>Contact rate</ThAjuda>
+              </tr>
+            </thead>
+            <tbody>
+              {linhas.map((l) => (
+                <tr key={l.chave} className={TR}>
+                  <th scope="row" className="px-2 py-2 text-left font-semibold text-ink">{l.marca}</th>
+                  <td className={TD}>{l.conversas}</td>
+                  <Celula valor={l.aguardandoPct} dica={dica(l.aguardando !== "—" && `${l.aguardando} aguardando`)} />
+                  <td className={TD}>{l.naoLidas}</td>
+                  <td className={TD}><ComMeta c={l.respondido} /></td>
+                  <td className={TD}><ComMeta c={l.nota} /></td>
+                  <Celula valor={l.tempoResposta} dica={l.tempoDetalhe} />
+                  <td className={TD}>{l.contactRate}</td>
+                </tr>
+              ))}
+              <tr className={TR_TOTAL}>
+                <th scope="row" className="px-2 py-2 text-left text-ink">Total</th>
+                <td className={TD}>{v.totais.conversas}</td>
+                <Celula valor={v.totais.aguardandoPct} dica={dica(v.totais.aguardando !== "—" && `${v.totais.aguardando} aguardando`)} />
+                <td className={TD}>{v.totais.naoLidas}</td>
+                <td className={TD} colSpan={4} />
+              </tr>
+            </tbody>
+          </table>
+        </TableScrollHint>
+      )}
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 7. Mais detalhes: fila do chat por tempo de espera
+// ---------------------------------------------------------------------------
 function FilaChat({ linhas }: { linhas: LinhaFilaCx[] }) {
   return (
     <section aria-labelledby="cx-fila-titulo" className="flex flex-col gap-2" data-testid="cx-fila">
@@ -282,12 +643,12 @@ function FilaChat({ linhas }: { linhas: LinhaFilaCx[] }) {
         Fila do chat: há quanto tempo o comprador espera
         <InfoDica texto={AJUDA_CX.fila} titulo="Fila do chat" />
       </h3>
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+      <TableScrollHint>
+        <table className="w-full min-w-[520px] border-collapse text-sm">
           <caption className="sr-only">Conversas aguardando resposta por tempo de espera</caption>
-          <thead>
-            <tr className="border-b border-line text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
-              <th scope="col" className="py-2 pr-3">Marca</th>
+          <thead className={THEAD}>
+            <tr>
+              <th scope="col" className={TH_MARCA}>Marca</th>
               <th scope="col" className={TH}>Até 1 h</th>
               <th scope="col" className={TH}>1 a 4 h</th>
               <th scope="col" className={TH}>4 a 24 h</th>
@@ -297,8 +658,8 @@ function FilaChat({ linhas }: { linhas: LinhaFilaCx[] }) {
           </thead>
           <tbody>
             {linhas.map((l) => (
-              <tr key={l.chave} className="border-b border-line last:border-b-0">
-                <th scope="row" className="py-2 pr-3 text-left font-semibold text-ink">{l.marca}</th>
+              <tr key={l.chave} className={TR}>
+                <th scope="row" className="px-2 py-2 text-left font-semibold text-ink">{l.marca}</th>
                 <td className={TD}>{l.ate1h}</td>
                 <td className={TD}>{l.de1a4h}</td>
                 <td className={TD}>{l.de4a24h}</td>
@@ -308,121 +669,8 @@ function FilaChat({ linhas }: { linhas: LinhaFilaCx[] }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 2. Pareto dos problemas
-// ---------------------------------------------------------------------------
-/** Classes LITERAIS: o Tailwind so' gera o que encontra escrito. */
-const COR_TIPO: Record<string, string> = {
-  "Devolução": "bg-canal-shopee",
-  Cancelamento: "bg-accent",
-};
-
-function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
-  const [aberto, setAberto] = useState<ItemPareto | null>(null);
-  // trocar de filtro fecha a lista (ela seria de outro recorte)
-  useEffect(() => {
-    setAberto(null);
-  }, [filtros.marca, filtros.dias]);
-  return (
-    <Panel titulo="Pareto dos problemas" descricao="Devoluções e cancelamentos por motivo" aria-label="Pareto dos problemas">
-      <div className="flex flex-col gap-4" data-testid="cx-pareto">
-        <Numeros
-          itens={[
-            ["Reembolsado", v.totais.reembolsado],
-            ["Devoluções", v.totais.devolucoes, AJUDA_CX.devolucoes],
-            ["Cancelamentos", v.totais.cancelamentos, AJUDA_CX.cancelamentos],
-            ["Reenviados", v.totais.reenviados],
-          ]}
-        />
-        {v.estado !== "dado" ? (
-          <StateBlock
-            tipo={v.estado === "erro" ? "erro" : v.estado === "vazio_legitimo" ? "vazio" : "indisponivel"}
-            compacto
-            titulo={v.motivo ?? "Sem dados"}
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-            <ol className="flex min-w-0 flex-col gap-2.5 xl:col-span-3" aria-label="Motivos, do maior para o menor">
-              {v.itens.map((i) => (
-                <li key={i.chave}>
-                  <button
-                    type="button"
-                    onClick={() => setAberto(aberto?.chave === i.chave ? null : i)}
-                    aria-expanded={aberto?.chave === i.chave}
-                    aria-controls="cx-pedidos-motivo"
-                    title="Ver os pedidos deste motivo"
-                    className={`flex w-full flex-col gap-1 rounded-md px-1.5 py-1 text-left hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      aberto?.chave === i.chave ? "bg-raised ring-1 ring-line-strong" : ""
-                    }`}
-                  >
-                  <div className="flex w-full items-baseline justify-between gap-3 text-sm">
-                    <span className="min-w-0 break-words text-ink">
-                      {i.rotulo}
-                      {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">(sem tradução)</span>}
-                      <span className="ml-1.5 text-xs text-ink-faint">{i.tipo} · {i.natureza}</span>
-                    </span>
-                    <span className="shrink-0 tabular-nums text-ink-muted">
-                      {i.quantidade} <span className="text-xs">· {i.pct} · acum. {i.acumulado}</span>
-                    </span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-raised" aria-hidden="true">
-                    <div className={`h-full rounded-full ${COR_TIPO[i.tipo] ?? "bg-accent"}`} style={{ width: `${i.largura}%` }} />
-                  </div>
-                  </button>
-                </li>
-              ))}
-              {v.resto && <li className="text-xs text-ink-faint">{v.resto}</li>}
-            </ol>
-            <div className="min-w-0 overflow-x-auto xl:col-span-2">
-              <table className="w-full border-collapse text-sm">
-                <caption className="sr-only">Problemas por marca</caption>
-                <thead>
-                  <tr className="border-b border-line text-left text-xs font-semibold text-ink-faint">
-                    <th scope="col" className="py-2 pr-3">Marca</th>
-                    <th scope="col" className={TH}>Pedidos</th>
-                    <ThAjuda ajuda={AJUDA_CX.cancelamentosMarca}>Cancel.</ThAjuda>
-                    <ThAjuda ajuda={AJUDA_CX.devolucoesMarca}>Devol.</ThAjuda>
-                    <ThAjuda ajuda={AJUDA_CX.reembolsadoMarca}>Reembolsado</ThAjuda>
-                  </tr>
-                </thead>
-                <tbody>
-                  {v.linhas.map((l) => (
-                    <tr key={l.chave} className="border-b border-line last:border-b-0">
-                      <th scope="row" className="py-2 pr-3 text-left font-medium text-ink">{l.marca}</th>
-                      <td className={TD}>{l.pedidos}</td>
-                      <td className={TD}>
-                        <span className={l.cancelamentosPct === "—" ? "text-ink-faint" : "text-ink"}>{l.cancelamentosPct}</span>
-                        {l.cancelamentoDelta && (
-                          <span
-                            className={`ml-1 text-xs ${COR_DELTA[l.cancelamentoDelta.sentido]}`}
-                            title={l.cancelamentoAntes ? `Antes: ${l.cancelamentoAntes}` : undefined}
-                          >
-                            {l.cancelamentoDelta.texto}
-                          </span>
-                        )}
-                        {l.cancelamentos !== "—" && <span className="block text-xs text-ink-faint">{l.cancelamentos}</span>}
-                      </td>
-                      <td className={TD}><ComContagem valor={l.devolucoesPct} contagem={l.devolucoes} /></td>
-                      <td className={TD}>
-                        {l.reembolsado}
-                        {l.reembolsoPct && <span className="ml-1 text-xs text-ink-faint">· {l.reembolsoPct}</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-        {aberto && <PedidosDoMotivo item={aberto} filtros={filtros} fechar={() => setAberto(null)} />}
-        <Notas notas={v.notas} />
-      </div>
-    </Panel>
   );
 }
 
@@ -448,7 +696,7 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
   const tipo = tipoDoItem(item);
   const [r, setR] = useState<ResultadoPedidos | null>(null);
   const caixa = useRef<HTMLElement>(null);
-  // a lista abre abaixo da tabela por marca: leva o olho ate' ela
+  // a lista abre abaixo dos motivos: leva o olho ate' ela
   useEffect(() => {
     // chaves: o Chrome novo devolve uma Promise de scrollIntoView, e o React
     // trataria o retorno como funcao de limpeza
@@ -527,68 +775,5 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
       )}
       {v && <Notas notas={v.avisos} />}
     </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 0. Status por marca (so' com "Todas as marcas")
-// ---------------------------------------------------------------------------
-const BORDA_TOM: Record<StatusMarca["tom"], string> = {
-  critico: "border-crit/40",
-  atencao: "border-warn/40",
-  bom: "border-line",
-  neutro: "border-line",
-  ausente: "border-dashed border-line",
-};
-
-function StatusMarcas({ itens }: { itens: StatusMarca[] }) {
-  if (!itens.length) return null;
-  return (
-    <Panel
-      titulo={
-        <span className="inline-flex items-center gap-1.5">
-          Status por marca
-          <InfoDica texto={AJUDA_CX.status} titulo="Status por marca" />
-        </span>
-      }
-      descricao="Saúde da Conta da Shopee, da pior para a melhor"
-      aria-label="Status por marca"
-    >
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5" data-testid="cx-status-marcas">
-        {itens.map((s) => (
-          <li key={s.chave} className={`flex min-w-0 flex-col gap-2 rounded-lg border bg-surface p-3 ${BORDA_TOM[s.tom]}`}>
-            <div className="flex items-center justify-between gap-2">
-              <span className="truncate text-sm font-semibold text-ink">{s.marca}</span>
-              <Chip tom={s.tom} ponto={s.tom !== "ausente"}>{s.rotulo}</Chip>
-            </div>
-            {s.tom === "ausente" ? (
-              <p className="text-xs text-ink-faint">{s.alertas[0] ?? "Sem fotografia da Saúde da Conta."}</p>
-            ) : s.alertas.length ? (
-              <ul className="flex flex-col gap-0.5 text-xs font-medium text-crit-ink">
-                {s.alertas.map((a) => (
-                  <li key={a}>{a}</li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-xs text-ok-ink">Todas as métricas na meta</p>
-            )}
-            <dl className="mt-auto grid grid-cols-3 gap-2 border-t border-line pt-2 text-xs">
-              {(
-                [
-                  ["Aguardando", s.aguardando],
-                  ["Cancel.", s.cancelamento],
-                  ["Devol.", s.devolucoes],
-                ] as const
-              ).map(([r, v]) => (
-                <div key={r} className="min-w-0">
-                  <dt className="truncate text-ink-faint">{r}</dt>
-                  <dd className="font-semibold tabular-nums text-ink">{v}</dd>
-                </div>
-              ))}
-            </dl>
-          </li>
-        ))}
-      </ul>
-    </Panel>
   );
 }

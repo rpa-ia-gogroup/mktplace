@@ -19,6 +19,11 @@ import {
   montarPedidosMotivo,
   montarStatusMarcas,
   reais,
+  chipsCx,
+  avisoColetaChat,
+  heroiCx,
+  itensAtencaoCx,
+  MAX_ITENS_ATENCAO,
   resumoCxGerencial,
   deltaPp,
   medianaRisco,
@@ -175,14 +180,14 @@ test("atendimento: conversas, aguardando, % respondido e contact rate por loja",
   assert.equal(v.rotuloConversas, "Conversas (30 dias)");
   const apice = v.linhas.find((l) => l.chave === "apice")!;
   assert.deepEqual([apice.conversas, apice.aguardando, apice.naoLidas, apice.contactRate], ["200", "3", "4", "20,0%"]);
-  assert.equal(apice.respondido?.valor, "82,65%");
+  assert.equal(apice.respondido?.valor, "82,7%", "% com 1 casa, como o resto da aba");
   assert.equal(apice.aguardandoPct, "1,5%", "3 aguardando / 200 conversas");
   const rit = v.linhas.find((l) => l.chave === "rituaria")!;
   assert.equal(rit.conversas, "—", "sem a leitura nova: traco, nunca zero");
   assert.equal(rit.contactRate, "—");
   assert.equal(rit.aguardandoPct, "—", "sem conversas: traco, nunca 0%");
   assert.equal(rit.respondido?.fora, true);
-  assert.deepEqual(v.totais, { conversas: "200", aguardando: "3", naoLidas: "10", mais24h: "—", foraDaMeta: ["RITUARIA"] });
+  assert.deepEqual(v.totais, { conversas: "200", aguardando: "3", aguardandoPct: "1,5%", naoLidas: "10", mais24h: "—", foraDaMeta: ["RITUARIA"] });
   assert.ok(v.notas.some((n) => /Tempo de resposta/.test(n)));
 });
 
@@ -292,7 +297,7 @@ test("status por marca: nivel oficial, metrica fora da meta em alerta, pior prim
   assert.equal(rit.tom, "atencao");
   assert.equal(rit.rotulo, "Bom");
   assert.equal(rit.alertas.length, 1);
-  assert.match(rit.alertas[0], /^Taxa de resposta do chat 45,31% \(meta >= 60\)$/);
+  assert.match(rit.alertas[0], /^Taxa de resposta 45,3% \(meta >= 60\)$/);
   const apice = s[1];
   assert.deepEqual([apice.tom, apice.alertas, apice.aguardando, apice.cancelamento, apice.devolucoes], ["bom", [], "3", "2,0%", "10"]);
   const lescent = s[2];
@@ -312,10 +317,11 @@ test("ajuda: conversas e cancelamentos explicados no ⓘ, nao em nota", () => {
   assert.match(AJUDA_CX.conversas, /Cada comprador conta uma vez/);
   assert.match(AJUDA_CX.cancelamentos, /não pagos/);
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.conversas\}>Conversas<\/ThAjuda>/);
+  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.conversas\} dica=\{v\.rotuloConversas\}>Conversas<\/ThAjuda>/);
   assert.match(AJUDA_CX.cancelamentosMarca, /não pagos/);
   assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.cancelamentosMarca\}>Cancel\.<\/ThAjuda>/);
-  assert.match(tela, /\{!marca && <StatusMarcas/);
+  // CX-IDENTIDADE: o status por marca virou pilulas no heroi, com uma ou todas as marcas
+  assert.match(tela, /<SaudePorMarca itens=\{status\}/);
 });
 
 test("filtro aplica sozinho: sem botao Aplicar (so' no noscript) e navega por hrefCx", () => {
@@ -672,4 +678,105 @@ test("seta do cancelamento: base explicita quando exclui marca sem historico", (
     rotulo,
   );
   assert.equal(todas.cancelamentoBase, null, "todas com historico: so' a seta");
+});
+
+// ---------------------------------------------------------------------------
+// CX-IDENTIDADE (08/11/2026): cabecalho em chips, heroi, fila de atencao
+// ---------------------------------------------------------------------------
+test("chips: janela, hora da resposta e a captura MAIS ANTIGA da Saude da Conta", () => {
+  const p = comConversas(30);
+  p.chat.contas[0] = { ...p.chat.contas[0], capturado_em: "2026-11-04T12:30:00Z" };
+  p.chat.contas[1] = { ...p.chat.contas[1], capturado_em: "2026-11-03T09:05:00Z" };
+  const c = chipsCx(p);
+  assert.equal(c.janela, "30 dias fechados · 05/10 a 03/11");
+  assert.match(c.geradoEm, /^gerado em 04\/11\/2026/);
+  assert.equal(c.saudeDaConta, "Saúde da Conta: 03/11 06:05", "horario de Brasilia, a mais antiga");
+  assert.equal(chipsCx(comConversas(30)).saudeDaConta, null, "sem captura: sem chip (nunca inventa data)");
+});
+
+test("aviso da coleta do chat: so' quando falta a leitura", () => {
+  const p = comConversas(30);
+  assert.equal(avisoColetaChat(p), null);
+  assert.equal(avisoColetaChat({ chat: { ...p.chat, nao_lidas_estado: "sem_fonte", nao_lidas: [] } }), "Conversas: aguardando a coleta");
+  assert.equal(avisoColetaChat({ chat: { ...p.chat, nao_lidas_estado: "erro" } }), "Conversas indisponíveis nesta carga");
+});
+
+test("heroi: contexto com aguardando e >24 h; selo pela meta oficial", () => {
+  const p = comConversas(30);
+  p.chat.nao_lidas[0].aguardando_mais_24h = 1;
+  const h = heroiCx(montarAtendimentoCx(p, rotulo));
+  assert.equal(h.contexto, "3 conversas aguardando · 1 há mais de 24 h");
+  assert.deepEqual(h.selo, { texto: "1 loja abaixo da meta", tom: "critico" });
+  const ok = comConversas(30);
+  ok.chat.contas = ok.chat.contas.slice(0, 1);
+  assert.deepEqual(heroiCx(montarAtendimentoCx(ok, rotulo)).selo, { texto: "Todas na meta", tom: "ok" });
+  const sem = heroiCx(montarAtendimentoCx({ ...ok, chat: { ...ok.chat, contas: [], nao_lidas_estado: "sem_fonte", nao_lidas: [] } }, rotulo));
+  assert.deepEqual([sem.contexto, sem.selo], [null, null], "sem medida: sem selo e sem contexto, nunca zero");
+});
+
+test("atendimento: total de aguardando em %, nota em numero para ordenar", () => {
+  const trunc = comConversas(30);
+  trunc.chat.nao_lidas[0].conversas_truncado = true;
+  const v = montarAtendimentoCx(trunc, rotulo);
+  assert.deepEqual([v.totais.conversas, v.totais.aguardandoPct], ["≥ 200", "≤ 1,5%"], "piso no total tambem");
+  assert.deepEqual(v.linhas.map((l) => [l.chave, l.notaNum]), [["apice", null], ["rituaria", 4.93]]);
+});
+
+test("fila de atencao: metrica fora da meta, >24 h, fora da curva sem repetir e sem foto", () => {
+  const p = comConversas(30);
+  Object.assign(p.chat.nao_lidas[0], { aguardando_mais_24h: 2, espera_max_s: 2 * 86400 });
+  const r = resumoCxGerencial(p, rotulo);
+  const itens = itensAtencaoCx(p, r, rotulo);
+  assert.deepEqual(
+    itens.map((i) => [i.severidade, i.titulo, i.detalhe]),
+    [
+      ["critico", "RITUARIA: Taxa de resposta 45,3%", "meta ≥ 60%"],
+      ["critico", "APICE: 2 conversas há mais de 24 h", "mais antiga: 2 d"],
+      ["info", "LESCENT: Sem fotografia capturada ainda.", null],
+    ],
+  );
+  assert.deepEqual(itens[0].abre, { marca: "rituaria" });
+  // fora da curva: entra uma vez por marca+indicador; a resposta fora da meta oficial nao repete
+  const curva = itensAtencaoCx(p, {
+    medianas: { contactRate: 10, resposta: 80, cancelamento: 1, reembolso: 1 },
+    marcas: [{ ...r.todas[0], chave: "rituaria", marca: "RITUARIA", acima: ["resposta", "cancelamento"], foraMeta: true, tom: "critico",
+      valores: { contactRate: null, resposta: 45.31, cancelamento: 2, reembolso: null } }],
+  }, rotulo);
+  const daCurva = curva.filter((i) => i.chave.includes(":curva:"));
+  assert.deepEqual(daCurva.map((i) => [i.titulo, i.detalhe, i.abre]), [["RITUARIA: cancelamento 2,0%", "mediana 1,0%", { indicador: "cancelamento" }]]);
+  assert.ok(MAX_ITENS_ATENCAO <= 8);
+});
+
+test("pareto: linha de total da tabela por marca", () => {
+  const p = comConversas(30);
+  const [apice, rit] = p.atendimento.marcas;
+  const v = montarPareto(
+    { ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, pedidos_anterior: 1000, cancelamentos_anterior: 10 }, rit] } },
+    rotulo,
+  );
+  assert.deepEqual(
+    { ...v.total, reembolsado: v.total.reembolsado.replace(/\s/g, " ") },
+    {
+      pedidos: "1.300", cancelamentosPct: "1,8%", cancelamentoDelta: { texto: "▲ 1,0 p.p.", sentido: "piorou" },
+      cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
+    },
+  );
+});
+
+test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalhes", () => {
+  const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
+  for (const peca of ["<Heroi", "<Faixa ", "<FilaAtencao", "lg:col-span-7", "lg:col-span-5", "<MaisDetalhes", "<KpiDrilldownDialog", "variante=\"gerencial\""]) {
+    assert.ok(tela.includes(peca), peca);
+  }
+  assert.ok(tela.lastIndexOf("<Heroi") < tela.indexOf("<Faixa ") && tela.indexOf("<Faixa ") < tela.indexOf("<FilaAtencao"), "ordem da spec");
+  assert.match(tela, /<PageHeader[\s\S]*icon=\{MessageCircle\}/);
+  assert.doesNotMatch(tela, /subtitle=/, "subtitulo virou chip");
+  // revisao do Prumo: sem cartao sem numero na faixa; um nome so' para a taxa; Pareto com 2 numeros por motivo
+  assert.doesNotMatch(tela, /rotulo="Reenvio"/);
+  assert.ok(tela.includes("grid grid-cols-1 gap-3 sm:grid-cols-3"));
+  assert.ok(tela.includes(">Taxa de resposta</ThAjuda>") && !tela.includes("% respondido</ThAjuda>"));
+  assert.doesNotMatch(tela, /· acum\. \{i\.acumulado\}/);
+  assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
+  const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias = DIAS\)/, "Gerencial segue com 30 dias por padrao");
 });

@@ -2,16 +2,16 @@
  * Aba CX (menu principal, 04/11/2026) — atendimento ao cliente nos
  * marketplaces. Primeira versao: so' Shopee.
  *
- * Ordem de leitura: chat (Saude da Conta, oficial e com a meta da Shopee) →
- * devolucoes (coleta propria) → cancelamentos → o que ainda falta, dito na
- * tela para a ausencia nunca parecer zero.
+ * CX-IDENTIDADE (08/11/2026): mesma identidade da Gerencial. Cabecalho com
+ * chips → heroi (taxa de resposta) → faixa de KPIs → "O que exige atencao
+ * agora" → por que (Pareto | problemas por marca) → atendimento por loja →
+ * CX do site → Mais detalhes.
  *
- * O servidor so' le os filtros da URL e desenha cabecalho e formulario; os
- * dados sao buscados pelo navegador em `CxConteudo` (a API vive atras do
- * login, via `/torre-api`). Nenhum dado demonstrativo.
+ * O servidor so' le os filtros da URL; o cabecalho (cujos chips dependem da
+ * resposta) e os dados vivem em `CxConteudo`, buscados pelo navegador (a API
+ * vive atras do login, via `/torre-api`). Nenhum dado demonstrativo.
  */
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
 import { lerFiltrosCx } from "@/lib/cx";
 import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
 
@@ -26,8 +26,7 @@ export default async function CxPage({ searchParams }: { searchParams: SearchPar
   const filtros = lerFiltrosCx(await searchParams, ALL_BRAND_KEYS);
   return (
     <PageContainer>
-      <PageHeader title="CX" subtitle="Atendimento ao cliente · Shopee" filters={<FiltrosCx f={filtros} />} />
-      <CxConteudo filtros={filtros} />
+      <CxConteudo filtros={filtros} barra={<FiltrosCx f={filtros} />} />
     </PageContainer>
   );
 }

@@ -55,8 +55,11 @@ const COR_DELTA: Record<DeltaCx["sentido"], string> = {
 const PONTO_TOM = { atencao: "bg-warn", critico: "bg-crit" } as const;
 const TINTA_TOM = { atencao: "text-warn-ink", critico: "text-crit-ink" } as const;
 
-/** As ressalvas de cada card: o ⓘ do card e o rodape do detalhe dizem o mesmo. */
-export function notasDoTile(r: ResumoCx, i: IndicadorCx): string[] {
+/**
+ * As ressalvas de cada card: o ⓘ do card e o rodape do detalhe dizem o mesmo.
+ * `dias`: janela da comparacao (a Gerencial usa sempre 30; a aba CX, o filtro).
+ */
+export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] {
   if (i === "contactRate") {
     return [
       `${AJUDA_CX.contactRate} Conversas ÷ pedidos.`,
@@ -79,7 +82,7 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx): string[] {
   if (i === "cancelamento") {
     return [
       `${AJUDA_CX.cancelamentos} Cancelamentos ÷ pedidos.`,
-      "A seta compara com os 30 dias anteriores, em pontos percentuais; subir é pior.",
+      `A seta compara com os ${dias} dias anteriores, em pontos percentuais; subir é pior.`,
       r.cancelamentoBase
         ? `A seta compara sem ${r.semHistoricoCancelamento.join(", ")} (sem histórico): ${r.cancelamentoBase.anterior} → ${r.cancelamentoBase.atual}.`
         : "",

@@ -20,8 +20,9 @@ import {
   type EstadoBloco,
   type JanelaDias,
   type Motivo,
+  textoJanela,
 } from "./performance-contas-atendimento.ts";
-import { MOTIVO_TIMEOUT, TIMEOUT_API_MS } from "./performance-contas.ts";
+import { formatarInstante, MOTIVO_TIMEOUT, TIMEOUT_API_MS } from "./performance-contas.ts";
 import { valorMetrica, type ContaOficial } from "./expedicao-performance.ts";
 
 export { JANELAS_DIAS, JANELA_PADRAO, type JanelaDias };
@@ -240,6 +241,8 @@ export interface LinhaAtendimentoCx {
   respondido: CelulaMeta | null;
   nota: CelulaMeta | null;
   contactRate: string;
+  /** Nota da loja (Saude da Conta) em numero, para ordenar pior primeiro; null sem nota. */
+  notaNum: number | null;
   /** Mediana (ou media, Kokeshi) do tempo de resposta; "—" sem medida. */
   tempoResposta: string;
   /** Detalhe do tempo (p90, % em ate' 1 h), para o title da celula. */
@@ -262,7 +265,15 @@ export interface VisaoAtendimentoCx {
   estado: "dado" | "sem_fonte" | "erro";
   motivo: string | null;
   rotuloConversas: string;
-  totais: { conversas: string; aguardando: string; naoLidas: string; mais24h: string; foraDaMeta: string[] };
+  totais: {
+    conversas: string;
+    aguardando: string;
+    /** Aguardando ÷ conversas, so' nas lojas com as duas leituras. */
+    aguardandoPct: string;
+    naoLidas: string;
+    mais24h: string;
+    foraDaMeta: string[];
+  };
   linhas: LinhaAtendimentoCx[];
   /** Fila do chat por loja (so' lojas com a leitura das faixas). */
   fila: LinhaFilaCx[];
@@ -295,10 +306,24 @@ function tempoDaLoja(n: NaoLidas | undefined): { tempo: string; detalhe: string 
   return { tempo: duracao(n.tempo_resposta_s), detalhe: partes.length ? partes.join(" · ") : null };
 }
 
+type MetricaCx = ContaOficial["metricas"][number];
+
+/** Um nome so' para a mesma metrica oficial na aba (heroi, fila, tabela): "Taxa de resposta". */
+export function rotuloOficial(m: Pick<MetricaCx, "codigo" | "rotulo">): string {
+  return m.codigo === COD_RESPONDIDO ? "Taxa de resposta" : m.rotulo;
+}
+
+/** % com 1 casa, como o resto da aba; nota com 2 (com uma, 4,77 e 4,83 viram o mesmo 4,8 e a pior some). */
+export function valorOficial(m: Pick<MetricaCx, "codigo" | "valor" | "unidade">): string {
+  if (m.valor == null || !Number.isFinite(m.valor)) return valorMetrica(m);
+  if (m.codigo === COD_NOTA) return FMT_NOTA.format(m.valor);
+  return m.unidade === "pct" ? pct(m.valor) : valorMetrica(m);
+}
+
 function celulaMeta(conta: ContaOficial | undefined, codigo: string): CelulaMeta | null {
   const m = conta?.metricas.find((x) => x.codigo === codigo);
   if (!m) return null;
-  return { valor: valorMetrica(m), fora: m.situacao === "fora", meta: m.rotulo_meta ?? null };
+  return { valor: valorOficial(m), fora: m.situacao === "fora", meta: m.rotulo_meta ?? null };
 }
 
 export function montarAtendimentoCx(
@@ -330,6 +355,7 @@ export function montarAtendimentoCx(
     naoLidas: inteiro(n?.valor),
     respondido: celulaMeta(contas.get(m), COD_RESPONDIDO),
     nota: celulaMeta(contas.get(m), COD_NOTA),
+    notaNum: contas.get(m)?.metricas.find((x) => x.codigo === COD_NOTA)?.valor ?? null,
     contactRate: comContactRate && conv != null && ped ? pct((conv / ped) * 100) : "—",
     tempoResposta: tempoDaLoja(n).tempo,
     tempoDetalhe: tempoDaLoja(n).detalhe,
@@ -378,8 +404,16 @@ export function montarAtendimentoCx(
     motivo: linhas.length ? null : (chat.motivo ?? "Nenhuma loja Shopee no filtro."),
     rotuloConversas: usa7 ? "Conversas (7 dias)" : "Conversas (30 dias)",
     totais: {
-      conversas: inteiro(somar(brutas.map((b) => b.conv))),
+      // conversas truncadas sao piso: o total tambem
+      conversas: (() => {
+        const t = inteiro(somar(brutas.map((b) => b.conv)));
+        return t !== "—" && brutas.some((b) => b.conv != null && b.n?.conversas_truncado) ? `≥ ${t}` : t;
+      })(),
       aguardando: inteiro(somar(brutas.map((b) => b.n?.aguardando_resposta))),
+      aguardandoPct: (() => {
+        const v = razaoPct(brutas.map((b) => [b.n?.aguardando_resposta, b.conv]));
+        return v != null && brutas.some((b) => b.n?.conversas_truncado) ? `≤ ${pct(v)}` : pct(v);
+      })(),
       naoLidas: inteiro(somar(brutas.map((b) => b.n?.valor))),
       mais24h: inteiro(somar(brutas.map((b) => b.n?.aguardando_mais_24h))),
       foraDaMeta: linhas.filter((l) => l.respondido?.fora).map((l) => l.marca),
@@ -515,7 +549,7 @@ export function montarStatusMarcas(
       }
       const alertas = conta.metricas
         .filter((x) => x.situacao === "fora")
-        .map((x) => `${x.rotulo} ${valorMetrica(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
+        .map((x) => `${rotuloOficial(x)} ${valorOficial(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
       // Tom e' o da propria Shopee (nivel); metrica fora da meta nunca fica verde.
       const tom: TomStatus = alertas.length && conta.tom === "bom" ? "atencao" : conta.tom;
       return { ...base, tom, rotulo: conta.nivel ?? "Sem nível", alertas };
@@ -568,6 +602,17 @@ export interface VisaoPareto {
     /** Devolucoes aceitas ÷ pedidos (a mesma taxa do card da Gerencial). */
     reembolsoPct: string | null;
   }[];
+  /** Linha de total da tabela por marca (as mesmas contas, somando as lojas). */
+  total: {
+    pedidos: string;
+    cancelamentosPct: string;
+    cancelamentoDelta: DeltaCx | null;
+    cancelamentoAntes: string | null;
+    devolucoesPct: string;
+    devolucoes: string;
+    reembolsado: string;
+    reembolsoPct: string | null;
+  };
   notas: string[];
 }
 
@@ -628,7 +673,27 @@ export function montarPareto(
   notas.push(`Reenvios: ${MOTIVO_REENVIO}; sem fonte ainda.`);
 
   const erro = dev?.estado === "erro" || can.motivos?.estado === "erro";
+  // Total: so' as lojas com os dois lados de cada conta (sem historico fica fora da seta).
+  const comHist = can.marcas.filter((m) => m.pedidos_anterior != null);
+  const cancTotal = razaoPct(can.marcas.map((m) => [m.cancelamentos, m.pedidos]));
+  const cancAntesTotal = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
+  const cancAtualHist = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
+  const devTotal = somar(marcas.map((m) => liquidas(devMarca.get(m))));
+  const linhaTotal = {
+    pedidos: inteiro(somar(can.marcas.map((m) => m.pedidos))),
+    cancelamentosPct: pct(cancTotal),
+    cancelamentoDelta: deltaPp(cancAtualHist, cancAntesTotal),
+    cancelamentoAntes: cancAntesTotal == null ? null : pct(cancAntesTotal),
+    devolucoesPct: pct(razaoPct(marcas.map((m) => [liquidas(devMarca.get(m)), canMarca.get(m)?.pedidos]))),
+    devolucoes: inteiro(devTotal),
+    reembolsado: dev?.estado === "dado" ? reais(dev.reembolsado) : "—",
+    reembolsoPct: (() => {
+      const v = razaoPct(marcas.map((m) => [devMarca.get(m)?.aceitas, canMarca.get(m)?.pedidos]));
+      return v == null ? null : pct(v);
+    })(),
+  };
   return {
+    total: linhaTotal,
     estado: todos.length ? "dado" : erro ? "erro" : blocoDev || blocoCan ? "vazio_legitimo" : "sem_fonte",
     motivo: todos.length ? null : erro ? "Fonte indisponível nesta carga." : "Nenhum problema registrado no período.",
     totais: {
@@ -980,6 +1045,147 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
         };
       }),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Aba CX no padrao Gerencial (CX-IDENTIDADE, 08/11/2026): cabecalho em chips,
+// heroi da taxa de resposta e "O que exige atencao agora".
+// ---------------------------------------------------------------------------
+const FMT_DIA_HORA = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+});
+
+export interface ChipsCx {
+  /** "30 dias fechados · 05/10 a 03/11" */
+  janela: string;
+  /** Hora da resposta da API (title do chip; nao e' frescor). */
+  geradoEm: string;
+  /** Captura MAIS ANTIGA da Saude da Conta entre as lojas; null sem nenhuma. */
+  saudeDaConta: string | null;
+}
+
+export function chipsCx(dados: Pick<CxShopeeResponse, "janela" | "gerado_em" | "chat">): ChipsCx {
+  const capturas = dados.chat.contas
+    .map((c) => (c.capturado_em ? new Date(c.capturado_em).getTime() : NaN))
+    .filter(Number.isFinite);
+  return {
+    janela: textoJanela(dados.janela),
+    geradoEm: `gerado em ${formatarInstante(dados.gerado_em) ?? dados.gerado_em}`,
+    saudeDaConta: capturas.length ? `Saúde da Conta: ${FMT_DIA_HORA.format(Math.min(...capturas)).replace(",", "")}` : null,
+  };
+}
+
+/** Estado da coleta do chat, quando falta: chip curto ao lado do numero do heroi. */
+export function avisoColetaChat(dados: Pick<CxShopeeResponse, "chat">): string | null {
+  const { chat } = dados;
+  if (chat.nao_lidas_estado === "erro") return "Conversas indisponíveis nesta carga";
+  const comLeitura = (chat.nao_lidas_estado === "dado" ? chat.nao_lidas ?? [] : []).some(
+    (n) => n.aguardando_resposta != null || n.conversas_30d != null || n.conversas_7d != null,
+  );
+  return comLeitura ? null : "Conversas: aguardando a coleta";
+}
+
+export interface HeroiCx {
+  /** "3 conversas aguardando · 1 há mais de 24 h"; null sem nenhuma leitura. */
+  contexto: string | null;
+  /** Regra: meta oficial da Shopee do "% respondido". null = nenhuma loja medida. */
+  selo: { texto: string; tom: "ok" | "critico" } | null;
+}
+
+export function heroiCx(v: Pick<VisaoAtendimentoCx, "totais" | "linhas">): HeroiCx {
+  const { aguardando, mais24h } = v.totais;
+  const partes = [
+    aguardando !== "—" ? `${aguardando} ${aguardando === "1" ? "conversa aguardando" : "conversas aguardando"}` : null,
+    mais24h !== "—" ? `${mais24h} há mais de 24 h` : null,
+  ].filter(Boolean);
+  const medidas = v.linhas.filter((l) => l.respondido);
+  const fora = v.totais.foraDaMeta.length;
+  return {
+    contexto: partes.length ? partes.join(" · ") : null,
+    selo: !medidas.length
+      ? null
+      : fora
+        ? { texto: `${fora} ${fora === 1 ? "loja abaixo" : "lojas abaixo"} da meta`, tom: "critico" }
+        : { texto: "Todas na meta", tom: "ok" },
+  };
+}
+
+export interface ItemAtencaoCx {
+  chave: string;
+  severidade: "critico" | "atencao" | "info";
+  titulo: string;
+  detalhe: string | null;
+  /** O que o clique abre: o detalhe da marca ou o do indicador. */
+  abre: { marca: string } | { indicador: IndicadorCx };
+}
+
+export const MAX_ITENS_ATENCAO = 8;
+const ORDEM_SEVERIDADE = { critico: 0, atencao: 1, info: 2 } as const;
+
+/** "meta ≥ 60%" a partir do numero da meta; sem numero, o rotulo da Shopee como veio. */
+function metaDaMetrica(m: ContaOficial["metricas"][number]): string | null {
+  if (m.meta != null && Number.isFinite(m.meta)) {
+    return `meta ${SINAL_META[m.comparador ?? ""] ?? m.comparador ?? ""} ${valorMetrica({ valor: m.meta, unidade: m.unidade })}`.replace(/\s+/g, " ");
+  }
+  return m.rotulo_meta ? m.rotulo_meta.toLowerCase() : null;
+}
+
+/**
+ * Fila "O que exige atencao agora": metrica oficial fora da meta e conversa
+ * esperando ha' mais de 24 h (critico), marca fora da curva (regra do
+ * CxResumo; a resposta fora da meta oficial ja' entrou como metrica, nao
+ * repete) e loja sem fotografia (informativo). Ate' `MAX_ITENS_ATENCAO`.
+ */
+export function itensAtencaoCx(
+  dados: Pick<CxShopeeResponse, "chat" | "atendimento" | "devolucoes">,
+  resumo: Pick<ResumoCx, "marcas" | "medianas">,
+  rotuloMarca: (m: string) => string,
+): ItemAtencaoCx[] {
+  const { chat } = dados;
+  const contas = new Map(chat.contas.map((c) => [c.marca, c]));
+  const itens: ItemAtencaoCx[] = [];
+  for (const s of montarStatusMarcas(dados, rotuloMarca)) {
+    for (const m of contas.get(s.chave)?.metricas.filter((x) => x.situacao === "fora") ?? []) {
+      itens.push({
+        chave: `${s.chave}:${m.codigo}`,
+        severidade: "critico",
+        titulo: `${s.marca}: ${rotuloOficial(m)} ${valorOficial(m)}`,
+        detalhe: metaDaMetrica(m),
+        abre: { marca: s.chave },
+      });
+    }
+  }
+  for (const n of chat.nao_lidas_estado === "dado" ? chat.nao_lidas ?? [] : []) {
+    const qtd = n.aguardando_mais_24h ?? 0;
+    if (qtd <= 0) continue;
+    itens.push({
+      chave: `${n.marca}:mais24h`,
+      severidade: "critico",
+      titulo: `${rotuloMarca(n.marca)}: ${inteiro(qtd)} ${qtd === 1 ? "conversa" : "conversas"} há mais de 24 h`,
+      detalhe: n.espera_max_s != null ? `mais antiga: ${duracao(n.espera_max_s)}` : null,
+      abre: { marca: n.marca },
+    });
+  }
+  for (const m of resumo.marcas) {
+    for (const i of m.acima) {
+      if (i === "resposta" && m.foraMeta) continue;
+      itens.push({
+        chave: `${m.chave}:curva:${i}`,
+        severidade: m.tom === "critico" ? "critico" : "atencao",
+        titulo: `${m.marca}: ${ROTULO_CURTO[i]} ${pct(m.valores[i])}`,
+        detalhe: `mediana ${pct(resumo.medianas[i])}`,
+        abre: { indicador: i },
+      });
+    }
+  }
+  for (const s of chat.sem_foto) {
+    itens.push({ chave: `${s.marca}:sem-foto`, severidade: "info", titulo: `${rotuloMarca(s.marca)}: ${s.motivo}`, detalhe: null, abre: { marca: s.marca } });
+  }
+  return itens
+    .map((x, idx) => ({ x, idx }))
+    .sort((a, b) => ORDEM_SEVERIDADE[a.x.severidade] - ORDEM_SEVERIDADE[b.x.severidade] || a.idx - b.idx)
+    .map(({ x }) => x)
+    .slice(0, MAX_ITENS_ATENCAO);
 }
 
 // ---------------------------------------------------------------------------
