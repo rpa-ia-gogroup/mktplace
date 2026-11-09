@@ -36,7 +36,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import ExpedicaoClient from "./ExpedicaoClient";
 import LdrTopo from "@/components/expedicao/LdrTopo";
-import PerformanceOficial from "@/components/expedicao/PerformanceOficial";
+import PerformanceOficial, { itensForaDoLimite, usePerformanceOficial } from "@/components/expedicao/PerformanceOficial";
 import TikTokDispatchPanel from "@/components/expedicao/TikTokDispatchPanel";
 import Note from "@/components/ui/Note";
 import Segmented from "@/components/ui/Segmented";
@@ -97,6 +97,10 @@ export default function ExpedicaoShell() {
   const [pronta, setPronta] = useState(false);
   // T-0010: `?demo=` (dados ficticios para QA). `demoAtivo` e' sempre falso em producao.
   const [demo, setDemo] = useState(false);
+
+  // IDENTIDADE-GERENCIAL: a Performance oficial vai para "Mais detalhes" do
+  // painel, e as metricas fora do limite sobem para "O que exige atencao".
+  const performance = usePerformanceOficial(API, canal, marca, PERFORMANCE_LIGADA && pronta);
 
   const lerDaUrl = useCallback(() => {
     setCanal(lerCanalExpedicao(window.location.search, FLAGS));
@@ -188,9 +192,12 @@ export default function ExpedicaoShell() {
       </p>
     );
   }
-  // CX-MKT-3: o LDR entra no esqueleto logo abaixo do cabecalho (slot `destaque`).
+  // CX-MKT-3: o LDR entra no esqueleto (slot `faixaTopo`), depois de "Backlog por marca".
   const destaque = PERFORMANCE_LIGADA ? <LdrTopo api={API} marca={marca} /> : undefined;
-  const corpoDoCanal = ehCanalDaFila(canal) ? (
+  const extras = PERFORMANCE_LIGADA
+    ? { performance: <PerformanceOficial estado={performance} />, itensOficiais: itensForaDoLimite(performance) }
+    : {};
+  const corpo = ehCanalDaFila(canal) ? (
     <ExpedicaoClient
       canal={canal}
       seletorCanal={seletorCanal}
@@ -199,6 +206,7 @@ export default function ExpedicaoShell() {
       marca={marca}
       aoTrocarMarca={trocarMarca}
       faixaTopo={destaque}
+      {...extras}
     />
   ) : (
     <TikTokDispatchPanel
@@ -208,20 +216,8 @@ export default function ExpedicaoShell() {
       marca={marca}
       aoTrocarMarca={trocarMarca}
       faixaTopo={destaque}
+      {...extras}
     />
-  );
-  // Performance oficial do canal escolhido no FIM da visao do gestor; segue a marca.
-  const corpo = PERFORMANCE_LIGADA ? (
-    <>
-      {corpoDoCanal}
-      {visao === "gestor" ? (
-        <div className="w-full px-4 pb-4">
-          <PerformanceOficial api={API} canal={canal} marca={marca} />
-        </div>
-      ) : null}
-    </>
-  ) : (
-    corpoDoCanal
   );
   if (!demo) return corpo;
   // T-0010: modo de demonstracao (so' fora de producao). A faixa e' ESCRITA:

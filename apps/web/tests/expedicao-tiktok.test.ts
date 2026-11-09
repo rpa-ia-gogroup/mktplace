@@ -429,7 +429,8 @@ test("LDR do TikTok e da Shopee (KPI e tabelas) usam TaxaComBase", async () => {
   const raiz = juntar(import.meta.dirname, "..");
   const tk = lerFonte(juntar(raiz, "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
   const sh = lerFonte(juntar(raiz, "src/components/expedicao/LdrShopeePanel.tsx"), "utf8");
-  assert.match(tk, /valor=\{<TaxaComBase numerador=\{ldr\.late\} base=\{ldr\.base\} taxa=\{ldr\.rate\} \/>\}/);
+  // Cartao "LDR da janela": a base numa linha menor (`linha`), pelo 390px.
+  assert.match(tk, /valor=\{<TaxaComBase numerador=\{ldr\.late\} base=\{ldr\.base\} taxa=\{ldr\.rate\}(?: linha)? \/>\}/);
   assert.match(tk, /<TaxaComBase numerador=\{m\.late\} base=\{m\.base\} taxa=\{m\.rate\} linha \/>/);
   assert.match(tk, /<TaxaComBase numerador=\{d\.late\} base=\{d\.base\} taxa=\{d\.rate\} linha \/>/);
   assert.match(tk, /<TaxaComBase numerador=\{f\.late\} base=\{f\.base\} taxa=\{f\.rate\} linha \/>/);

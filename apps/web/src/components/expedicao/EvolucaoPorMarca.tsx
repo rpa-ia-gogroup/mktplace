@@ -395,17 +395,22 @@ function TabelaUnica({
                   className="border-b border-line last:border-b-0"
                   data-estado={s?.estado ?? "sem_ponto"}
                 >
-                  <th scope="row" className="text-left font-semibold text-ink">
+                  <th
+                    scope="row"
+                    className="text-left font-semibold text-ink"
+                    title={!apelido && f?.atualizadaEm ? `atualizada ${f.atualizadaEm}` : undefined}
+                  >
                     {titulo}
+                    {/* IDENTIDADE-GERENCIAL: a linha 2 so' existe com mais de uma
+                        conta na marca; senao, a hora vai para title + sr-only. */}
                     {apelido ? (
-                      <span className="ml-1.5 text-xs font-normal text-ink-faint">{apelido}</span>
-                    ) : null}
-                    {f?.atualizadaEm ? (
-                      <span
-                        className="block text-xs font-normal text-ink-faint"
-                        data-testid="exp-hora-da-conta"
-                      >
-                        atualizada {f.atualizadaEm}
+                      <span className="block text-xs font-normal text-ink-faint" data-testid="exp-hora-da-conta">
+                        {apelido}
+                        {f?.atualizadaEm ? ` · atualizada ${f.atualizadaEm}` : ""}
+                      </span>
+                    ) : f?.atualizadaEm ? (
+                      <span className="sr-only" data-testid="exp-hora-da-conta">
+                        {" "}· atualizada {f.atualizadaEm}
                       </span>
                     ) : null}
                   </th>
@@ -413,19 +418,18 @@ function TabelaUnica({
                     {inteiro(f ? f.backlog : (s?.atual ?? 0))}
                   </td>
                   {comVencidos ? (
-                    <td className="whitespace-nowrap text-right tabular-nums text-ink tc-num-pct">
+                    <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctVencidos ? `${f.pctVencidos} da fila` : undefined}>
                       {f?.vencidos == null ? (
                         "—"
                       ) : f.vencidos === 0 ? (
                         // EXPEDICAO-ATRASO-7D: zero vencidos AGORA nao zera a
                         // taxa de 7 dias (atrasados ÷ pedidos com prazo na
                         // janela). Toda linha com o calculo mostra o %.
-                        <span className="tc-vencido-zero">
+                        <span className="relative px-2">
                           {inteiro(0)}
                           {f.pctVencidos ? (
                             <>
-                              <span className="sr-only"> · </span>
-                              <span className="ml-1.5 tc-pct text-xs font-normal text-ink-faint">{f.pctVencidos}</span>
+                              <span className="sr-only"> · {f.pctVencidos} da fila</span>
                             </>
                           ) : null}
                         </span>
@@ -448,8 +452,7 @@ function TabelaUnica({
                           )}
                           {f.pctVencidos ? (
                             <>
-                              <span className="sr-only"> · </span>
-                              <span className="ml-1.5 tc-pct text-xs font-normal text-ink-faint">{f.pctVencidos}</span>
+                              <span className="sr-only"> · {f.pctVencidos} da fila</span>
                             </>
                           ) : null}
                         </span>
@@ -457,7 +460,7 @@ function TabelaUnica({
                     </td>
                   ) : null}
                   {comPerto ? (
-                    <td className="whitespace-nowrap text-right tabular-nums text-ink tc-num-pct">
+                    <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctPertoDeVencer ? `${f.pctPertoDeVencer} da fila` : undefined}>
                       {f?.pertoDeVencer == null ? (
                         "—"
                       ) : (
@@ -476,8 +479,7 @@ function TabelaUnica({
                           )}
                           {f.pctPertoDeVencer && f.pertoDeVencer > 0 ? (
                             <>
-                              <span className="sr-only"> · </span>
-                              <span className="ml-1 tc-pct text-xs font-normal text-ink-faint">{f.pctPertoDeVencer}</span>
+                              <span className="sr-only"> · {f.pctPertoDeVencer} da fila</span>
                             </>
                           ) : null}
                         </span>
@@ -487,7 +489,7 @@ function TabelaUnica({
                   <td className="text-right tabular-nums text-ink">
                     {inteiro(f ? f.acima48h : (ultimo?.over48h ?? 0))}
                   </td>
-                  <td className="whitespace-nowrap text-right tabular-nums text-ink tc-num-pct">
+                  <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctTravados && f.travados > 0 ? `${f.pctTravados} da fila` : undefined}>
                     {/* T-0021: "12" e "5,3%" eram lidos colados ("125,3%"); o
                         " · " so' para o leitor de tela, preso ao invólucro
                         `relative` (QA F1). */}
@@ -506,8 +508,7 @@ function TabelaUnica({
                       )}
                       {f?.pctTravados && f.travados > 0 ? (
                         <>
-                          <span className="sr-only"> · </span>
-                          <span className="ml-1 tc-pct text-xs text-ink-faint">{f.pctTravados}</span>
+                          <span className="sr-only"> · {f.pctTravados} da fila</span>
                         </>
                       ) : null}
                     </span>

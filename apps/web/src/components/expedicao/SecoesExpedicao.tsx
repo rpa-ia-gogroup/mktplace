@@ -11,85 +11,8 @@
 import { useId, type ReactNode } from "react";
 
 import InfoDica from "@/components/ui/InfoDica";
-import Panel from "@/components/ui/Panel";
-import type { ItemAtencao, TomAtencao } from "@/lib/expedicao-ux";
 
 import { ID_FAIXA_DE_CONTROLES } from "./CabecalhoExpedicao";
-
-const PONTO: Record<TomAtencao, string> = {
-  critico: "bg-crit",
-  atencao: "bg-warn",
-  neutro: "bg-ink-faint",
-  bom: "bg-ok",
-};
-
-const TINTA: Record<TomAtencao, string> = {
-  critico: "text-crit-ink",
-  atencao: "text-warn-ink",
-  neutro: "text-ink-muted",
-  bom: "text-ok-ink",
-};
-
-/** Escrito, e nao so' pintado: o ponto colorido nunca e' o unico sinal. */
-const ROTULO: Record<TomAtencao, string> = {
-  critico: "Crítico",
-  atencao: "Atenção",
-  neutro: "Nota",
-  bom: "Info",
-};
-
-/**
- * "O que exige atenção agora" — a narrativa do gestor.
- *
- * Linhas densas numa lista, e nao um banner por item: era a pilha de banners
- * que empurrava o primeiro numero do TikTok para baixo da dobra.
- */
-export function AtencaoAgora({
-  itens,
-  descricao,
-  semItens = "Nenhum alerta publicado para este recorte.",
-}: {
-  itens: ItemAtencao[];
-  /** Uma linha. Com a fonte velha, diz de QUANDO e' o "agora". */
-  descricao?: ReactNode;
-  /** Por que a lista esta' vazia — "nenhum alerta" so' quando e' verdade. */
-  semItens?: string;
-}) {
-  return (
-    <Panel titulo="O que exige atenção agora" descricao={descricao}>
-      {itens.length ? (
-        <ul className="flex flex-col divide-y divide-line">
-          {itens.map((i) => (
-            <li key={i.chave} className="flex items-start gap-3 py-2 first:pt-0 last:pb-0">
-              <span
-                className={`flex w-20 shrink-0 items-center gap-1.5 pt-0.5 text-xs font-semibold uppercase tracking-wide ${TINTA[i.tom]}`}
-              >
-                <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO[i.tom]}`} />
-                {ROTULO[i.tom]}
-              </span>
-              <p className="min-w-0 text-sm leading-snug text-ink">{i.texto}</p>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-sm text-ink-muted">{semItens}</p>
-      )}
-    </Panel>
-  );
-}
-
-/** Selo de leitura: "agora" na fila do instante, "inclui FBS" no aviso. */
-export function SeloLeitura({ children, tom = "neutro" }: { children: ReactNode; tom?: "neutro" | "atencao" }) {
-  const cor =
-    tom === "atencao"
-      ? "border-warn/40 bg-warn-soft text-warn-ink"
-      : "border-line bg-raised text-ink-muted";
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${cor}`}>
-      {children}
-    </span>
-  );
-}
 
 /**
  * Faixa de KPIs: quatro em destaque, seis (o "Risco atual" da Shopee) ou a
@@ -103,7 +26,7 @@ export function FaixaKpis({
 }: {
   rotulo: string;
   secundaria?: boolean;
-  colunas?: 3 | 4 | 6;
+  colunas?: 2 | 3 | 4 | 6;
   children: ReactNode;
 }) {
   const grade = secundaria
@@ -111,7 +34,10 @@ export function FaixaKpis({
     : colunas === 6
       ? "grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
       : colunas === 3
-        ? "grid grid-cols-2 gap-2 sm:grid-cols-3"
+        ? // No celular (2 colunas), o 3o cartao ocupa a linha: sem buraco.
+          "grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1"
+        : colunas === 2
+          ? "grid grid-cols-2 gap-2"
         : "grid grid-cols-2 gap-2 lg:grid-cols-4";
   return (
     <section aria-label={rotulo} className={grade}>

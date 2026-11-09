@@ -29,6 +29,8 @@ export async function resolve(spec, ctx, next) {
     const alvo = achar(join(dirname(fileURLToPath(ctx.parentURL)), spec));
     if (alvo) return { url: pathToFileURL(alvo).href, shortCircuit: true };
   }
+  // `next/link` sem extensao so' resolve no bundler; em ESM puro e' `next/link.js`.
+  if (spec === "next/link") return next("next/link.js", ctx);
   return next(spec, ctx);
 }
 

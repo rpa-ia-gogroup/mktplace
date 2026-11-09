@@ -29,10 +29,38 @@ const ROTULO: Record<SeveridadeQualidade, string> = {
   info: "Informação",
 };
 
+/**
+ * IDENTIDADE-GERENCIAL: ressalvas que a tela ja' diz em outro lugar, visiveis
+ * sem hover — a idade da fotografia/serie (chip "Desatualizada" do cabecalho)
+ * e as marcas com fonte em alerta (chip do heroi). Nao viram a nota da barra;
+ * continuam na lista de limitacoes.
+ */
+const DITO_NO_TOPO = new Set(["fotografia_antiga", "serie_desatualizada", "fonte_em_alerta"]);
+
 export default function BarraDeQualidade({ barra }: { barra: BarraQualidade }) {
   const [aberta, setAberta] = useState(false);
   const id = useId();
   if (!barra.principal) return null;
+  const principal = barra.detalhes.find((d) => !DITO_NO_TOPO.has(d.chave)) ?? null;
+  // So' o que ja' esta' no topo: sem nota, so' o acesso a' lista.
+  if (!principal) {
+    return (
+      <section aria-label="Qualidade do dado" className="flex flex-col items-start">
+        <button
+          type="button"
+          aria-expanded={aberta}
+          aria-controls={id}
+          onClick={() => setAberta((v) => !v)}
+          className="min-h-11 rounded-md px-1 text-xs font-semibold text-ink-muted underline underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          {aberta
+            ? "Ocultar limitações"
+            : `Ver ${barra.detalhes.length} ${barra.detalhes.length === 1 ? "limitação" : "limitações"} do dado`}
+        </button>
+        {aberta ? <ListaDeLimitacoes id={id} barra={barra} /> : null}
+      </section>
+    );
+  }
   // EXPEDICAO-TRAVADOS-1: so' informacao (ex.: marca fora da cobertura) nao
   // e' problema do dado — vira uma linha discreta com "ⓘ", sem caixa.
   if (barra.severidade === "info" && barra.detalhes.every((d) => d.curto)) {
@@ -51,7 +79,7 @@ export default function BarraDeQualidade({ barra }: { barra: BarraQualidade }) {
   return (
     <section aria-label="Qualidade do dado">
       <Note
-        tom={TOM[barra.principal.severidade]}
+        tom={TOM[principal.severidade]}
         papel="status"
         acao={
           mais ? (
@@ -67,21 +95,22 @@ export default function BarraDeQualidade({ barra }: { barra: BarraQualidade }) {
           ) : undefined
         }
       >
-        {barra.principal.texto}
+        {principal.texto}
       </Note>
-      {mais && aberta ? (
-        <ul
-          id={id}
-          className="mt-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-muted"
-        >
-          {barra.detalhes.map((d) => (
-            <li key={d.chave} className="flex gap-2 py-1">
-              <span className="w-20 shrink-0 font-semibold text-ink">{ROTULO[d.severidade]}</span>
-              <span>{d.texto}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {mais && aberta ? <ListaDeLimitacoes id={id} barra={barra} /> : null}
     </section>
+  );
+}
+
+function ListaDeLimitacoes({ id, barra }: { id: string; barra: BarraQualidade }) {
+  return (
+    <ul id={id} className="mt-1.5 rounded-lg border border-line bg-surface px-3 py-2 text-xs text-ink-muted">
+      {barra.detalhes.map((d) => (
+        <li key={d.chave} className="flex gap-2 py-1">
+          <span className="w-20 shrink-0 font-semibold text-ink">{ROTULO[d.severidade]}</span>
+          <span>{d.texto}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

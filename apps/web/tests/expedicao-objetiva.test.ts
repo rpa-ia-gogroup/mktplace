@@ -14,9 +14,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
-  ondeAgirNaFila,
-  medidasDoDestaque,
-  type Kpi,
+  montarFilaPorConta,
   type PontoTendencia,
   type RespostaTendencia,
   type ResumoConta,
@@ -45,91 +43,92 @@ function conta(shop: string, brand: string, over: Partial<Totais> = {}): ResumoC
 }
 
 // ---------------------------------------------------------------------------
-// 9. "onde agir"
+// 9. "O que exige atenção agora" por conta (o antigo "onde agir" e' o 1o item)
 // ---------------------------------------------------------------------------
-test("onde agir: a marca que concentra a medida mais grave acesa", () => {
-  const item = ondeAgirNaFila(
+test("fila por conta: da maior concentracao para a menor, 'X dos Y vencidos'", () => {
+  const itens = montarFilaPorConta(
     totais({ overdue_count: 27 }),
-    [conta("a", "apice", { overdue_count: 25 }), conta("b", "kokeshi", { overdue_count: 2 })],
+    [
+      conta("b", "kokeshi", { overdue_count: 2, stalled_count: 0, due_soon_count: 0 }),
+      conta("a", "apice", { overdue_count: 25, stalled_count: 3, due_soon_count: 4 }),
+    ],
     "shopee",
   );
-  assert.equal(item?.texto, "ÁPICE concentra 25 dos 27 vencidos.");
-  assert.equal(item?.tom, "critico");
+  assert.deepEqual(itens.map((i) => i.conta), ["a", "b"]);
+  assert.equal(itens[0].titulo, "ÁPICE: 25 dos 27 vencidos");
+  assert.equal(itens[0].detalhe, "3 travados · 4 perto de vencer");
+  assert.equal(itens[0].severidade, "critico");
+  assert.equal(itens[0].lista, "vencidos");
+  assert.equal(itens[0].valor, 25, "o dialogo abre com o numero da conta");
+  assert.equal(itens[1].detalhe, undefined, "sem travado nem perto, sem detalhe");
 });
 
-test("onde agir: sem vencidos, desce para a proxima medida; todos numa conta", () => {
-  const item = ondeAgirNaFila(
-    totais({ overdue_count: 0, due_within_24h_count: 8 }),
-    [conta("a", "apice", { due_within_24h_count: 0 }), conta("b", "kokeshi", { due_within_24h_count: 8 })],
-    "shopee",
-  );
-  assert.equal(item?.texto, "KOKESHI concentra todos os 8 a vencer em 24 h.");
-  assert.equal(item?.tom, "atencao");
-});
-
-test("onde agir: um pedido so' fica no singular", () => {
-  const item = ondeAgirNaFila(
+test("fila por conta: um pedido so' no singular; todos numa conta", () => {
+  const um = montarFilaPorConta(
     totais({ overdue_count: 1 }),
-    [conta("a", "apice", { overdue_count: 1 }), conta("b", "kokeshi", { overdue_count: 0 })],
+    [conta("a", "apice", { overdue_count: 1, stalled_count: 0 }), conta("b", "kokeshi", { overdue_count: 0, stalled_count: 0 })],
     "shopee",
   );
-  assert.equal(item?.texto, "ÁPICE tem o único pedido vencido.");
+  assert.equal(um[0].titulo, "ÁPICE: o único pedido vencido");
+  const todos = montarFilaPorConta(
+    totais({ overdue_count: 8 }),
+    [conta("a", "apice", { overdue_count: 0, stalled_count: 0 }), conta("b", "kokeshi", { overdue_count: 8, stalled_count: 0 })],
+    "shopee",
+  );
+  assert.equal(todos[0].titulo, "KOKESHI: todos os 8 vencidos");
 });
 
-test("onde agir: Mercado Livre nao fala de vencidos; uma conta so' nao gera frase", () => {
-  assert.deepEqual(medidasDoDestaque("mercadolivre"), ["over_48h_count", "stalled_count"]);
-  const ml = ondeAgirNaFila(
+test("fila por conta: sem vencido, perto de vencer ou travados vira atencao", () => {
+  const itens = montarFilaPorConta(
+    totais({ overdue_count: 0 }),
+    [
+      conta("a", "apice", { overdue_count: 0, stalled_count: 0, due_soon_count: 0 }),
+      conta("b", "kokeshi", { overdue_count: 0, stalled_count: 2, due_soon_count: 5 }),
+    ],
+    "shopee",
+  );
+  assert.equal(itens.length, 1, "conta sem nada aceso nao entra");
+  assert.equal(itens[0].severidade, "atencao");
+  assert.equal(itens[0].titulo, "KOKESHI: 5 perto de vencer · 2 travados");
+  assert.equal(itens[0].lista, "perto_de_vencer");
+});
+
+test("fila por conta: conta unica nao repete os numeros do heroi e da faixa", () => {
+  const itens = montarFilaPorConta(totais({ overdue_count: 10 }), [conta("a", "apice", { overdue_count: 10 })], "shopee");
+  assert.equal(itens[0].titulo, "ÁPICE: concentra todos os vencidos");
+  assert.doesNotMatch(itens[0].titulo, /\d/);
+  assert.equal(itens[0].detalhe, undefined);
+});
+
+test("fila por conta: Mercado Livre sem prazo fala de +48 h (atencao, nunca critico); sem totais, nada", () => {
+  const ml = montarFilaPorConta(
     totais({ over_48h_count: 9 }),
-    [conta("1", "kokeshi", { over_48h_count: 9 }), conta("2", "apice", { over_48h_count: 0 })],
+    [conta("1", "kokeshi", { over_48h_count: 9 }), conta("2", "apice", { over_48h_count: 0, stalled_count: 0 })],
     "mercadolivre",
   );
-  assert.match(ml!.texto, /acima de 48 h/);
-  assert.doesNotMatch(ml!.texto, /vencid/);
-  assert.equal(ondeAgirNaFila(totais(), [conta("a", "apice")], "shopee"), null);
-  assert.equal(ondeAgirNaFila(null, [conta("a", "apice"), conta("b", "kokeshi")], "shopee"), null);
+  assert.equal(ml[0].titulo, "KOKESHI: todos os 9 acima de 48 h");
+  assert.equal(ml[0].severidade, "atencao");
+  assert.equal(ml[0].lista, "acima_48h");
+  assert.doesNotMatch(ml.map((i) => i.titulo).join(" "), /vencid/);
+  assert.deepEqual(montarFilaPorConta(null, [conta("a", "apice")], "shopee"), [], "ausencia nao vira item");
 });
 
 // ---------------------------------------------------------------------------
-// 8. destaque
+// 8. heroi
 // ---------------------------------------------------------------------------
 const { createElement: h } = await import("react");
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { default: RiscoEmDestaque } = await import("../src/components/expedicao/RiscoEmDestaque.tsx");
 const { SecaoGerencial } = await import("../src/components/expedicao/SecoesExpedicao.tsx");
 const { default: EvolucaoPorMarca } = await import("../src/components/expedicao/EvolucaoPorMarca.tsx");
 
-const kpi = (chave: string, rotulo: string, valor: number | null): Kpi => ({ chave, rotulo, valor, alerta: false });
-
-test("destaque: vencidos grande em vermelho, backlog pequeno, onde agir dentro", () => {
-  const html = renderToStaticMarkup(
-    h(RiscoEmDestaque, {
-      principal: kpi("overdue", "Vencidos", 27),
-      backlog: kpi("backlog", "Backlog", 1234),
-      marcasAlerta: kpi("marcas_alerta", "Marcas em alerta", 2),
-      secundarios: h("i", null, "sec"),
-      prazo: h("b", null, "barra"),
-      ondeAgir: { chave: "overdue_count", tom: "critico", texto: "ÁPICE concentra 25 dos 27 vencidos." },
-    }),
-  );
-  assert.match(html, /text-4xl[^"]*text-crit-ink[^"]*">27</);
-  assert.match(html, /de 1\.234 em fila/);
-  assert.match(html, /2 marcas em alerta/);
-  assert.match(html, /<b>barra<\/b>/);
-  assert.match(html, /Onde agir:<\/span> ÁPICE concentra 25 dos 27 vencidos\./);
-  assert.match(html, /<i>sec<\/i>/);
-});
-
-test("destaque: zero nao pinta; +48 h (limiar interno) e' ambar, nao vermelho", () => {
-  const zero = renderToStaticMarkup(
-    h(RiscoEmDestaque, { principal: kpi("overdue", "Vencidos", 0), secundarios: null }),
-  );
-  assert.doesNotMatch(zero, /crit/);
-  assert.doesNotMatch(zero, /marcas? em alerta/, "sem marca em alerta, sem selo");
-  const ml = renderToStaticMarkup(
-    h(RiscoEmDestaque, { principal: kpi("over48h", "Acima de 48 h", 9), secundarios: null }),
-  );
-  assert.match(ml, /text-warn-ink/);
-  assert.doesNotMatch(ml, /text-crit-ink/);
+test("heroi: % da fila antes do absoluto; zero nao pinta; +48 h e' ambar; marcas em alerta so' com alerta", () => {
+  assert.match(CLIENTE, /const pctHeroi = valorHeroi !== null && backlogRisco !== null \? percentualDaFila\(valorHeroi, backlogRisco\) : null;/);
+  assert.match(CLIENTE, /`\$\{numero\(valorHeroi\)\} \$\{valorHeroi === 1 \? "pedido" : "pedidos"\} de \$\{numero\(backlogRisco\)\} em fila`/);
+  assert.match(CLIENTE, /tom=\{valorHeroi === null \|\| valorHeroi === 0 \? "neutro" : temPrazo \? "critico" : "atencao"\}/);
+  assert.match(CLIENTE, /\{qtdAlerta > 0 \? \(\s*<Chip ponto tom="atencao"/);
+  // Ausencia (marca de varias contas, sem total) e' "—" com o motivo, nunca 0.
+  assert.match(CLIENTE, /valorHeroi === null \? \(\s*<span title=\{avisoRecorte \?\? "Medida não publicada nesta fotografia\."\}>—<\/span>/);
+  assert.match(CLIENTE, /selo=\{\s*valorHeroi === null\s*\? undefined/);
 });
 
 test("secao: o ⓘ e o selo ficam fora do h3 (nome da secao = titulo)", () => {
@@ -200,21 +199,32 @@ test("tabela unica: sem tendencia ainda mostra as marcas; canal sem prazo sem co
 // ---------------------------------------------------------------------------
 // Fiacao na tela
 // ---------------------------------------------------------------------------
-test("tela: destaque no lugar da faixa e da lista; barra de prazo nao repete", () => {
-  assert.match(CLIENTE, /\{destaque \? \(\s*<RiscoEmDestaque/);
-  assert.match(CLIENTE, /\{destaque \? null : \(\s*<AtencaoAgora/);
-  assert.match(CLIENTE, /\{destaque && temBarraDePrazo \? null : \(/);
+test("tela: heroi, faixa e fila sem repetir numero; a barra de prazo e' o meio do heroi", () => {
   assert.match(CLIENTE, /const chaveDestaque = temPrazo \? "overdue" : "over48h";/);
-  // EXPEDICAO-PERTO-DE-VENCER: a barra saiu do destaque (fileira mais limpa);
-  // o cartao inteiro abre a lista.
-  assert.doesNotMatch(CLIENTE, /prazo=\{temPrazo \? barraDePrazo/);
-  assert.match(CLIENTE, /aoAbrir=\{abrirLista\(destaque, LISTA_DO_KPI\[destaque\.chave\]\)\}/);
+  assert.match(CLIENTE, /meio=\{meioHeroi\}/);
+  assert.match(CLIENTE, /const meioHeroi = temPrazo \?[\s\S]*?\{barraDePrazo\(\)\}/);
+  // A faixa nao repete o heroi: so' perto de vencer, +48 h e travados (sem prazo, travados).
+  assert.match(CLIENTE, /const chavesDaFaixa = temPrazo \? \["due_soon", "over48h", "stalled"\] : \["stalled"\];/);
+  // "Ver pedidos →" sempre visivel (nao so' no hover), abrindo a lista do heroi.
+  assert.match(CLIENTE, /const abrirHeroi = destaque \? abrirLista\(destaque, LISTA_DO_KPI\[destaque\.chave\]\) : undefined;/);
+  assert.match(CLIENTE, /onClick=\{abrirHeroi\}[\s\S]*?>\s*Ver pedidos →\s*<\/button>/);
+  assert.doesNotMatch(CLIENTE, /opacity-0[^"]*group-hover:opacity-100/);
+  // O 1o item da fila e' o antigo "onde agir"; ate' 6 itens.
+  assert.match(CLIENTE, /\]\.slice\(0, MAX_ITENS_DA_FILA\);/);
 });
 
-test("tela: so' o selo 'desatualizada' (o 'agora' saiu a pedido) e 'inclui FBS' com ⓘ", () => {
-  assert.match(CLIENTE, /\{fotografiaVelha \? <SeloLeitura tom="atencao">desatualizada<\/SeloLeitura> : null\}/);
-  assert.doesNotMatch(CLIENTE, /<SeloLeitura>agora<\/SeloLeitura>/);
-  assert.match(CLIENTE, /<SeloLeitura tom="atencao">inclui FBS<\/SeloLeitura>\s*<InfoDica texto=\{AVISO_FILA_COM_FBS\} \/>/);
+test("tela: 'desatualizada' uma vez (cabecalho) e no ⓘ do heroi; 'inclui FBS' so' no heroi, com ⓘ", () => {
+  // O selo de secao saiu; o aviso escrito fica no chip do cabecalho, e o
+  // "confirme antes de agir" no ⓘ do heroi (via `quando`).
+  assert.doesNotMatch(CLIENTE, /SeloLeitura/);
+  assert.match(CLIENTE, /desatualizada: confirme antes de agir/);
+  assert.match(CLIENTE, /const extrasHeroi = \[\s*quando,/);
+  assert.match(CABECALHO, /<Chip ponto tom="atencao"[^>]*>\s*Desatualizada\s*<\/Chip>/);
+  assert.match(CLIENTE, /<Chip tom="atencao">inclui FBS<\/Chip>\s*<InfoDica texto=\{AVISO_FILA_COM_FBS\} \/>/);
+  assert.equal((CLIENTE.match(/>inclui FBS</g) ?? []).length, 1, "o selo so' no heroi");
+  // Nas tabelas da fila publicada, vira title + sr-only do titulo.
+  assert.match(CLIENTE, /<span className="sr-only"> \(inclui pedidos FBS\)<\/span>/);
+  assert.match(CLIENTE, /<TituloComFbs titulo="Backlog por marca"/);
   assert.match(CABECALHO, /<InfoDica texto=\{definicao\} \/>/);
 });
 

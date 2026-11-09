@@ -21,13 +21,11 @@ import {
   KPIS_PRINCIPAIS,
   KPIS_RISCO_ATUAL,
   canalTemPrazo,
-  medidasDoDestaque,
-  montarAtencaoDaFila,
+  montarFilaPorConta,
   montarKpisPrincipais,
   montarMapaDeRisco,
   montarRiscoAtual,
   montarTimeline,
-  ondeAgirNaFila,
   type FotografiaDoPrazo,
   type LinhaFila,
   type ResumoConta,
@@ -101,26 +99,20 @@ test("ML com SLA: os quatro cartoes principais sao os da Shopee", () => {
   assert.deepEqual(semSla, [...KPIS_PRINCIPAIS.mercadolivre]);
 });
 
-test("ML com SLA: a atencao fala do prazo do Mercado Livre, nunca da Shopee", () => {
-  const itens = montarAtencaoDaFila(totais(), [conta("2227056661", "kokeshi")], "mercadolivre", COM_SLA);
-  const vencidos = itens.find((i) => i.chave === "overdue")!;
-  assert.equal(vencidos.tom, "critico");
-  assert.match(vencidos.texto, /prazo de despacho do Mercado Livre/);
-  assert.doesNotMatch(itens.map((i) => i.texto).join(" "), /Shopee/);
-  // Sem SLA, a frase de vencidos nao existe (nao ha o que vencer).
-  const sem = montarAtencaoDaFila(totais(), [conta("2227056661", "kokeshi")], "mercadolivre", SEM_SLA);
-  assert.ok(!sem.some((i) => i.chave === "overdue"));
-});
-
-test("ML com SLA: destaque e onde agir comecam pelos vencidos", () => {
-  assert.deepEqual(medidasDoDestaque("mercadolivre", SEM_SLA), ["over_48h_count", "stalled_count"]);
-  assert.equal(medidasDoDestaque("mercadolivre", COM_SLA)[0], "overdue_count");
+test("ML com SLA: a fila de atencao comeca pelos vencidos; sem SLA, pela idade (nunca critico)", () => {
   const contas = [
     conta("2227056661", "kokeshi", { overdue_count: 3 }),
     conta("2532564723", "barbours", { overdue_count: 1 }),
   ];
-  const onde = ondeAgirNaFila(totais(), contas, "mercadolivre", COM_SLA);
-  assert.equal(onde?.chave, "overdue_count");
+  const com = montarFilaPorConta(totais(), contas, "mercadolivre", COM_SLA);
+  assert.equal(com[0].severidade, "critico");
+  assert.equal(com[0].lista, "vencidos");
+  assert.match(com[0].titulo, /Kokeshi: 3 dos 4 vencidos/i);
+  assert.doesNotMatch(com.map((i) => i.titulo).join(" "), /Shopee/);
+  // Sem SLA nao ha o que vencer: a fila fala de +48 h, limiar interno (atencao).
+  const sem = montarFilaPorConta(totais(), contas, "mercadolivre", SEM_SLA);
+  assert.ok(sem.every((i) => i.severidade !== "critico" && i.lista !== "vencidos"));
+  assert.match(sem[0].titulo, /acima de 48 h/);
 });
 
 test("ML com SLA: a barra por marca e' a particao de prazo (empilhavel)", () => {
@@ -161,7 +153,8 @@ test("cliente: o prazo vem da fotografia do MESMO canal, e a LDR fica so' na Sho
   );
   assert.match(CLIENTE, /const temPrazo = canalTemPrazo\(filtros\.channel, fotografiaDoPrazo\);/);
   assert.match(CLIENTE, /const ldrNaSecao = LDR_SHOPEE_LIGADA && filtros\.channel === "shopee";/);
-  assert.match(CLIENTE, /acao=\{<Ajuda chave=\{`\$\{filtros\.channel\}\.prazo_situacao`\} \/>\}/);
+  // A barra de prazo e' o meio do heroi, com o ⓘ do canal (nunca o da Shopee fixo).
+  assert.match(CLIENTE, /const meioHeroi = temPrazo \?[\s\S]*?<Ajuda chave=\{`\$\{filtros\.channel\}\.prazo_situacao`\} \/>/);
 });
 
 test("lista em popup: a coluna Prazo aparece no ML quando alguma linha traz o SLA", () => {

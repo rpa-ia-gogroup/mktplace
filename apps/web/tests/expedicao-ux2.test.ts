@@ -522,13 +522,15 @@ test("tabela unica: travados le '12 · 5,3%' (com e sem o botao 'ver quais'), pr
     return m![1];
   };
   const travadosDe = (marca: string) =>
-    linha(marca).match(/<td class="whitespace-nowrap text-right[^"]*">([\s\S]*?)<\/td>/)![1];
+    linha(marca).match(/<td class="whitespace-nowrap text-right[^"]*"(?: title="[^"]*")?>([\s\S]*?)<\/td>/)![1];
 
   const k = travadosDe("KOKESHI");
-  assert.match(k, /^<span class="relative"><button[^>]*aria-label="Ver os 12 pedidos travados de KOKESHI"[^>]*>12<\/button><span class="sr-only"> · <\/span><span class="ml-1 [^"]*">5,3%<\/span><\/span>$/);
+  // IDENTIDADE-GERENCIAL: o % sai da tela (title da celula + sr-only); 1 numero visivel.
+  assert.match(k, /^<span class="relative"><button[^>]*aria-label="Ver os 12 pedidos travados de KOKESHI"[^>]*>12<\/button><span class="sr-only"> · 5,3% da fila<\/span><\/span>$/);
+  assert.match(html, /title="5,3% da fila"/);
   const l = travadosDe("LESCENT");
-  assert.equal(l.replace(/<[^>]+>/g, ""), "2 · 5,0%");
-  assert.match(l, /^<span class="relative">2<span class="sr-only"> · <\/span>/);
+  assert.equal(l.replace(/<[^>]+>/g, ""), "2 · 5,0% da fila");
+  assert.match(l, /^<span class="relative">2<span class="sr-only"> · 5,0% da fila<\/span>/);
   // sem percentual (zero travados), sem separador solto
   assert.equal(travadosDe("ÁPICE"), '<span class="relative">0</span>');
   assert.doesNotMatch(html, /125,3%|25,0%/);

@@ -26,12 +26,15 @@ export default function AjudaMetrica({
   chave,
   className = "",
   extras = [],
+  emControle = false,
 }: {
   chave: ChaveMetrica;
   className?: string;
   /** EXPEDICAO-SEM-TEXTAO: ressalvas que vem da RESPOSTA (limitacoes da API,
    * o que ficou fora da contagem). Entram no balao, nunca soltas na tela. */
   extras?: readonly string[];
+  /** IDENTIDADE-GERENCIAL: dentro do cartao-botao (KpiTile gerencial com onAbrir). */
+  emControle?: boolean;
 }) {
   const def = definicaoDe(chave);
   const nota = [def.limitacoes, ...extras.filter((e) => e && e !== def.limitacoes)].join(" ");
@@ -40,6 +43,7 @@ export default function AjudaMetrica({
       titulo={def.nome}
       texto={def.definicao}
       nota={nota}
+      emControle={emControle}
       className={`align-middle ${className}`}
     />
   );

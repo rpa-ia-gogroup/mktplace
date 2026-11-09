@@ -144,8 +144,10 @@ test("flag desligada: a secao Prazo fica como antes, inclusive o aviso de LDR au
   // EXPEDICAO-ML-PRAZO: a LDR (e o aviso dela) e' so' da Shopee; o ML com SLA
   // tem o proprio aviso, escolhido por `dicaDaSecaoPrazo`.
   assert.match(CLIENTE, /const ldrNaSecao = LDR_SHOPEE_LIGADA && filtros\.channel === "shopee";/);
-  assert.match(CLIENTE, /<SecaoGerencial titulo="Prazo" dica=\{ldrNaSecao \? undefined : dicaDaSecaoPrazo\(filtros\.channel\)\}>/);
-  assert.match(CLIENTE, /\{ldrNaSecao \? <LdrShopeePanel ldr=\{ldr\} marca=\{marcaAtiva\} \/> : null\}/);
+  // IDENTIDADE-GERENCIAL: sem a LDR, o aviso dela vai para o ⓘ do heroi; com
+  // ela, o painel fica em "Mais detalhes" (o LdrTopo e' o LDR da 1a dobra).
+  assert.match(CLIENTE, /!temPrazo \? SEM_PRAZO_CANAL_ML : !ldrNaSecao \? dicaDaSecaoPrazo\(filtros\.channel\) : null/);
+  assert.match(CLIENTE, /const maisDetalhes = \([\s\S]*?\{ldrNaSecao \? \(\s*<SecaoGerencial titulo="Prazo">\s*<LdrShopeePanel ldr=\{ldr\} marca=\{marcaAtiva\} \/>/);
   // Flag off = nenhuma requisicao: o hook so' liga com a flag E na Shopee.
   // O LDR e' sempre dos ultimos 7 dias, independente do periodo do topo.
   assert.match(CLIENTE, /useLdrShopee\(API, marcaAtiva, LDR_SHOPEE_LIGADA && filtros\.channel === "shopee", DIAS_LDR_SHOPEE\)/);
@@ -204,7 +206,7 @@ test("conferencia mostra parcelas e total, sem chamar o total de risco", () => {
 test("tela: risco do vendedor com a divisao; aviso de FBS sem ela; FBS em bloco proprio", () => {
   assert.match(CLIENTE, /const totaisRisco = divisao \? divisao\.vendedor : recorte\.totais;/);
   assert.match(CLIENTE, /montarRiscoAtual\(totaisRisco,/);
-  assert.match(CLIENTE, /montarAtencaoDaFila\(totaisRisco, contasRisco,/);
+  assert.match(CLIENTE, /montarFilaPorConta\(totaisRisco, contasRisco,/);
   assert.match(CLIENTE, /faixasDePrazo\(totaisRisco\)/);
   assert.match(CLIENTE, /filtros\.channel === "shopee" && !divisao && recorte\.totais \?/);
   assert.match(CLIENTE, /\{divisao \? <BlocoFbs divisao=\{divisao\} \/> : null\}/);

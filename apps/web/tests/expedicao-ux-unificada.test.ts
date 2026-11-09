@@ -31,7 +31,7 @@ import {
 } from "../src/lib/expedicao-ux.ts";
 import {
   fotografiaDaFila,
-  montarAtencaoDaFila,
+  montarFilaPorConta,
   type ResumoConta,
   type Totais,
 } from "../src/lib/expedicao-contract.ts";
@@ -165,8 +165,8 @@ function conta(over: Partial<ResumoConta>): ResumoConta {
   };
 }
 
-test("Shopee: vencidos vem primeiro, com a conta que mais concentra", () => {
-  const itens = montarAtencaoDaFila(
+test("Shopee: vencidos vem primeiro, da conta que mais concentra", () => {
+  const itens = montarFilaPorConta(
     totais({ overdue_count: 24, due_within_24h_count: 329, stalled_count: 3 }),
     [
       conta({ shop_account: "apice", brand: "apice", overdue_count: 5 }),
@@ -174,47 +174,45 @@ test("Shopee: vencidos vem primeiro, com a conta que mais concentra", () => {
     ],
     "shopee",
   );
-  assert.deepEqual(itens.map((i) => i.chave), ["overdue", "due24h", "stalled"]);
-  assert.equal(itens[0].tom, "critico");
-  assert.match(itens[0].texto, /^24 pedido\(s\) já passaram do prazo da Shopee/);
-  assert.match(itens[0].texto, /Maior concentração: BARBOURS, com 19\./);
-  assert.match(itens[1].texto, /^329 pedido\(s\) vencem nas próximas 24 h/);
+  assert.deepEqual(itens.map((i) => i.conta), ["barbours", "apice"]);
+  assert.equal(itens[0].severidade, "critico");
+  assert.equal(itens[0].titulo, "BARBOURS: 19 dos 24 vencidos");
 });
 
-test("Mercado Livre: nunca pergunta por prazo, e 48h e' limiar interno", () => {
-  const itens = montarAtencaoDaFila(
+test("Mercado Livre: nunca pergunta por prazo, e 48h e' limiar interno (atencao)", () => {
+  const itens = montarFilaPorConta(
     totais({ overdue_count: 7, due_within_24h_count: 3, over_48h_count: 169 }),
-    [conta({ shop_account: "2227056661", brand: "kokeshi", over_48h_count: 169 })],
+    [
+      conta({ shop_account: "2227056661", brand: "kokeshi", over_48h_count: 169, overdue_count: 7 }),
+      conta({ shop_account: "2532564723", brand: "barbours" }),
+    ],
     "mercadolivre",
   );
-  // `overdue` do ML e' zero/lixo por AUSENCIA de prazo: nunca vira frase.
-  assert.deepEqual(itens.map((i) => i.chave), ["over48h"]);
+  // `overdue` do ML e' zero/lixo por AUSENCIA de prazo: nunca vira item.
+  assert.deepEqual(itens.map((i) => i.lista), ["acima_48h"]);
   for (const i of itens) {
-    assert.doesNotMatch(i.texto, /vencid|prazo da Shopee|SLA/i, i.texto);
+    assert.doesNotMatch(i.titulo, /vencid|prazo da Shopee|SLA/i, i.titulo);
+    assert.notEqual(i.severidade, "critico", "limiar interno nao e' prazo do marketplace");
   }
-  assert.match(itens[0].texto, /limiar interno da Torre, não prazo do marketplace/);
-  // EXPEDICAO-UX-3: a marca e' a identidade da frase; o seller_id so'
-  // aparece quando a marca tem mais de uma conta.
-  assert.match(itens[0].texto, /Maior concentração: KOKESHI, com 169\./);
-  assert.doesNotMatch(itens[0].texto, /2227056661/);
+  // EXPEDICAO-UX-3: a marca e' a identidade; o seller_id so' com mais de uma conta na marca.
+  assert.match(itens[0].titulo, /^KOKESHI: todos os 169 acima de 48 h$/);
+  assert.doesNotMatch(itens[0].titulo, /2227056661/);
 });
 
-test("nada aceso nao vira 'tudo certo' em verde", () => {
+test("nada aceso nao vira 'tudo certo' em verde: lista vazia com frase neutra presa a fotografia", () => {
   for (const canal of ["shopee", "mercadolivre"] as const) {
-    const itens = montarAtencaoDaFila(totais(), [], canal);
-    assert.equal(itens.length, 1);
-    assert.equal(itens[0].tom, "neutro", "fotografia pode estar velha: sem verde");
-    assert.match(itens[0].texto, /^Nesta fotografia/);
+    assert.deepEqual(montarFilaPorConta(totais(), [conta({})], canal), []);
   }
-  assert.doesNotMatch(montarAtencaoDaFila(totais(), [], "mercadolivre")[0].texto, /vencid/);
+  assert.match(CLIENTE, /"Nesta fotografia, nenhum pedido vencido, perto de vencer ou travado\."/);
+  assert.match(CLIENTE, /"Nesta fotografia, nenhum pedido acima de 48 h ou travado\."/);
 });
 
-test("sem totais nao ha frase — ausencia nao vira zero", () => {
-  assert.deepEqual(montarAtencaoDaFila(null, [], "shopee"), []);
+test("sem totais nao ha item — ausencia nao vira zero", () => {
+  assert.deepEqual(montarFilaPorConta(null, [], "shopee"), []);
 });
 
-test("concentracao e' selecao, nao soma: empate fica com a primeira da API", () => {
-  const itens = montarAtencaoDaFila(
+test("concentracao e' selecao, nao soma: cada conta com o proprio numero", () => {
+  const itens = montarFilaPorConta(
     totais({ stalled_count: 10 }),
     [
       conta({ shop_account: "a", brand: "a", stalled_count: 5 }),
@@ -222,8 +220,8 @@ test("concentracao e' selecao, nao soma: empate fica com a primeira da API", () 
     ],
     "shopee",
   );
-  assert.match(itens[0].texto, /Maior concentração: A, com 5\./);
-  assert.doesNotMatch(itens[0].texto, /com 10\./, "nenhuma conta e' somada a outra");
+  assert.deepEqual(itens.map((i) => i.titulo), ["A: 5 travados", "B: 5 travados"]);
+  assert.doesNotMatch(itens.map((i) => i.titulo).join(" "), /10/, "nenhuma conta e' somada a outra");
 });
 
 test("a fotografia da fila repete a idade e o veredito que ja' existiam", () => {
@@ -399,17 +397,14 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
   // evolucao — a mesma ordem do TikTok. UI-EXPEDICAO-1 (decisao do usuario):
   // a concentracao entrou na TABELA UNICA de marcas do painel de evolucao,
   // entao o gestor nao tem mais a segunda tabela com as mesmas marcas.
-  for (const s of ["{secaoRisco}", "{secaoPrazo}", "{painelEvolucao}", "<ConviteAoDetalhe"]) {
+  // IDENTIDADE-GERENCIAL: heroi, faixa, atencao, backlog por marca (com a
+  // evolucao), LDR, Mais detalhes, convite — a ordem e' do esqueleto.
+  for (const s of ["heroi={heroi}", "faixa={faixa}", "atencao={filaDeAtencao}", "backlog={painelEvolucao}", "maisDetalhes={maisDetalhes}", "<ConviteAoDetalhe"]) {
     assert.ok(gestor.includes(s), `gestor sem ${s}`);
   }
-  assert.ok(
-    gestor.indexOf("{secaoRisco}") < gestor.indexOf("{secaoPrazo}") &&
-      gestor.indexOf("{secaoPrazo}") < gestor.indexOf("{painelEvolucao}"),
-    "ordem: risco, prazo, evolucao",
-  );
   assert.ok(!gestor.includes("painelContas("), "o gestor tem UMA tabela de marcas");
   assert.match(CLIENTE, /fila=\{linhasDaFila\}/);
-  assert.match(CLIENTE, /const secaoRisco = \([\s\S]*?<AtencaoAgora\s+itens=\{atencao\}/);
+  assert.match(CLIENTE, /const filaDeAtencao = \(\s*<FilaAtencao\s+itens=\{itensDaFila\}/);
   // marca de varias contas: a lista vazia diz POR QUE esta' vazia
   assert.match(CLIENTE, /Leitura por conta: veja “Backlog por marca”\./);
   assert.ok(!gestor.includes("{painelFila}"), "a fila paginada nao e' visao do gestor");
@@ -420,20 +415,14 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
 
 test("TikTok: LDR no gestor, fluxo por pagamento so' no detalhe", () => {
   const { gestor, detalhe } = ramos(TIKTOK.replace(/\r\n/g, "\n"));
-  for (const s of ["{secaoRisco}", "{secaoLdr}", "{painelEvolucao}", "painelLojas(", "<ConviteAoDetalhe"]) {
+  for (const s of ["<HeroiTikTok", "faixa={faixa}", "atencao={fila}", "evolucao={painelEvolucao}", "concentracao={painelLojas(", "maisDetalhes=", "{secaoPrazo(false)}", "<ConviteAoDetalhe"]) {
     assert.ok(gestor.includes(s), `gestor sem ${s}`);
   }
-  assert.ok(
-    gestor.indexOf("{secaoRisco}") < gestor.indexOf("{secaoLdr}") &&
-      gestor.indexOf("{secaoLdr}") < gestor.indexOf("{painelEvolucao}") &&
-      gestor.indexOf("{painelEvolucao}") < gestor.indexOf("painelLojas("),
-    "mesma ordem da fila: risco, prazo, evolucao, concentracao",
-  );
-  assert.match(TIKTOK, /const secaoRisco = ldr \? \([\s\S]*?<AtencaoAgora itens=\{atencao\} \/>/);
+  assert.match(TIKTOK, /const fila = <FilaAtencao itens=\{itensFila\}/);
   // LDR e fluxo por pagamento nao dividem a primeira dobra.
   assert.ok(!gestor.includes("painelFluxo("));
   assert.ok(!gestor.includes("{painelCoortes}"));
-  for (const s of ["{secaoLdr}", "{painelCoortes}", "painelLojas(", "painelFluxo("]) {
+  for (const s of ["{secaoPrazo(true)}", "{painelCoortes}", "painelLojas(", "painelFluxo("]) {
     assert.ok(detalhe.includes(s), `detalhe sem ${s}`);
   }
   // e o fluxo continua NOMEADO como visao auxiliar
@@ -451,7 +440,7 @@ test("o TikTok nao empilha mais banners antes do primeiro numero", () => {
   assert.doesNotMatch(codigo, /alerts\.map/, "um banner por alerta");
   assert.doesNotMatch(codigo, /AVISO_PRAZO_RECONSTRUIDO/, "aviso solto fora da barra");
   assert.match(TIKTOK, /<BarraDeQualidade barra=\{barra\} \/>/);
-  assert.match(TIKTOK, /<AtencaoAgora itens=\{atencao\}/);
+  assert.match(TIKTOK, /<FilaAtencao itens=\{itensFila\}/);
 });
 
 test("serie sem vencimento fechado troca o grafico por uma linha", () => {
@@ -501,9 +490,8 @@ const { default: CabecalhoExpedicao, ChipsFotografia } = await import(
   "../src/components/expedicao/CabecalhoExpedicao.tsx"
 );
 const { default: BarraDeQualidade } = await import("../src/components/expedicao/BarraDeQualidade.tsx");
-const { AtencaoAgora, ConviteAoDetalhe } = await import(
-  "../src/components/expedicao/SecoesExpedicao.tsx"
-);
+const { ConviteAoDetalhe } = await import("../src/components/expedicao/SecoesExpedicao.tsx");
+const { default: FilaAtencao } = await import("../src/components/ui/FilaAtencao.tsx");
 
 test("o cabecalho poe o canal no h2 e a profundidade num radiogroup", () => {
   const html = renderToStaticMarkup(
@@ -558,7 +546,9 @@ test("a barra mostra o principal e anuncia quantas limitacoes ha", () => {
     h(BarraDeQualidade, { barra: montarBarraDeQualidadeTikTok(payload()) }),
   );
   assert.match(html, /<section aria-label="Qualidade do dado">/);
-  assert.match(html, /Série desatualizada\./);
+  // IDENTIDADE-GERENCIAL: a idade da serie ja' esta' ESCRITA no chip
+  // "Desatualizada" do cabecalho; na barra ela fica so' na lista.
+  assert.doesNotMatch(html, /Série desatualizada\./);
   assert.match(html, /aria-expanded="false"/);
   assert.match(html, /aria-controls="[^"]+"/);
   assert.match(html, /Ver 3 limitações/);
@@ -568,21 +558,34 @@ test("a barra mostra o principal e anuncia quantas limitacoes ha", () => {
     "",
     "sem problema, sem barra",
   );
+  // So' o que o topo ja' diz (idade, fonte em alerta): sem nota, so' o acesso a' lista.
+  const soIdade = renderToStaticMarkup(
+    h(BarraDeQualidade, {
+      barra: consolidarQualidade([
+        { chave: "fotografia_antiga", severidade: "atencao", texto: "Fotografia publicada há 30 h." },
+        { chave: "fonte_em_alerta", severidade: "alerta", texto: "1 marca(s) com a fonte em alerta: ÁPICE." },
+      ]),
+    }),
+  );
+  assert.doesNotMatch(soIdade, /role="status"|Fotografia publicada|fonte em alerta/);
+  assert.match(soIdade, /aria-expanded="false"[^>]*>Ver 2 limitações do dado</);
+  assert.match(soIdade, /min-h-11/);
 });
 
 test("atencao: severidade escrita, uma linha por item, sem banner", () => {
-  const html = renderToStaticMarkup(
-    h(AtencaoAgora, {
-      itens: montarAtencaoDoTikTok(payload()),
-      descricao: "Segundo a série publicada em 13/10/2026.",
-    }),
-  );
-  assert.match(html, /<h3[^>]*>O que exige atenção agora<\/h3>/);
+  // IDENTIDADE-GERENCIAL: os alertas da API viram itens da FilaAtencao, sem reescrita.
+  const itens = montarAtencaoDoTikTok(payload()).map((i) => ({
+    chave: i.chave,
+    severidade: i.tom === "critico" || i.tom === "atencao" ? i.tom : ("info" as const),
+    titulo: i.texto,
+  }));
+  const html = renderToStaticMarkup(h(FilaAtencao, { itens, vazio: "Nenhum alerta publicado para este recorte." }));
+  assert.match(html, /<h2[^>]*>O que exige atenção agora<\/h2>/);
   assert.match(html, /Crítico/);
   assert.match(html, /Atenção/);
   assert.equal((html.match(/<li\b/g) ?? []).length, 2);
   assert.doesNotMatch(html, /role="alert"/, "atencao nao interrompe o leitor de tela");
-  const vazio = renderToStaticMarkup(h(AtencaoAgora, { itens: [] }));
+  const vazio = renderToStaticMarkup(h(FilaAtencao, { itens: [], vazio: "Nenhum alerta publicado para este recorte." }));
   assert.match(vazio, /Nenhum alerta publicado/);
 });
 
@@ -631,19 +634,30 @@ const { CorpoGestor, SecaoIndisponivel, EstadoSecao, CLASSE_RAIZ_EXPEDICAO } = a
   "../src/components/expedicao/LayoutExpedicao.tsx"
 );
 
-test("o corpo do gestor tem ordem fixa: risco, prazo, jornada, evolucao, concentracao, convite", () => {
+test("o corpo do gestor tem ordem fixa: heroi, faixa, atencao, backlog, evolucao|concentracao, ldr, mais detalhes, convite", () => {
   const html = renderToStaticMarkup(
     h(CorpoGestor, {
       // fora de ordem de proposito: quem manda e' o esqueleto
-      convite: h("i", null, "6"),
-      concentracao: h("i", null, "5"),
-      evolucao: h("i", null, "4"),
-      jornada: h("i", null, "3"),
-      prazo: h("i", null, "2"),
-      risco: h("i", null, "1"),
+      convite: h("i", null, "9"),
+      maisDetalhes: h("i", null, "8"),
+      ldr: h("i", null, "7"),
+      concentracao: h("i", null, "6"),
+      evolucao: h("i", null, "5"),
+      backlog: h("i", null, "4"),
+      atencao: h("i", null, "3"),
+      faixa: h("i", null, "2"),
+      heroi: h("i", null, "1"),
     }),
   );
-  assert.equal(html, "<i>1</i><i>2</i><i>3</i><i>4</i><i>5</i><i>6</i>");
+  assert.equal(
+    html,
+    '<i>1</i><i>2</i><i>3</i><i>4</i><div class="grid grid-cols-1 gap-3 lg:grid-cols-12">' +
+      '<div class="min-w-0 lg:col-span-7"><i>5</i></div><div class="min-w-0 lg:col-span-5"><i>6</i></div></div>' +
+      "<i>7</i><i>8</i><i>9</i>",
+  );
+  // Sem evolucao nem concentracao (fila Shopee/ML), a grade 7/5 nao existe.
+  const semGrade = renderToStaticMarkup(h(CorpoGestor, { heroi: h("i", null, "1"), atencao: h("i", null, "3"), backlog: h("i", null, "4") }));
+  assert.equal(semGrade, "<i>1</i><i>3</i><i>4</i>");
 });
 
 test("os dois corpos usam o mesmo esqueleto, a mesma raiz e a mesma tabela", () => {

@@ -22,7 +22,9 @@ export function KpiComAjuda({
   ajuda,
   ...props
 }: Omit<ComponentProps<typeof KpiTile>, "ajuda"> & { ajuda: ChaveMetrica | null }) {
-  return <KpiTile {...props} ajuda={ajuda ? <AjudaMetrica chave={ajuda} /> : undefined} />;
+  // Cartao-botao (gerencial com onAbrir): o "ⓘ" nao pode ser focavel dentro dele.
+  const emControle = props.variante === "gerencial" && Boolean(props.onAbrir);
+  return <KpiTile {...props} ajuda={ajuda ? <AjudaMetrica chave={ajuda} emControle={emControle} /> : undefined} />;
 }
 
 export default KpiComAjuda;

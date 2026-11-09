@@ -182,6 +182,7 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
       )}
       <FaixaKpis rotulo="LDR operacional da Shopee" colunas={4}>
         <KpiComAjuda
+          variante="gerencial"
           ajuda="shopee.ldr"
           rotulo="LDR operacional"
           valor={<TaxaComBase numerador={l.late} base={l.base} taxa={l.rate} />}
@@ -191,6 +192,7 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
           destaque
         />
         <KpiComAjuda
+          variante="gerencial"
           ajuda="shopee.ldr_base"
           rotulo="Base (prazos vencidos)"
           valor={l.mature_due_days ? numero(l.base) : VALOR_AUSENTE}
@@ -198,6 +200,7 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
           destaque
         />
         <KpiComAjuda
+          variante="gerencial"
           ajuda="shopee.ldr_atrasados"
           rotulo="Atrasados"
           valor={l.mature_due_days ? numero(l.late) : VALOR_AUSENTE}
@@ -206,6 +209,7 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
           destaque
         />
         <KpiComAjuda
+          variante="gerencial"
           ajuda="shopee.ldr_em_risco"
           rotulo="Vencem hoje ou amanhã"
           valor={numero(l.pending_at_risk)}

@@ -791,8 +791,10 @@ test("jornada TikTok: coorte rotulada, so' o selo 'Desatualizada' (publicacao no
   assert.match(html, /Pedidos pagos de 19\/10 a 25\/10/);
   // EXPEDICAO-ULTIMA-ATUALIZACAO: a hora fica so' no topo; aqui, no `title`.
   assert.doesNotMatch(html, /publicado em <time/);
-  assert.match(html, /title="Última publicação dos dias desta coorte: \d{2}\/\d{2} \d{2}:\d{2}\."/);
-  assert.match(html, />Desatualizada</);
+  // IDENTIDADE-GERENCIAL: "Desatualizada" escrito fica UMA vez, no cabecalho;
+  // aqui o aviso e a ultima publicacao vao para o ⓘ (nada some).
+  assert.doesNotMatch(html, />Desatualizada</);
+  assert.match(html, /aria-label="[^"]*Desatualizada: publicação ou fonte fora do prazo esperado\. Última publicação dos dias desta coorte: \d{2}\/\d{2} \d{2}:\d{2}\.[^"]*"/);
   assert.match(html, /Parcial:/);
   assert.match(html, /1 dia\(s\) sem publicação na janela/);
   assert.match(html, /title="[^"]*o TikTok não publica fila aberta[^"]*"[^>]*>\s*Indisponível neste canal\./);
@@ -879,14 +881,15 @@ test("R21 render: partial por fonte_desatualizada -> secao visivel com selo de d
   const html = render(200, p, "tiktok");
   assert.match(html, /Pedidos pagos de 19\/10 a 25\/10/);
   assert.match(html, /4\.310 pedidos/);
-  assert.match(html, />Desatualizada</, "chip de frescor");
-  assert.match(html, /exp-jornada-coorte-desatualizada/, "aviso no bloco");
+  // IDENTIDADE-GERENCIAL: o aviso sai do bloco (o cabecalho ja' diz) e vai para o ⓘ.
+  const noIcone = /aria-label="[^"]*Desatualizada: publicação ou fonte fora do prazo esperado\.[^"]*"/;
+  assert.match(html, noIcone, "aviso no ⓘ");
+  assert.doesNotMatch(html, />Desatualizada<|exp-jornada-coorte-desatualizada/);
   assert.match(html, /Parcial:/);
   assert.match(html, /Coorte: a fonte não recebe dado novo/);
-  // sem o booleano (opcional no parser), o `reason` da secao mantem o selo
+  // sem o booleano (opcional no parser), o `reason` da secao mantem o aviso
   const semBool = render(200, { ...p, coorte: { ...p.coorte, desatualizada: undefined } }, "tiktok");
-  assert.match(semBool, />Desatualizada</);
-  assert.match(semBool, /exp-jornada-coorte-desatualizada/);
+  assert.match(semBool, noIcone);
 });
 
 test("R21: motivo com detalhe entre parenteses vira frase; zumbi nao afirma fonte parada", () => {
@@ -1223,5 +1226,5 @@ test("EXPEDICAO-SEM-TEXTAO: a Jornada nao tem paragrafo de ressalva na tela", ()
   assert.doesNotMatch(html, /Dentro dessas etapas|aparecem abaixo|ainda mudando|dia\(s\) fechado|>Fora da contagem|aria-label="Limitações"|data-sobreposicao/);
   const fonte = readFileSync(join(process.cwd(), "src/components/expedicao/JornadaPedidos.tsx"), "utf8");
   assert.doesNotMatch(fonte, /<Sobreposicoes|<Limitacoes|ainda mudando\./);
-  assert.match(fonte, /extras=\{\[\.\.\.c\.limitacoes, \.\.\.foraDaContagem\(c\)\]\}/);
+  assert.match(fonte, /extras=\{\[\s*\.\.\.c\.limitacoes,\s*\.\.\.foraDaContagem\(c\),/);
 });
