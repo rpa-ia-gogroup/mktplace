@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 from app.deps.filters import ResolvedFilters
 from app.deps.period import EffectivePeriod, resolve_compare_period
 from app.services import performance_service as perf_svc
+from app.services.canal_preposicao import no_canal
 from app.services import regioes_service as regioes_svc
 
 # ---------------------------------------------------------------------------
@@ -529,7 +530,7 @@ def _build_brand_freshness_risks(brand_rows: list[dict], marketplace_rows: list[
             "severity": "warning",
             "title": f"{display} · {brand.upper()} sem dados recentes",
             "description": (
-                f"{brand.upper()} no {display} tem dados até {max_date.strftime('%d/%m/%Y')}; "
+                f"{brand.upper()} {no_canal(mkt_name, display)} tem dados até {max_date.strftime('%d/%m/%Y')}; "
                 f"o canal está em {topo.strftime('%d/%m/%Y')}. Marca não coberta pela "
                 "atualização automática deste canal: os dias sem dado não são venda zero."
             ),

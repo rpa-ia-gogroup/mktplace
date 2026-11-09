@@ -172,7 +172,7 @@ test("aviso do bloco principal corta na oracao, nunca no ponto decimal", async (
   assert.match(src, /texto\.split\(\/\[;\.\]\(\?=\\s\|\$\)\/\)/);
   const re = /[;.](?=\s|$)/;
   assert.equal("Custo/GMV de 16.7% no canal. Mais".split(re)[0], "Custo/GMV de 16.7% no canal");
-  assert.equal("KOKESHI no Shopee tem dados até 12/10/2026; o canal".split(re)[0], "KOKESHI no Shopee tem dados até 12/10/2026");
+  assert.equal("KOKESHI na Shopee tem dados até 12/10/2026; o canal".split(re)[0], "KOKESHI na Shopee tem dados até 12/10/2026");
 });
 
 test("hover usa sombra preta nos dois temas", () => {

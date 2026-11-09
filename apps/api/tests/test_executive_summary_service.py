@@ -154,6 +154,7 @@ def test_marca_parada_em_canal_fresco_vira_risco_com_marca_e_nao_e_venda_zero():
     assert (r["marketplace"], r["brand"], r["last_date"]) == ("shopee", "kokeshi", "2026-07-03")
     assert r["staleness_days"] == (NOW.date() - date(2026, 7, 3)).days
     assert "KOKESHI" in r["title"] and "não são venda zero" in r["description"]
+    assert r["description"].startswith("KOKESHI na Shopee tem dados até 03/07/2026"), "na Shopee, nunca no Shopee"
     assert r["category"] == "data_confidence"
     ExecutiveSummaryResponse.model_validate(result)
 
