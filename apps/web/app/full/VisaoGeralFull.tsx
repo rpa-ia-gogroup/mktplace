@@ -247,7 +247,7 @@ function CelulaEstoque({ t, alinhar = "start" }: { t: ItemRuptura; alinhar?: "st
   const c = celulaEstoque(t);
   return (
     <span className={`flex flex-col ${alinhar === "end" ? "items-end" : "items-start"}`} title={c.ausente}>
-      <span className="text-sm font-medium text-ink">{c.texto}</span>
+      <span className="text-sm font-semibold text-ink">{c.texto}</span>
       {c.apoio && <span className="text-xs font-normal text-ink-muted">{c.apoio}</span>}
       {c.ausente && <span className="sr-only"> ({c.ausente})</span>}
     </span>

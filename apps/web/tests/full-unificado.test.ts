@@ -551,14 +551,14 @@ test("top 10: canal so' aparece quando a lista mistura canais", () => {
   const soML = topRupturas([resumoML(ML)], 10, IMPACTO);
   assert.equal(canaisMisturados(soML), false);
   assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: true }), "KOKESHI · 3,0 un./dia");
-  assert.equal(descricaoTop(soML, true, false), "Sem estoque no Full (0 disponível), com venda nos últimos 28 dias · todos do ML");
+  assert.equal(descricaoTop(soML, true, false), "Sem estoque no Full, com venda nos últimos 28 dias · todos do ML");
   const misto = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, IMPACTO);
   assert.equal(canaisMisturados(misto), true);
   assert.equal(subtituloRuptura(misto[1], { mostrarCanal: true, comImpacto: true }), "KOKESHI · ML · 3,0 un./dia");
-  assert.equal(descricaoTop(misto, true, true), "Sem estoque no Full (0 disponível), com venda nos últimos 28 dias · lista incompleta");
+  assert.equal(descricaoTop(misto, true, true), "Sem estoque no Full, com venda nos últimos 28 dias · lista incompleta");
   // sem impacto: a venda e' a coluna, a linha 2 fica so' a marca
   assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: false }), "KOKESHI");
-  assert.equal(descricaoTop(soML, false, false), "Sem estoque no Full (0 disponível), com venda nos últimos 28 dias · todos do ML");
+  assert.equal(descricaoTop(soML, false, false), "Sem estoque no Full, com venda nos últimos 28 dias · todos do ML");
 });
 
 test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desenhada", () => {
@@ -719,8 +719,8 @@ test("fila em grupos: AA barato acima de A caro e de C caro; sem curva junto com
 });
 
 test("fila: filtro corta antes do top 10 e cabecalho de grupo so' em 'Todas'", () => {
-  assert.equal(descricaoTop([], true, false, true), "Sem estoque no Full (0 disponível), com venda nos últimos 28 dias");
-  assert.equal(descricaoTop([], true, false, false), "Sem estoque no Full (0 disponível), com venda nos últimos 28 dias", "mesmo subtitulo com ou sem curva");
+  assert.equal(descricaoTop([], true, false, true), "Sem estoque no Full, com venda nos últimos 28 dias");
+  assert.equal(descricaoTop([], true, false, false), "Sem estoque no Full, com venda nos últimos 28 dias", "mesmo subtitulo com ou sem curva");
   const canais: ResumoCanal[] = [resumoML(ML)];
   const muitos = Array.from({ length: 12 }, (_, i) => itemImp("kokeshi", `Z${i}`, 1000 - i));
   const imp2 = impactoCom([...muitos, itemImp("kokeshi", "K3", 1)]);
@@ -866,12 +866,14 @@ test("celula de impacto: Shopee com estoque do vendedor = 'sem perda' explicado;
   assert.match(DICA_IMPACTO_FILA, /É potencial/);
 });
 
-test("celula de estoque: '0 no Full' sempre; fora do Full so' quando existe; ausencia nunca vira 0", () => {
-  assert.deepEqual(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: 150, transferencia: 120 })), { texto: "0 no Full", apoio: "150 não disponível · 120 em transferência" });
+test("celula de estoque: '0 no Full' so' quando medido; fora do Full so' quando existe; ausencia nunca vira 0", () => {
+  assert.deepEqual(celulaEstoque(rup("ml", "M1", { naoDisponivel: 5 })), { texto: "— no Full", apoio: "5 não disponível", ausente: "estoque no Full não informado" });
+  assert.equal(celulaEstoque(rup("shopee", "S1", { estoqueFull: null, estoqueVendedor: 3 })).ausente, "estoque no Full não informado");
+  assert.deepEqual(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: 150, transferencia: 120 })), { texto: "0 no Full", apoio: "150 não disponível · 120 em transferência", ausente: undefined });
   assert.equal(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: 0, transferencia: 0 })).apoio, "0 não disponível", "zero medido");
-  assert.deepEqual(celulaEstoque(rup("ml", "M1", { naoDisponivel: null })), { texto: "0 no Full", ausente: "estoque fora do Full não informado" });
-  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueFull: 0, estoqueVendedor: 35 })), { texto: "0 no Full", apoio: "35 com o vendedor" });
-  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueVendedor: null })), { texto: "0 no Full", ausente: "estoque do vendedor não informado" });
+  assert.deepEqual(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: null })), { texto: "0 no Full", ausente: "estoque fora do Full não informado" });
+  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueFull: 0, estoqueVendedor: 35 })), { texto: "0 no Full", apoio: "35 com o vendedor", ausente: undefined });
+  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueFull: 0, estoqueVendedor: null })), { texto: "0 no Full", ausente: "estoque do vendedor não informado" });
 });
 
 test("filtro canal x curva combinados: cada contagem reflete o outro filtro", () => {

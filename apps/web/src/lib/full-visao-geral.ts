@@ -388,7 +388,7 @@ export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; com
 export function descricaoTop(top: ItemRuptura[], _comImpacto: boolean, incompleta: boolean, _comCurva = false): string {
   const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
   // A ordem (curva, impacto) mora no ⓘ da fila; o subtitulo diz o que a lista E'.
-  return `Sem estoque no Full (0 disponível), com venda nos últimos 28 dias${unico}${incompleta ? " · lista incompleta" : ""}`;
+  return `Sem estoque no Full, com venda nos últimos 28 dias${unico}${incompleta ? " · lista incompleta" : ""}`;
 }
 
 /** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
@@ -1009,16 +1009,18 @@ export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; 
  * Dado nao informado = ausencia com motivo, nunca 0.
  */
 export function celulaEstoque(t: ItemRuptura): { texto: string; apoio?: string; ausente?: string } {
-  // Todo item da fila e' ruptura: Full disponivel 0 e' a regra da lista, entao fica sempre em destaque.
-  const texto = `${fmtInt(t.estoqueFull ?? 0)} no Full`;
+  // "0" so' quando medido: ausencia e' "—" com motivo (a lista ja' diz que sao rupturas).
+  const full = t.estoqueFull == null ? null : fmtInt(t.estoqueFull);
+  const texto = `${full ?? "—"} no Full`;
+  const semFull = full === null ? "estoque no Full não informado" : undefined;
   if (t.canal === "shopee") {
     return t.estoqueVendedor == null
-      ? { texto, ausente: "estoque do vendedor não informado" }
-      : { texto, apoio: `${fmtInt(t.estoqueVendedor)} com o vendedor` };
+      ? { texto, ausente: semFull ?? "estoque do vendedor não informado" }
+      : { texto, apoio: `${fmtInt(t.estoqueVendedor)} com o vendedor`, ausente: semFull };
   }
-  if (t.naoDisponivel == null) return { texto, ausente: "estoque fora do Full não informado" };
+  if (t.naoDisponivel == null) return { texto, ausente: semFull ?? "estoque fora do Full não informado" };
   const transf = t.transferencia ? ` · ${fmtInt(t.transferencia)} em transferência` : "";
-  return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}` };
+  return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}`, ausente: semFull };
 }
 
 export const DICA_IMPACTO_FILA =
