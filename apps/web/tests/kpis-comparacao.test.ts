@@ -146,7 +146,10 @@ test("o card nao esconde valor e variacao do leitor de tela", () => {
 });
 
 test("tendencia e' so' o mini grafico com ponto final, sem texto visivel", () => {
-  const card = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
+  // CARD-KPI-GERENCIAL: a Sparkline e a LinhaDeTendencia sairam da KpiBand para ui/Sparkline.
+  const band = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
+  assert.match(band, /import \{ LinhaDeTendencia \} from "@\/components\/ui\/Sparkline"/);
+  const card = readFileSync(new URL("../src/components/ui/Sparkline.tsx", import.meta.url), "utf8");
   // nenhum rotulo visivel de tendencia
   assert.doesNotMatch(card, /↗ tende a subir|↘ tende a descer/);
   // o leitor de tela ainda ouve a direcao; o mouse ve' a conta no title

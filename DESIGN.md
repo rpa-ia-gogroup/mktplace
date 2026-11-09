@@ -419,6 +419,36 @@ CX, Expedição e Full seguem o esqueleto da Gerencial (`app/page.tsx`), sem que
 
 Regras: cartão = rótulo · valor · no máximo 1 linha; ressalva no ⓘ; "x de y" fora da vista (`title` + `sr-only`); ausência é "—" com motivo; "Desatualizada" escrito e visível sem hover. `KpiTile` sem `variante` continua idêntico (faixa padrão).
 
+#### Card de valor com comparação = card da faixa da Gerencial
+
+Todo card de valor com comparação nas abas principais usa o mesmo card da `KpiBand`: `KpiTile variante="gerencial" identidade="…"`. A cor de **identidade** (`kpi-*`) pinta a borda, o brilho em degradê no canto (do `globals.css`), o ladrilho do ícone (`h-8`) e o mini gráfico. **Ela não diz bom ou ruim:** isso fica no `ui/DeltaBadge` (↗/↘ verde ou vermelho conforme o tom; `neutral` sem juízo; `unidade="pp"` para taxa) e na tinta do valor. O rodapé traz o delta e o "antes X" à esquerda e o `ui/Sparkline` à direita. Sem período anterior real não há delta nem "antes"; sem série real (≥ 4 pontos), não há gráfico. Nada é inventado.
+
+O mesmo KPI tem a mesma cor em toda aba:
+
+| Token | Cor | KPIs |
+|---|---|---|
+| `kpi-gmv` | violeta | GMV · Impacto potencial ML/Shopee (Full) · Reembolso (CX) · Taxa de reembolso (site) |
+| `kpi-pedidos` | âmbar | Pedidos · Param a venda (Full) · Acima de 48 h · Pedido mais antigo · Reviews 1–3 ★ |
+| `kpi-ticket` | índigo | Ticket médio · LDR da janela |
+| `kpi-ads` | fúcsia | Investimento em Ads · Travados · Cancelamento · Taxa de reenvio (site) |
+| `kpi-roas` | verde | ACOS/ROAS |
+| `kpi-prazo` | azul (novo) | Perto de vencer · Vence hoje · Vence dd/mm |
+| `kpi-atendimento` | verde-azulado (novo) | Contact rate · NPS do site |
+
+Contraste medido (WCAG) do ícone e do gráfico. "Vidro" é a superfície com o brilho no máximo (16 % no claro, 22 % no escuro), onde fica o mini gráfico; "ladrilho" é a cor a 10 % sobre a superfície. Meta: ≥ 3:1.
+
+| Token | Claro: superfície · ladrilho · vidro | Escuro: superfície · ladrilho · vidro |
+|---|---|---|
+| `kpi-gmv` | 7,1 · 6,0 · 5,5 | 6,2 · 5,3 · 4,3 |
+| `kpi-pedidos` | 3,2 · **2,9 · 2,7** | 10,2 · 8,4 · 6,3 |
+| `kpi-ticket` | 6,3 · 5,4 · 4,9 | 5,7 · 4,9 · 4,0 |
+| `kpi-ads` | 4,7 · 4,1 · 3,7 | 6,9 · 5,9 · 4,6 |
+| `kpi-roas` | 3,8 · 3,3 · 3,1 | 8,8 · 7,5 · 5,7 |
+| `kpi-prazo` | 5,2 · 4,5 · 4,1 | 6,7 · 5,7 · 4,5 |
+| `kpi-atendimento` | 5,5 · 4,8 · 4,4 | 9,1 · 7,7 · 5,8 |
+
+**Pendência:** o âmbar `kpi-pedidos` (217 119 6) fica abaixo de 3:1 no tema claro, sobre o ladrilho e no canto do brilho. O token é o mesmo da faixa da Gerencial e não mudou aqui. Escurecê-lo (por exemplo, para o âmbar 700, 180 83 9) muda a Gerencial e precisa de decisão à parte.
+
 ## 6. Do's and Don'ts
 
 **Do**
