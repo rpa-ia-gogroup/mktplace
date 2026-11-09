@@ -29,16 +29,17 @@ export function FaixaKpis({
   colunas?: 2 | 3 | 4 | 6;
   children: ReactNode;
 }) {
+  // IDENTIDADE-GERENCIAL: 1 coluna no celular (rotulo sem quebrar em 3
+  // linhas), como no Full e na CX; a grade de antes a partir de `sm`.
   const grade = secundaria
     ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
     : colunas === 6
-      ? "grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6"
+      ? "grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-6"
       : colunas === 3
-        ? // No celular (2 colunas), o 3o cartao ocupa a linha: sem buraco.
-          "grid grid-cols-2 gap-2 sm:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1"
+        ? "grid grid-cols-1 gap-2 sm:grid-cols-3"
         : colunas === 2
-          ? "grid grid-cols-2 gap-2"
-        : "grid grid-cols-2 gap-2 lg:grid-cols-4";
+          ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
+          : "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4";
   return (
     <section aria-label={rotulo} className={grade}>
       {children}
