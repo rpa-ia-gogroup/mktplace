@@ -1,73 +1,130 @@
 "use client";
 
 /**
- * Filtros da aba CX (05/11/2026): aplicam sozinhos ao trocar a marca ou o
- * periodo, sem o botao "Aplicar". A URL continua a fonte de verdade
- * (`hrefCx`), e sem JS o formulario GET + o botao do `<noscript>` seguem
- * funcionando.
+ * Filtros da aba CX (CX-FILTROS-PADRAO, 08/11/2026): a mesma barra das outras
+ * abas, montada como o `GlobalFilterControls` (Gerencial, Canais, Financeiro):
+ * canal segmentado com a cor de identidade, marca e periodo como gatilhos que
+ * mostram o valor atual e, abaixo de `sm`, tudo recolhido atras de "Filtros"
+ * com o resumo do escopo.
+ *
+ * As pecas sao as do app: `BrandFilter` (variante `menu`) e o `Popover` que o
+ * `DateRangeFilter` usa. O que so' a CX tem entra dentro do padrao:
+ *   - canal: so' Shopee (a CX ainda nao le' ML nem TikTok) — o segmento fica
+ *     ativo e nao e' botao, porque nao ha' o que escolher;
+ *   - marca: UMA (a URL e a API leem uma), via `marcaUnica`;
+ *   - periodo: a janela de dias fechados (7, 30 ou 90), nao datas livres.
+ *
+ * A URL continua a fonte de verdade (`hrefCx`, os mesmos `brands` e `dias`).
  */
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
+import { CalendarDays, Check } from "lucide-react";
 
-import { JANELAS_DIAS, hrefCx, lerFiltrosCx, type FiltrosCx as Filtros } from "@/lib/cx";
-import { ALL_BRAND_KEYS, ALL_BRAND_OPTIONS } from "@/lib/filters/brands";
+import BrandFilter from "@/components/BrandFilter";
+import Popover from "@/components/ui/Popover";
+import { JANELAS_DIAS, hrefCx, marcaUnica, resumoFiltrosCx, type FiltrosCx as Filtros } from "@/lib/cx";
+import { brandLabel } from "@/lib/filters/brands";
 
-const CAMPO =
-  "min-h-11 rounded-md border border-line bg-surface px-2 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60";
+/** Mesmas classes dos botoes do `BrandFilter`/`DateRangeFilter` no menu. */
+const OPCAO =
+  "inline-flex w-full shrink-0 items-center justify-between min-h-11 min-w-11 px-3 rounded-md text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent";
+const OPCAO_ATIVA = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
+const OPCAO_INATIVA = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
 export default function FiltrosCx({ f }: { f: Filtros }) {
   const router = useRouter();
   const [aplicando, iniciar] = useTransition();
+  const [aberto, setAberto] = useState(false);
+  const id = useId();
 
-  const aoMudar = (e: React.ChangeEvent<HTMLFormElement>) => {
-    const dados = new FormData(e.currentTarget);
-    const novo = lerFiltrosCx(
-      { brands: String(dados.get("brands") ?? ""), dias: String(dados.get("dias") ?? "") },
-      ALL_BRAND_KEYS,
-    );
-    iniciar(() => router.push(hrefCx(novo), { scroll: false }));
-  };
+  const ir = (novo: Filtros) => iniciar(() => router.push(hrefCx(novo), { scroll: false }));
 
   return (
-    <form
-      method="get"
-      action="/cx"
-      onChange={aoMudar}
-      onSubmit={(e) => e.preventDefault()}
-      aria-busy={aplicando}
-      className="flex flex-wrap items-end gap-3"
-      data-testid="cx-filtros"
-    >
-      <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-        Marca
-        <select name="brands" defaultValue={f.marca ?? ""} className={CAMPO}>
-          <option value="">Todas as marcas</option>
-          {ALL_BRAND_OPTIONS.map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="flex flex-col gap-1 text-xs font-medium text-ink-muted">
-        Período
-        <select name="dias" defaultValue={String(f.dias)} className={CAMPO}>
-          {JANELAS_DIAS.map((d) => (
-            <option key={d} value={d}>
-              Últimos {d} dias
-            </option>
-          ))}
-        </select>
-      </label>
-      {aplicando && <span className="pb-3 text-xs text-ink-faint" role="status">Atualizando…</span>}
-      <noscript>
-        <button
-          type="submit"
-          className="min-h-11 rounded-md border border-line-strong px-3 text-sm font-semibold text-ink hover:bg-raised"
+    <div className="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="cx-filtros" aria-busy={aplicando}>
+      {/* Celular: o mesmo botao "Filtros" do GlobalFilterControls, com o escopo legivel */}
+      <button
+        type="button"
+        aria-expanded={aberto}
+        aria-controls={id}
+        onClick={() => setAberto((v) => !v)}
+        className="inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 text-left text-sm sm:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <span className="min-w-0">
+          <span className="block text-xs font-semibold text-ink">Filtros</span>
+          <span className="block truncate text-xs text-ink-muted">{resumoFiltrosCx(f, brandLabel)}</span>
+        </span>
+        <svg
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          aria-hidden="true"
+          className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${aberto ? "rotate-180" : ""}`}
         >
-          Aplicar
-        </button>
-      </noscript>
-    </form>
+          <path d="M3.5 6 8 10.5 12.5 6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+
+      <div
+        id={id}
+        className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-start gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
+      >
+        {/* Canal: o trilho do MarketplaceFilter com o unico canal que a CX le' */}
+        <div
+          role="group"
+          aria-label="Canal"
+          title="A aba CX lê só a Shopee por enquanto"
+          className="flex w-fit min-w-0 max-w-full gap-0.5 rounded-lg border border-line bg-raised p-0.5"
+        >
+          <span className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-surface px-3 text-sm font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong">
+            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-canal-shopee" />
+            Shopee
+            <span className="sr-only"> (único canal da aba CX por enquanto)</span>
+          </span>
+        </div>
+
+        <BrandFilter
+          value={f.marca ? [f.marca] : []}
+          onChange={(escolha) => ir({ ...f, marca: marcaUnica(escolha, f.marca) })}
+          variante="menu"
+        />
+
+        <Popover
+          rotulo="Período"
+          valor={`Últimos ${f.dias} dias`}
+          icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
+          largura="w-52"
+        >
+          {(fechar) => (
+            <div role="group" aria-label="Janela de dias fechados" className="flex flex-col gap-0.5">
+              {JANELAS_DIAS.map((d) => {
+                const ativo = f.dias === d;
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={ativo}
+                    onClick={() => {
+                      fechar();
+                      if (!ativo) ir({ ...f, dias: d });
+                    }}
+                    className={`${OPCAO} ${ativo ? OPCAO_ATIVA : OPCAO_INATIVA}`}
+                  >
+                    Últimos {d} dias
+                    {ativo && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </Popover>
+
+        {aplicando && (
+          <span role="status" className="inline-flex min-h-11 shrink-0 items-center text-xs text-ink-faint animate-pulse">
+            Atualizando…
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
