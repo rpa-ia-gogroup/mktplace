@@ -46,6 +46,8 @@ export interface CxAvaliacoesResponse {
   completa_em: string | null;
   aviso_frescor: string | null;
   minimo_avaliacoes: number;
+  /** false = nenhuma respondida no recorte: campo ainda nao coletado, a coluna sai. */
+  respostas_medidas: boolean;
   marcas: AvaliacoesMarca[];
   total: AvaliacoesMarca | null;
   produtos: AvaliacoesProduto[];
@@ -157,6 +159,7 @@ export function ajudaAvaliacoes(d: CxAvaliacoesResponse, rotulo: (m: string) => 
     "Nota da marca = média ponderada pelas avaliações com nota de cada produto.",
     `Lista de produtos: só com ${d.minimo_avaliacoes} avaliações ou mais.`,
     varrido ? `Última varredura: ${varrido}${completa ? `; última leitura completa: ${completa}` : ""}.` : null,
+    d.respostas_medidas ? null : "Respostas da loja: ainda não coletadas.",
     d.aviso_frescor,
     fora.length ? `Sem dado — ${fora.join("; ")}.` : null,
     `Fonte: ${d.fonte}.`,

@@ -43,6 +43,16 @@ test("marca com dado: nota 2 casas, % 1 casa, 0% respondidas e' zero medido", ()
   assert.equal(l.nota_extra, null);
 });
 
+test("respostas nao coletadas: a coluna sai e o ⓘ diz por que", async () => {
+  const { ajudaAvaliacoes } = await import("../src/lib/cx-avaliacoes.ts");
+  const base = { gerado_em: "", estado: "dado" as const, motivo_indisponivel: null, fonte: "F", varrido_em: null, completa_em: null,
+    aviso_frescor: null, minimo_avaliacoes: 20, marcas: [], total: null, produtos: [] };
+  assert.match(ajudaAvaliacoes({ ...base, respostas_medidas: false }, (m) => m), /Respostas da loja: ainda não coletadas/);
+  assert.doesNotMatch(ajudaAvaliacoes({ ...base, respostas_medidas: true }, (m) => m), /ainda não coletadas/);
+  const src = readFileSync(new URL("../app/cx/AvaliacoesProduto.tsx", import.meta.url), "utf-8");
+  assert.match(src, /d\.respostas_medidas \? \["% respondidas"\] : \[\]/);
+});
+
 test("truncado: contagem com '≥' e motivo do piso", () => {
   assert.equal(contagem(12345, true), "≥ 12.345");
   assert.equal(contagem(null, true), "—");

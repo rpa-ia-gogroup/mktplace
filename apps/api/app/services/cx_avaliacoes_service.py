@@ -43,6 +43,11 @@ TETO_API_SHOPEE = 1000
 #: A DAG roda uma vez por dia: mais de 2 dias sem varrer = dado velho.
 LIMITE_FRESCOR = timedelta(days=2)
 
+#: 09/11/2026: `respondida = false` nas 72.119 avaliacoes, quase certamente campo
+#: nao coletado. Nenhuma respondida no recorte = nao medido (None), nunca 0%.
+# shortcut: inferido dos dados; tirar quando a conferencia no Seller Centre confirmar a coleta.
+MOTIVO_SEM_RESPOSTAS = "Respostas da loja: ainda não coletadas."
+
 MOTIVO_SEM_VIEW = "Aguardando a primeira coleta de avaliações (DAG shopee_product_comments)."
 MOTIVO_NAO_VARRIDA = "Ainda não varrida: entra no próximo carregamento."
 MOTIVO_SEM_APP = "Sem app da Shopee: as avaliações não chegam por API."
@@ -157,6 +162,10 @@ def montar_avaliacoes(*, brands: Optional[list[str]] = None, consultar: Optional
     com_dado = [x for x in marcas if x.estado == "dado"]
     if not com_dado:
         return _resposta(agora, "sem_fonte", marcas, motivo_indisponivel=MOTIVO_NAO_VARRIDA)
+    respostas_medidas = any((_int(linhas[x.marca].get("respondidas")) or 0) > 0 for x in com_dado)
+    if not respostas_medidas:
+        marcas = [x.model_copy(update={"pct_respondidas": None}) if x.estado == "dado" else x for x in marcas]
+        com_dado = [x for x in marcas if x.estado == "dado"]
 
     def soma(campo: str):
         vals = [getattr(x, campo) for x in com_dado if getattr(x, campo) is not None]
@@ -171,6 +180,8 @@ def montar_avaliacoes(*, brands: Optional[list[str]] = None, consultar: Optional
         respondidas=sum(_int(linhas[x.marca].get("respondidas")) or 0 for x in com_dado),
         truncado=any(x.truncado for x in com_dado), varrido_em=max(varridos) if varridos else None,
     )
+    if not respostas_medidas:
+        total = total.model_copy(update={"pct_respondidas": None})
     velhas = [x for x in com_dado if x.varrido_em is None or agora - x.varrido_em > LIMITE_FRESCOR]
     aviso = None
     if velhas:
@@ -192,4 +203,5 @@ def montar_avaliacoes(*, brands: Optional[list[str]] = None, consultar: Optional
         agora, "dado", marcas, total=total, produtos=itens,
         varrido_em=max(varridos) if varridos else None,
         completa_em=max(completas) if completas else None, aviso_frescor=aviso,
+        respostas_medidas=respostas_medidas,
     )

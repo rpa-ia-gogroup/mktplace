@@ -75,6 +75,17 @@ def test_nota_da_marca_e_do_total_ponderada_por_com_nota():
     assert r.total.pct_1a3 == round(70 / 1100 * 100, 1)
 
 
+def test_nenhuma_respondida_e_nao_medido_nunca_zero():
+    sem = Fonte(marcas=[_marca("barbours", 10, 1000, 1000, 4.9, 30, 0), _marca("lescent", 5, 100, 100, 3.9, 40, 0)])
+    r = _montar(sem)
+    assert r.respostas_medidas is False
+    assert all(m.pct_respondidas is None for m in r.marcas) and r.total.pct_respondidas is None
+    # uma respondida ja' basta: ai' o 0% da outra marca e' medido
+    r = _montar()
+    assert r.respostas_medidas is True
+    assert {m.marca: m.pct_respondidas for m in r.marcas if m.estado == "dado"} == {"barbours": 10.0, "lescent": 0.0}
+
+
 def test_marca_nunca_varrida_e_sem_app_aparecem_sem_fonte_nunca_zero():
     r = _montar()
     por = {m.marca: m for m in r.marcas}

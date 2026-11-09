@@ -104,21 +104,21 @@ export default function AvaliacoesProduto({ filtros }: { filtros: FiltrosCx }) {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12" data-testid="cx-avaliacoes">
         <div className="min-w-0 lg:col-span-5">
           <TableScrollHint>
-            <table className="w-full min-w-[420px] border-collapse text-sm">
+            <table className={`w-full border-collapse text-sm ${d.respostas_medidas ? "min-w-[420px]" : ""}`}>
               <caption className="sr-only">Avaliações de produto da Shopee por marca</caption>
               <thead className={THEAD}>
                 <tr>
                   <th scope="col" className="px-2 py-2 text-left">Marca</th>
-                  {["Nota", "% 1–3 ★", "% respondidas", "Avaliações"].map((h) => (
+                  {["Nota", "% 1–3 ★", ...(d.respostas_medidas ? ["% respondidas"] : []), "Avaliações"].map((h) => (
                     <th key={h} scope="col" className="whitespace-nowrap px-2 py-2 text-right">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {linhas.map((l) => (
-                  <LinhaMarca key={l.chave} l={l} />
+                  <LinhaMarca key={l.chave} l={l} respostas={d.respostas_medidas} />
                 ))}
-                {total && <LinhaMarca l={total} totalizador />}
+                {total && <LinhaMarca l={total} totalizador respostas={d.respostas_medidas} />}
               </tbody>
             </table>
           </TableScrollHint>
@@ -162,7 +162,7 @@ export default function AvaliacoesProduto({ filtros }: { filtros: FiltrosCx }) {
   );
 }
 
-function LinhaMarca({ l, totalizador = false }: { l: LinhaAvaliacoes; totalizador?: boolean }) {
+function LinhaMarca({ l, totalizador = false, respostas }: { l: LinhaAvaliacoes; totalizador?: boolean; respostas: boolean }) {
   const extra = l.nota_extra;
   return (
     <tr className={totalizador ? "border-t border-line-strong bg-raised font-semibold" : "border-t border-line hover:bg-raised/60"} title={extra ?? undefined}>
@@ -172,7 +172,8 @@ function LinhaMarca({ l, totalizador = false }: { l: LinhaAvaliacoes; totalizado
       </th>
       <td className={`${TD} ${l.ausente ? "" : "font-semibold text-ink"}`}>{l.nota}</td>
       <td className={TD}>{l.pct1a3}</td>
-      <td className={TD}>{l.pctRespondidas}</td>
+      {/* respostas nao coletadas: a coluna sai (coluna so' com "—" nao aparece) */}
+      {respostas && <td className={TD}>{l.pctRespondidas}</td>}
       <td className={TD}>{l.avaliacoes}</td>
     </tr>
   );

@@ -59,6 +59,9 @@ class CxAvaliacoesResponse(BaseModel):
     aviso_frescor: Optional[str] = None
     #: So' produtos com ao menos esta quantidade de avaliacoes com nota entram na lista.
     minimo_avaliacoes: int
+    #: False = nenhuma avaliacao respondida em todo o recorte: tratado como campo
+    #: ainda nao coletado (`pct_respondidas` sai None), nunca como 0%.
+    respostas_medidas: bool = False
     marcas: list[AvaliacoesMarca] = []
     total: Optional[AvaliacoesMarca] = None
     #: Produtos com `com_nota >= minimo_avaliacoes`, da pior nota para a melhor.
