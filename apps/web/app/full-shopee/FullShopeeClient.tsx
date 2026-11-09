@@ -521,7 +521,7 @@ function Comparativo({
             {ordenadas.map((l) => (
               <tr key={l.nome} className="border-t border-line">
                 <th scope="row" className="text-left px-3 py-2 font-medium text-ink whitespace-nowrap">
-                  {l.nome[0].toUpperCase() + l.nome.slice(1)}
+                  {brandLabel(l.nome)}
                   {l.share === 0 && (
                     <span className="ml-2 text-xs font-normal text-ink-faint">
                       (coberta, sem FBS)
@@ -542,7 +542,7 @@ function Comparativo({
             {(naoCobertas ?? []).map((n) => (
               <tr key={`nc-${n}`} className="border-t border-line bg-warn-soft/40">
                 <th scope="row" className="text-left px-3 py-2 font-medium text-warn-ink whitespace-nowrap">
-                  {n[0].toUpperCase() + n.slice(1)}
+                  {brandLabel(n)}
                 </th>
                 <td colSpan={chave === "brand" ? 5 : 3}
                   className="px-3 py-2 text-xs text-warn-ink">
@@ -553,7 +553,7 @@ function Comparativo({
             {(ausentes ?? []).map((n) => (
               <tr key={`au-${n}`} className="border-t border-line bg-warn-soft/40">
                 <th scope="row" className="text-left px-3 py-2 font-medium text-warn-ink whitespace-nowrap">
-                  {n[0].toUpperCase() + n.slice(1)}
+                  {brandLabel(n)}
                 </th>
                 <td colSpan={3} className="px-3 py-2 text-xs text-warn-ink">
                   Sem movimento na janela — fora da cobertura medida, não é 0%.
