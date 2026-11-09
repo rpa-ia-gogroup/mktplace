@@ -180,21 +180,30 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
       className={`${CARD} card-hover w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span}`}
     >
       <KpiTile
+        // Rotulo em UMA linha (truncate): um nome que quebre empurraria o valor
+        // para baixo dos vizinhos. O nome inteiro fica no title, no aria-label
+        // do botao e no ⓘ.
         rotulo={
-          i === "resposta" ? (
-            // O nome inteiro quebra em 390 px e desalinha a fileira; ele fica no aria-label
-            <>
-              <span className="sm:hidden">Resposta</span>
-              <span className="hidden sm:inline">{ROTULO_INDICADOR[i]}</span>
-            </>
-          ) : (
-            ROTULO_INDICADOR[i]
-          )
+          <span className="min-w-0 truncate" title={ROTULO_INDICADOR[i]}>
+            {i === "resposta" ? (
+              <>
+                <span className="sm:hidden">Resposta</span>
+                <span className="hidden sm:inline">Resposta do chat</span>
+              </>
+            ) : (
+              ROTULO_INDICADOR[i]
+            )}
+          </span>
         }
         valor={valor}
         comparacao={linha ?? SEM_LINHA}
         // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
-        ajuda={<InfoDica emControle texto={notasDoTile(r, i).join(" ")} />}
+        ajuda={
+          <InfoDica
+            emControle
+            texto={[i === "resposta" ? `${ROTULO_INDICADOR[i]}.` : null, ...notasDoTile(r, i)].filter(Boolean).join(" ")}
+          />
+        }
       />
     </button>
   );
