@@ -703,3 +703,9 @@ test("a Expedicao continua registrada e intacta", () => {
   const navlist = fonte("src/components/shell/NavList.tsx");
   assert.match(navlist, /expedicaoHabilitado\(process\.env\.NEXT_PUBLIC_EXPEDICAO_ENABLED\)/);
 });
+
+test("tabelas de adocao mostram o nome de exibicao da marca, nunca o slug capitalizado", () => {
+  // 'Apice'/'Rituaria' (so' a inicial maiuscula, sem acento) -> 'ÁPICE'/'RITUÁRIA'.
+  assert.ok(CLIENT.includes("{brandLabel(l.nome)}"));
+  assert.doesNotMatch(CLIENT, /\[0\]\.toUpperCase\(\) \+ /);
+});
