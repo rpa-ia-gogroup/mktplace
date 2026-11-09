@@ -42,6 +42,8 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
+from app.services.gold_service import BRAND_LABELS
+
 from sqlalchemy import text
 
 TABELA = "marts.expedicao_tiktok_dispatch_daily"
@@ -526,7 +528,8 @@ def _alertas(*, ldr, marcas, evento, effective_at, agora):
             "code": "marcas_concentram",
             "message": (
                 "Acima da meta (medição interna) em: "
-                + ", ".join(f"{m['brand']} ({_pct(m['rate'])})" for m in piores[:4])
+                + ", ".join(f"{BRAND_LABELS.get(m['brand'], m['brand'].upper())} ({_pct(m['rate'])})"
+                            for m in piores[:4])
                 + "."
             ),
         })

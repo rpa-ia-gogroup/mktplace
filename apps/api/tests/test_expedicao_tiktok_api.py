@@ -549,3 +549,17 @@ def test_janela_anterior_segue_o_filtro_de_marca():
     linhas += _dias_pagos(date(2026, 8, 25), date(2026, 9, 21), "apice", col_atras=9)
     ant = serie(linhas, dias=7, brands=["apice"])["ldr"]["previous"]
     assert ant["rate"] == pytest.approx(0.09)
+
+
+def test_alerta_de_marcas_acima_da_meta_usa_o_nome_de_exibicao():
+    """FULL-SLUG: o texto do alerta vai para a tela; slug cru ('apice') nao."""
+    linhas = []
+    for marca, atras in (("apice", 30), ("kokeshi", 20), ("novamarca", 25)):
+        d = date(2026, 9, 10)
+        while d <= date(2026, 9, 21):
+            linhas.append(linha(d, marca, brutos=200, col_atras=atras))
+            d += timedelta(days=1)
+    msg = next(a["message"] for a in serie(linhas, dias=7)["alerts"] if a["code"] == "marcas_concentram")
+    assert "ÁPICE (" in msg and "KOKESHI (" in msg
+    assert "NOVAMARCA (" in msg  # fora do mapa: maiusculo (padrao do app), nunca o slug cru
+    assert "apice (" not in msg

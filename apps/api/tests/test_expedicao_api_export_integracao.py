@@ -211,7 +211,7 @@ def test_a_kokeshi_entra_na_resposta_da_shopee(juntas):
     assert r["limitations"]["brands_not_covered"] == []
     notas = r["limitations"]["notes"]
     assert svc.NOTA_KOKESHI_SEM_FONTE not in notas
-    assert any("kokeshi: fila do export" in n for n in notas)
+    assert any("KOKESHI: fila do export" in n for n in notas)
     frescor = {f["brand"]: f for f in r["freshness"]}
     assert frescor["kokeshi"]["freshness"] == "fresh"
 

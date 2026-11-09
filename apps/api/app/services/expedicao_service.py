@@ -52,6 +52,7 @@ from app.schemas.expedicao import (
 from app.services import expedicao_shopee_ldr_service as shopee_ldr_svc
 from app.services import expedicao_atraso_7d_export as atraso_7d_export
 from app.services import expedicao_tiktok_service as tiktok_svc
+from app.services.gold_service import BRAND_LABELS
 
 CHECK_FRESHNESS = "expedicao_source_freshness"
 
@@ -454,7 +455,8 @@ def _limitacoes(canal: Canal, idade_h: Optional[float],
              if not (n == NOTA_SEM_IDENTIFICADOR and _numero_publico())
              and not (n == NOTA_KOKESHI_SEM_FONTE and "kokeshi" in cobertas)]
     if cobertas:
-        notas.append(NOTA_EXPORT.format(marcas=", ".join(sorted(cobertas))))
+        notas.append(NOTA_EXPORT.format(
+            marcas=", ".join(BRAND_LABELS.get(m, m.upper()) for m in sorted(cobertas))))
     notas.extend(extras or [])
     return {
         "no_automation": True,
