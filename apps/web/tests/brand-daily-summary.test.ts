@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "../src/lib/brand-daily-summary.ts";
 import type { DailyRow } from "../src/lib/mock-daily.ts";
 import { tiktokMaturacaoRotulo, TIKTOK_MATURACAO_DICA } from "../src/lib/tiktok-maturacao.ts";
+import { mlMaturacaoRotulo, ML_MATURACAO_DICA } from "../src/lib/ml-maturacao.ts";
 
 function row(overrides: Partial<DailyRow>): DailyRow {
   return {
@@ -209,4 +210,38 @@ test("a dica explica o motivo e a janela", () => {
   assert.match(TIKTOK_MATURACAO_DICA, /cancelados até ~30 dias/);
   assert.match(TIKTOK_MATURACAO_DICA, /pode cair/);
   assert.match(TIKTOK_MATURACAO_DICA, /35 dias/);
+});
+
+// T-0077 — helper do rótulo "em maturação" do GMV ML
+// (src/lib/ml-maturacao.ts). Só rótulo: nenhum número muda.
+
+test("ML: dias marcados pela API viram rótulo com o primeiro dia em maturação", () => {
+  const r = mlMaturacaoRotulo([
+    { date: "2026-10-04", ml_em_maturacao: false },
+    { date: "2026-11-08", ml_em_maturacao: true },
+    { date: "2026-10-05", ml_em_maturacao: true },
+  ]);
+  assert.deepEqual(r, { desde: "2026-10-05", dias: 2, texto: "Mercado Livre em maturação desde 05/10" });
+});
+
+test("ML: nenhum dia em maturação, campo null (ML fora do escopo), API antiga ou lista vazia: sem rótulo", () => {
+  assert.equal(mlMaturacaoRotulo([{ date: "2026-09-01", ml_em_maturacao: false }]), null);
+  assert.equal(mlMaturacaoRotulo([{ date: "2026-11-08", ml_em_maturacao: null }]), null);
+  assert.equal(mlMaturacaoRotulo([{ date: "2026-11-08" }]), null);
+  assert.equal(mlMaturacaoRotulo([]), null);
+});
+
+test("ML e TikTok são independentes: cada helper lê só o próprio campo", () => {
+  const linhas = [
+    { date: "2026-11-08", tiktok_em_maturacao: true, ml_em_maturacao: false },
+    { date: "2026-10-20", tiktok_em_maturacao: false, ml_em_maturacao: true },
+  ];
+  assert.equal(mlMaturacaoRotulo(linhas)?.desde, "2026-10-20");
+  assert.equal(tiktokMaturacaoRotulo(linhas)?.desde, "2026-11-08");
+});
+
+test("ML: a dica explica o motivo e a janela", () => {
+  assert.match(ML_MATURACAO_DICA, /cancelados ou reembolsados até ~35 dias/);
+  assert.match(ML_MATURACAO_DICA, /pode cair/);
+  assert.match(ML_MATURACAO_DICA, /35 dias/);
 });
