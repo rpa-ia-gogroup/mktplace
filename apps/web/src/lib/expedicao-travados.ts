@@ -80,7 +80,13 @@ export function fatias(n: Map<string, number>, total: number): FatiaEtapa[] {
 
 /** "97,3%" / "100%": 1 casa so' quando ha' fracao. */
 export function pctDaEtapa(n: number, total: number): string {
-  return `${((n / total) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  const pct = (n / total) * 100;
+  const texto = pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  // 7 de 20.512 nao e' "0%", e 20.505 de 20.512 nao e' "100%" (visto em
+  // producao, 09/11): o arredondamento nunca apaga nem completa uma etapa.
+  if (n > 0 && texto === "0") return "<0,1%";
+  if (n < total && texto === "100") return ">99,9%";
+  return `${texto}%`;
 }
 
 /** A etapa REAL foi publicada para alguma linha (nao so' o default da 033). */
