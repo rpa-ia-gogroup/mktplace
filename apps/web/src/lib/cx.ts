@@ -774,7 +774,7 @@ export const MIN_MARCAS_RISCO = 3;
 /** shortcut: resposta 0% teria excesso infinito; o teto so' ordena, trocar se 0% virar caso real. */
 const TETO_EXCESSO = 10;
 export const AJUDA_RISCO =
-  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta do chat fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais. Taxa de resposta abaixo da meta oficial da Shopee deixa a marca vermelha e em primeiro, mostrando a meta no lugar da mediana.";
+  "Uma marca fica fora da curva quando passa de 1,2× a mediana das marcas em contact rate, cancelamento ou reembolso (subir é pior), ou quando a taxa de resposta do chat fica abaixo da mediana ÷ 1,2 (cair é pior). Cada marca pesa igual; com menos de 3 marcas medidas, o indicador não conta. Aparecem até 2 marcas, as mais fora, cada uma com o pior indicador. Âmbar: um indicador fora. Vermelho: dois ou mais. Taxa de resposta do chat abaixo da meta oficial da Shopee deixa a marca vermelha e em primeiro, mostrando a meta no lugar da mediana.";
 
 /** Mediana; null com menos de `MIN_MARCAS_RISCO` valores. */
 export function medianaRisco(vals: number[]): number | null {
