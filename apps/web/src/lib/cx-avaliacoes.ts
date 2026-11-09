@@ -7,7 +7,7 @@
  */
 import type { FiltrosCx } from "./cx.ts";
 import { nota, pct } from "./cx-site.ts";
-import { MOTIVO_TIMEOUT, TIMEOUT_API_MS, formatarInstante } from "./performance-contas.ts";
+import { MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS, formatarInstante } from "./performance-contas.ts";
 
 export type EstadoAvaliacoes = "dado" | "vazio_legitimo" | "sem_fonte" | "erro";
 
@@ -71,7 +71,14 @@ export function problemaNoPayloadAvaliacoes(json: unknown): string | null {
 }
 
 /** Nunca lanca: qualquer falha volta como `{ ok: false }`. */
+/** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarAvaliacoes(
+  ...args: Parameters<typeof carregarAvaliacoesUmaVez>
+): ReturnType<typeof carregarAvaliacoesUmaVez> {
+  return repetirSeEstourar(() => carregarAvaliacoesUmaVez(...args));
+}
+
+async function carregarAvaliacoesUmaVez(
   f: Pick<FiltrosCx, "marca">,
   fetchImpl: typeof fetch = fetch,
   base: string = API_URL,

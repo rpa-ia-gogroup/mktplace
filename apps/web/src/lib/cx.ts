@@ -22,7 +22,7 @@ import {
   type Motivo,
   textoJanela,
 } from "./performance-contas-atendimento.ts";
-import { formatarInstante, MOTIVO_TIMEOUT, TIMEOUT_API_MS } from "./performance-contas.ts";
+import { formatarInstante, MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS } from "./performance-contas.ts";
 import { valorMetrica, type ContaOficial } from "./expedicao-performance.ts";
 import type { DeltaTone } from "./gerencial/kpi-band.ts";
 
@@ -243,7 +243,14 @@ export function urlCxShopee(base: string, f: FiltrosCx): string {
 export type ResultadoCx = { ok: true; dados: CxShopeeResponse } | { ok: false; motivo: string };
 
 /** Nunca lanca: qualquer falha volta como `{ ok: false }` e a pagina mostra erro. */
+/** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarCxShopee(
+  ...args: Parameters<typeof carregarCxShopeeUmaVez>
+): ReturnType<typeof carregarCxShopeeUmaVez> {
+  return repetirSeEstourar(() => carregarCxShopeeUmaVez(...args));
+}
+
+async function carregarCxShopeeUmaVez(
   f: FiltrosCx,
   fetchImpl: typeof fetch = fetch,
   base: string = API_URL,
@@ -1455,7 +1462,14 @@ export function urlPedidosMotivo(base: string, f: FiltrosCx, tipo: TipoPedidos, 
 export type ResultadoPedidos = { ok: true; dados: PedidosMotivoResponse } | { ok: false; motivo: string };
 
 /** Nunca lanca: falha volta como `{ ok: false }`. */
+/** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarPedidosMotivo(
+  ...args: Parameters<typeof carregarPedidosMotivoUmaVez>
+): ReturnType<typeof carregarPedidosMotivoUmaVez> {
+  return repetirSeEstourar(() => carregarPedidosMotivoUmaVez(...args));
+}
+
+async function carregarPedidosMotivoUmaVez(
   f: FiltrosCx,
   tipo: TipoPedidos,
   codigo: string,

@@ -12,6 +12,7 @@ import {
   PERFORMANCE_CONTAS_FLAG,
   TIMEOUT_API_MS,
   carregarPerformanceContas,
+  repetirSeEstourar,
   estadoEfetivo,
   estadoParaStateBlock,
   filtrarCanais,
@@ -575,4 +576,53 @@ test("loading.tsx: carregando acessivel (role=status + aria-busy), sem digito ne
   const texto = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   assert.match(texto, /Carregando a performance das contas…/);
   assert.doesNotMatch(texto, /\d/, "nenhum numero (nem zero) enquanto carrega");
+});
+
+// ---------------------------------------------------------------------------
+// Nova tentativa so' quando estoura o tempo (1o acesso depois de a API reiniciar)
+// ---------------------------------------------------------------------------
+test("carregarPerformanceContas: estourou o tempo, tenta de novo uma vez e usa a 2a resposta", async () => {
+  const corpo = { gerado_em: "2026-10-29T10:00:00Z", canais: [] };
+  let chamadas = 0;
+  const pendurado = fetchPendurado({});
+  const fake = ((url: string, init?: RequestInit) => {
+    chamadas += 1;
+    return chamadas === 1 ? pendurado(url, init) : Promise.resolve(Response.json(corpo));
+  }) as unknown as typeof fetch;
+  const r = await carregarPerformanceContas({ marca: null }, fake, "http://x", 30);
+  assert.equal(chamadas, 2);
+  assert.equal(r.ok, true);
+});
+
+test("carregarPerformanceContas: dois estouros param na 2a tentativa (nunca mais de duas)", async () => {
+  let chamadas = 0;
+  const pendurado = fetchPendurado({});
+  const fake = ((url: string, init?: RequestInit) => {
+    chamadas += 1;
+    return pendurado(url, init);
+  }) as unknown as typeof fetch;
+  const r = await carregarPerformanceContas({ marca: null }, fake, "http://x", 30);
+  assert.equal(chamadas, 2);
+  assert.deepEqual(r, { ok: false, motivo: MOTIVO_TIMEOUT });
+});
+
+test("carregarPerformanceContas: erro que nao e' timeout (status, rede) nao repete", async () => {
+  let chamadas = 0;
+  const status = (async () => {
+    chamadas += 1;
+    return new Response("x", { status: 500 });
+  }) as unknown as typeof fetch;
+  const r = await carregarPerformanceContas({ marca: null }, status, "http://x", 30);
+  assert.equal(chamadas, 1);
+  assert.deepEqual(r, { ok: false, motivo: "A API respondeu 500." });
+});
+
+test("repetirSeEstourar: so' o motivo de timeout dispara a 2a busca", async () => {
+  let n = 0;
+  const ok = await repetirSeEstourar(async () => ({ ok: true as const, n: ++n }));
+  assert.equal(n, 1);
+  assert.equal(ok.ok, true);
+  n = 0;
+  await repetirSeEstourar(async () => ({ ok: false as const, motivo: "Não foi possível contatar a API.", n: ++n }));
+  assert.equal(n, 1);
 });
