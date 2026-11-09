@@ -54,6 +54,16 @@ class TikTokMaturacao(BaseModel):
     motivo: str
 
 
+class MlMaturacao(BaseModel):
+    """T-0077 — o GMV ML de um dia ainda pode CAIR ate completar `janela_dias`
+    (cancelamentos e reembolsos parciais chegam ate ~D+35). So' rotulo: nenhum
+    valor muda. Mesmo formato de `TikTokMaturacao`. Ausente (`None`) quando o
+    ML esta fora do escopo pedido. Regra em docs/ml_gmv_maturacao.md."""
+    em_maturacao_desde: date  # hoje (America/Sao_Paulo) - janela_dias, inclusive
+    janela_dias: int
+    motivo: str
+
+
 class BrandPerformance(BaseModel):
     brand: str              # "barbours"
     label: str              # "BARBOURS"
@@ -86,6 +96,7 @@ class BrandsResponse(BaseModel):
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
     tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
+    ml_maturacao: Optional[MlMaturacao] = None  # T-0077, aditivo
 
 
 class MonthlyBrandGmv(BaseModel):
@@ -99,11 +110,14 @@ class MonthlyBrandGmv(BaseModel):
     # T-0074, aditivo: o mes tem ao menos um dia em maturacao. None = TikTok
     # fora do escopo.
     tiktok_em_maturacao: Optional[bool] = None
+    # T-0077, aditivo: idem para o GMV ML. None = ML fora do escopo.
+    ml_em_maturacao: Optional[bool] = None
 
 
 class MonthlyResponse(BaseModel):
     data: list[MonthlyBrandGmv]
     tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
+    ml_maturacao: Optional[MlMaturacao] = None  # T-0077, aditivo
 
 
 class TrendPoint(BaseModel):
@@ -152,6 +166,9 @@ class DailyRow(BaseModel):
     # T-0074, aditivo: o GMV TikTok deste dia ainda pode cair. None = TikTok
     # fora do escopo.
     tiktok_em_maturacao: Optional[bool] = None
+    # T-0077, aditivo: o GMV ML deste dia ainda pode cair. None = ML fora do
+    # escopo.
+    ml_em_maturacao: Optional[bool] = None
 
 
 class DailyResponse(BaseModel):
@@ -159,6 +176,7 @@ class DailyResponse(BaseModel):
     marketplace: str
     data: list[DailyRow]
     tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
+    ml_maturacao: Optional[MlMaturacao] = None  # T-0077, aditivo
 
 
 class QualityKpis(BaseModel):
