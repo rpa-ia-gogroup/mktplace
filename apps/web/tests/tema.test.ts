@@ -220,6 +220,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
 // nada e fica de fora) e recusa qualquer cor literal de paleta.
 // ---------------------------------------------------------------------------
 const PAGINA_DA_ROTA: Record<string, string> = {
+  "/expedicao": "app/expedicao/page.tsx",
   "/": "app/page.tsx",
   "/canais": "app/canais/page.tsx",
   "/financeiro": "app/financeiro/page.tsx",
@@ -275,7 +276,6 @@ function arvoreDaRota(pagina: string): string[] {
 
 test("toda rota tematizada tem a arvore inteira em tokens, dialogos inclusive", () => {
   for (const rota of ROTAS_TEMATIZADAS) {
-    if (rota === "/expedicao") continue; // coberta pela lista explicita da secao 5
     const pagina = PAGINA_DA_ROTA[rota];
     assert.ok(pagina, `${rota} entrou na lista sem pagina mapeada neste teste`);
     const arvore = arvoreDaRota(pagina);
@@ -312,6 +312,16 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
     "src/components/ui/Heroi.tsx",
   ]) {
     assert.ok(cx.includes(esperado), `percurso da /cx nao alcancou ${esperado}`);
+  }
+  const exp = arvoreDaRota("app/expedicao/page.tsx");
+  for (const esperado of [
+    "app/expedicao/ExpedicaoClient.tsx",
+    "src/components/expedicao/TikTokDispatchPanel.tsx",
+    "src/components/expedicao/TravadosDialog.tsx",
+    "src/components/expedicao/PerformanceOficial.tsx",
+    "src/components/expedicao/ConsolidadoEtapas.tsx",
+  ]) {
+    assert.ok(exp.includes(esperado), `percurso da /expedicao nao alcancou ${esperado}`);
   }
   const canais = arvoreDaRota("app/canais/page.tsx");
   assert.ok(canais.includes("src/components/AffiliateCostsPanel.tsx"));
