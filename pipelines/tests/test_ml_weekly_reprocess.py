@@ -104,6 +104,8 @@ def test_daily_ml_continua_incremental_sem_days():
 
 def test_nenhum_pipeline_existente_ganhou_o_passo_semanal():
     for nome, passos in orch.PIPELINES.items():
+        if nome == PIPELINE:   # quando registrado, o proprio pipeline nao conta
+            continue
         assert "ml_weekly_reprocess" not in {s.name for s in passos}, nome
         assert not any(s.args[:2] == ("--source", "ml") and "backfill" in s.args
                        for s in passos), nome
