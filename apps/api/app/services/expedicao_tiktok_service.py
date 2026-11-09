@@ -528,7 +528,7 @@ def _alertas(*, ldr, marcas, evento, effective_at, agora):
             "code": "marcas_concentram",
             "message": (
                 "Acima da meta (medição interna) em: "
-                + ", ".join(f"{BRAND_LABELS.get(m['brand'], m['brand'].title())} ({_pct(m['rate'])})"
+                + ", ".join(f"{BRAND_LABELS.get(m['brand'], m['brand'].upper())} ({_pct(m['rate'])})"
                             for m in piores[:4])
                 + "."
             ),

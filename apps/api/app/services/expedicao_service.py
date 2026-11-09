@@ -456,7 +456,7 @@ def _limitacoes(canal: Canal, idade_h: Optional[float],
              and not (n == NOTA_KOKESHI_SEM_FONTE and "kokeshi" in cobertas)]
     if cobertas:
         notas.append(NOTA_EXPORT.format(
-            marcas=", ".join(BRAND_LABELS.get(m, m.title()) for m in sorted(cobertas))))
+            marcas=", ".join(BRAND_LABELS.get(m, m.upper()) for m in sorted(cobertas))))
     notas.extend(extras or [])
     return {
         "no_automation": True,

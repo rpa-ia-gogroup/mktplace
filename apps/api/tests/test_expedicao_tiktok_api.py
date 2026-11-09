@@ -561,5 +561,5 @@ def test_alerta_de_marcas_acima_da_meta_usa_o_nome_de_exibicao():
             d += timedelta(days=1)
     msg = next(a["message"] for a in serie(linhas, dias=7)["alerts"] if a["code"] == "marcas_concentram")
     assert "ÁPICE (" in msg and "KOKESHI (" in msg
-    assert "Novamarca (" in msg  # fora do mapa: Title, nunca o slug cru
+    assert "NOVAMARCA (" in msg  # fora do mapa: maiusculo (padrao do app), nunca o slug cru
     assert "apice (" not in msg

@@ -692,7 +692,7 @@ def get_ml_full_estoque_block(
 
     # Texto que vai para a tela: o nome de exibicao da marca, nunca o slug.
     def rotulos(ms: list[str]) -> str:
-        return ", ".join(BRAND_LABELS.get(m, m.title()) for m in ms)
+        return ", ".join(BRAND_LABELS.get(m, m.upper()) for m in ms)
 
     motivos_parcial = []
     if sem_foto:
