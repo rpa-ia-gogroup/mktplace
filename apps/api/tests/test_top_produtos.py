@@ -106,3 +106,77 @@ def test_ads_do_ml_que_nao_chegaram_nao_viram_zero():
 
 def test_detalhe_sem_venda_e_none():
     assert get_detalhe(lambda s, p: [], "shopee", "apice", "X", date(2026, 11, 1), date(2026, 11, 5)) is None
+
+
+# ---------------------------------------------------------------------------
+# COMPARAR-CANAIS — o mesmo produto em cada canal, pela fatia da marca
+# ---------------------------------------------------------------------------
+from app.services.top_produtos_service import get_comparar_canais, montar_comparacao, normalizar_sku  # noqa: E402
+
+
+def _l(marca, sku, chave, nome, receita):
+    return {"marca": marca, "sku": sku, "chave": chave, "nome": nome, "receita": receita}
+
+
+def test_sku_normalizado_casa_lescent_e_kits():
+    assert normalizar_sku("V10008") == normalizar_sku("10008") == "10008"
+    assert normalizar_sku("kit-130") == normalizar_sku("KIT130") == "KIT130"
+    assert normalizar_sku("VELA01") == "VELA01"  # 'V' so' sai antes de numero
+    assert normalizar_sku("") is None and normalizar_sku(None) is None
+
+
+def test_fatia_por_canal_apelidos_do_tiktok_e_canal_sem_venda():
+    linhas = {
+        "ml": [_l("kokeshi", "20002", "20002", "Kit Facial", 150), _l("kokeshi", "KS999", "KS999", "Sérum", 850)],
+        "tiktok": [_l("kokeshi", "KS03043", "P1", "Kit Facial TT", 20), _l("kokeshi", "KS999", "P2", "Sérum TT", 980)],
+        "shopee": [],
+    }
+    # O TikTok liga o codigo antigo (20002) ao novo (KS03043) no mesmo product_id.
+    apelidos = [{"produto": "P1", "sku": "KS03043"}, {"produto": "P1", "sku": "20002"}]
+    [m] = montar_comparacao(linhas, apelidos, ["kokeshi"])
+    assert [c.canal for c in m.canais] == ["tiktok", "ml"]  # Shopee sem venda: sem coluna
+    kit = next(p for p in m.produtos if p.chave == "20002")
+    fatias = {c.canal: c.fatia for c in kit.celulas}
+    assert fatias["ml"] == 0.15 and fatias["tiktok"] == 0.02
+    assert {c.canal: c.sku for c in kit.celulas} == {"tiktok": "P1", "ml": "20002"}  # chave do detalhe
+
+
+def test_produto_so_num_canal_nao_tem_celula_no_outro_nunca_zero():
+    linhas = {"ml": [_l("barbours", "KIT122", "KIT122", "Kit 122", 100), _l("barbours", "A1", "A1", "Body", 900)],
+              "shopee": [_l("barbours", "A1", "i9", "Body", 1000)], "tiktok": []}
+    [m] = montar_comparacao(linhas, [], ["barbours"])
+    kit = next(p for p in m.produtos if p.chave == "KIT122")
+    assert [c.canal for c in kit.celulas] == ["ml"]
+
+
+def test_ordem_pela_maior_fatia_e_empate_pela_soma():
+    linhas = {
+        "ml": [_l("lescent", "A", "A", "A", 30), _l("lescent", "B", "B", "B", 30), _l("lescent", "C", "C", "C", 40)],
+        "shopee": [_l("lescent", "A", "A", "A", 10), _l("lescent", "B", "B", "B", 50), _l("lescent", "C", "C", "C", 40)],
+        "tiktok": [],
+    }
+    [m] = montar_comparacao(linhas, [], ["lescent"])
+    # B: max 0,5 (Shopee). C: max 0,4, soma 0,8. A: max 0,3. Nunca pela soma primeiro.
+    assert [p.chave for p in m.produtos] == ["B", "C", "A"]
+
+
+def test_sem_seller_sku_fica_fora_e_baixa_a_cobertura():
+    linhas = {"ml": [_l("rituaria", None, "MLB1", "Sem SKU", 200), _l("rituaria", "R1", "R1", "Sérum", 800)],
+              "shopee": [], "tiktok": []}
+    [m] = montar_comparacao(linhas, [], ["rituaria"])
+    assert m.canais[0].cobertura == 0.8
+    assert [p.chave for p in m.produtos] == ["R1"]
+
+
+def test_rota_consulta_os_tres_canais_e_os_apelidos_em_paralelo():
+    vistos = []
+
+    def consultar(sql, params):
+        vistos.append(sql)
+        assert params["ini_apelidos"] == date(2026, 5, 12)  # fim - 180 dias
+        return []
+
+    r = get_comparar_canais(consultar, date(2026, 10, 10), date(2026, 11, 8), ["kokeshi"])
+    assert r.marcas == [] and len(vistos) == 4
+    assert any("stg_tiktok_line_items" in s and "seller_sku" in s for s in vistos)
+    assert get_comparar_canais(consultar, date(2026, 10, 10), date(2026, 11, 8), ["fora"]).marcas == []

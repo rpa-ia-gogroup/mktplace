@@ -23,9 +23,10 @@ import { MARCAS, hojeBrt } from "@/lib/metas";
 import type { Marketplace } from "@/lib/mock-data";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtVezes } from "@/lib/formatters";
 import {
-  agrupar, buscarDetalhe, buscarTopProdutos, comparacaoValida, rotuloPeriodo, variacao,
-  type DetalheProduto, type Grao, type MarcaTop, type ProdutoTop, type TopProdutosResponse,
+  agrupar, buscarComparacao, buscarDetalhe, buscarTopProdutos, comparacaoValida, fmtFatia, rotuloPeriodo, variacao,
+  type CompararCanaisResponse, type DetalheProduto, type Grao, type MarcaTop, type ProdutoTop, type TopProdutosResponse,
 } from "@/lib/gerencial/top-produtos";
+import TopProdutosComparar from "./TopProdutosComparar";
 
 const Grafico = dynamic(() => import("./TopProdutoGrafico"), {
   ssr: false,
@@ -47,6 +48,18 @@ const OPCOES_CANAL: { valor: CanalCard; texto: string; icone?: React.ReactNode }
   { valor: "ml", texto: "Mercado Livre", icone: ponto("ml") },
   { valor: "shopee", texto: "Shopee", icone: ponto("shopee") },
 ];
+// COMPARAR-CANAIS: o segundo seletor so' existe com Canal = Todos.
+type Modo = "ranking" | "comparar";
+const OPCOES_MODO: { valor: Modo; texto: string }[] = [
+  { valor: "ranking", texto: "Ranking" },
+  { valor: "comparar", texto: "Comparar canais" },
+];
+const DICA_COMPARAR =
+  "Mesmo produto em cada canal pelo seller SKU (códigos antigos e novos juntados; Lescent por fragrância, com os volumes somados). " +
+  "A fatia é a parte da receita da marca naquele canal: compara canais de tamanhos diferentes sem somar R$. " +
+  "O TikTok entra por seller SKU, com cerca de 95% do GMV: serve para fatia, não para R$. " +
+  "Selo “forte no canal”: fatia de pelo menos 3%, 2× a maior dos outros canais e 3 p.p. acima. " +
+  "“Sem venda”: o produto tem 3% ou mais num canal e nenhuma venda em outro que a marca tem. Respeita o período do filtro.";
 const rotuloMarca = (id: string) => MARCAS.find((m) => m.id === id)?.label ?? id.toUpperCase();
 const TH = "py-2 px-2 text-xs font-semibold uppercase tracking-wide text-ink-faint";
 
@@ -64,7 +77,10 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
   const [tentativa, setTentativa] = useState(0);
   const [abertas, setAbertas] = useState<Record<string, boolean>>({});
   const [marcaSel, setMarcaSel] = useState<string | null>(null);
-  const [aberto, setAberto] = useState<{ marca: string; produto: ProdutoTop } | null>(null);
+  const [aberto, setAberto] = useState<{ marca: string; produto: ProdutoTop; doComparar?: boolean } | null>(null);
+  const [modoEscolhido, setModo] = useState<Modo>("ranking");
+  const [comp, setComp] = useState<CompararCanaisResponse | null>(null);
+  const [erroComp, setErroComp] = useState(false);
   // Canal do card, escolha unica: nasce do filtro do topo (um canal so' = ele;
   // mais de um = Todos) e volta a segui-lo quando o topo muda.
   const doTopo = (): CanalCard => (channels.length === 1 ? channels[0] : "todos");
@@ -72,6 +88,8 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
   const canaisTopo = channels.join(",");
   useEffect(() => setCanal(doTopo()), [canaisTopo]); // `channels` muda de identidade a cada render
   const canais = canal === "todos" ? TODOS_CANAIS : [canal];
+  // Um canal so' nao tem o que comparar: volta para o Ranking.
+  const modo: Modo = canal === "todos" ? modoEscolhido : "ranking";
   const chave = [canais.join(","), brands.join(","), dateFrom, dateTo, compare].join("|");
 
   useEffect(() => {
@@ -88,6 +106,21 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
     // `chave` resume os filtros; `tentativa` refaz a busca.
   }, [chave, tentativa]);
 
+  // COMPARAR-CANAIS: busca propria, so' com o modo ligado (marca e periodo do filtro).
+  const chaveComp = [brands.join(","), dateFrom, dateTo].join("|");
+  useEffect(() => {
+    if (modo !== "comparar") return;
+    const ac = new AbortController();
+    const q = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+    if (brands.length) q.set("brands", brands.join(","));
+    setErroComp(false);
+    setComp(null);
+    buscarComparacao(q, ac.signal).then(setComp).catch((e) => {
+      if (!(e instanceof DOMException && e.name === "AbortError")) setErroComp(true);
+    });
+    return () => ac.abort();
+  }, [modo, chaveComp, tentativa]);
+
   const comparando = dados ? comparacaoValida(dados, hojeBrt()) : false;
   const soHojeSemComparar = Boolean(dados?.comparacao_inicio) && !comparando;
   const vsRotulo = dados?.comparacao_inicio && dados.comparacao_fim
@@ -95,6 +128,10 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
     : "vs anterior";
   // Aba: a escolhida, se ainda existe no recorte; senao a marca que mais vendeu.
   const marca = dados?.marcas.find((m) => m.marca === marcaSel) ?? dados?.marcas[0] ?? null;
+  const marcaComp = comp?.marcas.find((m) => m.marca === marcaSel) ?? comp?.marcas[0] ?? null;
+  // As abas de marca seguem a fonte do modo.
+  const abasMarca = modo === "comparar" ? comp?.marcas.map((m) => m.marca) : dados?.marcas.map((m) => m.marca);
+  const marcaAtual = modo === "comparar" ? marcaComp?.marca : marca?.marca;
 
   return (
     <section aria-labelledby="top-produtos-titulo" className="flex flex-col gap-3 rounded-xl border border-line bg-surface p-4">
@@ -104,19 +141,25 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
           <h2 id="top-produtos-titulo" className="text-sm font-semibold text-ink-muted">
             Mais vendidos por marca
           </h2>
-          <InfoDica texto="Ranking por receita do anúncio como foi vendido em cada canal: kit conta como kit, sem de-para. TikTok e Mercado Livre somam o mesmo GMV da Torre; Shopee usa o preço do item sem cancelados e brindes. Clique num produto para ver o detalhe." />
+          <InfoDica
+            texto={
+              modo === "comparar"
+                ? DICA_COMPARAR
+                : "Ranking por receita do anúncio como foi vendido em cada canal: kit conta como kit, sem de-para. TikTok e Mercado Livre somam o mesmo GMV da Torre; Shopee usa o preço do item sem cancelados e brindes. Clique num produto para ver o detalhe."
+            }
+          />
         </div>
       </div>
 
       {/* Uma barra so', alinhada a' esquerda: marca | canal (como a barra do topo). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {marca && dados && (
+        {marcaAtual && abasMarca && (
           <>
             <div className="-mx-1 max-w-full overflow-x-auto px-1">
               <Segmented
                 rotulo="Marca"
-                opcoes={dados.marcas.map((m) => ({ valor: m.marca, texto: rotuloMarca(m.marca) }))}
-                valor={marca.marca}
+                opcoes={abasMarca.map((m) => ({ valor: m, texto: rotuloMarca(m) }))}
+                valor={marcaAtual}
                 aoEscolher={setMarcaSel}
                 className="whitespace-nowrap"
               />
@@ -127,9 +170,60 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
         <div className="-mx-1 max-w-full overflow-x-auto px-1">
           <Segmented rotulo="Canal" opcoes={OPCOES_CANAL} valor={canal} aoEscolher={setCanal} className="whitespace-nowrap" />
         </div>
+        {canal === "todos" && (
+          <div className="-mx-1 flex max-w-full items-center gap-2 overflow-x-auto px-1">
+            <span id="top-produtos-modo" className="text-xs text-ink-faint">Ver</span>
+            <Segmented
+              rotulo="Ver"
+              rotuladoPor="top-produtos-modo"
+              opcoes={OPCOES_MODO}
+              valor={modo}
+              aoEscolher={setModo}
+              className="whitespace-nowrap"
+            />
+          </div>
+        )}
       </div>
 
-      {erro ? (
+      {modo === "comparar" ? (
+        erroComp ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised p-3">
+            <p className="text-sm text-ink-muted">Comparação entre canais indisponível nesta carga.</p>
+            <button
+              type="button"
+              onClick={() => setTentativa((t) => t + 1)}
+              className="min-h-11 rounded-lg border border-line-strong px-3 text-xs font-semibold text-ink-muted hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : !comp ? (
+          <div className="flex flex-col gap-2" role="status" aria-busy="true">
+            <span className="sr-only">Carregando a comparação entre canais…</span>
+            {[0, 1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-10 animate-pulse rounded bg-accent-soft motion-reduce:animate-none" />
+            ))}
+          </div>
+        ) : !marcaComp ? (
+          <p className="text-sm text-ink-faint">Sem venda de produto no período e filtros selecionados.</p>
+        ) : (
+          <TopProdutosComparar
+            key={marcaComp.marca}
+            m={marcaComp}
+            abrir={(p, c) => {
+              const celula = p.celulas.find((x) => x.canal === c)!;
+              setAberto({
+                marca: marcaComp.marca,
+                doComparar: true,
+                produto: {
+                  posicao: 0, canal: c, sku: celula.sku, produto: p.produto, kit: p.kit,
+                  pecas: 0, receita: 0, pecas_ant: null, receita_ant: null, preco_medio: null, share_marca: celula.fatia,
+                },
+              });
+            }}
+          />
+        )
+      ) : erro ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised p-3">
           <p className="text-sm text-ink-muted">Mais vendidos indisponível nesta carga.</p>
           <button
@@ -200,8 +294,15 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
         largura="larga"
         focusResetKey={aberto ? `${aberto.produto.canal}:${aberto.produto.sku}` : undefined}
       >
-        {aberto && dados && (
-          <DetalheTop marca={aberto.marca} p={aberto.produto} inicio={dados.inicio} fim={dados.fim} comparando={comparando} />
+        {aberto && (aberto.doComparar ? comp : dados) && (
+          <DetalheTop
+            marca={aberto.marca}
+            p={aberto.produto}
+            inicio={(aberto.doComparar ? comp! : dados!).inicio}
+            fim={(aberto.doComparar ? comp! : dados!).fim}
+            comparando={aberto.doComparar ? false : comparando}
+            doComparar={aberto.doComparar}
+          />
         )}
       </KpiDrilldownDialog>
     </section>
@@ -385,8 +486,8 @@ function Indicador({ rotulo, valor, delta }: { rotulo: string; valor: string; de
 }
 
 function DetalheTop({
-  marca, p, inicio, fim, comparando,
-}: { marca: string; p: ProdutoTop; inicio: string; fim: string; comparando: boolean }) {
+  marca, p, inicio, fim, comparando, doComparar = false,
+}: { marca: string; p: ProdutoTop; inicio: string; fim: string; comparando: boolean; doComparar?: boolean }) {
   const [det, setDet] = useState<DetalheProduto | null>(null);
   const [erro, setErro] = useState(false);
   const [grao, setGrao] = useState<Grao>("dia");
@@ -403,6 +504,14 @@ function DetalheTop({
   }, [p.canal, p.sku, marca, inicio, fim]);
 
   const barras = det ? agrupar(det.serie, fim, grao) : [];
+  // COMPARAR-CANAIS: a comparacao so' traz a fatia; receita e pecas do periodo
+  // saem da serie do proprio detalhe (enquanto carrega, "—").
+  const doPeriodo = doComparar && det
+    ? det.serie.filter((d) => d.dia >= inicio && d.dia <= fim).reduce((a, d) => ({ r: a.r + d.receita, q: a.q + d.pecas }), { r: 0, q: 0 })
+    : null;
+  const receita = doComparar ? (doPeriodo?.r ?? null) : p.receita;
+  const pecas = doComparar ? (doPeriodo?.q ?? null) : p.pecas;
+  const precoMedio = doComparar ? (receita != null && pecas ? receita / pecas : null) : p.preco_medio;
   const fmtExtra = (v: number, f: "brl" | "num" | "vezes") => (f === "brl" ? fmtBrlCurto(v) : f === "vezes" ? fmtVezes(v) : fmtNumCurto(v));
 
   return (
@@ -412,14 +521,17 @@ function DetalheTop({
         <CanalSelo canal={p.canal} />
         {p.kit && <KitSelo />}
         <span className="font-mono text-xs text-ink-faint">{p.sku}</span>
-        <span className="text-xs text-ink-faint">#{p.posicao} da marca</span>
+        {!doComparar && <span className="text-xs text-ink-faint">#{p.posicao} da marca</span>}
       </div>
 
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Indicador rotulo="Receita" valor={fmtBrlCurto(p.receita)} delta={comparando ? <Delta valor={variacao(p.receita, p.receita_ant)} /> : undefined} />
-        <Indicador rotulo="Peças" valor={fmtNumCurto(p.pecas)} delta={comparando ? <Delta valor={variacao(p.pecas, p.pecas_ant)} /> : undefined} />
-        <Indicador rotulo="Preço médio" valor={p.preco_medio != null ? fmtBrlCurto(p.preco_medio) : "—"} />
-        <Indicador rotulo="% da marca" valor={p.share_marca != null ? `${Math.round(p.share_marca * 100)}%` : "—"} />
+        <Indicador rotulo="Receita" valor={receita != null ? fmtBrlCurto(receita) : "—"} delta={comparando ? <Delta valor={variacao(p.receita, p.receita_ant)} /> : undefined} />
+        <Indicador rotulo="Peças" valor={pecas != null ? fmtNumCurto(pecas) : "—"} delta={comparando ? <Delta valor={variacao(p.pecas, p.pecas_ant)} /> : undefined} />
+        <Indicador rotulo="Preço médio" valor={precoMedio != null ? fmtBrlCurto(precoMedio) : "—"} />
+        <Indicador
+          rotulo={doComparar ? "% da marca no canal" : "% da marca"}
+          valor={p.share_marca != null ? (doComparar ? fmtFatia(p.share_marca) : `${Math.round(p.share_marca * 100)}%`) : "—"}
+        />
       </div>
 
       <div className="flex flex-col gap-2">
@@ -471,8 +583,8 @@ function DetalheTop({
                 <dt className="text-xs text-ink-faint">{e.rotulo}</dt>
                 <dd className="text-sm font-semibold tabular-nums text-ink">
                   {fmtExtra(e.valor, e.formato)}
-                  {e.formato === "brl" && p.canal === "tiktok" && p.receita > 0 && (
-                    <span className="ml-1.5 text-xs font-medium text-ink-faint">{Math.round((e.valor / p.receita) * 100)}%</span>
+                  {e.formato === "brl" && p.canal === "tiktok" && receita != null && receita > 0 && (
+                    <span className="ml-1.5 text-xs font-medium text-ink-faint">{Math.round((e.valor / receita) * 100)}%</span>
                   )}
                 </dd>
               </div>
