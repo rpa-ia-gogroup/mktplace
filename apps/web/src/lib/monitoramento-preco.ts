@@ -28,6 +28,7 @@ import type {
   MonitoramentoPrecoRow,
   ProductType,
 } from "./monitoramento-preco-contract";
+import { doCanal, noCanal } from "./canal-preposicao.ts";
 
 /** Marcador unico de valor indisponivel. NUNCA "R$ 0,00", nunca "0%". */
 export const INDISPONIVEL = "—";
@@ -68,7 +69,7 @@ export function canalLabel(m: Marketplace | string): string {
  * controle pegou a regressao.
  */
 export function canalComPreposicao(m: Marketplace | string): string {
-  return m === "ml" ? "do Mercado Livre" : `da ${canalLabel(m)}`;
+  return doCanal(m, canalLabel(m));
 }
 
 /**
@@ -559,7 +560,7 @@ export interface KpiView {
  * padrao: quem nao passa o canal continua vendo o que ja' estava publicado.
  */
 function escopoDoCanal(m: Marketplace): string {
-  return m === "ml" ? "no Mercado Livre" : `na ${canalLabel(m)}`;
+  return noCanal(m, canalLabel(m));
 }
 
 export function buildKpiViews(

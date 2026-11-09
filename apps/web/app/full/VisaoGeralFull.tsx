@@ -30,6 +30,7 @@ import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
+import { noCanal } from "@/lib/canal-preposicao";
 import { hrefAba } from "@/lib/full-abas";
 import {
   NOME_CANAL,
@@ -154,7 +155,7 @@ function DetalheImpacto({ canal, impacto }: { canal: Canal; impacto: ImpactoRupt
         <p className="text-ink-muted">Impacto potencial indisponível agora.</p>
       ) : (
         <table className="w-full">
-          <caption className="sr-only">Impacto potencial por marca no {NOME_CANAL[canal]}, da maior perda para a menor</caption>
+          <caption className="sr-only">Impacto potencial por marca {noCanal(canal, NOME_CANAL[canal])}, da maior perda para a menor</caption>
           <thead className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
             <tr>
               <th scope="col" className="py-2 pr-2 text-left">Marca</th>
