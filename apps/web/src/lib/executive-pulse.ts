@@ -10,6 +10,7 @@ import type { ExecutiveSeverity } from "@/lib/executive-summary";
 // produtos-tab-transition.ts) porque este e' um import de VALOR: sob
 // `node --test` o alias `@/` nao e' resolvido e a extensao e' exigida;
 // `allowImportingTsExtensions` no tsconfig cobre o build.
+import { noCanal } from "./canal-preposicao.ts";
 import { fmtBrl } from "./formatters.ts";
 
 export type PulseCategory = "performance" | "efficiency_ops" | "data_confidence";
@@ -191,8 +192,8 @@ function maxSeverity(items: PulseInsight[]): ExecutiveSeverity {
 function groupTitle(type: string, marketplace: string | null, members: PulseInsight[], representative: PulseInsight): string {
   if (members.length <= 1) return representative.title;
   const channel = marketplace ? CHANNEL_LABEL[marketplace] ?? marketplace : "";
-  if (type === "high_cost") return `${members.length} marcas com custo no p75 ou acima no ${channel}`;
-  if (type === "high_cancel_rate") return `${members.length} marcas com cancelamento alto no ${channel}`;
+  if (type === "high_cost") return `${members.length} marcas com custo no p75 ou acima ${noCanal(marketplace ?? "", channel)}`;
+  if (type === "high_cancel_rate") return `${members.length} marcas com cancelamento alto ${noCanal(marketplace ?? "", channel)}`;
   if (type === "stale_data") return `${members.length} fontes com dado desatualizado`;
   return `${members.length} itens · ${representative.title}`;
 }

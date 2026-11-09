@@ -473,7 +473,7 @@ test("R7. o que e' novo fica ESCOPADO aos canais; o ML nao ganha nada", async ()
   // Preposicao: "do Mercado Livre", nunca "de Mercado Livre".
   assert.equal(canalComPreposicao("ml"), "do Mercado Livre");
   assert.equal(canalComPreposicao("shopee"), "da Shopee");
-  assert.equal(canalComPreposicao("tiktok"), "da TikTok Shop");
+  assert.equal(canalComPreposicao("tiktok"), "do TikTok Shop", "o TikTok Shop: masculino (helper canal-preposicao)");
   assert.ok(!codigo.includes("de {canalLabel(marketplace)}"),
     "concordancia: 'de Mercado Livre' e' agramatical");
 });

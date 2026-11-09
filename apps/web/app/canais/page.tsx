@@ -27,6 +27,7 @@ import ChannelComparisonDialogContent from "@/components/ChannelComparisonDialog
 import AffiliateCostsPanel from "@/components/AffiliateCostsPanel";
 import TiktokOrderDiscountsPanel from "@/components/TiktokOrderDiscountsPanel";
 import { resolveBlockPhase } from "@/lib/canais-affiliate-costs";
+import { noCanal } from "@/lib/canal-preposicao";
 import { SkeletonTableRows } from "@/components/Skeleton";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import InfoDica from "@/components/ui/InfoDica";
@@ -680,7 +681,7 @@ function CanaisPageInner() {
                         type="button"
                         onClick={() => setDetailRow(row)}
                         aria-haspopup="dialog"
-                        aria-label={`Ver detalhes de ${row.label} no ${row.channel_label}`}
+                        aria-label={`Ver detalhes de ${row.label} ${noCanal(row.channel, row.channel_label)}`}
                         className="inline-flex items-center justify-center min-h-11 min-w-11 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded whitespace-nowrap"
                       >
                         Detalhe
