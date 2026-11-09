@@ -1,7 +1,28 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { tendencia } from "@/lib/gerencial/kpi-trend";
+import NumeroAnimado from "./NumeroAnimado";
+import { LinhaDeTendencia } from "./Sparkline";
 import { TOM_PONTO, TOM_SUPERFICIE, TOM_TINTA, type Tom } from "./tone";
+
+/**
+ * Cor de IDENTIDADE do KPI (token `kpi-*`), a mesma do card da Gerencial:
+ * borda (que acende o brilho em degrade do globals.css), ladrilho do icone e
+ * mini grafico. Nao e' cor de estado: o bom/ruim fica no DeltaBadge e na
+ * tinta do valor. Classes literais para o Tailwind enxergar.
+ */
+export type IdentidadeKpi = "gmv" | "pedidos" | "ticket" | "ads" | "roas" | "prazo" | "atendimento";
+
+const IDENTIDADE: Record<IdentidadeKpi, { tinta: string; borda: string; ladrilho: string }> = {
+  gmv: { tinta: "text-kpi-gmv", borda: "border-kpi-gmv/30", ladrilho: "bg-kpi-gmv/10" },
+  pedidos: { tinta: "text-kpi-pedidos", borda: "border-kpi-pedidos/35", ladrilho: "bg-kpi-pedidos/10" },
+  ticket: { tinta: "text-kpi-ticket", borda: "border-kpi-ticket/30", ladrilho: "bg-kpi-ticket/10" },
+  ads: { tinta: "text-kpi-ads", borda: "border-kpi-ads/30", ladrilho: "bg-kpi-ads/10" },
+  roas: { tinta: "text-kpi-roas", borda: "border-kpi-roas/35", ladrilho: "bg-kpi-roas/10" },
+  prazo: { tinta: "text-kpi-prazo", borda: "border-kpi-prazo/30", ladrilho: "bg-kpi-prazo/10" },
+  atendimento: { tinta: "text-kpi-atendimento", borda: "border-kpi-atendimento/35", ladrilho: "bg-kpi-atendimento/10" },
+};
 
 /**
  * UX-TORRE-1 — celula da faixa de KPIs.
@@ -31,6 +52,10 @@ export default function KpiTile({
   icone,
   delta,
   onAbrir,
+  identidade,
+  antes,
+  serie,
+  granularidade = "day",
 }: {
   rotulo: ReactNode;
   valor: ReactNode;
@@ -57,7 +82,28 @@ export default function KpiTile({
    * (nada interativo dentro de botao) e a ressalva vai no proprio dialogo.
    */
   onAbrir?: () => void;
+  /**
+   * So' na variante "gerencial": a cor de identidade do KPI. Com ela, o cartao
+   * e' o card da faixa da Gerencial (KpiBand): borda e brilho na cor, ladrilho
+   * h-8, valor na escala da faixa e rodape delta + "antes" | mini grafico.
+   * Sem ela, o render "gerencial" de antes.
+   */
+  identidade?: IdentidadeKpi;
+  /** Com `identidade`: o valor do periodo anterior ("antes R$ 70,51"). So' com periodo anterior REAL. */
+  antes?: ReactNode;
+  /** Com `identidade`: a serie do periodo, na ordem. Mini grafico so' com >= 4 pontos reais. */
+  serie?: number[];
+  /** Unidade de cada ponto da `serie`, para o texto da tendencia ("últimos 7 dias…"). */
+  granularidade?: "hour" | "day" | "week" | "month";
 }) {
+  if (variante === "gerencial" && identidade) {
+    return (
+      <KpiCardIdentidade
+        rotulo={rotulo} valor={valor} comparacao={comparacao} contexto={contexto} tom={tom} ajuda={ajuda}
+        icone={icone} delta={delta} onAbrir={onAbrir} identidade={identidade} antes={antes} serie={serie} granularidade={granularidade}
+      />
+    );
+  }
   if (variante === "gerencial") {
     return (
       <KpiGerencial rotulo={rotulo} valor={valor} comparacao={comparacao} contexto={contexto} tom={tom} ajuda={ajuda} icone={icone} delta={delta} onAbrir={onAbrir} />
@@ -145,3 +191,71 @@ function KpiGerencial({
   }
   return <div title={contexto} className={base}>{corpo}</div>;
 }
+
+/**
+ * O card da faixa da Gerencial (KpiCard da KpiBand), com as mesmas classes:
+ * cabecalho (rotulo + ⓘ | ladrilho h-8), valor na escala responsiva da faixa,
+ * rodape `mt-auto` com delta + "antes" a' esquerda e o mini grafico a' direita.
+ * Sem periodo anterior real nao ha' delta nem "antes"; sem serie real, sem
+ * grafico. Nada inventado.
+ */
+function KpiCardIdentidade({
+  rotulo, valor, comparacao, contexto, tom, ajuda, icone: Icone, delta, onAbrir, identidade, antes, serie, granularidade,
+}: {
+  rotulo: ReactNode; valor: ReactNode; comparacao?: ReactNode; contexto?: string; tom: Tom; ajuda?: ReactNode;
+  icone?: LucideIcon; delta?: ReactNode; onAbrir?: () => void; identidade: IdentidadeKpi; antes?: ReactNode;
+  serie?: number[]; granularidade: "hour" | "day" | "week" | "month";
+}) {
+  const { tinta, borda, ladrilho } = IDENTIDADE[identidade];
+  const t = serie ? tendencia(serie, granularidade) : null;
+  const corpo = (
+    <>
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          {rotulo}
+          {ajuda}
+          {onAbrir && <span className="sr-only"> (abrir detalhe)</span>}
+        </span>
+        {Icone && (
+          <span
+            aria-hidden="true"
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 ease-out group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${ladrilho} ${tinta}`}
+          >
+            <Icone className="h-4 w-4" strokeWidth={1.75} />
+          </span>
+        )}
+      </span>
+      <span className={`text-lg md:text-xl lg:text-2xl xl:text-lg min-[1440px]:text-2xl font-semibold tracking-tight tabular-nums leading-tight ${TOM_TINTA[tom]}`}>
+        {typeof valor === "string" ? <NumeroAnimado texto={valor} /> : valor}
+      </span>
+      <span className="mt-auto flex items-end justify-between gap-3 pt-1">
+        <span className="flex min-w-0 flex-col gap-1">
+          {(delta || antes) && (
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              {delta}
+              {antes && <span className="text-xs text-ink-faint tabular-nums">{antes}</span>}
+            </span>
+          )}
+          {comparacao && <span className="text-xs text-ink-faint leading-snug">{comparacao}</span>}
+        </span>
+        {t && t.pontos.length >= 4 && <LinhaDeTendencia t={t} tinta={tinta} />}
+      </span>
+    </>
+  );
+  const base = `w-full min-w-0 h-full text-left bg-surface border rounded-xl p-3.5 flex flex-col gap-1 ${borda}`;
+  if (onAbrir) {
+    return (
+      <button
+        type="button"
+        onClick={onAbrir}
+        aria-haspopup="dialog"
+        title={contexto}
+        className={`card-hover group min-h-11 ${base} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
+      >
+        {corpo}
+      </button>
+    );
+  }
+  return <div title={contexto} className={`group ${base}`}>{corpo}</div>;
+}
+

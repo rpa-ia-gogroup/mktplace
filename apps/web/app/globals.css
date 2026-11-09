@@ -71,6 +71,9 @@
     --tc-kpi-ticket: 79 70 229;
     --tc-kpi-ads: 192 38 211;
     --tc-kpi-roas: 5 150 105;
+    /* IDENTIDADE-GERENCIAL — prazo (azul) e atendimento (verde-azulado). */
+    --tc-kpi-prazo: 37 99 235;
+    --tc-kpi-atendimento: 15 118 110;
 
     /* UX-TORRE-2 — identidade de canal. NAO e' serie por posicao: o gestor
        ja' le TikTok em violeta, ML em ciano e Shopee em laranja em toda a
@@ -153,6 +156,8 @@
     --tc-kpi-ticket: 129 140 248;
     --tc-kpi-ads: 232 121 249;
     --tc-kpi-roas: 52 211 153;
+    --tc-kpi-prazo: 96 165 250;
+    --tc-kpi-atendimento: 45 212 191;
 
     --tc-canal-tiktok: 167 139 250;
     --tc-canal-ml: 34 211 238;
@@ -653,6 +658,8 @@ html:not(.dark) .tc-fundo .tc-tema-claro {
 [class*="border-kpi-ticket"] { --kpi-cor: var(--tc-kpi-ticket); }
 [class*="border-kpi-ads"] { --kpi-cor: var(--tc-kpi-ads); }
 [class*="border-kpi-roas"] { --kpi-cor: var(--tc-kpi-roas); }
+[class*="border-kpi-prazo"] { --kpi-cor: var(--tc-kpi-prazo); }
+[class*="border-kpi-atendimento"] { --kpi-cor: var(--tc-kpi-atendimento); }
 .rounded-xl.border.bg-surface[class*="border-kpi-"] {
   background-image: radial-gradient(
     16rem 11rem at 100% 100%,

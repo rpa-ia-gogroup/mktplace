@@ -63,6 +63,8 @@ const config: Config = {
           ticket: token("kpi-ticket"),
           ads: token("kpi-ads"),
           roas: token("kpi-roas"),
+          prazo: token("kpi-prazo"),
+          atendimento: token("kpi-atendimento"),
         },
         canal: {
           tiktok: token("canal-tiktok"),

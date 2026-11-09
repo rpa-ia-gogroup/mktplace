@@ -28,6 +28,8 @@ export interface TendenciaKpi {
 }
 
 const UNIDADE: Record<string, [string, string]> = {
+  // Serie horaria da Expedicao (IDENTIDADE-GERENCIAL): "últimas N horas".
+  hour: ["hora", "horas"],
   day: ["dia", "dias"],
   week: ["semana", "semanas"],
   month: ["mês", "meses"],
@@ -55,7 +57,7 @@ export function tendencia(pontos: (number | null)[], granularidade: string): Ten
     pontos: vals,
     variacaoPct: pct,
     direcao: direcao(pct),
-    rotulo: `últimos ${janela} ${nome} vs ${janela} anteriores`,
+    rotulo: `${granularidade === "hour" ? "últimas" : "últimos"} ${janela} ${nome} vs ${janela} anteriores`,
   };
 }
 

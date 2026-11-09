@@ -73,6 +73,18 @@ export function fmtPctBr(valor: number): string {
   return `${sinal}${fmtDec(1, 1).format(Math.abs(valor))}%`;
 }
 
+/**
+ * Texto da pilula de variacao (ui/DeltaBadge): "pct" e' o da Gerencial
+ * ("+3,6%"); "pp" para variacao de taxa ("+0,6 p.p."); "pts" para indice como
+ * o NPS ("+3 pts", sem casa decimal quando nao precisa).
+ */
+export function fmtDelta(valor: number, unidade: "pct" | "pp" | "pts" = "pct"): string {
+  if (unidade === "pct") return fmtPctBr(valor);
+  if (unidade === "pp") return fmtPctBr(valor).replace("%", " p.p.");
+  const sinal = valor > 0 ? "+" : valor < 0 ? "−" : "";
+  return `${sinal}${fmtDec(0, 1).format(Math.abs(valor))} pts`;
+}
+
 /** Percentual sem sinal (ACOS): "9,6%". */
 export function fmtPctSimples(valor: number): string {
   return `${fmtDec(1, 1).format(valor)}%`;

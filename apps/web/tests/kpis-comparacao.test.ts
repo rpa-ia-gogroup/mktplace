@@ -107,6 +107,13 @@ test("tendencia em periodo curto usa metade contra metade, e sem ponto suficient
   assert.equal(tendencia([100, 100, 100.2, 100.2], "day")!.direcao, "flat");
 });
 
+test("tendencia horaria (Expedicao): 'últimas N horas', nunca 'dias'", () => {
+  const t = tendencia([...Array(7).fill(20), ...Array(7).fill(30)], "hour")!;
+  assert.equal(t.rotulo, "últimas 7 horas vs 7 anteriores");
+  assert.equal(t.direcao, "up");
+  assert.equal(tendencia([5, 5, 4, 4], "hour")!.rotulo, "últimas 2 horas vs 2 anteriores");
+});
+
 test("ticket ponto a ponto e' GMV / pedidos, so' onde ha' pedido", () => {
   assert.deepEqual(ticketPorPonto([100, 50, null, 30], [2, 0, 3, 3]), [50, null, null, 10]);
 });
@@ -146,7 +153,10 @@ test("o card nao esconde valor e variacao do leitor de tela", () => {
 });
 
 test("tendencia e' so' o mini grafico com ponto final, sem texto visivel", () => {
-  const card = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
+  // CARD-KPI-GERENCIAL: a Sparkline e a LinhaDeTendencia sairam da KpiBand para ui/Sparkline.
+  const band = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
+  assert.match(band, /import \{ LinhaDeTendencia \} from "@\/components\/ui\/Sparkline"/);
+  const card = readFileSync(new URL("../src/components/ui/Sparkline.tsx", import.meta.url), "utf8");
   // nenhum rotulo visivel de tendencia
   assert.doesNotMatch(card, /↗ tende a subir|↘ tende a descer/);
   // o leitor de tela ainda ouve a direcao; o mouse ve' a conta no title
