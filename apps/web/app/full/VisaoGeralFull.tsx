@@ -64,6 +64,9 @@ import {
   contarGrupos,
   grupoDe,
   rotuloGrupo,
+  filaPorGrupo,
+  POR_GRUPO,
+  type GrupoCurva,
   DICA_ORDEM_FILA,
   type CurvaAbc,
   type FiltroCurva,
@@ -325,6 +328,8 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
   // Um so' dialogo na pagina para os drilldowns (identidade Gerencial).
   const [drill, setDrill] = useState<Canal | "curva" | null>(null);
   const [filtro, setFiltro] = useState<FiltroCurva>("todas");
+  const [abertos, setAbertos] = useState<ReadonlySet<GrupoCurva>>(new Set());
+  const alternarGrupo = (g: GrupoCurva) => setAbertos((a) => { const n = new Set(a); if (n.has(g)) n.delete(g); else n.add(g); return n; });
   const ok = oks(canais);
   const heroi = heroiRuptura(canais);
   const aHeroi = antesHeroi(canais, antes);
@@ -346,6 +351,8 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
   const contagem = contarFiltros(ranking, abc);
   // Cabecalho de grupo (AA, A, Demais) so' com o filtro "Todas"; a contagem e' do ranking inteiro.
   const grupos = comCurva && filtroAtivo === "todas" ? contarGrupos(ranking, abc) : null;
+  // "Todas" com curva: ate' 5 por grupo, os 3 grupos sempre visiveis; senao, o top 10 de antes.
+  const lista = grupos ? filaPorGrupo(ranking, abc, abertos).flatMap((g) => g.itens) : top;
   const comImpacto = impactosOk(impacto).length > 0;
   const mistos = canaisMisturados(top);
   const colunas = colunasMarca(canais, marcas);
@@ -502,7 +509,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
             <InfoDica texto={DICA_ORDEM_FILA} nota={dicaCurva(abc, impacto)} className="shrink-0" />
           </div>
         )}
-        {top.length === 0 ? (
+        {lista.length === 0 ? (
           <StateBlock tipo="vazio" titulo={filtroAtivo === "todas" ? "Nenhuma ruptura no Full" : "Nenhuma ruptura nesta curva"} compacto />
         ) : (
           <table className="w-full text-sm">
@@ -514,16 +521,24 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {top.map((t, i) => {
+              {lista.map((t, i) => {
                 const cv = curvaDe(t, abc);
                 const g = grupoDe(cv);
-                const abreGrupo = grupos && (i === 0 || grupoDe(curvaDe(top[i - 1], abc)) !== g);
+                const abreGrupo = grupos && (i === 0 || grupoDe(curvaDe(lista[i - 1], abc)) !== g);
                 return (
                 <Fragment key={`${t.canal}-${i}`}>
                 {abreGrupo && (
                   <tr className="bg-raised">
-                    <th scope="colgroup" colSpan={2} className="px-3 py-1.5 sm:px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                      {rotuloGrupo(g, grupos[g])}
+                    <th scope="colgroup" colSpan={2} className="px-3 py-1 sm:px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                      <span className="flex items-center justify-between gap-2">
+                        {rotuloGrupo(g, grupos[g])}
+                        {grupos[g] > POR_GRUPO && (
+                          <button type="button" onClick={() => alternarGrupo(g)} aria-expanded={abertos.has(g)}
+                            className="inline-flex min-h-11 items-center normal-case tracking-normal font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            {abertos.has(g) ? "ver menos" : `ver todos (${grupos[g]})`}
+                          </button>
+                        )}
+                      </span>
                     </th>
                   </tr>
                 )}
