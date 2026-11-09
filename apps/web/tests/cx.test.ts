@@ -861,7 +861,7 @@ test("cards com cor de identidade: faixa da /cx, CX do site e card CX da Gerenci
 // ---------------------------------------------------------------------------
 test("sem periodo anterior: linha neutra com motivo e data; sem a API-3, nada", () => {
   assert.deepEqual(textoSemComparacao({ motivo: "coleta desde 04/11", a_partir_de: "2026-12-04", detalhe: "A coleta de conversas começou em 04/11." }),
-    { texto: "comparação a partir de 04/12", detalhe: "coleta desde 04/11 · A coleta de conversas começou em 04/11." }, "comeca pelo que o gestor procura; o motivo no title");
+    { texto: "comparação a partir de 04/12", detalhe: "A coleta de conversas começou em 04/11." }, "comeca pelo que o gestor procura; o motivo no title");
   assert.deepEqual(textoSemComparacao({ motivo: "só em 7 e 30 dias", a_partir_de: null }), { texto: "sem comparação", detalhe: "só em 7 e 30 dias" }, "nunca: sem data");
   assert.equal(textoSemComparacao(null), null);
   const p = comConversas(30);
@@ -871,7 +871,7 @@ test("sem periodo anterior: linha neutra com motivo e data; sem a API-3, nada", 
     reembolso: { motivo: "devoluções desde 05/10", a_partir_de: "2026-12-04", detalhe: "y" },
   } }, rotulo);
   assert.equal(r.semAnterior.contactRate?.texto, "comparação a partir de 04/12");
-  assert.equal(r.semAnterior.reembolso?.detalhe, "devoluções desde 05/10 · y");
+  assert.equal(r.semAnterior.reembolso?.detalhe, "y", "sem repetir motivo e detalhe");
   assert.equal(r.semAnterior.cancelamento, undefined);
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /if \(c\.delta\) return \{ \.\.\.c, \.\.\.grafico \};[\s\S]{0,250}antes: <LinhaSemComparacao \{\.\.\.sem\} \/>/, "a pilula vence; sem ela, a linha");
