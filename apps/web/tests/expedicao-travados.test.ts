@@ -258,6 +258,10 @@ test("consolidado por etapa: % sobre o TOTAL da lista, da maior para a menor, 'S
   assert.equal(itens[2].rotulo, "Sem etapa");
   assert.equal(pctDaEtapa(1420, 1465), "96,9%");
   assert.equal(pctDaEtapa(1465, 1465), "100%");
+  // Producao 09/11 (TikTok, vence ter 10/11): 20.505 e 7 de 20.512.
+  assert.equal(pctDaEtapa(20505, 20512), ">99,9%");
+  assert.equal(pctDaEtapa(7, 20512), "<0,1%");
+  assert.equal(pctDaEtapa(0, 10), "0%");
   // A quebra cobre so' parte do total: o resto e' "Sem etapa", nunca escondido.
   const parcial = consolidadoPorEtapa([{ stage: "aguardando_coleta", count: 90 }], 100);
   assert.deepEqual(parcial.map((i) => i.n), [90, 10]);
