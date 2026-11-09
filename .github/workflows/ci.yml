@@ -38,7 +38,14 @@ jobs:
         # para os testes que importam `pipelines`.
         env:
           PYTHONPATH: ${{ github.workspace }}
-        run: uv run --frozen python -m pytest -q -rs
+          # Ambiente SEM banco, o que os testes "..._sem_banco_..." declaram: URL
+          # vazia -> engine None -> get_db devolve None -> a rota responde 503.
+          # Sem isto valia o padrao do config (localhost:5432) e a conexao
+          # recusada estourava como excecao. Teste que precisa de banco real
+          # se pula pelo proprio skipif (TEST_PG_DSN, PMA_TEST_PG_BIN...).
+          DATABASE_URL: ""
+        # -rfEs: falhas, erros e pulos (com motivo) no resumo do log.
+        run: uv run --frozen python -m pytest -q -rfEs
 
   web:
     name: web (typecheck + test)
