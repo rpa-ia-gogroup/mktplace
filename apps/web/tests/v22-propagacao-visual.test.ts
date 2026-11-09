@@ -35,7 +35,6 @@ const ROTAS = [
   ["financeiro", "app/financeiro/page.tsx"],
   ["qualidade", "app/qualidade/page.tsx"],
   ["pedidos", "app/pedidos/page.tsx"],
-  ["tempo-real", "app/tempo-real/page.tsx"],
   ["inteligencia", "app/inteligencia/page.tsx"],
   ["operacoes", "app/operacoes/page.tsx"],
   ["brand", "app/brand/[brand]/page.tsx"],
@@ -74,7 +73,7 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 9, consumidores.join(","));
+  assert.equal(consumidores.length, 8, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
@@ -210,7 +209,6 @@ const FETCHERS_POR_ROTA: Record<string, string[]> = {
   financeiro: ["fetchFinanceiro"],
   qualidade: ["fetchQuality"],
   pedidos: ["fetchPedidos"],
-  "tempo-real": ["fetchTempoReal"],
   inteligencia: ["fetchInteligencia"],
   operacoes: ["fetchOperacoes"],
   brand: ["fetchBrandDetail", "fetchDailyRange"],
@@ -344,8 +342,8 @@ test("P19. Regioes: GMV com cobertura regional nunca se apresenta como GMV total
   assert.match(src, /coverageLabel|semCoberturaAviso/, "cobertura do canal continua declarada");
 });
 
-test("P20. Tempo Real / Inteligencia / Operacoes: indisponibilidade explicada, sem mock", () => {
-  for (const arquivo of ["app/tempo-real/page.tsx", "app/inteligencia/page.tsx", "app/operacoes/page.tsx"]) {
+test("P20. Inteligencia / Operacoes: indisponibilidade explicada, sem mock", () => {
+  for (const arquivo of ["app/inteligencia/page.tsx", "app/operacoes/page.tsx"]) {
     const src = read(arquivo);
     assert.match(src, /indispon[íi]ve/i, `${arquivo}: precisa nomear a indisponibilidade`);
     assert.doesNotMatch(codeOnly(src), /MOCK_|mockData|fakeData/, `${arquivo}: nenhum mock local`);

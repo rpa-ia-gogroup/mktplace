@@ -1657,49 +1657,6 @@ export function fetchQuality(
   });
 }
 
-// ---------- Tempo Real ----------
-
-export interface TempoRealHour {
-  hour: number;
-  gmv_hour: number;
-  gmv_acumulado: number;
-  gmv_hour_prior: number | null;
-  gmv_acumulado_prior: number | null;
-  gmv_avg7d: number | null;
-  customers_hour: number;
-  customers_acumulado: number;
-  conversion_hour: number | null;
-  ticket_medio: number | null;
-}
-
-export interface TempoRealBrand {
-  brand: string;
-  label: string;
-  gmv_hoje: number;
-  gmv_ontem: number | null;
-  delta_pct: number | null;
-  ritmo_projetado: number | null;
-  clientes_hoje: number;
-  ultima_hora: number;
-  conversion_hora: number | null;
-  ticket_medio: number | null;
-  hours: TempoRealHour[];
-}
-
-export interface TempoRealData {
-  total_gmv_hoje: number;
-  total_gmv_ontem: number | null;
-  total_delta_pct: number | null;
-  total_ritmo_projetado: number | null;
-  brands: TempoRealBrand[];
-}
-
-export async function fetchTempoReal(): Promise<{ data: TempoRealData; live: boolean } | null> {
-  const raw = await apiFetch<TempoRealData>("/api/v1/performance/tempo-real");
-  if (raw) return { live: true, data: raw };
-  return null;
-}
-
 // ---------- Hoje padronizado por hora (VENDAS-POR-HORA-1) ----------
 
 /** Sem cache de proposito: o numero muda de hora em hora e o bloco so' busca

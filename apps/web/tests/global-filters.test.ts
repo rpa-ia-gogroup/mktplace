@@ -351,7 +351,7 @@ test("isFilterAwarePath: trata /brand/[brand] como rota compativel, sem hardcode
 });
 
 test("isFilterAwarePath: telas com semantica propria nao propagam filtro", () => {
-  for (const p of ["/produtos", "/tempo-real", "/inteligencia", "/operacoes"]) {
+  for (const p of ["/produtos", "/inteligencia", "/operacoes"]) {
     assert.equal(isFilterAwarePath(p), false, p);
   }
 });

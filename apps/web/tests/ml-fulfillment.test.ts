@@ -588,7 +588,7 @@ test("a rota entra na navegacao sem remover nem renomear nada", () => {
   assert.ok(NAV.includes('{ href: "/full", label: "Full" }'));
   for (const existente of [
     '"/", label: "Gerencial"', '"/canais"', '"/produtos"', '"/qualidade"',
-    '"/financeiro"', '"/regioes"', '"/tempo-real"', '"/pedidos"',
+    '"/financeiro"', '"/regioes"', '"/pedidos"',
     '"/inteligencia"', '"/monitoramento-preco"', '"/operacoes"',
     '"/referencias-externas/avoe"',
   ]) {

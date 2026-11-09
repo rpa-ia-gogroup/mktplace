@@ -42,7 +42,6 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
     // (`isNavItemActive` casa por prefixo).
     "/dre",
     "/regioes",
-    "/tempo-real",
     "/pedidos",
     // Gate EXP-UX-2C — `/pedidos/tiktok` e `/pedidos/ml` sairam. Eram itens
     // `disabled` com selo "Em breve" desde o Gate U1: promessa parada ocupa a
@@ -147,7 +146,6 @@ test("getRouteTitle: reconhece cada rota de Cockpits pelo label do item", () => 
   assert.equal(getRouteTitle("/qualidade"), "Qualidade");
   assert.equal(getRouteTitle("/financeiro"), "Financeiro");
   assert.equal(getRouteTitle("/regioes"), "Regiões");
-  assert.equal(getRouteTitle("/tempo-real"), "Tempo Real");
 });
 
 test("getRouteTitle: /brand/[brand] usa a mesma associacao visual da Gerencial", () => {
@@ -167,7 +165,7 @@ test("buildPreservedQuery + hrefForPage: preserva filtros apenas em paginas filt
   assert.equal(preserved, "channels=tiktok%2Cml&compare=true");
   assert.equal(hrefForPage("/canais", preserved), "/canais?channels=tiktok%2Cml&compare=true");
 
-  // Produtos/Tempo Real/Inteligencia/Operacoes nao fazem parte do contrato —
+  // Produtos/Inteligencia/Operacoes nao fazem parte do contrato —
   // nunca herdam a querystring, mesmo que ela exista.
   const notFilterAware = buildPreservedQuery("/produtos", getParam);
   assert.equal(notFilterAware, "");
@@ -175,7 +173,6 @@ test("buildPreservedQuery + hrefForPage: preserva filtros apenas em paginas filt
 });
 
 test("hrefForPage: paginas fora do contrato de filtros nunca recebem querystring anexada", () => {
-  assert.equal(hrefForPage("/tempo-real", "channels=ml"), "/tempo-real");
   assert.equal(hrefForPage("/inteligencia", "channels=ml"), "/inteligencia");
   assert.equal(hrefForPage("/operacoes", "channels=ml"), "/operacoes");
 });

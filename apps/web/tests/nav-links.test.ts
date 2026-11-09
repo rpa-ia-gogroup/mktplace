@@ -119,7 +119,7 @@ test("Financeiro: link de marca da tabela Shopee sobrescreve brands/channels e p
 test("regressao: NAV_SECTIONS continua cobrindo todas as rotas do inventario do U0", () => {
   const hrefs = NAV_SECTIONS.flatMap((s) => s.pages.map((p) => p.href));
   const expected = [
-    "/", "/canais", "/produtos", "/qualidade", "/financeiro", "/regioes", "/tempo-real",
+    "/", "/canais", "/produtos", "/qualidade", "/financeiro", "/regioes",
     "/pedidos", "/inteligencia", "/operacoes",
   ];
   for (const href of expected) {
