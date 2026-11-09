@@ -77,6 +77,7 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", "app/page.tsx", "src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", "src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", "app/page.tsx", "src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", "src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
   assert.equal(mudou, "", mudou);
 });

@@ -7,9 +7,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+import TableScrollHint from "@/components/TableScrollHint";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiTile from "@/components/ui/KpiTile";
+import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import type { FiltrosCx } from "@/lib/cx";
@@ -79,16 +81,20 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
           {selos.map((s) => (
             <Chip key={s.texto} tom={s.tom} ponto={s.tom === "critico"} title={s.title}>{s.texto}</Chip>
           ))}
+          <span className="inline-flex items-center gap-1" data-testid="cx-site-ressalva">
+            <Chip>realizado bruto, não bate com o Vision CX</Chip>
+            <InfoDica titulo="Reenvio e reembolso" texto={RESSALVA_REENVIO} />
+          </span>
         </div>
         {d.reviews.aviso_frescor && (
           <p className="text-xs font-medium text-crit-ink" data-testid="cx-site-aviso-reviews">Reviews: {d.reviews.aviso_frescor}</p>
         )}
-        <p className="text-xs text-ink-muted" data-testid="cx-site-ressalva">{RESSALVA_REENVIO}</p>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {tiles.map((t) => (
             <KpiTile
               key={t.rotulo}
+              variante="gerencial"
               rotulo={t.rotulo}
               valor={t.valor}
               comparacao={t.comparacao}
@@ -98,8 +104,10 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
           ))}
         </div>
 
+        {(linhas.length > 0 || d.reviews.estado === "dado") && (
+        <MaisDetalhes titulo="Por marca e produtos">
         {linhas.length > 0 && (
-          <div className="overflow-x-auto">
+          <TableScrollHint>
             <table className="w-full min-w-[640px] text-sm">
               <caption className="sr-only">CX do site por marca</caption>
               <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -126,7 +134,7 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
                 ))}
               </tbody>
             </table>
-          </div>
+          </TableScrollHint>
         )}
 
         {d.reviews.estado === "dado" && (
@@ -134,6 +142,8 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
             <Produtos titulo="Produtos com pior nota" itens={d.reviews.piores} minimo={d.reviews.minimo_reviews} />
             <Produtos titulo="Produtos com melhor nota" itens={d.reviews.melhores} minimo={d.reviews.minimo_reviews} />
           </div>
+        )}
+        </MaisDetalhes>
         )}
       </div>
     </Panel>
