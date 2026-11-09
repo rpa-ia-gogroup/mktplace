@@ -6,13 +6,15 @@
  * e reviews do Judge.me por produto. Funcoes puras testadas em node --test; o
  * componente `app/cx/CxSite.tsx` so' desenha.
  */
-import type { FiltrosCx } from "./cx.ts";
+import type { FiltrosCx, SemComparacao } from "./cx.ts";
 import { fmtBrlCurto, fmtNumCurto } from "./formatters.ts";
 import { MOTIVO_TIMEOUT, TIMEOUT_API_MS, formatarInstante } from "./performance-contas.ts";
 
 export type EstadoBloco = "dado" | "vazio_legitimo" | "sem_fonte" | "erro";
 
 interface BlocoBase {
+  /** API-3: por que o bloco nao tem periodo anterior e quando passa a ter. */
+  sem_anterior?: SemComparacao | null;
   estado: EstadoBloco;
   fonte: string;
   atualizado_em?: string | null;
@@ -176,11 +178,15 @@ export function textoSafra(inicio: string, fim: string): string {
   return inicio.slice(0, 7) === fim.slice(0, 7) ? `safra ${m(fim)}/${ano}` : `safras ${m(inicio)} a ${m(fim)}/${ano}`;
 }
 
-/** Selo de frescor de um bloco: carga parada vira tom critico, nunca some. */
-export function seloFrescor(nome: string, b: BlocoBase): { texto: string; tom: "neutro" | "critico"; title: string } {
+/**
+ * Frescor de um bloco, para o ⓘ do card (SITE-SEM-CHIPS, 09/11): a hora da
+ * carga e a fonte. Carga parada (`parada`) tambem vira o selo "Desatualizado"
+ * no proprio card: nunca some.
+ */
+export function frescorDoBloco(b: BlocoBase): { texto: string; parada: boolean } {
   const quando = formatarInstante(b.atualizado_em ?? null);
-  if (b.aviso_frescor) return { texto: `${nome}: carga parada`, tom: "critico", title: `${b.aviso_frescor} Fonte: ${b.fonte}` };
-  return { texto: quando ? `${nome}: ${quando}` : `${nome}: sem data de carga`, tom: "neutro", title: `Fonte: ${b.fonte}` };
+  if (b.aviso_frescor) return { texto: `${b.aviso_frescor} Fonte: ${b.fonte}.`, parada: true };
+  return { texto: `${quando ? `Atualizado em ${quando}` : "Sem data de carga"}. Fonte: ${b.fonte}.`, parada: false };
 }
 
 // ---------------------------------------------------------------------------

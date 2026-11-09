@@ -27,13 +27,13 @@ import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { notasDoTile } from "@/components/gerencial/CxResumo";
+import { notasDoTile, rodapeComparacao } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao from "@/components/ui/FilaAtencao";
 import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
+import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
@@ -403,34 +403,37 @@ function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaF
 //    em Mais detalhes)
 // ---------------------------------------------------------------------------
 function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: IndicadorCx) => void }) {
-  const tile = (i: IndicadorCx, icone: typeof Ban, valor: string, comparacao: ReactNode, delta?: ReactNode) => (
+  const tile = (
+    i: IndicadorCx,
+    identidade: IdentidadeKpi,
+    icone: typeof Ban,
+    valor: string,
+    comparacao: ReactNode,
+    extra: { delta?: ReactNode; antes?: ReactNode } = {},
+  ) => (
     <KpiTile
       variante="gerencial"
+      identidade={identidade}
       icone={icone}
       rotulo={ROTULO_INDICADOR[i]}
       valor={valor}
       tom={valor === "—" ? "ausente" : "neutro"}
-      delta={delta}
+      delta={extra.delta}
+      antes={extra.antes}
       comparacao={comparacao}
       // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
       ajuda={<InfoDica emControle texto={notasDoTile(r, i, dias).join(" ")} />}
       onAbrir={() => abrir(i)}
     />
   );
-  const delta = r.cancelamentoDelta;
   return (
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
-        {tile("contactRate", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null)}
-        {tile(
-          "cancelamento",
-          Ban,
-          r.cancelamento,
-          delta ? <span className="whitespace-nowrap text-ink-faint">vs {dias} dias antes</span> : null,
-          delta ? <span className={`whitespace-nowrap ${COR_DELTA[delta.sentido]}`}>{delta.texto}</span> : undefined,
-        )}
+        {/* cor de identidade (spec do Prumo, 09/11): a mesma do card CX da Gerencial */}
+        {tile("contactRate", "atendimento", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null, dias > 30 ? {} : rodapeComparacao(r, "contactRate"))}
+        {tile("cancelamento", "ads", Ban, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
         {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
-        {tile("reembolso", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null)}
+        {tile("reembolso", "gmv", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
       </div>
     </section>
   );

@@ -96,7 +96,39 @@ export interface CxShopeeResponse {
   devolucoes?: DevolucoesShopee;
   /** Base de `*_anterior` (os `dias` antes de `janela`). Ausente na API antiga. */
   janela_anterior?: AtendimentoResponse["janela"] | null;
+  /**
+   * API-3: por que um indicador nao tem periodo anterior e quando passa a ter.
+   * A chave so' vem quando falta; `a_partir_de` null = nunca (ex.: contact rate em 90 dias).
+   */
+  sem_anterior?: Partial<Record<ChaveApiCx, SemComparacao>> | null;
 }
+
+/** API-3 (contrato com o Sextante, 09/11): por que falta a comparacao e quando ela passa a existir. */
+export interface SemComparacao {
+  /** Curto e minusculo: "coleta desde 04/11". */
+  motivo: string;
+  /** Primeiro dia com o mesmo recorte coberto; null = nunca. */
+  a_partir_de: string | null;
+  /** Texto longo, para o title. */
+  detalhe?: string | null;
+}
+
+/**
+ * Linha neutra do card, comecando pelo que o gestor procura: "comparação a
+ * partir de 04/12" (ou "sem comparação", quando nunca). O motivo e o detalhe
+ * ("coleta desde 04/11 · …") vao para o title e o sr-only.
+ */
+export function textoSemComparacao(x: SemComparacao | null | undefined): { texto: string; detalhe: string | null } | null {
+  if (!x?.motivo) return null;
+  const [a, m, d] = (x.a_partir_de ?? "").slice(0, 10).split("-");
+  return {
+    texto: a && m && d ? `comparação a partir de ${d}/${m}` : "sem comparação",
+    detalhe: [x.motivo, x.detalhe].filter(Boolean).join(" · "),
+  };
+}
+
+/** Chave do indicador na API-3 (`sem_anterior`, `sem_serie`). */
+export type ChaveApiCx = "contact_rate" | "resposta" | "cancelamento" | "reembolso";
 
 // ---------------------------------------------------------------------------
 // Filtros (URL e' a fonte de verdade)
@@ -575,7 +607,7 @@ export function montarStatusMarcas(
 // reembolsamos, reenviamos e cancelamos). Devolucoes e cancelamentos juntos.
 // ---------------------------------------------------------------------------
 export const MAX_ITENS_PARETO = 10;
-export const MOTIVO_REENVIO = "nenhuma API da Shopee marca o pedido reenviado";
+export const MOTIVO_REENVIO = "a Shopee não informa reenvio (nenhuma API dela marca o pedido reenviado)";
 
 export interface ItemPareto {
   chave: string;
@@ -880,8 +912,14 @@ export interface ResumoCx {
   semChat: string[];
   /** Cancelamento contra a janela anterior, nas marcas com historico; null = sem historico. */
   cancelamentoDelta: DeltaCx | null;
+  /** O mesmo delta em numero (p.p.), para a pilula do card; null = sem historico. */
+  cancelamentoDeltaPp: number | null;
+  /** Cancelamento da janela anterior ("2,5%"), nas marcas com historico; null = sem historico. */
+  cancelamentoAntes: string | null;
   /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
   semHistoricoCancelamento: string[];
+  /** Linha neutra do card sem periodo anterior (API-3): "comparação a partir de 04/12" (motivo no title). */
+  semAnterior: Partial<Record<IndicadorCx, { texto: string; detalhe: string | null }>>;
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
   cancelamentoBase: { anterior: string; atual: string } | null;
   /** Valor da Shopee no filtro (os tiles). */
@@ -894,6 +932,23 @@ export interface ResumoCx {
   marcas: MarcaCx[];
   /** Todas as marcas do recorte, inclusive sem medida (o drill-down mostra "—" e o motivo). */
   todas: MarcaCx[];
+}
+
+const CHAVE_API: Record<IndicadorCx, ChaveApiCx> = {
+  contactRate: "contact_rate",
+  resposta: "resposta",
+  cancelamento: "cancelamento",
+  reembolso: "reembolso",
+};
+
+/** `sem_anterior` da API-3 em texto de card; sem a chave (ou sem a API-3), nada. */
+export function textosSemAnterior(sem: CxShopeeResponse["sem_anterior"]): ResumoCx["semAnterior"] {
+  const out: ResumoCx["semAnterior"] = {};
+  for (const i of INDICADORES_CX) {
+    const t = textoSemComparacao(sem?.[CHAVE_API[i]]);
+    if (t) out[i] = t;
+  }
+  return out;
 }
 
 /** Uma casa decimal, como na tela: menos que 0,05 p.p. e' estavel. */
@@ -1043,7 +1098,10 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
     semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
     cancelamentoDelta: delta,
+    cancelamentoDeltaPp: delta && cancAtual != null && cancAnt != null ? cancAtual - cancAnt : null,
+    cancelamentoAntes: delta ? pct(cancAnt) : null,
     semHistoricoCancelamento,
+    semAnterior: textosSemAnterior(dados.sem_anterior),
     cancelamentoBase: delta && semHistoricoCancelamento.length ? { anterior: pct(cancAnt), atual: pct(cancAtual) } : null,
     totais,
     medianas,
