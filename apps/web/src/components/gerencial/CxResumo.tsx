@@ -67,12 +67,13 @@ export function deltaCancelamento(r: ResumoCx): { delta?: ReactNode; antes?: Rea
 
 /**
  * Rodape de comparacao do card: a pilula + "antes" quando ha' periodo anterior;
- * sem ele, a linha neutra da API-3 ("sem comparação: … · a partir de dd/mm").
+ * sem ele, a linha neutra da API-3 ("comparação a partir de dd/mm").
  * Nunca vermelho, nunca zero.
  */
 export function rodapeComparacao(r: ResumoCx, i: IndicadorCx): { delta?: ReactNode; antes?: ReactNode } {
   const c = i === "cancelamento" ? deltaCancelamento(r) : {};
-  const sem = r.semAnterior[i];
+  // sem numero no card ("—"), falar de comparacao e' ruido: o motivo fica no ⓘ
+  const sem = r.totais[i] == null ? undefined : r.semAnterior[i];
   return c.delta ? c : sem ? { antes: <LinhaSemComparacao {...sem} /> } : {};
 }
 

@@ -114,7 +114,7 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
               tom={t.ausente ? "ausente" : "neutro"}
               antes={(() => {
                 // API-3: sem periodo anterior, a linha neutra com o motivo e a data
-                const sem = textoSemComparacao(blocoDoCard[t.rotulo].sem_anterior);
+                const sem = t.ausente ? null : textoSemComparacao(blocoDoCard[t.rotulo].sem_anterior);
                 return sem ? <LinhaSemComparacao {...sem} /> : undefined;
               })()}
               ajuda={<InfoDica texto={`${t.ajuda} ${frescorDoBloco(blocoDoCard[t.rotulo]).texto}`} titulo={t.rotulo} />}

@@ -113,11 +113,18 @@ export interface SemComparacao {
   detalhe?: string | null;
 }
 
-/** Linha neutra do card: "sem comparação: coleta desde 04/11 · a partir de 04/12" (+ o detalhe no title). */
+/**
+ * Linha neutra do card, comecando pelo que o gestor procura: "comparação a
+ * partir de 04/12" (ou "sem comparação", quando nunca). O motivo e o detalhe
+ * ("coleta desde 04/11 · …") vao para o title e o sr-only.
+ */
 export function textoSemComparacao(x: SemComparacao | null | undefined): { texto: string; detalhe: string | null } | null {
   if (!x?.motivo) return null;
   const [a, m, d] = (x.a_partir_de ?? "").slice(0, 10).split("-");
-  return { texto: `sem comparação: ${x.motivo}${a && m && d ? ` · a partir de ${d}/${m}` : ""}`, detalhe: x.detalhe ?? null };
+  return {
+    texto: a && m && d ? `comparação a partir de ${d}/${m}` : "sem comparação",
+    detalhe: [x.motivo, x.detalhe].filter(Boolean).join(" · "),
+  };
 }
 
 /** Chave do indicador na API-3 (`sem_anterior`, `sem_serie`). */
@@ -911,7 +918,7 @@ export interface ResumoCx {
   cancelamentoAntes: string | null;
   /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
   semHistoricoCancelamento: string[];
-  /** Linha neutra do card sem periodo anterior (API-3): "sem comparação: coleta desde 04/11 · a partir de 04/12". */
+  /** Linha neutra do card sem periodo anterior (API-3): "comparação a partir de 04/12" (motivo no title). */
   semAnterior: Partial<Record<IndicadorCx, { texto: string; detalhe: string | null }>>;
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
   cancelamentoBase: { anterior: string; atual: string } | null;
