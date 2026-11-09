@@ -475,7 +475,7 @@ export default function TikTokDispatchPanel({
       delta={deltaLdr ? <DeltaBadge pct={deltaLdr.pp} unidade="pp" tone={Math.abs(deltaLdr.pp) < 0.05 ? "neutral" : "lower_is_better"} /> : undefined}
       antes={
         deltaLdr && ldr.previous
-          ? `antes ${formatarTaxa(deltaLdr.antes / 100, 1)} · ${formatarDiaCurto(ldr.previous.from)} a ${formatarDiaCurto(ldr.previous.to)}`
+          ? `antes ${formatarTaxa(deltaLdr.antes / 100, 1)} · ${formatarDiaCurto(ldr.previous.from)}–${formatarDiaCurto(ldr.previous.to)}`
           : undefined
       }
       rotulo="LDR da janela"
@@ -496,7 +496,8 @@ export default function TikTokDispatchPanel({
       comparacao={
         ldr.rate === null
           ? "Sem vencimento maduro na janela."
-          : `referência ${formatarTaxa(META_TIKTOK_LDR, 0)} · ${ldr.above_target ? "acima da meta" : "dentro da meta"}`
+          : // "acima/dentro da meta" ja' esta' na tinta do valor e no ⓘ: 1 linha a menos.
+            `meta ${formatarTaxa(META_TIKTOK_LDR, 0)}`
       }
       // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
       tom={ldr.rate === null ? "ausente" : ldr.above_target ? "critico" : "bom"}
