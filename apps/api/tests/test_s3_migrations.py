@@ -207,7 +207,9 @@ def test_m02_head_unico_em_todas_as_revisoes():
     # hora, nenhuma tabela existente alterada; nasceu 036).
     # T-0069: head avancado de 039 para 040, que so' troca o CHECK de
     # componentes de marts.fact_dre_insumo_mensal (aceita os impostos do webgex).
-    assert heads == ["040"], f"head deveria ser unico e igual a 040, veio {heads}"
+    # T-0068: head avancado de 040 para 041, que so' acrescenta a coluna anulavel
+    # buyer_shipping_fee a marts.fact_tiktok_order_discounts_daily.
+    assert heads == ["041"], f"head deveria ser unico e igual a 041, veio {heads}"
 
 
 def test_m03_as_tres_revisoes_novas_existem_uma_vez_cada():

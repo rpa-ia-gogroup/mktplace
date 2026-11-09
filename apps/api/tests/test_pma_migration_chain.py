@@ -68,7 +68,9 @@ DDL_PATH = REPO / "db" / "sql" / "marts" / "pma_listing_price_serving_ddl.sql"
 #: alterada), encadeada SOBRE a 038 (nasceu 036 na branch antiga).
 #: Avancado para 040 pela T-0069 (CHECK de componentes da
 #: marts.fact_dre_insumo_mensal aceita os impostos do webgex), SOBRE a 039.
-HEAD_ESPERADO = "040"
+#: Avancado para 041 pela T-0068 (coluna anulavel buyer_shipping_fee em
+#: marts.fact_tiktok_order_discounts_daily, a tabela da 013), SOBRE a 040.
+HEAD_ESPERADO = "041"
 
 #: Mapa OFICIAL de propriedade das revisoes. Existe para que uma frente nao
 #: ocupe o numero de outra: 016 e' do Full, 017 e' do PMA e a 018 esta
