@@ -43,6 +43,17 @@ class OverviewResponse(BaseModel):
     refreshed_at: Optional[str] = None
 
 
+class TikTokMaturacao(BaseModel):
+    """T-0074 — o GMV TikTok de um dia ainda pode CAIR ate completar
+    `janela_dias` (cancelamentos chegam ate ~D+30). So' rotulo: nenhum valor
+    muda. Dia `>= em_maturacao_desde` esta em maturacao. Ausente (`None`)
+    quando o TikTok esta fora do escopo pedido. Regra em
+    docs/tiktok_gmv_maturacao.md."""
+    em_maturacao_desde: date  # hoje (America/Sao_Paulo) - janela_dias, inclusive
+    janela_dias: int
+    motivo: str
+
+
 class BrandPerformance(BaseModel):
     brand: str              # "barbours"
     label: str              # "BARBOURS"
@@ -74,6 +85,7 @@ class BrandsResponse(BaseModel):
     compare_date_to: Optional[date] = None
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
+    tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
 
 
 class MonthlyBrandGmv(BaseModel):
@@ -84,10 +96,14 @@ class MonthlyBrandGmv(BaseModel):
     apice: float = 0
     lescent: float = 0
     rituaria: float = 0
+    # T-0074, aditivo: o mes tem ao menos um dia em maturacao. None = TikTok
+    # fora do escopo.
+    tiktok_em_maturacao: Optional[bool] = None
 
 
 class MonthlyResponse(BaseModel):
     data: list[MonthlyBrandGmv]
+    tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
 
 
 class TrendPoint(BaseModel):
@@ -133,12 +149,16 @@ class DailyRow(BaseModel):
     orders: int
     avg_ticket: Optional[float] = None
     ad_spend: Optional[float] = None
+    # T-0074, aditivo: o GMV TikTok deste dia ainda pode cair. None = TikTok
+    # fora do escopo.
+    tiktok_em_maturacao: Optional[bool] = None
 
 
 class DailyResponse(BaseModel):
     brand: str
     marketplace: str
     data: list[DailyRow]
+    tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
 
 
 class QualityKpis(BaseModel):
