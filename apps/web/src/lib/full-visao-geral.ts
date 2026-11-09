@@ -15,6 +15,7 @@
 import {
   CONTAS_ESPERADAS_API,
   contasAusentes,
+  fmtDecimal,
   fotografiaEstaVelha,
   frescorLabel,
   nomeExibido,
@@ -23,7 +24,7 @@ import {
 import {
   fotografiaVelhaML,
   frescorLabelML,
-  identificacaoML,
+  SEM_IDENTIFICACAO_ML,
   tituloMarca,
   type MLFullEstoqueResponse,
 } from "./ml-full-estoque.ts";
@@ -47,7 +48,10 @@ export interface MarcaCanal {
 export interface ItemRuptura {
   canal: Canal;
   marca: string;
+  /** Nome para a vista: titulo; sem titulo, o SKU. Nunca "sku · titulo". */
   nome: string;
+  /** SKU so' quando o nome e' o titulo (vai para title + sr-only); senao `null`. */
+  sku: string | null;
   mediaDiaria: number;
   /** Shopee: estoque do vendedor (fora do Full). `undefined` no ML: nao se aplica. */
   estoqueVendedor?: number | null;
@@ -120,7 +124,7 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
   const rupturas = itens
     .filter((p) => p.classificacao_torre === "RUPTURA_CANDIDATA")
     .map((p) => ({
-      canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p),
+      canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p), sku: p.item_name?.trim() ? p.item_sku?.trim() || null : null,
       mediaDiaria: numero(p.avg_daily_units_28d) ?? 0, estoqueVendedor: p.seller_stock_total,
     }));
   const rupturasCompletas = rupturas.length === i.produtos_ruptura;
@@ -159,7 +163,7 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
 
   const rupturas = itens
     .filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA")
-    .map((v) => ({ canal: "ml" as const, marca: v.brand, nome: identificacaoML(v).texto, mediaDiaria: numero(v.media_diaria_28d) ?? 0 }));
+    .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0 }));
 
   return {
     canal: "ml",
@@ -241,19 +245,21 @@ function plural(n: number, um: string, varios: string): string {
 }
 
 /**
- * Titulo do topo: % antes do absoluto, sem datas, impacto ou recorte por canal
- * (isso vai na linha de cada canal). Canal fora nao entra nem como zero.
+ * Heroi da visao geral: o % sem estoque (antes do absoluto), o total em uma
+ * linha e o "x de y" para title + sr-only. Canal fora nao entra nem como zero.
+ * `null` = nenhum canal medido (a tela mostra o estado de ausencia).
  */
-export function manchete(canais: ResumoCanal[]): { texto: string; critico: boolean } {
+export function heroiRuptura(canais: ResumoCanal[]): { valor: string; contexto: string; detalhe: string; critico: boolean } | null {
   const ok = oks(canais);
-  if (!ok.length) return { texto: "Estoque Full sem dado agora nos dois canais", critico: false };
+  if (!ok.length) return null;
   const n = ok.reduce((s, c) => s + c.ruptura, 0);
-  if (n === 0) return { texto: "Nenhum produto sem estoque no Full com demanda", critico: false };
   const base = ok.reduce((s, c) => s + c.base, 0);
   const de = ok.length === 1 ? (ok[0].canal === "ml" ? " do ML" : " da Shopee") : "";
   return {
-    texto: `${fmtPct(pct(n, base))} do sortimento${de} sem estoque no Full com demanda · ${plural(n, "produto", "produtos")}`,
-    critico: true,
+    valor: fmtPct(pct(n, base)),
+    contexto: n === 0 ? `nenhum produto sem estoque${de}` : `${plural(n, "produto", "produtos")} do sortimento${de}`,
+    detalhe: `${n.toLocaleString("pt-BR")} de ${base.toLocaleString("pt-BR")} itens no Full`,
+    critico: n > 0,
   };
 }
 
@@ -319,6 +325,42 @@ export function topRupturas(canais: ResumoCanal[], n = 10, impacto: ImpactoRuptu
     .sort((a, b) =>
       (b.perdaDia ?? -1) - (a.perdaDia ?? -1) || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome))
     .slice(0, n);
+}
+
+/** Nome sem o codigo: titulo; sem titulo, o SKU. O SKU so' sobra quando o nome e' o titulo. */
+export function nomeESku(sku: string | null | undefined, titulo: string | null | undefined, semNada: string): { nome: string; sku: string | null } {
+  const s = sku?.trim() || null;
+  const t = titulo?.trim() || null;
+  return t ? { nome: t, sku: s } : { nome: s ?? semNada, sku: null };
+}
+
+/** Lista do top com mais de um canal: so' ai' o canal aparece na linha do produto. */
+export function canaisMisturados(top: ItemRuptura[]): boolean {
+  return new Set(top.map((t) => t.canal)).size > 1;
+}
+
+/** Linha 2 do produto no top: "Kokeshi · ML · 38,6 un./dia" (canal so' com lista mista; venda so' com impacto, senao ela e' a coluna). */
+export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; comImpacto: boolean }): string {
+  return [tituloMarca(t.marca), o.mostrarCanal ? NOME_CANAL[t.canal] : null, o.comImpacto ? `${fmtDecimal(t.mediaDiaria)} un./dia` : null]
+    .filter(Boolean).join(" · ");
+}
+
+/** Descricao do top: o que ordena, "todos do ML" quando a lista e' de um canal so', e se esta' incompleta. */
+export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean): string {
+  const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
+  return `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}${unico}${incompleta ? " · lista incompleta" : ""}`;
+}
+
+/** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
+export function colunasMarca(canais: ResumoCanal[], marcas: LinhaMarca[]): Canal[] {
+  return oks(canais).map((c) => c.canal).filter((c) => marcas.some((l) => l.celulas[c]?.ruptura != null));
+}
+
+/** "12,6%" na vista e "59 de 468" para title + sr-only. `null` = ausencia. */
+export function fracao(parte: number | null, base: number | null): { texto: string; detalhe: string } | null {
+  const v = pct(parte, base);
+  if (v === null || parte === null || base === null) return null;
+  return { texto: fmtPct(v), detalhe: `${parte.toLocaleString("pt-BR")} de ${base.toLocaleString("pt-BR")}` };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,11 +449,8 @@ export function perdaDestaqueShopee(i: Pick<ItemImpacto, "perda_dia" | "estoque_
 }
 
 function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
-  const nome = canal === "ml"
-    ? identificacaoML({ sku: i.sku, titulo: i.titulo, ancora_e_variacao: null }).texto
-    : i.titulo?.trim() || i.sku?.trim() || "sem identificação";
   return {
-    canal, marca: i.brand, nome, mediaDiaria: i.media_diaria_28d,
+    canal, marca: i.brand, ...nomeESku(i.sku, i.titulo, "sem identificação"), mediaDiaria: i.media_diaria_28d,
     estoqueVendedor: canal === "shopee" ? i.estoque_vendedor : undefined,
     perdaDia: canal === "shopee" ? perdaDestaqueShopee(i) : i.perda_dia,
     perdaBruta: i.perda_dia,
@@ -419,25 +458,58 @@ function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
 }
 
 /**
- * Linha de impacto do canal no topo. `valor: null` = sem preco (vira "—" com
- * motivo); impacto fora = "indisponível agora". Nunca R$ 0 por ausencia.
- * Shopee conta so' os sem estoque do vendedor (`semVendedor` itens).
+ * Cartao "Impacto potencial · canal": % do faturamento Full no valor, R$/dia
+ * na comparacao. Impacto fora = "—" + "indisponível agora"; sem preco = "—";
+ * nunca R$ 0 por ausencia. Shopee conta so' quem para a venda (sem estoque do
+ * vendedor); com todas cobertas pelo vendedor, o destaque e' zero MEDIDO e diz
+ * o porque.
  */
-export function linhaImpacto(
+export function kpiImpacto(
   canal: Canal, impacto: ImpactoRuptura | null, semVendedor: number | null = null,
-): { rotulo: string; valor: string | null } {
-  const rotulo = canal === "ml" ? "Impacto potencial"
-    : semVendedor === null ? "Impacto potencial dos sem estoque do vendedor"
-    : `Impacto potencial ${semVendedor === 1 ? "do" : "dos"} ${semVendedor.toLocaleString("pt-BR")}`;
-  // Todas com estoque do vendedor: explica o porque, nao "R$ 0" (mesmo padrao da tabela por marca).
-  // Vale mesmo com a rota de impacto fora: o destaque da Shopee so' conta quem nao tem vendedor.
-  if (canal === "shopee" && semVendedor === 0) return { rotulo: "Impacto potencial", valor: "nenhum, o vendedor tem estoque" };
+): { valor: string; comparacao: string } {
+  if (canal === "shopee" && semVendedor === 0) return { valor: fmtPct(0), comparacao: "nenhum, o vendedor tem estoque" };
   const c = impactosOk(impacto).find((x) => x.canal === canal);
-  if (!c) return { rotulo, valor: "indisponível agora" };
+  if (!c) return { valor: "—", comparacao: "indisponível agora" };
   const v = perdaDestaque(canal, c);
-  if (v === null) return { rotulo, valor: null };
+  if (v === null) return { valor: "—", comparacao: "sem preço" };
   const p = pctDestaque(canal, c);
-  return { rotulo, valor: `${p === null ? "" : `${fmtPct(p)} do faturamento Full · `}${fmtReais(v)}/dia` };
+  if (p === null) return { valor: `${fmtReais(v)}/dia`, comparacao: "% do faturamento indisponível" };
+  return { valor: fmtPct(p), comparacao: canal === "ml" ? `${fmtReais(v)}/dia do faturamento Full` : `${fmtReais(v)}/dia · só quem para a venda` };
+}
+
+/** Cartao "Param a venda · Shopee": % das rupturas sem estoque do vendedor; "x de y" no `detalhe`. */
+export function kpiParamVenda(shopee: ResumoCanal | undefined): { valor: string; comparacao: string; detalhe?: string } {
+  if (!shopee || shopee.status !== "ok") return { valor: "—", comparacao: "Shopee sem dado agora" };
+  if (shopee.ruptura === 0) return { valor: "—", comparacao: "nenhuma ruptura na Shopee" };
+  if (shopee.semVendedor === null) return { valor: "—", comparacao: "lista de rupturas incompleta" };
+  if (shopee.semVendedor === 0) return { valor: fmtPct(0), comparacao: "todas têm estoque do vendedor" };
+  const f = fracao(shopee.semVendedor, shopee.ruptura)!;
+  return { valor: f.texto, comparacao: "sem estoque do vendedor", detalhe: f.detalhe };
+}
+
+export interface LinhaImpactoMarca {
+  marca: string;
+  /** % do Full da marca (o destaque do canal). `null` = sem GMV de 28 dias. */
+  pct: number | null;
+  /** R$/dia potencial (destaque do canal). `null` = sem preco. */
+  perda: number | null;
+  /** Shopee: tudo coberto pelo vendedor -- o zero e' explicado, nao "R$ 0". */
+  vendedorTemEstoque: boolean;
+}
+
+/** Drilldown do cartao de impacto: marca | % do Full da marca | R$/dia, da maior perda para a menor. `null` = canal fora. */
+export function impactoPorMarca(canal: Canal, impacto: ImpactoRuptura | null): LinhaImpactoMarca[] | null {
+  const c = impactosOk(impacto).find((x) => x.canal === canal);
+  if (!c) return null;
+  return c.marcas
+    .map((m) => {
+      const perda = perdaDestaque(canal, m);
+      return {
+        marca: m.brand, pct: pctDestaque(canal, m), perda,
+        vendedorTemEstoque: canal === "shopee" && perda === 0 && (m.perda_dia ?? 0) > 0,
+      };
+    })
+    .sort((a, b) => (b.perda ?? -1) - (a.perda ?? -1) || a.marca.localeCompare(b.marca));
 }
 
 /** Texto do ⓘ de impacto do canal, com as ressalvas DAQUELE canal (sem preco, preco anunciado). */

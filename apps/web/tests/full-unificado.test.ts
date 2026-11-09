@@ -1,5 +1,5 @@
 // FULL-UNIFICADO-1 — rota unica /full: abas, redirecionamentos e as regras da
-// Visao geral (manchete, %, ruptura por marca, top rupturas).
+// Visao geral (heroi, faixa de KPIs, %, ruptura por marca, top rupturas).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +7,10 @@ import { readFileSync } from "node:fs";
 import { abasVisiveis, hrefAba, resolverAba } from "../src/lib/full-abas.ts";
 import {
   fmtPct,
-  manchete,
+  heroiRuptura,
+  kpiImpacto,
+  kpiParamVenda,
+  impactoPorMarca,
   mediana,
   pct,
   resumoML,
@@ -17,8 +20,13 @@ import {
   topRupturas,
   total,
   fmtReais,
-  linhaImpacto,
   dicaImpacto,
+  canaisMisturados,
+  colunasMarca,
+  descricaoTop,
+  fracao,
+  nomeESku,
+  subtituloRuptura,
   type CanalImpactoOk,
   type ImpactoRuptura,
   type ResumoCanal,
@@ -182,25 +190,23 @@ test("total so' com os dois canais medidos", () => {
   assert.equal(total([resumoML(ML), { canal: "shopee", status: "erro", motivo: "x" }]), null);
 });
 
-test("manchete: % antes do absoluto, sem datas, impacto ou recorte por canal", () => {
-  const m = manchete([resumoML(ML), resumoShopee(SHOPEE)]);
-  assert.equal(m.texto, "37,5% do sortimento sem estoque no Full com demanda · 3 produtos");
-  assert.equal(m.critico, true);
+test("heroi: % antes do absoluto, total numa linha, 'x de y' so' no detalhe", () => {
+  const h = heroiRuptura([resumoML(ML), resumoShopee(SHOPEE)])!;
+  assert.deepEqual(h, { valor: "37,5%", contexto: "3 produtos do sortimento", detalhe: "3 de 8 itens no Full", critico: true });
 });
 
-test("manchete: sem ruptura nao e' critica", () => {
-  const semRuptura = shopee([produto("apice", "SUFICIENTE")]);
-  const m = manchete([resumoShopee(semRuptura)]);
-  assert.equal(m.critico, false);
-  assert.equal(m.texto, "Nenhum produto sem estoque no Full com demanda");
+test("heroi: sem ruptura nao e' critico; nenhum canal medido = null", () => {
+  const h = heroiRuptura([resumoShopee(shopee([produto("apice", "SUFICIENTE")]))])!;
+  assert.equal(h.critico, false);
+  assert.equal(h.contexto, "nenhum produto sem estoque da Shopee");
+  assert.equal(heroiRuptura([{ canal: "ml", status: "erro", motivo: "" }, { canal: "shopee", status: "erro", motivo: "" }]), null);
 });
 
-test("manchete: canal fora conta so' o medido, sem sufixo e nunca como zero", () => {
-  const m = manchete([resumoML(ML), { canal: "shopee", status: "erro", motivo: "caiu" }]);
-  assert.equal(m.texto, "50,0% do sortimento do ML sem estoque no Full com demanda · 2 produtos");
-  assert.equal(manchete([{ canal: "ml", status: "erro", motivo: "" }, { canal: "shopee", status: "erro", motivo: "" }]).critico, false);
-  assert.equal(manchete([resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA")]))]).texto,
-    "100,0% do sortimento da Shopee sem estoque no Full com demanda · 1 produto");
+test("heroi: canal fora conta so' o medido e diz qual, nunca como zero", () => {
+  const h = heroiRuptura([resumoML(ML), { canal: "shopee", status: "erro", motivo: "caiu" }])!;
+  assert.equal(h.valor, "50,0%");
+  assert.equal(h.contexto, "2 produtos do sortimento do ML");
+  assert.equal(heroiRuptura([resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA")]))])!.contexto, "1 produto do sortimento da Shopee");
 });
 
 test("ruptura por marca: pior primeiro, junta canais e mantem a ausencia por celula", () => {
@@ -341,29 +347,49 @@ test("fmtReais: compacto em pt-BR e ausencia nunca vira R$ 0", () => {
   assert.equal(sp(fmtReais(0)), "R$ 0", "zero medido continua zero");
 });
 
-test("linha de impacto: por canal, Shopee so' dos sem vendedor, ausencia nunca vira R$ 0", () => {
-  const txt = (l: { rotulo: string; valor: string | null }) => sp(`${l.rotulo}: ${l.valor}`);
-  assert.equal(txt(linhaImpacto("ml", IMPACTO)), "Impacto potencial: 10,3% do faturamento Full · R$ 13,3 mil/dia");
-  assert.equal(txt(linhaImpacto("shopee", IMPACTO, 18)), "Impacto potencial dos 18: 2,8% do faturamento Full · R$ 1,5 mil/dia");
-  assert.equal(linhaImpacto("shopee", IMPACTO, null).rotulo, "Impacto potencial dos sem estoque do vendedor");
-  // todas com estoque do vendedor: explicado, nunca "R$ 0" nem "dos 0"
-  const todasComVendedor = txt(linhaImpacto("shopee", IMPACTO, 0))!;
-  assert.equal(todasComVendedor, "Impacto potencial: nenhum, o vendedor tem estoque");
-  assert.ok(!todasComVendedor.includes("R$ 0") && !todasComVendedor.includes("dos 0"));
-  assert.equal(linhaImpacto("shopee", IMPACTO, 1).rotulo, "Impacto potencial do 1");
-  assert.equal(linhaImpacto("shopee", null, 0).rotulo, "Impacto potencial", "nem com a rota fora vira 'dos 0'");
-  // impacto fora (rota caiu ou canal indisponivel): "indisponível agora", sem R$
-  assert.equal(txt(linhaImpacto("ml", null)), "Impacto potencial: indisponível agora");
+test("cartao de impacto: % no valor, R$ na comparacao, por canal; ausencia nunca vira R$ 0", () => {
+  const k = (c: { valor: string; comparacao: string }) => ({ valor: sp(c.valor), comparacao: sp(c.comparacao) });
+  assert.deepEqual(k(kpiImpacto("ml", IMPACTO)), { valor: "10,3%", comparacao: "R$ 13,3 mil/dia do faturamento Full" });
+  assert.deepEqual(k(kpiImpacto("shopee", IMPACTO, 18)), { valor: "2,8%", comparacao: "R$ 1,5 mil/dia · só quem para a venda" });
+  // todas com estoque do vendedor: zero MEDIDO e explicado, mesmo com a rota fora
+  assert.deepEqual(kpiImpacto("shopee", IMPACTO, 0), { valor: "0,0%", comparacao: "nenhum, o vendedor tem estoque" });
+  assert.equal(kpiImpacto("shopee", null, 0).comparacao, "nenhum, o vendedor tem estoque");
+  // impacto fora: "—" + "indisponível agora"
+  assert.deepEqual(kpiImpacto("ml", null), { valor: "—", comparacao: "indisponível agora" });
   const soML = { ...IMPACTO, shopee: { canal: "shopee" as const, status: "unavailable" as const, motivo: "x" } };
-  assert.equal(linhaImpacto("shopee", soML, 18).valor, "indisponível agora");
-  // pct ausente: so' o R$; perda ausente: null (vira "—" com motivo)
+  assert.deepEqual(kpiImpacto("shopee", soML, 18), { valor: "—", comparacao: "indisponível agora" });
+  // pct ausente: o R$ vira o valor; perda ausente: "—" sem preco
   const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk };
-  assert.equal(sp(linhaImpacto("ml", semPct).valor), "R$ 13,3 mil/dia");
+  assert.equal(sp(kpiImpacto("ml", semPct).valor), "R$ 13,3 mil/dia");
   const semPerda = { ...IMPACTO, ml: { ...IMPACTO.ml, perda_dia: null } as CanalImpactoOk };
-  assert.equal(linhaImpacto("ml", semPerda).valor, null);
-  for (const l of [linhaImpacto("ml", null), linhaImpacto("shopee", soML, 18), linhaImpacto("ml", semPerda)]) {
-    assert.ok(!String(l.valor).includes("R$ 0"));
+  assert.deepEqual(kpiImpacto("ml", semPerda), { valor: "—", comparacao: "sem preço" });
+  for (const c of [kpiImpacto("ml", null), kpiImpacto("shopee", soML, 18), kpiImpacto("ml", semPerda)]) {
+    assert.ok(!sp(`${c.valor} ${c.comparacao}`)!.includes("R$ 0"));
   }
+});
+
+test("cartao 'param a venda': % das rupturas sem vendedor, 'x de y' no detalhe, estados da rodada 1", () => {
+  const r = resumoShopee(shopee([
+    produto("apice", "RUPTURA_CANDIDATA", 1, 0, 0),
+    produto("apice", "RUPTURA_CANDIDATA", 1, 0, 0),
+    produto("apice", "RUPTURA_CANDIDATA", 1, 0, 5),
+    produto("apice", "RUPTURA_CANDIDATA", 1, 0, 7),
+  ]));
+  assert.deepEqual(kpiParamVenda(r), { valor: "50,0%", comparacao: "sem estoque do vendedor", detalhe: "2 de 4" });
+  const todas = resumoShopee(shopee([produto("apice", "RUPTURA_CANDIDATA", 1, 0, 3)]));
+  assert.deepEqual(kpiParamVenda(todas), { valor: "0,0%", comparacao: "todas têm estoque do vendedor" });
+  assert.deepEqual(kpiParamVenda({ canal: "shopee", status: "erro", motivo: "x" }), { valor: "—", comparacao: "Shopee sem dado agora" });
+  assert.equal(kpiParamVenda(resumoShopee(shopee([produto("apice", "SUFICIENTE")]))).comparacao, "nenhuma ruptura na Shopee");
+});
+
+test("drilldown do impacto: % do Full da marca e R$/dia, da maior perda para a menor; canal fora = null", () => {
+  const ml = impactoPorMarca("ml", IMPACTO)!;
+  assert.deepEqual(ml.map((l) => [l.marca, l.pct, l.perda]), [["kokeshi", 0.16, 8000], ["barbours", 0, 0]]);
+  // Shopee pelo destaque (sem estoque do vendedor), nao pelo bruto
+  assert.deepEqual(impactoPorMarca("shopee", IMPACTO)!.map((l) => [l.marca, l.pct, l.perda]), [["apice", 0.04, 500]]);
+  assert.equal(impactoPorMarca("ml", null), null);
+  const coberta = { ...IMPACTO, shopee: { ...IMPACTO.shopee, marcas: [{ brand: "lescent", rupturas: 1, sem_preco: 0, perda_dia: 90, perda_dia_sem_vendedor: 0, gmv_full_dia: 1000, pct_gmv_full: 0.09, pct_gmv_full_sem_vendedor: 0 }] } as CanalImpactoOk };
+  assert.equal(impactoPorMarca("shopee", coberta)![0].vendedorTemEstoque, true, "vendedor cobre: explicado, nao R$ 0");
 });
 
 test("dica de impacto: ressalvas do proprio canal, R$ bruto da Shopee so' no ⓘ", () => {
@@ -444,4 +470,58 @@ test("tabela por marca: Shopee com ruptura coberta pelo vendedor e' explicada, n
   const linhas = rupturaPorMarca([resumo], COERENCIA);
   assert.equal(linhas.find((l) => l.marca === "barbours")!.vendedorTemEstoque, true);
   assert.equal(linhas.find((l) => l.marca === "apice")!.vendedorTemEstoque, false, "misto: um item para a venda");
+});
+
+// ---------------------------------------------------------------------------
+// FULL-VISAO-RODADA-2 — menos poluida: 1 numero + 1 secundario por celula
+// ---------------------------------------------------------------------------
+
+test("fracao: a vista mostra so' o %, o 'x de y' vai para title + sr-only", () => {
+  assert.deepEqual(fracao(59, 468), { texto: "12,6%", detalhe: "59 de 468" });
+  assert.equal(fracao(null, 468), null, "ausencia nunca vira 0%");
+  assert.equal(fracao(3, 0), null);
+});
+
+test("top 10: nome sem o codigo, com e sem titulo", () => {
+  assert.deepEqual(nomeESku("KIT001", "Kit Rotina Facial", "x"), { nome: "Kit Rotina Facial", sku: "KIT001" });
+  assert.deepEqual(nomeESku("KIT001", "  ", "x"), { nome: "KIT001", sku: null }, "sem titulo: o SKU vira o nome, sem repetir");
+  assert.deepEqual(nomeESku(null, null, "sem identificação"), { nome: "sem identificação", sku: null });
+  // ML do estoque e do impacto: nunca mais "SKU · titulo"
+  const top = topRupturas([resumoML(ML)], 10, IMPACTO);
+  assert.deepEqual(top.map((t) => [t.nome, t.sku]), [["Kit", "K1"], ["K2", null]]);
+  const semImpacto = topRupturas([resumoML(ML)], 10);
+  assert.ok(semImpacto.every((t) => t.nome === "SKU-kokeshi" && t.sku === null && !t.nome.includes(" · ")));
+});
+
+test("top 10: canal so' aparece quando a lista mistura canais", () => {
+  const soML = topRupturas([resumoML(ML)], 10, IMPACTO);
+  assert.equal(canaisMisturados(soML), false);
+  assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: true }), "KOKESHI · 3,0 un./dia");
+  assert.equal(descricaoTop(soML, true, false), "Rupturas de maior impacto potencial por dia · todos do ML");
+  const misto = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, IMPACTO);
+  assert.equal(canaisMisturados(misto), true);
+  assert.equal(subtituloRuptura(misto[1], { mostrarCanal: true, comImpacto: true }), "KOKESHI · ML · 3,0 un./dia");
+  assert.equal(descricaoTop(misto, true, true), "Rupturas de maior impacto potencial por dia · lista incompleta");
+  // sem impacto: a venda e' a coluna, a linha 2 fica so' a marca
+  assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: false }), "KOKESHI");
+  assert.equal(descricaoTop(soML, false, false), "Rupturas com mais venda por dia · todos do ML");
+});
+
+test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desenhada", () => {
+  const dois: ResumoCanal[] = [resumoML(ML), resumoShopee(SHOPEE)];
+  assert.deepEqual(colunasMarca(dois, rupturaPorMarca(dois)), ["ml", "shopee"]);
+  const fora: ResumoCanal[] = [resumoML(ML), { canal: "shopee", status: "erro", motivo: "caiu" }];
+  assert.deepEqual(colunasMarca(fora, rupturaPorMarca(fora)), ["ml"]);
+});
+
+test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de frescor", () => {
+  const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
+  const linha = src.slice(src.indexOf("function LinhaCanal"), src.indexOf("function ChipFoto"));
+  assert.ok(linha.includes("c.aviso"), "aviso no li do canal");
+  assert.ok(!src.includes("<footer"), "sem rodape de frescor");
+  assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
+  assert.ok(src.includes("<Heroi") && src.includes('variante="gerencial"') && src.includes("<KpiDrilldownDialog"), "esqueleto da Gerencial");
+  assert.equal((src.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um so' dialogo na pagina");
+  assert.ok(!src.includes("selo="), "sem selo: nao ha' limite de negocio para ruptura");
+  assert.ok(!/min-w-\[/.test(src), "nenhuma tabela com largura minima (390 sem rolagem)");
 });
