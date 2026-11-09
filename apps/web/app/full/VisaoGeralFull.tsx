@@ -60,6 +60,7 @@ import {
   fmtFatia,
   rankingRupturas,
   avisoCanal,
+  celulaEstoque,
   celulaImpacto,
   contarCanais,
   filtrarCanal,
@@ -237,6 +238,18 @@ function CelulaImpacto({ t }: { t: ItemRuptura }) {
       <span className={c.zeroMedido ? "text-ink-faint" : "text-ink"}>{c.texto}</span>
       {c.apoio && <span className="text-xs font-normal text-ink-muted max-w-36 lg:max-w-none lg:whitespace-nowrap">{c.apoio}</span>}
       {c.titulo && <span className="sr-only"> ({c.titulo})</span>}
+    </span>
+  );
+}
+
+/** Celula "Estoque" da fila: Full + onde esta' o resto; ausencia leva o motivo no title. */
+function CelulaEstoque({ t, alinhar = "start" }: { t: ItemRuptura; alinhar?: "start" | "end" }) {
+  const c = celulaEstoque(t);
+  return (
+    <span className={`flex flex-col ${alinhar === "end" ? "items-end" : "items-start"}`} title={c.ausente}>
+      <span className="text-sm font-medium text-ink">{c.texto}</span>
+      {c.apoio && <span className="text-xs font-normal text-ink-muted">{c.apoio}</span>}
+      {c.ausente && <span className="sr-only"> ({c.ausente})</span>}
     </span>
   );
 }
@@ -661,6 +674,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                   <th scope="col" className="px-3 py-2 text-left">Produto</th>
                   <th scope="col" className="w-36 px-3 py-2 text-left">Canal</th>
                   <th scope="col" className="w-24 px-3 py-2 text-right">Venda/dia</th>
+                  <th scope="col" className="w-56 px-3 py-2 text-left">Estoque</th>
                   <th scope="col" className="w-60 whitespace-nowrap px-4 py-2 text-right">
                     <span className="inline-flex items-center justify-end gap-1">Impacto potencial/dia <InfoDica texto={DICA_IMPACTO_FILA} /></span>
                   </th>
@@ -675,7 +689,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                     <Fragment key={`${t.canal}-${i}`}>
                       {abreGrupo && (
                         <tr className="bg-raised">
-                          <th scope="colgroup" colSpan={5} className="px-4 py-0.5 text-left font-normal">
+                          <th scope="colgroup" colSpan={6} className="px-4 py-0.5 text-left font-normal">
                             <CabecaGrupo g={g} total={grupos[g]} aberto={abertos.has(g)} alternar={() => alternarGrupo(g)} />
                           </th>
                         </tr>
@@ -690,6 +704,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                         </th>
                         <td className="px-3 py-3 align-top"><SeloCanal canal={t.canal} /></td>
                         <td className="px-3 py-3 text-right align-top tabular-nums text-ink-muted">{fmtDecimal(t.mediaDiaria)} un.</td>
+                        <td className="px-3 py-3 align-top tabular-nums"><CelulaEstoque t={t} /></td>
                         <td className="px-4 py-3 text-right align-top text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></td>
                       </tr>
                     </Fragment>
@@ -725,6 +740,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                         <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
                         <span className="tabular-nums">{fmtDecimal(t.mediaDiaria)} un./dia</span>
                       </span>
+                      <CelulaEstoque t={t} />
                     </li>
                   </Fragment>
                 );
