@@ -239,3 +239,44 @@ test("popup de travados largo e sem quebra nas colunas curtas (sem rolagem later
   assert.match(POPUP, /\[&_th\]:whitespace-nowrap/);
   assert.match(POPUP, /<td className="whitespace-nowrap font-medium text-ink">\{rotuloDaEtapa\(l\.etapa\)\}<\/td>/);
 });
+
+// ---------------------------------------------------------------------------
+// EXPEDICAO-POPUP-ETAPAS — consolidado por etapa no topo do popup
+// ---------------------------------------------------------------------------
+test("consolidado por etapa: % sobre o TOTAL da lista, da maior para a menor, 'Sem etapa' nunca some", async () => {
+  const { consolidadoPorEtapa, pctDaEtapa } = await import("../src/lib/expedicao-travados.ts");
+  const itens = consolidadoPorEtapa(
+    [
+      { stage: "a_preparar", count: 40 },
+      { stage: null, count: 3 },
+      { stage: "nao_publicada", count: 2 },
+      { stage: "aguardando_coleta", count: 1420 },
+    ],
+    1465,
+  );
+  assert.deepEqual(itens.map((i) => i.n), [1420, 40, 5]);
+  assert.equal(itens[2].rotulo, "Sem etapa");
+  assert.equal(pctDaEtapa(1420, 1465), "96,9%");
+  assert.equal(pctDaEtapa(1465, 1465), "100%");
+  // A quebra cobre so' parte do total: o resto e' "Sem etapa", nunca escondido.
+  const parcial = consolidadoPorEtapa([{ stage: "aguardando_coleta", count: 90 }], 100);
+  assert.deepEqual(parcial.map((i) => i.n), [90, 10]);
+  assert.equal(parcial[1].rotulo, "Sem etapa");
+  // API antiga (sem quebra) ou lista vazia: nada.
+  assert.deepEqual(consolidadoPorEtapa(null, 100), []);
+  assert.deepEqual(consolidadoPorEtapa([], 0), []);
+});
+
+test("consolidado TikTok: etapa de cada lista do resumo; 100% numa etapa aparece; API antiga, nada", async () => {
+  const { etapasDaLista } = await import("../src/lib/expedicao-tiktok-abertos.ts");
+  const t = {
+    open: 0, awaiting_shipment: 0, awaiting_collection: 0, on_hold: 0, overdue: 0, overdue_shipment: 0,
+    overdue_collection: 0, due_today: 1465, due_next_day: 0, on_time: 0, over_48h: 0,
+  };
+  assert.deepEqual(etapasDaLista("due_today", t, 1465), [], "API antiga: sem a etapa da lista");
+  const com = { ...t, due_today_collection: 1465, due_today_shipment: 0 };
+  assert.deepEqual(etapasDaLista("due_today", com, 1465), [{ rotulo: "Aguardando coleta", n: 1465 }]);
+  const misto = { ...t, over_48h: 10, over_48h_collection: 7, over_48h_shipment: 3 };
+  assert.deepEqual(etapasDaLista("over_48h", misto, 10).map((e) => e.n), [7, 3]);
+  assert.deepEqual(etapasDaLista("awaiting_shipment", t, 5).map((e) => e.n), [5]);
+});

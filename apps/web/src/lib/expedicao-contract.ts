@@ -356,6 +356,8 @@ export interface Paginacao {
   returned: number;
   total: number;
   has_more: boolean;
+  /** EXPEDICAO-POPUP-ETAPAS (aditivo): etapa da lista INTEIRA; `stage` nulo = sem etapa. */
+  stage_counts?: { stage: string | null; count: number }[] | null;
 }
 
 export interface Limitacoes {

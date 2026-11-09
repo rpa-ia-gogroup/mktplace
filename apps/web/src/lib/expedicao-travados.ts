@@ -42,6 +42,47 @@ export function rotuloDaEtapa(etapa: string | null | undefined): string {
   return ROTULO_ETAPA.get(etapa) ?? etapa;
 }
 
+export interface FatiaEtapa {
+  rotulo: string;
+  n: number;
+}
+
+/**
+ * EXPEDICAO-POPUP-ETAPAS — consolidado do topo do popup: % de cada etapa sobre
+ * o TOTAL da lista (nunca a pagina), da maior para a menor. Etapa nula ou
+ * "nao_publicada" vira "Sem etapa"; o que a quebra nao cobre do total tambem
+ * (nunca escondido). Sem quebra da API (`null`), nada.
+ */
+export function consolidadoPorEtapa(
+  contagens: { stage: string | null; count: number }[] | null | undefined,
+  total: number,
+): FatiaEtapa[] {
+  if (!contagens || !(total > 0)) return [];
+  const n = new Map<string, number>();
+  for (const c of contagens) {
+    const rotulo = !c.stage || c.stage === "nao_publicada" ? SEM_ETAPA : rotuloDaEtapa(c.stage);
+    n.set(rotulo, (n.get(rotulo) ?? 0) + c.count);
+  }
+  return fatias(n, total);
+}
+
+export const SEM_ETAPA = "Sem etapa";
+
+/** Ordena da maior para a menor e completa com "Sem etapa" ate' o total. */
+export function fatias(n: Map<string, number>, total: number): FatiaEtapa[] {
+  const coberto = [...n.values()].reduce((a, b) => a + b, 0);
+  if (coberto < total) n.set(SEM_ETAPA, (n.get(SEM_ETAPA) ?? 0) + total - coberto);
+  return [...n.entries()]
+    .filter(([, qtd]) => qtd > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([rotulo, qtd]) => ({ rotulo, n: qtd }));
+}
+
+/** "97,3%" / "100%": 1 casa so' quando ha' fracao. */
+export function pctDaEtapa(n: number, total: number): string {
+  return `${((n / total) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+}
+
 /** A etapa REAL foi publicada para alguma linha (nao so' o default da 033). */
 export function temEtapaPublicada(linhas: Pick<LinhaFila, "etapa">[]): boolean {
   return linhas.some((l) => l.etapa && l.etapa !== "nao_publicada");

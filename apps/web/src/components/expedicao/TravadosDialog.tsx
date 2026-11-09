@@ -53,6 +53,7 @@ import {
   queryDaLista,
   rotuloDaEtapa,
   temEtapaPublicada,
+  consolidadoPorEtapa,
   travadosPorEtapa,
   type AlvoTravados,
   type FiltroVencimento,
@@ -60,6 +61,9 @@ import {
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { formatarInteiro } from "@/lib/expedicao-formato";
 import { brandLabel } from "@/lib/filters/brands";
+import type { Paginacao } from "@/lib/expedicao-contract";
+
+import ConsolidadoEtapas from "./ConsolidadoEtapas";
 
 export type { AlvoTravados };
 
@@ -77,6 +81,8 @@ type Estado =
       /** Contagem EXATA da API (`due_today_count`/`due_next_day_count`) no recorte. */
       contagemHoje: number | null;
       contagemProximo: number | null;
+      /** EXPEDICAO-POPUP-ETAPAS: etapa da lista INTEIRA (API); `null` na API antiga. */
+      etapas: Paginacao["stage_counts"];
     };
 
 /**
@@ -190,6 +196,7 @@ export default function TravadosDialog({
           efetivoEm,
           contagemHoje: contagemDoRecorte(json, alvo?.marca ?? null, alvo?.conta ?? null, "due_today_count"),
           contagemProximo: contagemDoRecorte(json, alvo?.marca ?? null, alvo?.conta ?? null, "due_next_day_count"),
+          etapas: json.pagination?.stage_counts ?? null,
         });
       })
       .catch(() => {
@@ -272,7 +279,11 @@ export default function TravadosDialog({
       ? estado.contagemProximo
       : filtrarPorVencimento(todasAsLinhas, "proximo", hojeFoto, proximoFoto).length;
   const diaProximo = estado.tipo === "ok" ? diaDoProximoVencimento(estado.proximo, estado.efetivoEm) : "amanhã";
-  const porEtapa = estado.tipo === "ok" && temEtapa ? travadosPorEtapa(linhas) : [];
+  // Consolidado EXATO (lista inteira) no topo; a quebra por amostra so' fica
+  // quando ele nao existe (API antiga) ou com o filtro de dia ativo.
+  const consolidado = estado.tipo === "ok" ? consolidadoPorEtapa(estado.etapas, estado.total) : [];
+  const porEtapa =
+    estado.tipo === "ok" && temEtapa && !(consolidado.length && filtroAtivo === "todos") ? travadosPorEtapa(linhas) : [];
   const porMotivo = ehTravados ? contarPor(linhas, motivoDoTravado) : [];
   const porMarca = variasMarcas ? contarPor(linhas, (l) => brandLabel(l.brand)) : [];
   const cortada = cortadaNaFonte;
@@ -316,6 +327,8 @@ export default function TravadosDialog({
               </span>
             </span>
           </div>
+          {/* EXPEDICAO-POPUP-ETAPAS: % de cada etapa sobre a lista INTEIRA. */}
+          {estado.tipo === "ok" ? <ConsolidadoEtapas itens={consolidado} total={estado.total} /> : null}
 
           {estado.tipo === "carregando" ? (
             <p role="status" className="text-sm text-ink-muted">Carregando pedidos…</p>

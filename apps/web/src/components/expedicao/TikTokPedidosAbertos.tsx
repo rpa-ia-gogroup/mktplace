@@ -24,6 +24,7 @@ import { CLASSE_CABECALHO, CLASSE_TABELA, EstadoSecao } from "@/components/exped
 import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
+import ConsolidadoEtapas from "./ConsolidadoEtapas";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import { formatarHoras } from "@/lib/expedicao-contract";
@@ -103,11 +104,11 @@ function PopupAbertos({
   const porMarca =
     dados && lista
       ? dados.brands
-          .map((b) => ({ rotulo: brandLabel(b.brand), n: b[CAMPO_DA_LISTA[lista]] }))
+          .map((b) => ({ rotulo: brandLabel(b.brand), n: b[CAMPO_DA_LISTA[lista]] ?? 0 }))
           .filter((b) => b.n > 0)
           .sort((a, b) => b.n - a.n)
       : [];
-  const porEtapa = dados && lista ? etapasDaLista(lista, dados.totals) : [];
+  const porEtapa = dados && lista ? etapasDaLista(lista, dados.totals, totalLista) : [];
   const temMaisDeUmaPagina = Boolean(dados && (dados.has_more || pagina > 1));
 
   return (
@@ -120,6 +121,9 @@ function PopupAbertos({
             </span>
             <span className="pb-0.5 text-xs text-ink-faint">{marca ? brandLabel(marca) : "todas as marcas"}</span>
           </div>
+          {/* EXPEDICAO-POPUP-ETAPAS: % de cada etapa sobre a lista INTEIRA, logo
+              abaixo do total -- inclusive quando e' 100% numa etapa so'. */}
+          <ConsolidadoEtapas itens={porEtapa} total={totalLista} />
 
           {carga.tipo === "carregando" ? (
             <p role="status" className="text-sm text-ink-muted">Carregando pedidos…</p>
@@ -134,16 +138,6 @@ function PopupAbertos({
             <p role="status" className="text-sm text-ink-muted">{cfg.vazio}</p>
           ) : (
             <>
-              {porEtapa.length > 1 ? (
-                <DrilldownSecao titulo="Em que etapa estão">
-                  <ul className="flex flex-col">
-                    {porEtapa.map((i) => (
-                      <EvidenceRow key={i.rotulo} label={i.rotulo} pct={(i.n / totalLista) * 100} barra="bg-warn"
-                        value={`${formatarInteiro(i.n)} · ${pct(i.n, totalLista)}`} />
-                    ))}
-                  </ul>
-                </DrilldownSecao>
-              ) : null}
               {porMarca.length > 1 ? (
                 <DrilldownSecao titulo="Por marca">
                   <ul className="flex flex-col">
