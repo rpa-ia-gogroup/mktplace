@@ -517,13 +517,33 @@ export const TIMEOUT_API_MS = 15_000;
 export const MOTIVO_TIMEOUT = "A API não respondeu a tempo.";
 
 /**
+ * Busca de novo UMA vez, so' quando a primeira estoura o tempo. Os
+ * carregadores daqui sao GET de leitura: repetir nao duplica efeito. Caso
+ * tipico: o 1o acesso depois de a API reiniciar passa dos 15 s; a API termina
+ * o trabalho e guarda o resultado, entao a 2a tentativa volta rapido. Qualquer
+ * outra falha (status, rede, JSON) volta direto, sem repetir.
+ */
+export async function repetirSeEstourar<T extends { ok: boolean }>(buscar: () => Promise<T>): Promise<T> {
+  const primeira = await buscar();
+  const estourou = !primeira.ok && (primeira as { motivo?: string }).motivo === MOTIVO_TIMEOUT;
+  return estourou ? buscar() : primeira;
+}
+
+/**
  * Fetch no SERVIDOR. Nunca lanca: falha de rede, timeout, status nao-2xx,
  * JSON quebrado ou forma invalida voltam como `{ ok: false }` e a tela
  * inteira mostra erro — nenhum numero.
  *
  * `timeoutMs` so' existe para o teste nao esperar 15 s.
  */
+/** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarPerformanceContas(
+  ...args: Parameters<typeof carregarPerformanceContasUmaVez>
+): ReturnType<typeof carregarPerformanceContasUmaVez> {
+  return repetirSeEstourar(() => carregarPerformanceContasUmaVez(...args));
+}
+
+async function carregarPerformanceContasUmaVez(
   filtros: Pick<FiltrosPerformanceContas, "marca">,
   fetchImpl: typeof fetch = fetch,
   base: string = API_URL,

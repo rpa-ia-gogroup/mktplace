@@ -13,6 +13,7 @@
 import {
   CANAIS,
   MOTIVO_TIMEOUT,
+  repetirSeEstourar,
   TIMEOUT_API_MS,
   ehObjeto,
   filtrarCanais,
@@ -374,7 +375,14 @@ export type ResultadoAtendimento =
   | { ok: false; motivo: string };
 
 /** Nunca lanca: qualquer falha volta como `{ ok: false }` e a aba mostra erro. */
+/** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarAtendimento(
+  ...args: Parameters<typeof carregarAtendimentoUmaVez>
+): ReturnType<typeof carregarAtendimentoUmaVez> {
+  return repetirSeEstourar(() => carregarAtendimentoUmaVez(...args));
+}
+
+async function carregarAtendimentoUmaVez(
   filtros: { marca: string | null; dias: JanelaDias },
   fetchImpl: typeof fetch = fetch,
   base: string = API_URL,
