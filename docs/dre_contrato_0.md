@@ -369,12 +369,37 @@ casada: Apice TikTok 24,4%, Kokeshi TikTok 24,8%, Barbours ML 21,2%; as 14 célu
 Cobertura: Lescent 0,62–0,67 (buraco de carga), Rituaria TikTok 0,86. O "11,6–14,6%" que a API mostrava omitia o
 DIFAL.
 
-**Limitações abertas (perguntas ao Fiscal):**
-- (a) o total mensal bate com a apuração/SPED? Não comparado.
-- (b) o DIFAL é recolhido integralmente, ou há regime especial/benefício por UF?
-- (c) bruto × líquido de devoluções: hoje **bruto** (créditos `DX`/`DV` fora), coerente com a receita bruta, já que a
-  DRE não tem devoluções em valor.
-- (d) ST e FCP não aparecem nesta fonte.
+**Limitações abertas (perguntas ao Fiscal, versão de 09/11/2026):**
+- (a) **SPED:** o total mensal do webgex bate com o SPED? Não há SPED em nenhuma base que conseguimos acessar, então
+  não foi comparado.
+- (b) **DIFAL:** o webgex traz o DIFAL **destacado** na NF, não o recolhido. Além disso, há cerca de R$ 60 mil de DIFAL
+  em remessa de bonificação/brinde em out/26. Esse DIFAL de remessa entra na DRE?
+- (c) **Devolução:** quase não aparece no webgex (13 linhas em out/26, cerca de R$ 1 mil). Hoje o imposto é **bruto**
+  (créditos `DX`/`DV` fora), coerente com a receita bruta. Se o imposto tiver de ser líquido de devolução, qual fonte
+  usar?
+- (d) **FCP e ST:** o FCP está embutido no ICMS/DIFAL do webgex ou é apurado à parte? Existe ST em alguma operação
+  gobeauté? A tabela não tem coluna de ST nem de FCP.
+
+#### 4.10.2 Premissas de impostos de out/26 corrigidas pelo medido (T-0073, 09/11/2026)
+
+Duas células da matriz de premissas de out/26 divergiam do imposto medido no webgex (`VX`/`DB`, jul–out/2026). Elas
+foram corrigidas para o valor medido, arredondado. A decisão foi do Mário, por meio do supervisor-claude. Os
+percentuais antigos e novos e o efeito na margem por marca ficam só no relatório privado: o repositório é público e
+as taxas nunca foram versionadas aqui.
+
+| Célula | Correção | Fonte |
+|---|---|---|
+| Rituaria × ICMS | a premissa estava muito abaixo do medido (provável erro de digitação na origem) e passou ao medido | webgex, jul–set/26 |
+| Apice × DIFAL | a premissa estava abaixo do medido e passou ao medido | webgex, jul–out/26 |
+
+- **Mecanismo:** cópia corrigida da matriz privada, só com essas duas células alteradas, publicada pelo
+  `pipelines/dre/premissa_publisher.py` (competência 2026-10). O código não muda.
+- **PIS/COFINS fica como estava.** No ML, o medido (Rituaria, Kokeshi, Lescent) é bem maior que a premissa, mas a
+  matriz é marca × componente, **sem canal**. Subir a taxa da marca superestimaria o imposto de TikTok e Shopee,
+  onde o medido é baixo. Fica como limitação conhecida da premissa.
+- **Alcance:** vale só para o `cenario_premissas` (estimado). Onde houver imposto realizado (§4.10.1), a DRE usa o
+  realizado, e a premissa não entra.
+- Nenhum outro mês nem outra premissa foi alterado.
 
 ---
 
