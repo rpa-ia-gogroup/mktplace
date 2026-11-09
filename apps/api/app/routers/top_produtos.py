@@ -6,10 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps.filters import ResolvedFilters, filters_query
 from app.deps.period import resolve_period, today_brt
-from app.schemas.top_produtos import Canal, DetalheProduto, TopProdutosResponse
+from app.schemas.top_produtos import Canal, CompararCanaisResponse, DetalheProduto, TopProdutosResponse
 from app.services import datamart_leitura
 from app.services.gold_service import BRANDS_IN_SCOPE
-from app.services.top_produtos_service import canais_do_filtro, get_detalhe, get_top_produtos
+from app.services.top_produtos_service import canais_do_filtro, get_comparar_canais, get_detalhe, get_top_produtos
 
 router = APIRouter(prefix="/api/v1/gerencial", tags=["gerencial"])
 logger = logging.getLogger(__name__)
@@ -27,6 +27,18 @@ def top_produtos(filters: ResolvedFilters = Depends(filters_query)):
         )
     except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
         logger.exception("top-produtos falhou")
+        raise HTTPException(503, "Base de produtos indisponivel.") from exc
+
+
+@router.get("/top-produtos/comparar-canais", response_model=CompararCanaisResponse)
+def top_produtos_comparar_canais(filters: ResolvedFilters = Depends(filters_query)):
+    """COMPARAR-CANAIS: o mesmo produto (seller SKU normalizado) em cada canal,
+    pela fatia da receita da marca no canal. Respeita marca e periodo; sempre
+    os tres canais (comparar exige mais de um)."""
+    try:
+        return get_comparar_canais(datamart_leitura.consultar, filters.period.start, filters.period.end, filters.brands)
+    except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
+        logger.exception("top-produtos/comparar-canais falhou")
         raise HTTPException(503, "Base de produtos indisponivel.") from exc
 
 

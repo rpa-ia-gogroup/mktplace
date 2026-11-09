@@ -22,7 +22,8 @@ from datetime import date, timedelta
 from typing import Callable, Optional
 
 from app.schemas.top_produtos import (
-    DetalheProduto, ExtraCanal, MarcaTop, PontoDiario, ProdutoTop, ResumoCanal, TopProdutosResponse,
+    CanalComparado, CelulaCanal, CompararCanaisResponse, DetalheProduto, ExtraCanal, MarcaComparada, MarcaTop,
+    PontoDiario, ProdutoComparado, ProdutoTop, ResumoCanal, TopProdutosResponse,
 )
 from app.services.gold_service import BRANDS_IN_SCOPE
 
@@ -266,3 +267,165 @@ def get_detalhe(
         serie=[PontoDiario(dia=_data(l["dia"]), pecas=_num(l["pecas"]), receita=_num(l["receita"])) for l in linhas],
         extras=extras, aviso_extras=aviso,
     )
+
+
+
+# ---------------------------------------------------------------------------
+# COMPARAR-CANAIS (pedido da operacao, 09/11/2026): o que vende bem num canal e
+# fraco no outro. O MESMO produto entre canais e' o seller SKU do ERP,
+# normalizado (checagem do Sonda: cobertura 96-100%). A comparacao e' pela
+# FATIA da receita da marca em cada canal, nunca por R$ (canais tem tamanhos
+# diferentes; o TikTok por seller SKU soma ~95% do GMV da gold).
+# ---------------------------------------------------------------------------
+TOP_COMPARAR = 20
+#: Janela para os apelidos do TikTok (codigo antigo e novo no mesmo product_id).
+DIAS_APELIDOS = 180
+
+# Cada consulta devolve (marca, sku, chave, nome, receita): `sku` e' o seller
+# SKU cru (nulo quando o anuncio nao tem); `chave` e' o codigo da rota de detalhe.
+SQL_COMPARAR = {
+    "tiktok": """
+        SELECT o.brand AS marca, NULLIF(li.seller_sku, '') AS sku, li.product_id AS chave,
+               MAX(li.product_name) AS nome, SUM(li.sale_price) AS receita
+          FROM silver.stg_tiktok_line_items li
+          JOIN silver.stg_tiktok_orders o ON o.order_id = li.order_id
+         WHERE o.brand = ANY(:marcas) AND o.paid_at >= :ini AND o.paid_at < :fim_excl
+           AND o.order_status <> 'CANCELLED' AND NOT COALESCE(o.is_sample_order, false)
+           AND NOT COALESCE(li.is_gift, false)
+         GROUP BY 1, 2, 3""",
+    "ml": """
+        SELECT o.brand AS marca, NULLIF(i.seller_sku, '') AS sku,
+               COALESCE(NULLIF(i.seller_sku, ''), i.item_id) AS chave,
+               MAX(i.title) AS nome, SUM(i.quantity * i.unit_price) AS receita
+          FROM silver.stg_ml_order_items i
+          JOIN silver.stg_ml_orders o ON o.order_id = i.order_id AND o.brand = i.brand
+         WHERE o.status = 'paid' AND o.brand = ANY(:marcas)
+           AND o.date_created >= :ini AND o.date_created < :fim_excl
+         GROUP BY 1, 2, 3""",
+    "shopee": """
+        SELECT o.brand AS marca, NULLIF(i.sku, '') AS sku,
+               COALESCE(NULLIF(i.sku, ''), i.item_id) AS chave,
+               MAX(i.item_name) AS nome, SUM(i.quantity * i.discounted_price) AS receita
+          FROM silver.stg_shopee_order_items i
+          JOIN silver.stg_shopee_orders o ON o.order_sn = i.order_sn
+         WHERE o.order_status NOT IN ('cancelled', 'unpaid')
+           AND COALESCE(i.is_freebie, false) = false
+           AND o.brand = ANY(:marcas) AND o.created_date_brt BETWEEN :ini AND :fim
+         GROUP BY 1, 2, 3""",
+}
+
+# Pares product_id <-> seller SKU do TikTok: o TikTok agrupa no mesmo produto o
+# codigo antigo e o novo do mesmo item e, na Lescent, os volumes da mesma
+# fragrancia. E' isso que junta "o mesmo produto" entre canais.
+SQL_APELIDOS = """
+    SELECT DISTINCT li.product_id AS produto, li.seller_sku AS sku
+      FROM silver.stg_tiktok_line_items li
+      JOIN silver.stg_tiktok_orders o ON o.order_id = li.order_id
+     WHERE o.brand = ANY(:marcas) AND o.paid_at >= :ini_apelidos AND o.paid_at < :fim_excl
+       AND NULLIF(li.seller_sku, '') IS NOT NULL"""
+
+_NAO_ALFANUM = re.compile(r"[^A-Z0-9]")
+_V_ANTES_DE_NUMERO = re.compile(r"^V(?=\d)")
+
+
+def normalizar_sku(sku: Optional[str]) -> Optional[str]:
+    """'v10008' -> '10008', 'kit-130' -> 'KIT130'. Vazio -> None."""
+    s = _V_ANTES_DE_NUMERO.sub("", _NAO_ALFANUM.sub("", (sku or "").upper()))
+    return s or None
+
+
+class _Grupos:
+    """Uniao de SKUs normalizados (union-find): o mesmo produto entre canais."""
+
+    def __init__(self) -> None:
+        self.pai: dict[str, str] = {}
+
+    def raiz(self, s: str) -> str:
+        self.pai.setdefault(s, s)
+        while self.pai[s] != s:
+            self.pai[s] = self.pai[self.pai[s]]
+            s = self.pai[s]
+        return s
+
+    def unir(self, a: str, b: str) -> None:
+        ra, rb = self.raiz(a), self.raiz(b)
+        if ra != rb:
+            self.pai[max(ra, rb)] = min(ra, rb)
+
+
+def montar_comparacao(linhas: dict[str, list[dict]], apelidos: list[dict], marcas: list[str]) -> list[MarcaComparada]:
+    """Regra pura (testavel sem banco): linhas por canal -> marcas comparadas."""
+    grupos = _Grupos()
+    por_produto_tk: dict[str, set[str]] = {}
+    for a in apelidos:
+        s = normalizar_sku(a.get("sku"))
+        if s:
+            por_produto_tk.setdefault(str(a["produto"]), set()).add(s)
+    for skus in por_produto_tk.values():
+        primeiro, *resto = sorted(skus)
+        for s in resto:
+            grupos.unir(primeiro, s)
+
+    blocos = []
+    for marca in marcas:
+        total: dict[str, float] = {}
+        com_sku: dict[str, float] = {}
+        # grupo -> canal -> {receita, melhor: (receita, chave)}
+        prod: dict[str, dict[str, dict]] = {}
+        nomes: dict[str, tuple[float, str]] = {}
+        for canal in CANAIS:
+            for l in linhas.get(canal, []):
+                if l["marca"] != marca:
+                    continue
+                receita = _num(l["receita"])
+                if receita <= 0:
+                    continue
+                total[canal] = total.get(canal, 0.0) + receita
+                s = normalizar_sku(l.get("sku"))
+                if s is None:
+                    continue  # sem seller SKU nao casa com outro canal: so' entra na cobertura
+                com_sku[canal] = com_sku.get(canal, 0.0) + receita
+                g = grupos.raiz(s)
+                c = prod.setdefault(g, {}).setdefault(canal, {"receita": 0.0, "melhor": (0.0, "")})
+                c["receita"] += receita
+                if receita > c["melhor"][0]:
+                    c["melhor"] = (receita, str(l["chave"]))
+                nome = (l.get("nome") or "").strip()
+                if nome and receita > nomes.get(g, (0.0, ""))[0]:
+                    nomes[g] = (receita, nome)
+        canais_marca = [c for c in CANAIS if total.get(c, 0) > 0]
+        if not canais_marca:
+            continue
+        produtos = []
+        for g, por_canal in prod.items():
+            celulas = [CelulaCanal(canal=c, fatia=v["receita"] / total[c], sku=v["melhor"][1])
+                       for c, v in por_canal.items()]
+            nome = nomes.get(g, (0.0, g))[1]
+            produtos.append(ProdutoComparado(
+                chave=g, produto=nome, kit=eh_kit(nome),
+                celulas=sorted(celulas, key=lambda x: CANAIS.index(x.canal)),
+            ))
+        produtos.sort(key=lambda p: (-max(x.fatia for x in p.celulas), -sum(x.fatia for x in p.celulas), p.chave))
+        blocos.append(MarcaComparada(
+            marca=marca,
+            canais=[CanalComparado(canal=c, cobertura=com_sku.get(c, 0.0) / total[c]) for c in canais_marca],
+            produtos=produtos[:TOP_COMPARAR],
+        ))
+    return blocos
+
+
+def get_comparar_canais(
+    consultar: Consultar, inicio: date, fim: date, marcas: Optional[list[str]],
+) -> CompararCanaisResponse:
+    escopo = [m for m in (marcas or BRANDS_IN_SCOPE) if m in BRANDS_IN_SCOPE]
+    params = {"marcas": escopo, "ini": inicio, "fim": fim, "fim_excl": fim + timedelta(days=1),
+              "ini_apelidos": fim - timedelta(days=DIAS_APELIDOS)}
+    tarefas = [(c, SQL_COMPARAR[c]) for c in CANAIS] + [("apelidos", SQL_APELIDOS)]
+    if not escopo:
+        return CompararCanaisResponse(inicio=inicio, fim=fim, marcas=[])
+    # Uma consulta por canal + apelidos, em paralelo: a resposta espera a mais lenta.
+    with ThreadPoolExecutor(max_workers=len(tarefas)) as pool:
+        respostas = list(pool.map(lambda t: consultar(t[1], params), tarefas))
+    por_nome = {nome: r for (nome, _), r in zip(tarefas, respostas)}
+    apelidos = por_nome.pop("apelidos")
+    return CompararCanaisResponse(inicio=inicio, fim=fim, marcas=montar_comparacao(por_nome, apelidos, escopo))

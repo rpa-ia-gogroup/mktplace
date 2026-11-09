@@ -175,3 +175,115 @@ export function eixoTicket(valores: readonly (number | null)[]): { domain: [numb
   const ticks = [0, 1, 2, 3, 4].map((k) => lo + k * passo);
   return { domain: [lo, ticks[4]], ticks };
 }
+
+// ---------------------------------------------------------------------------
+// COMPARAR-CANAIS (pedido da operacao, 09/11/2026): o mesmo produto em cada
+// canal, pela FATIA da receita da marca no canal. Regras da spec do Prumo.
+// ---------------------------------------------------------------------------
+export interface CelulaCanal {
+  canal: CanalTop;
+  /** Receita do produto / receita da marca neste canal (0-1). Nunca R$. */
+  fatia: number;
+  /** Codigo do anuncio para o detalhe do canal. */
+  sku: string;
+}
+export interface ProdutoComparado {
+  chave: string;
+  produto: string;
+  kit: boolean;
+  /** So' os canais onde vende: ausencia nunca vira 0. */
+  celulas: CelulaCanal[];
+}
+export interface CanalComparado {
+  canal: CanalTop;
+  /** Parte da receita do canal com seller SKU (casavel), 0-1. */
+  cobertura: number;
+}
+export interface MarcaComparada {
+  marca: string;
+  canais: CanalComparado[];
+  produtos: ProdutoComparado[];
+}
+export interface CompararCanaisResponse {
+  inicio: string;
+  fim: string;
+  marcas: MarcaComparada[];
+}
+
+export function buscarComparacao(q: URLSearchParams, signal: AbortSignal) {
+  return pedir<CompararCanaisResponse>(`/api/v1/gerencial/top-produtos/comparar-canais?${q}`, signal);
+}
+
+/** Selo so' acima do piso (produto pequeno nao gera ruido), 2x e 3 p.p. */
+export const PISO_FATIA = 0.03;
+export const VEZES_FORTE = 2;
+export const DIFERENCA_MINIMA = 0.03;
+/** Abaixo disso a cobertura do SKU vira chip visivel ("cobertura parcial"). */
+export const COBERTURA_MINIMA = 0.9;
+
+export const CANAL_CURTO: Record<CanalTop, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
+const PREP: Record<CanalTop, string> = { tiktok: "no", ml: "no", shopee: "na" };
+
+export type Selo =
+  | { tipo: "forte"; canal: CanalTop; diferenca: number }
+  | { tipo: "sem_venda"; canal: CanalTop; forte: CanalTop };
+
+/** "15%", "2,3%", "<0,1%" — nunca "0%" para quem vendeu. */
+export function fmtFatia(f: number): string {
+  const n = f * 100;
+  const t = n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  return n > 0 && t === "0" ? "<0,1%" : `${t}%`;
+}
+
+/** "no ML", "na Shopee", "no TikTok". */
+export const noCanal = (c: CanalTop) => `${PREP[c]} ${CANAL_CURTO[c]}`;
+
+/**
+ * - "sem venda no Y": fatia >= 3% em algum canal e nenhuma venda num outro
+ *   canal que a marca tem (vem antes: e' a maior oportunidade);
+ * - "forte no X": a maior fatia e' >= 2x a maior dos outros canais, com
+ *   diferenca >= 3 p.p. e ela mesma >= 3%.
+ */
+export function seloDoProduto(p: ProdutoComparado, canaisMarca: readonly CanalTop[]): Selo | null {
+  const topo = [...p.celulas].sort((a, b) => b.fatia - a.fatia)[0];
+  if (!topo || topo.fatia < PISO_FATIA) return null;
+  const vende = new Set(p.celulas.map((c) => c.canal));
+  const ausente = canaisMarca.find((c) => !vende.has(c));
+  if (ausente) return { tipo: "sem_venda", canal: ausente, forte: topo.canal };
+  const maxOutro = Math.max(0, ...p.celulas.filter((c) => c.canal !== topo.canal).map((c) => c.fatia));
+  const diferenca = topo.fatia - maxOutro;
+  return topo.fatia >= VEZES_FORTE * maxOutro && diferenca >= DIFERENCA_MINIMA
+    ? { tipo: "forte", canal: topo.canal, diferenca }
+    : null;
+}
+
+export function textoDoSelo(s: Selo): string {
+  return s.tipo === "forte" ? `forte ${noCanal(s.canal)}` : `sem venda ${noCanal(s.canal)}`;
+}
+
+/**
+ * Ate' 3 achados por marca: "sem venda" primeiro (pela maior fatia), depois
+ * "forte" pela diferenca em p.p. Percentual primeiro:
+ * "Kit X: 15% da receita no ML · 2% na Shopee · sem venda no TikTok".
+ */
+export function achadosDaMarca(m: MarcaComparada, max = 3): { chave: string; texto: string }[] {
+  const canais = m.canais.map((c) => c.canal);
+  const comSelo = m.produtos
+    .map((p) => ({ p, s: seloDoProduto(p, canais) }))
+    .filter((x): x is { p: ProdutoComparado; s: Selo } => x.s !== null);
+  const fatiaMax = (p: ProdutoComparado) => Math.max(...p.celulas.map((c) => c.fatia));
+  const ordem = [
+    ...comSelo.filter((x) => x.s.tipo === "sem_venda").sort((a, b) => fatiaMax(b.p) - fatiaMax(a.p)),
+    ...comSelo
+      .filter((x) => x.s.tipo === "forte")
+      .sort((a, b) => (b.s.tipo === "forte" ? b.s.diferenca : 0) - (a.s.tipo === "forte" ? a.s.diferenca : 0)),
+  ].slice(0, max);
+  return ordem.map(({ p }) => {
+    const topo = [...p.celulas].sort((a, b) => b.fatia - a.fatia)[0];
+    const fatia = new Map(p.celulas.map((c) => [c.canal, c.fatia]));
+    const resto = canais
+      .filter((c) => c !== topo.canal)
+      .map((c) => (fatia.has(c) ? `${fmtFatia(fatia.get(c)!)} ${noCanal(c)}` : `sem venda ${noCanal(c)}`));
+    return { chave: p.chave, texto: [`${p.produto}: ${fmtFatia(topo.fatia)} da receita ${noCanal(topo.canal)}`, ...resto].join(" · ") };
+  });
+}

@@ -69,3 +69,60 @@ test("eixoTicket: preco constante ganha folga redonda; serie que varia fica no a
   assert.deepEqual(eixoTicket([80, 120]), { domain: ["auto", "auto"] });
   assert.deepEqual(eixoTicket([null, null]), { domain: ["auto", "auto"] });
 });
+
+// COMPARAR-CANAIS: regras do selo, achados e celulas (spec do Prumo).
+import { readFileSync } from "node:fs";
+import {
+  achadosDaMarca, fmtFatia, seloDoProduto, type CanalTop, type MarcaComparada, type ProdutoComparado,
+} from "../src/lib/gerencial/top-produtos.ts";
+
+const prod = (chave: string, f: Partial<Record<CanalTop, number>>): ProdutoComparado => ({
+  chave, produto: `Kit ${chave}`, kit: true,
+  celulas: Object.entries(f).map(([canal, fatia]) => ({ canal: canal as CanalTop, fatia: fatia!, sku: chave })),
+});
+const TRES: CanalTop[] = ["tiktok", "ml", "shopee"];
+
+test("comparar: selo forte exige 2x, 3 p.p. e piso de 3%", () => {
+  assert.deepEqual(seloDoProduto(prod("a", { ml: 0.15, shopee: 0.02, tiktok: 0.01 }), TRES)?.tipo, "forte");
+  assert.equal(seloDoProduto(prod("b", { ml: 0.15, shopee: 0.08, tiktok: 0.01 }), TRES), null, "menos de 2x");
+  assert.equal(seloDoProduto(prod("c", { ml: 0.05, shopee: 0.025, tiktok: 0.01 }), TRES), null, "so' 2,5 p.p.");
+  assert.equal(seloDoProduto(prod("d", { ml: 0.029, shopee: 0.001, tiktok: 0.001 }), TRES), null, "abaixo de 3%");
+});
+
+test("comparar: sem venda vem antes e so' com 3% em algum canal", () => {
+  assert.deepEqual(seloDoProduto(prod("e", { tiktok: 0.09, shopee: 0.08 }), TRES), { tipo: "sem_venda", canal: "ml", forte: "tiktok" });
+  assert.equal(seloDoProduto(prod("f", { tiktok: 0.02 }), TRES), null);
+  // Canal que a marca nao tem nao vira "sem venda".
+  assert.equal(seloDoProduto(prod("g", { tiktok: 0.09, ml: 0.08 }), ["tiktok", "ml"]), null);
+});
+
+test("comparar: achados — sem venda primeiro, depois maior diferenca; ate' 3; ausencia nunca e' 0%", () => {
+  const m: MarcaComparada = {
+    marca: "x", canais: TRES.map((canal) => ({ canal, cobertura: 1 })),
+    produtos: [
+      prod("forte1", { ml: 0.1, shopee: 0.02, tiktok: 0.01 }),
+      prod("forte2", { ml: 0.2, shopee: 0.02, tiktok: 0.01 }),
+      prod("sem", { tiktok: 0.09, shopee: 0.08 }),
+      prod("forte3", { shopee: 0.07, ml: 0.01, tiktok: 0.01 }),
+    ],
+  };
+  const a = achadosDaMarca(m);
+  assert.deepEqual(a.map((x) => x.chave), ["sem", "forte2", "forte1"]);
+  assert.equal(a[0].texto, "Kit sem: 9% da receita no TikTok · sem venda no ML · 8% na Shopee");
+  assert.ok(!a.some((x) => / 0% /.test(x.texto)));
+  assert.deepEqual(achadosDaMarca({ ...m, produtos: [prod("z", { ml: 0.05, shopee: 0.04, tiktok: 0.03 })] }), []);
+});
+
+test("comparar: fatia formatada sem zero falso", () => {
+  assert.equal(fmtFatia(0.15), "15%");
+  assert.equal(fmtFatia(0.0233), "2,3%");
+  assert.equal(fmtFatia(0.0001), "<0,1%");
+});
+
+test("comparar: tabela so' com colunas dos canais da marca e traco para ausencia", () => {
+  const src = readFileSync(new URL("../src/components/gerencial/TopProdutosComparar.tsx", import.meta.url), "utf8");
+  assert.match(src, /const canais = m\.canais\.map/, "colunas vem dos canais da marca");
+  assert.match(src, /f === undefined[\s\S]*?—[\s\S]*?sem venda/, "ausencia e' traco com o motivo");
+  const card = readFileSync(new URL("../src/components/gerencial/TopProdutosMarca.tsx", import.meta.url), "utf8");
+  assert.match(card, /canal === "todos" \? modoEscolhido : "ranking"/, "um canal so' volta ao ranking");
+});
