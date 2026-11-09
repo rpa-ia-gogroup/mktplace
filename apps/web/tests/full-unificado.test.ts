@@ -361,6 +361,12 @@ test("cartao de impacto: % no valor, R$ na comparacao, por canal; ausencia nunca
   // pct ausente: o R$ vira o valor; perda ausente: "—" sem preco
   const semPct = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null } as CanalImpactoOk };
   assert.equal(sp(kpiImpacto("ml", semPct).valor), "R$ 13,3 mil/dia");
+  // % nulo nao tem cara de erro: diz o motivo (janela de faturamento incompleta) com os dias
+  const faltouOntem = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null, gmv_full_dia: null, dias_gmv: 27 } as CanalImpactoOk };
+  assert.equal(kpiImpacto("ml", faltouOntem).comparacao, "% do faturamento: só 27 de 28 dias de faturamento Full na janela");
+  const semGmv = { ...IMPACTO, ml: { ...IMPACTO.ml, pct_gmv_full: null, gmv_full_dia: null, dias_gmv: 0 } as CanalImpactoOk };
+  assert.equal(kpiImpacto("ml", semGmv).comparacao, "% do faturamento: sem faturamento Full na janela da foto");
+  assert.ok(!kpiImpacto("ml", faltouOntem).comparacao.includes("indisponível"));
   const semPerda = { ...IMPACTO, ml: { ...IMPACTO.ml, perda_dia: null } as CanalImpactoOk };
   assert.deepEqual(kpiImpacto("ml", semPerda), { valor: "—", comparacao: "sem preço" });
   for (const c of [kpiImpacto("ml", null), kpiImpacto("shopee", soML, 18), kpiImpacto("ml", semPerda)]) {

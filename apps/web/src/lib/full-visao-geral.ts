@@ -473,8 +473,21 @@ export function kpiImpacto(
   const v = perdaDestaque(canal, c);
   if (v === null) return { valor: "—", comparacao: "sem preço" };
   const p = pctDestaque(canal, c);
-  if (p === null) return { valor: `${fmtReais(v)}/dia`, comparacao: "% do faturamento indisponível" };
+  // % nulo = faturamento Full da janela incompleto (a API so' calcula com os 28 dias): diz quantos.
+  if (p === null) return { valor: `${fmtReais(v)}/dia`, comparacao: motivoSemPct(c.dias_gmv, impacto!.janela_gmv_dias) };
   return { valor: fmtPct(p), comparacao: canal === "ml" ? `${fmtReais(v)}/dia do faturamento Full` : `${fmtReais(v)}/dia · só quem para a venda` };
+}
+
+/**
+ * Motivo curto do % ausente no cartao de impacto. A API so' divide com a
+ * janela inteira de faturamento Full (28 dias antes da foto); faltando dia, o
+ * % ficaria inflado. Ex.: foto do ML de hoje com o faturamento de ontem ainda
+ * nao carregado (27 de 28).
+ */
+export function motivoSemPct(dias: number, janela: number): string {
+  return dias <= 0
+    ? "% do faturamento: sem faturamento Full na janela da foto"
+    : `% do faturamento: só ${dias} de ${janela} dias de faturamento Full na janela`;
 }
 
 /** Cartao "Param a venda · Shopee": % das rupturas sem estoque do vendedor; "x de y" no `detalhe`. */
