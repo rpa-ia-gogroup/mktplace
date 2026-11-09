@@ -113,30 +113,44 @@ function linha(over: Partial<MonitoramentoPrecoRow> = {}): MonitoramentoPrecoRow
 }
 
 // ---------------------------------------------------------------------------
-// 1 a 4 — capacidade fail-closed
+// 1 a 4 — capacidade: ligada por padrao, a env so' DESLIGA (T-0071)
 // ---------------------------------------------------------------------------
 
-test("1. flags ausentes resolvem false e so' o ML fica disponivel", () => {
+const SO_SHOPEE_DESLIGADA = { NEXT_PUBLIC_PMA_SHOPEE_ENABLED: "false" };
+const SO_TIKTOK_DESLIGADO = { NEXT_PUBLIC_PMA_TIKTOK_ENABLED: "false" };
+const TUDO_DESLIGADO = { ...SO_SHOPEE_DESLIGADA, ...SO_TIKTOK_DESLIGADO };
+
+test("1. flags ausentes: os tres canais ficam disponiveis (decisao 09/11/2026)", () => {
   semFlags(() => {
     assert.equal(canalHabilitado("ml"), true);
-    assert.equal(canalHabilitado("shopee"), false);
-    assert.equal(canalHabilitado("tiktok"), false);
-    assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml"]);
+    assert.equal(canalHabilitado("shopee"), true);
+    assert.equal(canalHabilitado("tiktok"), true);
+    assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml", "shopee", "tiktok"]);
   });
 });
 
-test("2. canal desativado nao aparece no seletor", () => {
-  comFlags({ NEXT_PUBLIC_PMA_SHOPEE_ENABLED: "true" }, () => {
+test("2. canal desligado com `false` nao aparece no seletor", () => {
+  comFlags(SO_SHOPEE_DESLIGADA, () => {
+    assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml", "tiktok"]);
+  });
+  comFlags(SO_TIKTOK_DESLIGADO, () => {
     assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml", "shopee"]);
   });
+  comFlags(TUDO_DESLIGADO, () => {
+    assert.deepEqual(canaisDisponiveis().map((c) => c.id), ["ml"]);
+    assert.equal(canalHabilitado("ml"), true, "o ML nao tem flag e nunca desliga");
+  });
 });
 
-test("3. so' a string exata `true` liga o canal", () => {
-  for (const valor of ["1", "yes", "True", "TRUE", "", "false"]) {
+test("3. so' a string exata `false` desliga o canal", () => {
+  for (const valor of ["true", "1", "yes", "True", ""]) {
     comFlags({ NEXT_PUBLIC_PMA_SHOPEE_ENABLED: valor }, () => {
-      assert.equal(canalHabilitado("shopee"), false, `ligou com "${valor}"`);
+      assert.equal(canalHabilitado("shopee"), true, `desligou com "${valor}"`);
     });
   }
+  comFlags(SO_SHOPEE_DESLIGADA, () => {
+    assert.equal(canalHabilitado("shopee"), false);
+  });
 });
 
 test("4. o seletor so' e' renderizado com mais de um canal disponivel", async () => {
@@ -545,7 +559,7 @@ test("27. o Mercado Livre continua o padrao e sem controles de canal", async () 
     "o ML tem de continuar selecionado por padrao");
   assert.equal(canalLabel("ml"), "Mercado Livre");
   // Com a capacidade desligada, o seletor nao existe e a tela e' a de antes.
-  semFlags(() => {
+  comFlags(TUDO_DESLIGADO, () => {
     assert.equal(canaisDisponiveis().length, 1);
   });
   // Os controles exclusivos ficam atras da capacidade do canal.
@@ -895,11 +909,11 @@ test("T67-2. link direto: ?canal= de canal habilitado e' lido da URL", async () 
 });
 
 test("T67-3. canal desabilitado ou invalido na URL cai para ML", () => {
-  semFlags(() => {
+  comFlags(TUDO_DESLIGADO, () => {
     assert.equal(canalDaUrl("?canal=shopee"), "ml", "flag desligada nao abre o canal pela URL");
     assert.equal(canalDaUrl("?canal=tiktok"), "ml");
   });
-  comFlags({ NEXT_PUBLIC_PMA_SHOPEE_ENABLED: "true" }, () => {
+  comFlags(SO_TIKTOK_DESLIGADO, () => {
     assert.equal(canalDaUrl("?canal=shopee"), "shopee");
     assert.equal(canalDaUrl("?canal=tiktok"), "ml", "so' a flag do proprio canal conta");
   });
@@ -907,6 +921,14 @@ test("T67-3. canal desabilitado ou invalido na URL cai para ML", () => {
     for (const lixo of ["?canal=SHOPEE", "?canal=amazon", "?canal=", "?canal=<b>x</b>"]) {
       assert.equal(canalDaUrl(lixo), "ml", `"${lixo}" nao pode virar canal`);
     }
+  });
+});
+
+test("T71-1. sem env, o link direto ?canal= abre Shopee e TikTok", () => {
+  semFlags(() => {
+    assert.equal(canalDaUrl("?canal=shopee"), "shopee");
+    assert.equal(canalDaUrl("?canal=tiktok"), "tiktok");
+    assert.equal(canalDaUrl("?canal=SHOPEE"), "ml", "lixo continua caindo para o ML");
   });
 });
 
