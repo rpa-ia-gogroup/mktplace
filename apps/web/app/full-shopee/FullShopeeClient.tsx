@@ -194,7 +194,7 @@ function FullShopeeInner() {
           className={CONTROLE}>
           <option value="">Todas as marcas cobertas</option>
           {MARCAS.map((m) => (
-            <option key={m} value={m}>{m[0].toUpperCase() + m.slice(1)}</option>
+            <option key={m} value={m}>{brandLabel(m)}</option>
           ))}
         </select>
       </div>
@@ -204,7 +204,7 @@ function FullShopeeInner() {
           className={CONTROLE}>
           <option value="">Todas as contas cobertas</option>
           {CONTAS.map((c) => (
-            <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>
+            <option key={c} value={c}>{brandLabel(c)}</option>
           ))}
         </select>
       </div>
