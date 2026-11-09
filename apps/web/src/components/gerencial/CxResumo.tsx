@@ -36,6 +36,7 @@ import {
   hrefCx,
   resumoCxGerencial,
   type IndicadorCx,
+  type ComparacaoCard,
   type ResultadoCx,
   type ResumoCx,
 } from "@/lib/cx";
@@ -65,16 +66,39 @@ export function deltaCancelamento(r: ResumoCx): { delta?: ReactNode; antes?: Rea
   };
 }
 
+/** O que o card recebe da comparacao: pilula, "antes" (ou a linha neutra) e o mini grafico. */
+export interface RodapeCard {
+  delta?: ReactNode;
+  antes?: ReactNode;
+  serie?: number[];
+  granularidade?: ComparacaoCard["granularidade"];
+}
+
+/** A pilula de um delta da API-3; menos de 0,05 e' estavel, sem cor de juizo. */
+export function pilula(c: ComparacaoCard): ReactNode {
+  if (c.delta == null) return undefined;
+  const estavel = Math.abs(c.delta) < 0.05;
+  return <DeltaBadge pct={estavel ? 0 : c.delta} unidade={c.unidade} tone={estavel ? "neutral" : c.tone} />;
+}
+
 /**
  * Rodape de comparacao do card: a pilula + "antes" quando ha' periodo anterior;
- * sem ele, a linha neutra da API-3 ("comparação a partir de dd/mm").
- * Nunca vermelho, nunca zero.
+ * sem ele, a linha neutra da API-3 ("comparação a partir de dd/mm"); e o mini
+ * grafico quando ha' serie real. Nunca vermelho, nunca zero. `emReais`: o
+ * reembolso em R$ (card da Gerencial), com o delta em %.
  */
-export function rodapeComparacao(r: ResumoCx, i: IndicadorCx): { delta?: ReactNode; antes?: ReactNode } {
-  const c = i === "cancelamento" ? deltaCancelamento(r) : {};
+export function rodapeComparacao(r: ResumoCx, i: IndicadorCx, emReais = false): RodapeCard {
+  const comp = emReais ? r.comparacaoReembolsoReais : r.comparacao[i];
+  const grafico = comp?.serie ? { serie: comp.serie, granularidade: comp.granularidade } : {};
+  // cancelamento: com sem_anterior da API (faltou loja no anterior), vale a regra geral: sem pilula, so' a linha neutra
+  const c =
+    i === "cancelamento"
+      ? r.semAnterior.cancelamento ? {} : deltaCancelamento(r)
+      : comp?.delta != null ? { delta: pilula(comp), antes: comp.antes } : {};
+  if (c.delta) return { ...c, ...grafico };
   // sem numero no card ("—"), falar de comparacao e' ruido: o motivo fica no ⓘ
   const sem = r.totais[i] == null ? undefined : r.semAnterior[i];
-  return c.delta ? c : sem ? { antes: <LinhaSemComparacao {...sem} /> } : {};
+  return { ...(sem ? { antes: <LinhaSemComparacao {...sem} /> } : {}), ...grafico };
 }
 
 /** A linha neutra, com o texto longo no title e para o leitor de tela. */
@@ -92,11 +116,16 @@ export function LinhaSemComparacao({ texto, detalhe }: { texto: string; detalhe:
  * `dias`: janela da comparacao (a Gerencial usa sempre 30; a aba CX, o filtro).
  */
 export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] {
+  // API-3: com anterior, como a seta compara; sem ele, o motivo da API; API antiga, o texto de antes
+  const comparacao = (semApi: string) =>
+    r.comparacao[i]?.delta != null
+      ? `A seta compara com os ${dias} dias anteriores, em pontos percentuais; ${i === "resposta" ? "cair" : "subir"} é pior.`
+      : r.semAnterior[i]?.detalhe ?? semApi;
   if (i === "contactRate") {
     return [
       `${AJUDA_CX.contactRate} Conversas ÷ pedidos.`,
       r.semChat.length ? `Sem dado de chat, fora da conta: ${r.semChat.join(", ")}.` : "",
-      SEM_HISTORICO_CHAT,
+      comparacao(SEM_HISTORICO_CHAT),
     ].filter(Boolean);
   }
   if (i === "resposta") {
@@ -108,7 +137,7 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] 
           ? "O card é a média simples das lojas: nem toda loja tem as conversas medidas para ponderar."
           : "",
       r.respostaMeta ? `Na Saúde da Conta, ${r.respostaMeta} (meta da própria Shopee).` : "",
-      "Aqui cair é pior. Sem comparação ainda com o período anterior.",
+      comparacao("Aqui cair é pior. Sem comparação ainda com o período anterior."),
     ].filter(Boolean);
   }
   if (i === "cancelamento") {
@@ -122,7 +151,7 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] 
   }
   return [
     "Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos.",
-    SEM_HISTORICO_DEVOLUCAO,
+    comparacao(SEM_HISTORICO_DEVOLUCAO),
   ];
 }
 
@@ -210,7 +239,7 @@ const IDENT: Record<IndicadorCx, { identidade: IdentidadeKpi; icone: LucideIcon 
 function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
   // CARDS-KPI (09/11): a cor de identidade da /cx; a resposta em kpi-ticket para nao repetir o contact rate ao lado
 
-  const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode, extra: { delta?: ReactNode; antes?: ReactNode } = {}) => (
+  const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode, extra: RodapeCard = {}) => (
     <button
       type="button"
       onClick={() => abrir(i)}
@@ -224,6 +253,8 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
         icone={IDENT[i].icone}
         delta={extra.delta}
         antes={extra.antes}
+        serie={extra.serie}
+        granularidade={extra.granularidade}
         // Rotulo em UMA linha (truncate): um nome que quebre empurraria o valor
         // para baixo dos vizinhos. O nome inteiro fica no title, no aria-label
         // do botao e no ⓘ.
@@ -251,7 +282,7 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
       {card("contactRate", SPAN_TOPO, r.contactRate, null, rodapeComparacao(r, "contactRate"))}
       {card("resposta", SPAN_TOPO, r.resposta, null, rodapeComparacao(r, "resposta"))}
       {card("cancelamento", SPAN_TOPO, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
-      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null, rodapeComparacao(r, "reembolso"))}
+      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null, rodapeComparacao(r, "reembolso", true))}
       <div className={`${CARD} ${SPAN_BASE}`}>
         <KpiTile
           variante="gerencial"

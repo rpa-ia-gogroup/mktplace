@@ -6,7 +6,7 @@
  * e reviews do Judge.me por produto. Funcoes puras testadas em node --test; o
  * componente `app/cx/CxSite.tsx` so' desenha.
  */
-import type { FiltrosCx, SemComparacao } from "./cx.ts";
+import type { ComparacaoCard, FiltrosCx, SemComparacao } from "./cx.ts";
 import { fmtBrlCurto, fmtNumCurto } from "./formatters.ts";
 import { MOTIVO_TIMEOUT, TIMEOUT_API_MS, formatarInstante } from "./performance-contas.ts";
 
@@ -32,6 +32,12 @@ export interface NpsMarca {
 }
 
 export interface BlocoNps extends BlocoBase {
+  /** API-3: periodo anterior e serie diaria (contagens: o front soma por semana). */
+  nps_anterior?: number | null;
+  promotores_pct_anterior?: number | null;
+  detratores_pct_anterior?: number | null;
+  respostas_anterior?: number | null;
+  serie?: { dia: string; respostas: number | null; promotores: number | null; detratores: number | null; nps: number | null }[] | null;
   respostas?: number | null;
   nps?: number | null;
   promotores_pct?: number | null;
@@ -53,6 +59,12 @@ export interface ReenvioMarca {
 }
 
 export interface BlocoReenvio extends BlocoBase {
+  /** API-3: safra anterior do mesmo tamanho e serie por safra. */
+  safra_anterior_inicio?: string | null;
+  safra_anterior_fim?: string | null;
+  taxa_reenvio_pct_anterior?: number | null;
+  taxa_reembolso_pct_anterior?: number | null;
+  serie?: { safra: string; taxa_reenvio_pct: number | null; taxa_reembolso_pct: number | null }[] | null;
   safra_inicio: string;
   safra_fim: string;
   reenvios?: number | null;
@@ -78,6 +90,10 @@ export interface ReviewsProduto extends NotaAgregada {
 }
 
 export interface BlocoReviews extends BlocoBase {
+  /** API-3: periodo anterior e serie diaria (contagens: o front soma por semana). */
+  reviews_anterior?: number | null;
+  baixas_pct_anterior?: number | null;
+  serie?: { dia: string; reviews: number | null; baixas: number | null; baixas_pct: number | null }[] | null;
   ultima_review_em?: string | null;
   reviews?: number | null;
   media?: number | null;
@@ -222,6 +238,8 @@ export function avisoRecorte(dias: number): string | null {
 }
 
 export interface TileSite {
+  /** API-3: delta, "antes" e serie; ausente = sem pilula e sem grafico. */
+  comp?: ComparacaoCard | null;
   rotulo: string;
   valor: string;
   comparacao: string;
@@ -233,6 +251,47 @@ function motivo(b: BlocoBase, padrao: string): string {
   return b.motivo_indisponivel ?? padrao;
 }
 
+/** Segunda-feira da semana do dia ("2026-11-04" -> "2026-11-02"), em UTC. */
+export function semanaDe(dia: string): string {
+  const t = new Date(`${dia.slice(0, 10)}T00:00:00Z`);
+  t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+  return t.toISOString().slice(0, 10);
+}
+
+/**
+ * Soma as contagens por semana e recalcula a taxa da semana (media de NPS ou de
+ * % nao vale). Um dia sem contagem anula a serie inteira (nunca parcial).
+ */
+export function seriePorSemana<T extends { dia: string }>(
+  serie: T[] | null | undefined,
+  contagens: (p: T) => (number | null)[],
+  taxa: (somas: number[]) => number | null,
+): number[] | null {
+  if (!serie?.length || serie.some((p) => contagens(p).some((v) => v == null))) return null;
+  const semanas = new Map<string, number[]>();
+  for (const p of [...serie].sort((a, b) => a.dia.localeCompare(b.dia))) {
+    const k = semanaDe(p.dia);
+    const c = contagens(p) as number[];
+    semanas.set(k, (semanas.get(k) ?? c.map(() => 0)).map((v, i) => v + c[i]));
+  }
+  const pts = [...semanas.values()].map(taxa);
+  return pts.every((v): v is number => v != null && Number.isFinite(v)) ? pts : null;
+}
+
+function comparacao(
+  atual: number | null | undefined,
+  anterior: number | null | undefined,
+  unidade: ComparacaoCard["unidade"],
+  tone: ComparacaoCard["tone"],
+  antes: (v: number) => string,
+  serie: number[] | null,
+  granularidade: ComparacaoCard["granularidade"],
+): ComparacaoCard | null {
+  const delta = atual != null && anterior != null ? atual - anterior : null;
+  if (delta == null && !serie) return null;
+  return { delta, unidade, tone, antes: delta != null ? `antes ${antes(anterior!)}` : null, serie, granularidade };
+}
+
 export function montarTilesSite(d: CxSiteResponse): TileSite[] {
   const { nps, reenvio_reembolso: rr, reviews: rv } = d;
   const safra = textoSafra(rr.safra_inicio, rr.safra_fim);
@@ -241,12 +300,19 @@ export function montarTilesSite(d: CxSiteResponse): TileSite[] {
     if (rr.estado !== "dado") return { rotulo, valor: "—", comparacao: motivo(rr, "Sem dado."), ajuda, ausente: true };
     const base = `${fmtBrlCurto(valor ?? 0)} em ${fmtNumCurto(qtd ?? 0)} solicitações · ${safra}`;
     if (v == null) return { rotulo, valor: "—", comparacao: rr.motivo_sem_taxa ?? base, ajuda, ausente: true };
-    return { rotulo, valor: pct(v), comparacao: base, ajuda, ausente: false };
+    const chave = rotulo === "Taxa de reenvio" ? "taxa_reenvio_pct" : "taxa_reembolso_pct";
+    const serie = rr.serie?.length && rr.serie.every((p) => p[chave] != null) ? rr.serie.map((p) => p[chave] as number) : null;
+    return {
+      rotulo, valor: pct(v), comparacao: base, ajuda, ausente: false,
+      comp: comparacao(v, rr[`${chave}_anterior`], "pp", "lower_is_better", pct, serie, "month"),
+    };
   };
   return [
     nps.estado === "dado"
       ? {
           rotulo: "NPS do site", valor: npsTexto(nps.nps), ajuda: AJUDA_SITE.nps, ausente: false,
+          comp: comparacao(nps.nps, nps.nps_anterior, "pts", "higher_is_better", npsTexto,
+            seriePorSemana(nps.serie, (p) => [p.promotores, p.detratores, p.respostas], ([pr, de, re]) => (re ? ((pr - de) / re) * 100 : null)), "week"),
           comparacao: `${pct(nps.promotores_pct)} promotores · ${pct(nps.detratores_pct)} detratores · ${fmtNumCurto(nps.respostas ?? 0)} respostas`,
         }
       : { rotulo: "NPS do site", valor: "—", comparacao: motivo(nps, "Sem dado."), ajuda: AJUDA_SITE.nps, ausente: true },
@@ -255,6 +321,8 @@ export function montarTilesSite(d: CxSiteResponse): TileSite[] {
     rv.estado === "dado"
       ? {
           rotulo: "Reviews 1–3 ★", valor: pct(rv.baixas_pct), ajuda: AJUDA_SITE.reviews, ausente: false,
+          comp: comparacao(rv.baixas_pct, rv.baixas_pct_anterior, "pp", "lower_is_better", pct,
+            seriePorSemana(rv.serie, (p) => [p.baixas, p.reviews], ([b, r]) => (r ? (b / r) * 100 : null)), "week"),
           comparacao: `nota média ${nota(rv.media)} · ${fmtNumCurto(rv.reviews ?? 0)} reviews`,
         }
       : { rotulo: "Reviews 1–3 ★", valor: "—", comparacao: motivo(rv, "Sem dado."), ajuda: AJUDA_SITE.reviews, ausente: true },
