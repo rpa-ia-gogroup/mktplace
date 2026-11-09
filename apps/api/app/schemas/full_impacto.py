@@ -48,6 +48,10 @@ class CanalImpactoOk(BaseModel):
     perda_dia_sem_vendedor: Optional[float] = None
     gmv_full_dia: Optional[float] = None
     dias_gmv: int
+    #: Janela do %: os 28 dias que terminam no ultimo dia com faturamento Full
+    #: carregado, ate' a vespera da foto. `None` = sem faturamento na janela.
+    janela_gmv_inicio: Optional[date] = None
+    janela_gmv_fim: Optional[date] = None
     pct_gmv_full: Optional[float] = None
     pct_gmv_full_sem_vendedor: Optional[float] = None
     motivo_pct: Optional[str] = None

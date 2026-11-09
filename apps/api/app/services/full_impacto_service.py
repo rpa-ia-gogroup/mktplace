@@ -31,7 +31,7 @@ R$ NUNCA e' somado entre canais: datas de foto e graos diferentes.
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -119,13 +119,23 @@ SQL_ML_RUPTURAS = text(f"""
        AND i.classificacao_torre = 'RUPTURA_CANDIDATA'
 """)
 
+#: Janela do %: os 28 dias que TERMINAM no ultimo dia com faturamento Full
+#: carregado, ate' a vespera da foto. O Data Mart chega com D-1: com a foto do
+#: dia, a janela "28 dias antes da foto" ficava sem ontem e o % sumia toda
+#: manha. Deslocar a janela nao infla: continuam 28 dias completos ou nada.
 SQL_ML_GMV = text(f"""
-    SELECT brand, SUM(paid_gmv) AS gmv, COUNT(DISTINCT ref_date) AS dias
-      FROM {ML_GMV_TABLE}
+    WITH fim AS (
+        SELECT MAX(ref_date) AS d FROM {ML_GMV_TABLE}
+         WHERE fulfillment_class = 'full'
+           AND brand = ANY(CAST(:brands AS text[]))
+           AND ref_date < :ref_date
+    )
+    SELECT brand, SUM(paid_gmv) AS gmv, COUNT(DISTINCT ref_date) AS dias, MAX(fim.d) AS fim
+      FROM {ML_GMV_TABLE}, fim
      WHERE fulfillment_class = 'full'
        AND brand = ANY(CAST(:brands AS text[]))
-       AND ref_date >= CAST(:ref_date AS date) - {JANELA_GMV_DIAS}
-       AND ref_date < :ref_date
+       AND ref_date > fim.d - {JANELA_GMV_DIAS}
+       AND ref_date <= fim.d
      GROUP BY brand
 """)
 
@@ -155,11 +165,15 @@ SQL_SHOPEE_RUPTURAS = text(f"""
 """)
 
 SQL_SHOPEE_GMV = text(f"""
-    SELECT brand, SUM(gross_gmv) AS gmv, COUNT(DISTINCT ref_date) AS dias
-      FROM {SHOPEE_GMV_TABLE}
+    WITH fim AS (
+        SELECT MAX(ref_date) AS d FROM {SHOPEE_GMV_TABLE}
+         WHERE fbs_class = 'fbs' AND ref_date < :ref_date
+    )
+    SELECT brand, SUM(gross_gmv) AS gmv, COUNT(DISTINCT ref_date) AS dias, MAX(fim.d) AS fim
+      FROM {SHOPEE_GMV_TABLE}, fim
      WHERE fbs_class = 'fbs'
-       AND ref_date >= CAST(:ref_date AS date) - {JANELA_GMV_DIAS}
-       AND ref_date < :ref_date
+       AND ref_date > fim.d - {JANELA_GMV_DIAS}
+       AND ref_date <= fim.d
      GROUP BY brand
 """)
 
@@ -192,6 +206,8 @@ def _montar_canal(canal: str, ref: date, itens: list[dict],
     gmv = {r["brand"]: (_dec(r["gmv"]) or Decimal(0), int(r["dias"])) for r in gmv_rows}
     dias = max((d for _, d in gmv.values()), default=0)
     gmv_ok = dias >= JANELA_GMV_DIAS
+    # Ultimo dia da janela do % (o mesmo para todas as marcas do canal); None = sem faturamento.
+    fim = max((r["fim"] for r in gmv_rows if r.get("fim") is not None), default=None)
 
     def gmv_dia(total: Optional[Decimal]) -> Optional[Decimal]:
         return None if total is None or not gmv_ok else total / JANELA_GMV_DIAS
@@ -235,6 +251,8 @@ def _montar_canal(canal: str, ref: date, itens: list[dict],
         "perda_dia_sem_vendedor": _dinheiro(sem_vend),
         "gmv_full_dia": _dinheiro(base),
         "dias_gmv": dias,
+        "janela_gmv_inicio": fim - timedelta(days=JANELA_GMV_DIAS - 1) if fim else None,
+        "janela_gmv_fim": fim,
         "pct_gmv_full": _fracao(perda, base),
         "pct_gmv_full_sem_vendedor": _fracao(sem_vend, base),
         "motivo_pct": None if gmv_ok else MOTIVO_GMV_INCOMPLETO,

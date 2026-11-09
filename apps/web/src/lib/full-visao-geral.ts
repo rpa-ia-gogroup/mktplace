@@ -402,6 +402,9 @@ export interface CanalImpactoOk {
   perda_dia_sem_vendedor: number | null;
   gmv_full_dia: number | null;
   dias_gmv: number;
+  /** Janela do %: 28 dias ate' o ultimo dia com faturamento Full carregado (ate' a vespera da foto). */
+  janela_gmv_inicio?: string | null;
+  janela_gmv_fim?: string | null;
   pct_gmv_full: number | null;
   pct_gmv_full_sem_vendedor: number | null;
   motivo_pct: string | null;
@@ -466,7 +469,7 @@ function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
  */
 export function kpiImpacto(
   canal: Canal, impacto: ImpactoRuptura | null, semVendedor: number | null = null,
-): { valor: string; comparacao: string } {
+): { valor: string; comparacao: string; detalhe?: string } {
   if (canal === "shopee" && semVendedor === 0) return { valor: fmtPct(0), comparacao: "nenhum, o vendedor tem estoque" };
   const c = impactosOk(impacto).find((x) => x.canal === canal);
   if (!c) return { valor: "—", comparacao: "indisponível agora" };
@@ -474,20 +477,43 @@ export function kpiImpacto(
   if (v === null) return { valor: "—", comparacao: "sem preço" };
   const p = pctDestaque(canal, c);
   // % nulo = faturamento Full da janela incompleto (a API so' calcula com os 28 dias): diz quantos.
-  if (p === null) return { valor: `${fmtReais(v)}/dia`, comparacao: motivoSemPct(c.dias_gmv, impacto!.janela_gmv_dias) };
-  return { valor: fmtPct(p), comparacao: canal === "ml" ? `${fmtReais(v)}/dia do faturamento Full` : `${fmtReais(v)}/dia · só quem para a venda` };
+  if (p === null) {
+    const m = motivoSemPct(c, impacto!.janela_gmv_dias);
+    return { valor: `${fmtReais(v)}/dia`, comparacao: m.texto, detalhe: m.detalhe };
+  }
+  const base = canal === "ml" ? `${fmtReais(v)}/dia do faturamento Full` : `${fmtReais(v)}/dia · só quem para a venda`;
+  return { valor: fmtPct(p), comparacao: base + janelaDeslocada(c) };
 }
 
 /**
- * Motivo curto do % ausente no cartao de impacto. A API so' divide com a
- * janela inteira de faturamento Full (28 dias antes da foto); faltando dia, o
- * % ficaria inflado. Ex.: foto do ML de hoje com o faturamento de ontem ainda
- * nao carregado (27 de 28).
+ * Motivo curto do % ausente no cartao de impacto (cabe em 1 linha); a conta
+ * ("27 de 28 dias…") vai no `detalhe` (title + sr-only). A API so' divide
+ * com a janela inteira de faturamento Full (28 dias ate' o ultimo dia carregado); faltando
+ * dia, o % ficaria inflado. Ex.: foto do ML de hoje com o faturamento de
+ * ontem ainda nao carregado. Janela completa com % nulo e' outro motivo: usa
+ * o da API.
  */
-export function motivoSemPct(dias: number, janela: number): string {
-  return dias <= 0
-    ? "% do faturamento: sem faturamento Full na janela da foto"
-    : `% do faturamento: só ${dias} de ${janela} dias de faturamento Full na janela`;
+export function motivoSemPct(
+  c: Pick<CanalImpactoOk, "dias_gmv" | "motivo_pct">, janela: number,
+): { texto: string; detalhe?: string } {
+  if (c.dias_gmv >= janela) return { texto: c.motivo_pct ?? "% do faturamento indisponível" };
+  const detalhe = `${c.dias_gmv} de ${janela} dias de faturamento Full na janela da foto`;
+  if (c.dias_gmv <= 0) return { texto: "sem faturamento Full para o %", detalhe };
+  const falta = janela - c.dias_gmv;
+  return { texto: falta === 1 ? "falta 1 dia de faturamento Full para o %" : `faltam ${falta} dias de faturamento Full para o %`, detalhe };
+}
+
+/**
+ * " · % de 11/10 a 07/11" quando a janela do % NAO termina na vespera da foto
+ * (faturamento atrasado): o leitor precisa saber que o % e' de outro recorte.
+ * Na vespera, nada: e' o caso de sempre.
+ */
+export function janelaDeslocada(c: Pick<CanalImpactoOk, "ref_date" | "janela_gmv_inicio" | "janela_gmv_fim">): string {
+  if (!c.janela_gmv_inicio || !c.janela_gmv_fim) return "";
+  const vespera = new Date(`${c.ref_date}T00:00:00Z`);
+  vespera.setUTCDate(vespera.getUTCDate() - 1);
+  if (c.janela_gmv_fim === vespera.toISOString().slice(0, 10)) return "";
+  return ` · % de ${diaMes(c.janela_gmv_inicio)} a ${diaMes(c.janela_gmv_fim)}`;
 }
 
 /** Cartao "Param a venda · Shopee": % das rupturas sem estoque do vendedor; "x de y" no `detalhe`. */
@@ -528,7 +554,7 @@ export function impactoPorMarca(canal: Canal, impacto: ImpactoRuptura | null): L
 /** Texto do ⓘ de impacto do canal, com as ressalvas DAQUELE canal (sem preco, preco anunciado). */
 export function dicaImpacto(canal: Canal, impacto: ImpactoRuptura | null): string {
   const c = impactosOk(impacto).find((x) => x.canal === canal);
-  const fim = "% sobre o faturamento Full/dia dos 28 dias antes da foto. R$ não é somado entre canais.";
+  const fim = "% sobre o faturamento Full/dia dos 28 dias que terminam no último dia com faturamento carregado (até a véspera da foto). R$ não é somado entre canais.";
   const semPreco = c && c.sem_preco > 0 ? ` ${c.sem_preco.toLocaleString("pt-BR")} sem preço ficaram fora da soma.` : "";
   if (canal === "ml") {
     const fallback = c && c.preco_fallback > 0 ? ` ${c.preco_fallback.toLocaleString("pt-BR")} usam o preço anunciado (sem venda em 30 dias).` : "";
