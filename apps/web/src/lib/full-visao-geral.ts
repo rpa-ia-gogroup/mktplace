@@ -332,16 +332,18 @@ export function topRupturas(
 }
 
 /**
- * O ranking inteiro (o filtro de curva corta ANTES do top 10): impacto R$/dia
- * desc; a curva desempata (AA > A > B > C > sem curva); depois a venda/dia.
+ * O ranking inteiro (o filtro de curva corta ANTES do top 10), em GRUPOS:
+ * AA, depois A, depois "Demais" (B, C e sem curva JUNTOS -- sem curva e'
+ * desconhecido, nao baixo, entao nunca vai para depois do C). Dentro de cada
+ * grupo: impacto R$/dia desc; desempate pela venda/dia.
  */
 export function rankingRupturas(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null = null): ItemRuptura[] {
   const comImpacto = new Map(impactosOk(impacto).map((c) => [c.canal, c]));
   return oks(canais)
     .flatMap((c) => comImpacto.get(c.canal)?.itens.map((i) => itemDoImpacto(c.canal, i)) ?? c.rupturas)
     .sort((a, b) =>
-      (b.perdaDia ?? -1) - (a.perdaDia ?? -1)
-      || ORDEM_CURVA[curvaDe(a, abc) ?? "sem"] - ORDEM_CURVA[curvaDe(b, abc) ?? "sem"]
+      ORDEM_GRUPO[grupoDe(curvaDe(a, abc))] - ORDEM_GRUPO[grupoDe(curvaDe(b, abc))]
+      || (b.perdaDia ?? -1) - (a.perdaDia ?? -1)
       || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome));
 }
 
@@ -364,9 +366,13 @@ export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; com
 }
 
 /** Descricao do top: o que ordena, "todos do ML" quando a lista e' de um canal so', e se esta' incompleta. */
-export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean): string {
+export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean, comCurva = false): string {
   const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
-  return `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}${unico}${incompleta ? " · lista incompleta" : ""}`;
+  // Com a curva, a ordem e' por grupo (AA, A, demais): a descricao diz isso.
+  const base = comCurva && comImpacto
+    ? "Produtos-chave primeiro (AA, depois A); dentro do grupo, pelo impacto potencial por dia"
+    : `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}`;
+  return `${base}${unico}${incompleta ? " · lista incompleta" : ""}`;
 }
 
 /** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
@@ -690,7 +696,30 @@ export interface CurvaAbc {
   aviso?: string | null;
 }
 
-const ORDEM_CURVA: Record<Curva | "sem", number> = { AA: 0, A: 1, B: 2, C: 3, sem: 4 };
+export type GrupoCurva = "AA" | "A" | "demais";
+const ORDEM_GRUPO: Record<GrupoCurva, number> = { AA: 0, A: 1, demais: 2 };
+
+/** Grupo da fila: AA, A ou "Demais" (B, C e sem curva juntos). */
+export function grupoDe(c: Curva | null): GrupoCurva {
+  return c === "AA" || c === "A" ? c : "demais";
+}
+
+/** Rotulo do cabecalho de grupo na fila ("AA · 3 rupturas"). */
+export function rotuloGrupo(g: GrupoCurva, n: number): string {
+  const nome = g === "demais" ? "Demais (B, C, sem curva)" : g;
+  return `${nome} · ${n.toLocaleString("pt-BR")} ${n === 1 ? "ruptura" : "rupturas"}`;
+}
+
+/** Contagem de cada grupo sobre o ranking inteiro (o cabecalho mostra o total, nao so' o top 10). */
+export function contarGrupos(itens: ItemRuptura[], abc: CurvaAbc | null): Record<GrupoCurva, number> {
+  const n: Record<GrupoCurva, number> = { AA: 0, A: 0, demais: 0 };
+  for (const t of itens) n[grupoDe(curvaDe(t, abc))]++;
+  return n;
+}
+
+export const DICA_ORDEM_FILA =
+  "Ordem: produtos AA, depois A, depois os demais; dentro de cada grupo, pelo impacto potencial por dia. "
+  + "'Sem curva' entra nos demais: não é C.";
 export const CURVAS: Curva[] = ["AA", "A", "B", "C"];
 
 /** Kit nao tem curva propria (ML "Kit110"/"KIT005"; a Shopee tambem traz `is_kit`). */

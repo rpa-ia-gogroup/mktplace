@@ -16,7 +16,7 @@
 
 import Link from "next/link";
 import { PackageX, TrendingDown, Trophy, Warehouse } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import PageContainer from "@/components/layout/PageContainer";
@@ -29,6 +29,7 @@ import KpiTile from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
+import ChipCurva from "@/components/full/ChipCurva";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { fetchCurvaAbc, fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
@@ -58,6 +59,10 @@ import {
   fmtFatia,
   linhaCurvaCanal,
   rankingRupturas,
+  contarGrupos,
+  grupoDe,
+  rotuloGrupo,
+  DICA_ORDEM_FILA,
   type CurvaAbc,
   type FiltroCurva,
   heroiRuptura,
@@ -361,7 +366,10 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
   // Com a leitura em falha o filtro some e a lista fica como antes.
   const filtroAtivo = comCurva ? filtro : "todas";
   const top = topRupturas(canais, 10, impacto, abc, filtroAtivo);
-  const contagem = contarFiltros(rankingRupturas(canais, impacto, abc), abc);
+  const ranking = rankingRupturas(canais, impacto, abc);
+  const contagem = contarFiltros(ranking, abc);
+  // Cabecalho de grupo (AA, A, Demais) so' com o filtro "Todas"; a contagem e' do ranking inteiro.
+  const grupos = comCurva && filtroAtivo === "todas" ? contarGrupos(ranking, abc) : null;
   const comImpacto = impactosOk(impacto).length > 0;
   const mistos = canaisMisturados(top);
   const colunas = colunasMarca(canais, marcas);
@@ -486,7 +494,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
       {/* 3. O que exige atencao agora: 2 colunas (marca, canal e venda na linha 2 do produto) */}
       <Panel
         titulo="O que exige atenção agora"
-        descricao={descricaoTop(top, comImpacto, algumaIncompleta)}
+        descricao={descricaoTop(top, comImpacto, algumaIncompleta, comCurva)}
         acao={
           <span className="flex flex-wrap gap-3 text-sm">
             {ok.map((c) => (
@@ -507,7 +515,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
               aoEscolher={setFiltro}
               className="shrink-0 whitespace-nowrap"
             />
-            <InfoDica texto={dicaCurva(abc, impacto)} className="shrink-0" />
+            <InfoDica texto={DICA_ORDEM_FILA} nota={dicaCurva(abc, impacto)} className="shrink-0" />
           </div>
         )}
         {top.length === 0 ? (
@@ -522,23 +530,28 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
               </tr>
             </thead>
             <tbody className="divide-y divide-line">
-              {top.map((t, i) => (
-                <tr key={`${t.canal}-${i}`}>
+              {top.map((t, i) => {
+                const cv = curvaDe(t, abc);
+                const g = grupoDe(cv);
+                const abreGrupo = grupos && (i === 0 || grupoDe(curvaDe(top[i - 1], abc)) !== g);
+                return (
+                <Fragment key={`${t.canal}-${i}`}>
+                {abreGrupo && (
+                  <tr className="bg-raised">
+                    <th scope="colgroup" colSpan={2} className="px-3 py-1.5 sm:px-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                      {rotuloGrupo(g, grupos[g])}
+                    </th>
+                  </tr>
+                )}
+                <tr>
                   <th scope="row" className="px-3 py-2 sm:px-4 text-left font-normal">
-                    <span className="line-clamp-2 font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
-                      {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
+                    <span className="flex items-start gap-1.5">
+                      {comCurva && <ChipCurva curva={cv} className="mt-0.5" />}
+                      <span className="line-clamp-2 font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
+                        {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
+                      </span>
                     </span>
-                    <span className="block text-xs text-ink-muted">
-                      {(() => {
-                        const cv = curvaDe(t, abc);
-                        return cv && (
-                          <span className={`mr-1.5 rounded border border-line px-1 ${cv === "AA" || cv === "A" ? "font-bold text-ink" : "text-ink-muted"}`}>
-                            {cv}<span className="sr-only"> (curva ABC)</span>
-                          </span>
-                        );
-                      })()}
-                      {subtituloRuptura(t, { mostrarCanal: mistos, comImpacto })}
-                    </span>
+                    <span className="block text-xs text-ink-muted">{subtituloRuptura(t, { mostrarCanal: mistos, comImpacto })}</span>
                   </th>
                   <td className="whitespace-nowrap px-3 py-2 sm:px-4 text-right align-top font-semibold tabular-nums text-ink">
                     {!comImpacto ? `${fmtDecimal(t.mediaDiaria)} un.`
@@ -553,7 +566,9 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                       ) : fmtReais(t.perdaDia)}
                   </td>
                 </tr>
-              ))}
+                </Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

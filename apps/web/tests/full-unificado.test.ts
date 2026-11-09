@@ -21,6 +21,9 @@ import {
   rankingRupturas,
   contarFiltros,
   dicaCurva,
+  contarGrupos,
+  grupoDe,
+  rotuloGrupo,
   fmtFatia,
   type CurvaAbc,
   type ItemImpacto,
@@ -674,22 +677,39 @@ test("leitura em falha: '—' com motivo, nunca 0", () => {
   assert.equal(linhaCurvaCanal("ml", null, ABC).estado, "ausente", "impacto fora tambem nao vira 0");
 });
 
-test("fila: impacto desc, curva desempata (AA > A > B > C > sem), filtro corta antes do top 10", () => {
-  const ml = [
-    itemImp("kokeshi", "X99", 50), itemImp("kokeshi", "K3", 50), itemImp("kokeshi", "K1", 50),
-    itemImp("kokeshi", "K2", 80),
-  ];
-  const imp = impactoCom(ml);
+test("fila em grupos: AA barato acima de A caro e de C caro; sem curva junto com B/C pelo impacto", () => {
   const canais: ResumoCanal[] = [resumoML(ML)];
-  const ordem = rankingRupturas(canais, imp, ABC).map((t) => t.codigo);
-  assert.deepEqual(ordem, ["K2", "K1", "K3", "X99"], "80 primeiro; nos 50 empatados, AA > C > sem curva");
-  // filtro + top 10: muitos sem curva acima nao escondem o AA/A
+  const ABC2: CurvaAbc = { ...ABC, curva_por_sku: { ...ABC.curva_por_sku, "kokeshi|B1": "B" } };
+  const imp = impactoCom([
+    itemImp("kokeshi", "K2", 834),   // A caro
+    itemImp("kokeshi", "K1", 214),   // AA barato
+    itemImp("kokeshi", "K3", 900),   // C caro
+    itemImp("kokeshi", "X99", 500),  // sem curva
+    itemImp("kokeshi", "B1", 300),   // B
+  ]);
+  assert.deepEqual(rankingRupturas(canais, imp, ABC2).map((t) => t.codigo), ["K1", "K2", "K3", "X99", "B1"],
+    "AA, depois A, depois os demais (C 900 > sem curva 500 > B 300) so' pelo impacto");
+  assert.deepEqual(contarGrupos(rankingRupturas(canais, imp, ABC2), ABC2), { AA: 1, A: 1, demais: 3 });
+  assert.equal(grupoDe(null), "demais", "sem curva nao e' C, mas entra nos demais");
+  assert.equal(rotuloGrupo("demais", 91), "Demais (B, C, sem curva) · 91 rupturas");
+  assert.equal(rotuloGrupo("AA", 1), "AA · 1 ruptura");
+  // desempate dentro do grupo: venda/dia
+  const emp = impactoCom([itemImp("kokeshi", "X1", 50, { media_diaria_28d: 2 }), itemImp("kokeshi", "X2", 50, { media_diaria_28d: 9 })]);
+  assert.deepEqual(rankingRupturas(canais, emp, ABC2).map((t) => t.codigo), ["X2", "X1"]);
+});
+
+test("fila: filtro corta antes do top 10 e cabecalho de grupo so' em 'Todas'", () => {
+  assert.equal(descricaoTop([], true, false, true), "Produtos-chave primeiro (AA, depois A); dentro do grupo, pelo impacto potencial por dia");
+  assert.equal(descricaoTop([], true, false, false), "Rupturas de maior impacto potencial por dia", "sem curva, a descricao de antes");
+  const canais: ResumoCanal[] = [resumoML(ML)];
   const muitos = Array.from({ length: 12 }, (_, i) => itemImp("kokeshi", `Z${i}`, 1000 - i));
-  const imp2 = impactoCom([...muitos, itemImp("kokeshi", "K1", 1)]);
-  assert.ok(!topRupturas(canais, 10, imp2, ABC).some((t) => t.codigo === "K1"), "sem filtro, o K1 fica fora do top 10");
-  assert.deepEqual(topRupturas(canais, 10, imp2, ABC, "aa_a").map((t) => t.codigo), ["K1"]);
-  const n = contarFiltros(rankingRupturas(canais, imp2, ABC), ABC);
-  assert.deepEqual(n, { todas: 13, aa_a: 1, b: 0, c: 0, sem: 12 });
+  const imp2 = impactoCom([...muitos, itemImp("kokeshi", "K3", 1)]);
+  assert.ok(!topRupturas(canais, 10, imp2, ABC).some((t) => t.codigo === "K3"), "C barato fica fora do top 10");
+  assert.deepEqual(topRupturas(canais, 10, imp2, ABC, "c").map((t) => t.codigo), ["K3"]);
+  assert.deepEqual(contarFiltros(rankingRupturas(canais, imp2, ABC), ABC), { todas: 13, aa_a: 0, b: 0, c: 1, sem: 12 });
+  const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
+  assert.ok(src.includes('comCurva && filtroAtivo === "todas" ? contarGrupos('), "cabecalho so' com o filtro Todas");
+  assert.ok(src.includes("<ChipCurva curva={cv}"), "selo na linha 1, inclusive 'sem curva'");
 });
 
 test("drilldown por curva: % e R$/dia por curva + total; ⓘ cita as duplicatas da fonte", () => {
