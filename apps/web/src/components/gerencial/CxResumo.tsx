@@ -90,7 +90,11 @@ export function pilula(c: ComparacaoCard): ReactNode {
 export function rodapeComparacao(r: ResumoCx, i: IndicadorCx, emReais = false): RodapeCard {
   const comp = emReais ? r.comparacaoReembolsoReais : r.comparacao[i];
   const grafico = comp?.serie ? { serie: comp.serie, granularidade: comp.granularidade } : {};
-  const c = i === "cancelamento" ? deltaCancelamento(r) : comp?.delta != null ? { delta: pilula(comp), antes: comp.antes } : {};
+  // cancelamento: com sem_anterior da API (faltou loja no anterior), vale a regra geral: sem pilula, so' a linha neutra
+  const c =
+    i === "cancelamento"
+      ? r.semAnterior.cancelamento ? {} : deltaCancelamento(r)
+      : comp?.delta != null ? { delta: pilula(comp), antes: comp.antes } : {};
   if (c.delta) return { ...c, ...grafico };
   // sem numero no card ("—"), falar de comparacao e' ruido: o motivo fica no ⓘ
   const sem = r.totais[i] == null ? undefined : r.semAnterior[i];

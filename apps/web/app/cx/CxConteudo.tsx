@@ -27,7 +27,7 @@ import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { notasDoTile, pilula, rodapeComparacao, type RodapeCard } from "@/components/gerencial/CxResumo";
+import { LinhaSemComparacao, notasDoTile, pilula, rodapeComparacao, type RodapeCard } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao from "@/components/ui/FilaAtencao";
@@ -180,7 +180,17 @@ function Corpo({ dados, filtros, site }: { dados: CxShopeeResponse; filtros: Fil
         tom={r.resposta === "—" ? "ausente" : "neutro"}
         // API-3: o heroi ganha so' a pilula (sem grafico)
         delta={r.comparacao.resposta ? pilula(r.comparacao.resposta) : undefined}
-        contexto={heroi.contexto}
+        contexto={
+          // sem pilula, a linha neutra da API-3 ("comparação a partir de dd/mm"), como na Gerencial
+          !r.comparacao.resposta?.delta && r.totais.resposta != null && r.semAnterior.resposta ? (
+            <>
+              {heroi.contexto && <span>{heroi.contexto}</span>}
+              <LinhaSemComparacao {...r.semAnterior.resposta} />
+            </>
+          ) : (
+            heroi.contexto
+          )
+        }
         aviso={aviso ? <Chip>{aviso}</Chip> : undefined}
         selo={heroi.selo ?? undefined}
         erro={v.estado === "erro" ? (v.motivo ?? "Atendimento indisponível nesta carga.") : undefined}

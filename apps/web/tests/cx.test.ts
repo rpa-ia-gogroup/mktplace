@@ -930,3 +930,16 @@ test("API-3 Shopee: serie diaria agrega as lojas com a regra do card; loja sem m
   p.serie_diaria[3] = { ...p.serie_diaria[3], cancelamentos: null };
   assert.equal(resumoCxGerencial(p, rotulo).comparacao.cancelamento?.serie ?? null, null, "um ponto nulo: sem grafico");
 });
+
+test("cancelamento: com sem_anterior da API, regra geral (linha neutra, sem a pilula parcial); heroi com a linha", () => {
+  const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.match(resumo, /r\.semAnterior\.cancelamento \? \{\} : deltaCancelamento\(r\)/);
+  const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
+  assert.match(tela, /!r\.comparacao\.resposta\?\.delta && r\.totais\.resposta != null && r\.semAnterior\.resposta/, "so' sem pilula e com valor");
+  const p = comConversas(30);
+  const [apice, rit] = p.atendimento.marcas;
+  const r = resumoCxGerencial({ ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, pedidos_anterior: 1000, cancelamentos_anterior: 10 }, rit] },
+    sem_anterior: { cancelamento: { motivo: "pedidos desde 04/10", a_partir_de: "2026-12-03", detalhe: "x" } } }, rotulo);
+  assert.equal(r.semAnterior.cancelamento?.texto, "comparação a partir de 03/12");
+  assert.ok(r.cancelamentoDelta, "o delta parcial continua calculado, mas a tela nao o mostra");
+});
