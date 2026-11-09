@@ -703,3 +703,59 @@ test("T-0033: o InfoDica liga a rolagem por `rolagemAoAbrir` e sabe se abriu pel
   // a posicao e' calculada na abertura (antes do primeiro quadro)
   assert.match(DICA, /\n {4}posicionar\(\);\n/);
 });
+
+// ---------------------------------------------------------------------------
+// CARDS-KPIBAND — serie e delta dos cards (Shopee/ML por hora; LDR do TikTok)
+// ---------------------------------------------------------------------------
+test("card da fila: % por hora soma as contas da MESMA hora e o delta e' em p.p. com sinal", async () => {
+  const { serieDaFila, haQuantoTempo } = await import("../src/lib/expedicao-evolucao.ts");
+  const p = (hora: string, conta: string, backlog: number, over: number) =>
+    ({ snapshot_hour: hora, shop_account: conta, backlog_count: backlog, over_48h_count: over, stalled_count: 0, overdue_count: 0 }) as never;
+  const horas = ["2026-11-08T10:00:00Z", "2026-11-08T11:00:00Z", "2026-11-08T12:00:00Z", "2026-11-08T13:00:00Z"];
+  const pontos = horas.flatMap((h, i) => [p(h, "a", 100, 10 + i * 2), p(h, "b", 100, 10)]);
+  const s = serieDaFila(pontos, ["a", "b"], "over_48h_count");
+  assert.deepEqual(s.serie, [10, 11, 12, 13]);
+  assert.equal(s.antesPct, 10);
+  assert.equal(s.deltaPp, 3); // subiu 3 p.p.: piora (lower_is_better pinta de vermelho)
+  const caiu = serieDaFila([...pontos].reverse().map((x, i) => ({ ...(x as object), snapshot_hour: horas[3 - Math.floor(i / 2)] }) as never), ["a", "b"], "over_48h_count");
+  assert.ok(caiu.deltaPp !== null);
+  assert.equal(haQuantoTempo(3), "há 72 h");
+  assert.equal(haQuantoTempo(1), "há 24 h");
+  assert.equal(haQuantoTempo(7), "há 7 dias");
+});
+
+test("card da fila: hora sem alguma conta nao entra; serie curta ou parcial fica sem sparkline/delta", async () => {
+  const { serieDaFila } = await import("../src/lib/expedicao-evolucao.ts");
+  const p = (hora: string, conta: string) =>
+    ({ snapshot_hour: hora, shop_account: conta, backlog_count: 100, over_48h_count: 5, stalled_count: 0, overdue_count: 0 }) as never;
+  const h = (n: number) => `2026-11-08T${String(10 + n).padStart(2, "0")}:00:00Z`;
+  // Primeira hora sem a conta "b": sem delta (nunca soma parcial); 4 completas ainda dao serie.
+  const semPrimeira = [p(h(0), "a"), ...[1, 2, 3, 4].flatMap((n) => [p(h(n), "a"), p(h(n), "b")])];
+  const s1 = serieDaFila(semPrimeira, ["a", "b"], "over_48h_count");
+  assert.equal(s1.deltaPp, null);
+  assert.equal(s1.antesPct, null);
+  assert.equal(s1.serie?.length, 4);
+  // So' 3 horas completas: sem sparkline.
+  const curta = [1, 2, 3].flatMap((n) => [p(h(n), "a"), p(h(n), "b")]);
+  assert.equal(serieDaFila(curta, ["a", "b"], "over_48h_count").serie, undefined);
+  // Conta esperada que nunca aparece: nada.
+  const s3 = serieDaFila(curta, ["a", "b", "c"], "over_48h_count");
+  assert.deepEqual(s3, { serie: undefined, deltaPp: null, antesPct: null });
+  // Sem contas ou sem pontos: nada.
+  assert.equal(serieDaFila([], ["a"], "over_48h_count").serie, undefined);
+});
+
+test("card LDR do TikTok: sparkline so' com vencimentos fechados com taxa; delta so' com a janela anterior medida", async () => {
+  const { serieDaLdr, deltaDaLdr } = await import("../src/lib/expedicao-tiktok-contract.ts");
+  const dia = (due_date: string, rate: number | null, is_mature: boolean) =>
+    ({ due_date, rate, is_mature, base: 1, late: 0, pending_overdue: 0, pending_on_time: 0, above_target: false, is_critical: false });
+  assert.deepEqual(
+    serieDaLdr([dia("2026-11-05", 0.03, true), dia("2026-11-03", 0.05, true), dia("2026-11-06", 0.2, false), dia("2026-11-04", null, true)]),
+    [5, 3],
+  );
+  const d = deltaDaLdr({ rate: 0.1208, previous: { from: "2026-10-24", to: "2026-10-31", days: 7, rate: 0.0125, base: 41227, late: 515, mature_due_days: 5, reason: null } });
+  assert.ok(d && Math.abs(d.pp - 10.83) < 1e-9 && Math.abs(d.antes - 1.25) < 1e-9);
+  assert.equal(deltaDaLdr({ rate: 0.1, previous: { from: "x", to: "y", days: 7, rate: null, base: null, late: null, mature_due_days: 0, reason: "sem_historico" } }), null);
+  assert.equal(deltaDaLdr({ rate: 0.1, previous: undefined }), null); // API antiga
+  assert.equal(deltaDaLdr({ rate: null, previous: null }), null);
+});

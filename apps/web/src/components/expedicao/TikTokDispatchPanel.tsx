@@ -79,6 +79,7 @@ import LayoutExpedicao, {
   CorpoGestor,
   TEXTO_ESTADO,
 } from "@/components/expedicao/LayoutExpedicao";
+import DeltaBadge from "@/components/ui/DeltaBadge";
 import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
 import { ConviteAoDetalhe, FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
@@ -115,8 +116,10 @@ import {
   contarForaDaMeta,
   descreverIncidente,
   explicarIndisponivelComMarca,
+  deltaDaLdr,
   formatarDiaCurto,
   formatarDiaLongo,
+  serieDaLdr,
   formatarInteiro,
   formatarTaxa,
   fotografiaDoTikTok,
@@ -458,11 +461,23 @@ export default function TikTokDispatchPanel({
   const abertos = useTikTokAbertos(BASE, marca);
 
   // A LDR da janela sobe da secao "Prazo" para a faixa.
+  const deltaLdr = ldr ? deltaDaLdr(ldr) : null;
   const cartaoLdr = ldr ? (
     <KpiComAjuda
       ajuda="tiktok.ldr"
       variante="gerencial"
       icone={Gauge}
+      // CARDS-KPIBAND: sparkline dos vencimentos FECHADOS; delta em p.p. contra
+      // a janela anterior do mesmo tamanho (API-2), so' com as duas taxas.
+      identidade="ticket"
+      serie={serieDaLdr(ldr.daily)}
+      granularidade="day"
+      delta={deltaLdr ? <DeltaBadge pct={deltaLdr.pp} unidade="pp" tone={Math.abs(deltaLdr.pp) < 0.05 ? "neutral" : "lower_is_better"} /> : undefined}
+      antes={
+        deltaLdr && ldr.previous
+          ? `antes ${formatarTaxa(deltaLdr.antes / 100, 1)} · ${formatarDiaCurto(ldr.previous.from)} a ${formatarDiaCurto(ldr.previous.to)}`
+          : undefined
+      }
       rotulo="LDR da janela"
       // A taxa PUBLICADA pela API, com 1 casa como os outros cartoes; a base
       // ("6.883 de 56.970") em title + sr-only. "Medição interna" fica no ⓘ.

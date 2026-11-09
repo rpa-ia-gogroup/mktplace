@@ -329,7 +329,15 @@ only what its source sustains (`CorpoGestor` owns the order).
    the count below, each card opens the order list. Shopee: Perto de vencer ·
    Acima de 48 h · Travados. ML without deadline: Travados · Pedido mais
    antigo em fila. TikTok: Vence hoje · Vence dd/mm · Acima de 48 h · LDR da
-   janela. Never repeats the hero.
+   janela. Never repeats the hero. Each card has its identity colour
+   (CARDS-KPIBAND: Perto de vencer / Vence hoje / Vence dd/mm `kpi-prazo`,
+   Acima de 48 h and Pedido mais antigo `kpi-pedidos`, Travados `kpi-ads`,
+   LDR da janela `kpi-ticket`). Delta in p.p. + "antes" + sparkline only
+   from real data: queue cards from the hourly series (hours where every
+   account has a point; first and last hour complete for the delta), the
+   TikTok LDR from closed due days and `ldr.previous`. Shopee with the
+   seller × FBS split has no delta: the card is the seller queue and the
+   series is the published one.
 3. **O que exige atenção agora** (`ui/FilaAtencao`, up to 6 on the queue) —
    accounts with vencidos by concentration ("{Marca}: X dos Y vencidos", the
    old "Onde agir"), official Performance metrics outside the limit, then
