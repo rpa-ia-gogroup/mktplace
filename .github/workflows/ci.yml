@@ -1,0 +1,59 @@
+# CI da Torre: pytest da API e typecheck + testes do web, em todo PR e na main.
+# Existe porque o Smart App Control das maquinas locais bloqueia os .pyd do
+# Python (asyncio/_overlapped): sem isto o pytest da API nao roda em lugar nenhum.
+# Sem segredo: teste que precisa de banco ou credencial se pula com motivo
+# (skipif ja' existente), e o `-rs` lista cada pulo no log.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: api (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - name: Dependências (uv.lock, extra dev)
+        run: uv sync --frozen --extra dev
+      - name: pytest
+        # `python -m` poe apps/api no path (pacote `app`); a raiz do repo entra
+        # para os testes que importam `pipelines`.
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: uv run --frozen python -m pytest -q -rs
+
+  web:
+    name: web (typecheck + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # Os testes rodam .ts direto no `node --test` (type stripping).
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
