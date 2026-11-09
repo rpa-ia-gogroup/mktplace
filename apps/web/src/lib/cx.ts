@@ -259,9 +259,15 @@ export type ResultadoCx = { ok: true; dados: CxShopeeResponse } | { ok: false; m
 /** Nunca lanca: qualquer falha volta como `{ ok: false }` e a pagina mostra erro. */
 /** Com uma nova tentativa se estourar o tempo (`repetirSeEstourar`). */
 export async function carregarCxShopee(
-  ...args: Parameters<typeof carregarCxShopeeUmaVez>
+  filtros: Parameters<typeof carregarCxShopeeUmaVez>[0],
+  fetchImpl?: typeof fetch,
+  base?: string,
+  timeoutMs?: number,
+  /** Chamado antes da 2a tentativa (so' quando a 1a estoura o tempo). */
+  aoRepetir?: () => void,
 ): ReturnType<typeof carregarCxShopeeUmaVez> {
-  return repetirSeEstourar(() => carregarCxShopeeUmaVez(...args));
+  // `undefined` nos opcionais cai no padrao do `UmaVez` (fetch, API_URL, 15 s)
+  return repetirSeEstourar(() => carregarCxShopeeUmaVez(filtros, fetchImpl, base, timeoutMs), aoRepetir);
 }
 
 async function carregarCxShopeeUmaVez(

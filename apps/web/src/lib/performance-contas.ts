@@ -523,11 +523,20 @@ export const MOTIVO_TIMEOUT = "A API não respondeu a tempo.";
  * o trabalho e guarda o resultado, entao a 2a tentativa volta rapido. Qualquer
  * outra falha (status, rede, JSON) volta direto, sem repetir.
  */
-export async function repetirSeEstourar<T extends { ok: boolean }>(buscar: () => Promise<T>): Promise<T> {
+export async function repetirSeEstourar<T extends { ok: boolean }>(
+  buscar: () => Promise<T>,
+  aoRepetir?: () => void,
+): Promise<T> {
   const primeira = await buscar();
   const estourou = !primeira.ok && (primeira as { motivo?: string }).motivo === MOTIVO_TIMEOUT;
-  return estourou ? buscar() : primeira;
+  if (!estourou) return primeira;
+  // a tela troca o "carregando" para o gestor saber por que demora (ate' ~30 s)
+  aoRepetir?.();
+  return buscar();
 }
+
+/** Titulo do "carregando" durante a 2a tentativa (`aoRepetir`). */
+export const TITULO_SEGUNDA_TENTATIVA = "A API está demorando para acordar; tentando de novo…";
 
 /**
  * Fetch no SERVIDOR. Nunca lanca: falha de rede, timeout, status nao-2xx,
