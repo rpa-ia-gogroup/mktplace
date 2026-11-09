@@ -81,6 +81,8 @@ export interface ResumoOk {
   /** Shopee: rupturas sem estoque do vendedor (a venda para de fato). `null` = nao se aplica ou lista incompleta. */
   semVendedor: number | null;
   aviso: string | null;
+  /** Marcas (ML) ou contas (Shopee) sem foto no dia: vao para o chip da foto ("sem RITUÁRIA"). */
+  semFoto: string[];
   refDate: string;
   diasFoto: number | null;
   frescor: string;
@@ -149,6 +151,7 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
     // `null` no estoque do vendedor e' "nao sabemos": so' conta o zero medido.
     semVendedor: rupturasCompletas ? rupturas.filter((p) => p.estoqueVendedor === 0).length : null,
     aviso: faltam.length ? `Sem fotografia para: ${faltam.map(tituloMarca).join(", ")}` : null,
+    semFoto: faltam.map(tituloMarca),
     refDate: r.frescor.ref_date,
     diasFoto: r.frescor.dias_desde_a_fotografia,
     frescor: frescorLabel(r.frescor),
@@ -184,6 +187,7 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
     rupturasCompletas: rupturas.length === i.inventarios_ruptura,
     semVendedor: null,
     aviso: i.total_parcial ? `Total parcial: ${i.motivos_total_parcial.join("; ")}` : null,
+    semFoto: r.marcas.filter((m) => m.estado === null).map((m) => tituloMarca(m.brand)),
     refDate: r.frescor.ref_date,
     diasFoto: r.frescor.dias_desde_a_fotografia,
     frescor: frescorLabelML(r.frescor),
@@ -827,4 +831,55 @@ export function fmtFatia(v: number): string {
   if (v < 1 && t === fmtPct(1)) return ">99,9%";
   return t;
 }
+
+/**
+ * Chip da foto do canal: data + idade, e qualquer aviso de cobertura escrito
+ * nele ("foto de 09/11 · sem RITUÁRIA"), em tom de atencao. O aviso inteiro
+ * vai no title. Substitui a linha ambar solta embaixo do canal.
+ */
+export function chipFoto(c: ResumoOk): { texto: string; atencao: boolean; titulo: string } {
+  const falta = c.semFoto.length ? ` · sem ${c.semFoto.join(", ")}` : c.aviso ? " · parcial" : "";
+  return {
+    texto: `${seloFrescor(c)}${falta}`,
+    atencao: c.frescorVelho || Boolean(c.aviso),
+    titulo: [c.frescor, c.aviso].filter(Boolean).join(" · "),
+  };
+}
+
+/**
+ * Heroi da curva: a CONTAGEM de produtos AA/A sem estoque no Full (decisao do
+ * usuario), o contexto (rupturas e % do sortimento) e uma linha por canal.
+ * Canal com curva cobrindo menos de 50% do impacto: sem %, a cobertura
+ * escrita, e o heroi avisa que a contagem e' so' do que se sabe. Leitura em
+ * falha: "—" (nunca 0) e o motivo no title.
+ */
+export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null): {
+  valor: string; contexto: string; titulo: string | null;
+  porCanal: Partial<Record<Canal, string>>; parcial: boolean; critico: boolean;
+} | null {
+  const ok = oks(canais);
+  if (!ok.length) return null;
+  const n = ok.reduce((s, c) => s + c.ruptura, 0);
+  const base = ok.reduce((s, c) => s + c.base, 0);
+  const contexto = `de ${n.toLocaleString("pt-BR")} rupturas com demanda · ${fmtPct(pct(n, base))} do sortimento`;
+  if (abc === null) return { valor: "—", contexto: `carregando a curva · ${contexto}`, titulo: null, porCanal: {}, parcial: false, critico: false };
+  if (abc.status !== "ok") return { valor: "—", contexto: `sem curva agora · ${contexto}`, titulo: abc.motivo ?? "curva ABC sem leitura", porCanal: {}, parcial: false, critico: false };
+  const ranking = rankingRupturas(canais, impacto, abc);
+  const aaA = (canal: Canal) => ranking.filter((t) => t.canal === canal && grupoDe(curvaDe(t, abc)) !== "demais").length;
+  const porCanal: Partial<Record<Canal, string>> = {};
+  let parcial = false;
+  let total = 0;
+  for (const c of ok) {
+    const k = aaA(c.canal);
+    total += k;
+    const l = linhaCurvaCanal(c.canal, impacto, abc);
+    if (!ranking.some((t) => t.canal === c.canal)) porCanal[c.canal] = "0 AA/A · nenhuma ruptura";
+    else if (l.estado === "ok") porCanal[c.canal] = `${k} AA/A · ${fmtPct(l.pct)} do impacto potencial`;
+    else if (l.estado === "pouca") { porCanal[c.canal] = `${k} AA/A · ${l.texto}`; parcial = true; }
+    else porCanal[c.canal] = `${k} AA/A`;
+  }
+  return { valor: total.toLocaleString("pt-BR"), contexto, titulo: null, porCanal, parcial, critico: total > 0 };
+}
+
+export const DICA_HEROI_PARCIAL = "AA/A conhecidos: a curva cobre só parte do ML (kits e códigos sem ligação com a planilha ficam sem curva).";
 
