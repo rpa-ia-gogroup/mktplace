@@ -104,7 +104,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
         filters={barra}
         meta={
           <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
-            <Chip>Shopee</Chip>
+            {/* o canal (Shopee) mora na barra de filtros, como nas outras abas */}
             {chips && (
               <Chip title={chips.geradoEm}>
                 {chips.janela}

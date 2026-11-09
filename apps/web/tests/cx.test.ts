@@ -19,6 +19,8 @@ import {
   montarPedidosMotivo,
   montarStatusMarcas,
   simbolosMeta,
+  marcaUnica,
+  resumoFiltrosCx,
   reais,
   chipsCx,
   avisoColetaChat,
@@ -325,14 +327,28 @@ test("ajuda: conversas e cancelamentos explicados no ⓘ, nao em nota", () => {
   assert.match(tela, /<SaudePorMarca itens=\{status\}/);
 });
 
-test("filtro aplica sozinho: sem botao Aplicar (so' no noscript) e navega por hrefCx", () => {
+test("filtros no padrao do app: BrandFilter em menu, Popover de periodo, recolhivel no celular", () => {
   const f = readFileSync(new URL("../app/cx/FiltrosCx.tsx", import.meta.url), "utf8");
   assert.match(f, /^"use client";/);
-  assert.match(f, /onChange=\{aoMudar\}/);
-  assert.match(f, /router\.push\(hrefCx\(novo\)/);
-  assert.match(f, /<noscript>[\s\S]*Aplicar[\s\S]*<\/noscript>/);
+  assert.match(f, /<BrandFilter[\s\S]*variante="menu"/);
+  assert.match(f, /<Popover[\s\S]*rotulo="Período"/);
+  assert.match(f, /router\.push\(hrefCx\(novo\)/, "a URL segue a fonte de verdade");
+  assert.match(f, /sm:hidden/, "abaixo de sm, o botao Filtros com o resumo");
+  assert.doesNotMatch(f, /<select/, "sem select nativo: o mesmo visual das outras abas");
   const pagina = readFileSync(new URL("../app/cx/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(pagina, /Aplicar/);
+});
+
+test("marca unica a partir do BrandFilter (multi): fica a recem-escolhida; desmarcar volta a todas", () => {
+  assert.equal(marcaUnica(["apice"], null), "apice");
+  assert.equal(marcaUnica(["apice", "kokeshi"], "apice"), "kokeshi");
+  assert.equal(marcaUnica([], "apice"), null, "desmarcou a mesma: todas");
+  assert.equal(marcaUnica([], null), null, "Todas");
+  assert.equal(marcaUnica(["apice"], "apice"), "apice");
+  assert.equal(resumoFiltrosCx({ marca: null, dias: 30 }, rotulo), "Shopee · Todas as marcas · Últimos 30 dias");
+  assert.equal(resumoFiltrosCx({ marca: "apice", dias: 7 }, rotulo), "Shopee · APICE · Últimos 7 dias");
+  // a URL nao muda: os mesmos brands e dias
+  assert.equal(hrefCx({ marca: marcaUnica(["kokeshi"], null), dias: 7 }), "/cx?brands=kokeshi&dias=7");
 });
 
 // ---------------------------------------------------------------------------

@@ -130,6 +130,20 @@ export function hrefCx(f: FiltrosCx): string {
   return s ? `/cx?${s}` : "/cx";
 }
 
+/**
+ * CX-FILTROS-PADRAO: o `BrandFilter` do app e' multi-selecao; a CX le' UMA
+ * marca na URL. Do que o filtro devolve, fica a marca recem-escolhida; vazio
+ * (ou a mesma marca desmarcada) volta a "todas".
+ */
+export function marcaUnica(escolha: readonly string[], atual: string | null): string | null {
+  return escolha.find((m) => m !== atual) ?? (atual && escolha.includes(atual) ? atual : null);
+}
+
+/** Resumo do botao "Filtros" no celular, no formato do `resumoDosFiltros` do app. */
+export function resumoFiltrosCx(f: FiltrosCx, rotuloMarca: (m: string) => string): string {
+  return ["Shopee", f.marca ? rotuloMarca(f.marca) : "Todas as marcas", `Últimos ${f.dias} dias`].join(" · ");
+}
+
 // ---------------------------------------------------------------------------
 // Payload e fetch no servidor
 // ---------------------------------------------------------------------------
