@@ -685,7 +685,7 @@ def test_38_detalhes_do_dq_nao_carregam_identificador_pessoal():
             "missing_keys_total", "missing_keys_sample", "truncated",
             "brands_absent", "note", "rows_fora_do_contrato",
             "last_closed_date", "teto_conhecido", "brands_expected",
-            "brands_observed",
+            "brands_observed", "keys_null_shipping_fee",
         }, c["nome"]
 
 
@@ -764,8 +764,9 @@ def test_f1c_bind_do_sql_recebe_a_tupla_derivada():
 
 def test_f2_populacao_vazia_vira_zero_por_case_sem_coalesce():
     sql = " ".join(str(sync.SQL_AGREGADO).split())
-    # 4 monetarios comerciais + 2 cancelados = 6 CASE.
-    assert sql.count("CASE WHEN COUNT(*) FILTER") == 6
+    # 4 monetarios comerciais + 2 cancelados = 6 CASE, mais o do frete do
+    # comprador (T-0068), que tem ramo NULL proprio (ver test_t68_*).
+    assert sql.count("CASE WHEN COUNT(*) FILTER") == 7
     assert "THEN 0::numeric ELSE" in sql
     assert "COALESCE" not in sql.upper()
 
@@ -1031,7 +1032,7 @@ def test_i4_uma_unica_chamada_de_carga_para_N_linhas():
 def test_i4_zero_insert_individual_no_codigo():
     corpo = SYNC_CODE.split("def publish_in_transaction")[1].split("\ndef ")[0]
     assert "for r in snapshot.rows:" not in corpo, "laco de INSERT individual voltou"
-    assert "conn.execute(SQL_STAGING_INSERT, parametros)" in corpo
+    assert "conn.execute(sql.staging_insert, parametros)" in corpo
 
 
 def test_i4_parametros_preservados_linha_a_linha():
@@ -1061,8 +1062,9 @@ def test_i4_parametros_preservados_linha_a_linha():
     assert b["raw_max_updated_at"] is None
     # O run_id vai em TODAS as linhas.
     assert {p["source_run_id"] for p in lote} == {"run-abc"}
-    # As chaves do lote sao exatamente as colunas do destino, sem sobra.
-    assert set(a) == set(sync.TARGET_COLUMNS)
+    # As chaves do lote sao exatamente as colunas do destino, sem sobra. O fake
+    # nao responde a deteccao da coluna nova: destino em 040, forma de antes.
+    assert set(a) == set(sync.TARGET_COLUMNS_SEM_FRETE)
 
 
 def test_i4_ordem_do_lote_espelha_a_do_snapshot():
@@ -1327,3 +1329,171 @@ def test_d6_apply_daily_sem_full_no_mes_publica_backfill(monkeypatch):
 def test_d7_cli_aceita_mode_daily():
     args = sync.build_parser().parse_args(["--mode", "daily", "--apply"])
     assert args.mode == sync.MODE_DAILY and args.apply
+
+
+# ===========================================================================
+# T-0068 — buyer_shipping_fee: frete pago pelo comprador
+# ===========================================================================
+
+
+def _conn_destino(tem_coluna):
+    """Destino fake: responde a deteccao da coluna e ao EXCEPT."""
+    return FakeConn({
+        "pg_attribute": FakeResult([tem_coluna]),
+        "so_staging": FakeResult([{"so_staging": 0, "so_destino": 0}]),
+    })
+
+
+def _linha_com_frete(brand="barbours", frete=Decimal("38.90"), nulos=0):
+    r = linha(brand=brand)
+    r.buyer_shipping_fee = frete
+    r.commercial_null_shipping_fee = nulos
+    return r
+
+
+def test_t68_sql_soma_shipping_fee_da_populacao_comercial_deduplicada():
+    sql = " ".join(str(sync.SQL_AGREGADO).split())
+    # Mesma CTE deduplicada do official_gmv, agora com shipping_fee.
+    dedup = sql.split("FROM raw.tiktok_shop_orders")[0]
+    assert "shipping_fee" in dedup
+    assert ("SUM(o.shipping_fee) FILTER (WHERE o.order_status IN "
+            ":commercial_statuses)") in sql
+    assert "AS buyer_shipping_fee" in sql
+    # Nulo dentro da populacao comercial vira NULL na chave, nunca zero.
+    assert ("WHEN COUNT(*) FILTER (WHERE o.order_status IN :commercial_statuses "
+            "AND o.shipping_fee IS NULL) > 0 THEN NULL::numeric") in sql
+    assert "AS commercial_null_shipping_fee" in sql
+    assert "COALESCE" not in sql.upper()
+    # Frete nao e' derivado de official_gmv - sub_total (inclui handling/residuo).
+    assert "total_amount - " not in sql and "official_gmv -" not in sql
+
+
+def test_t68_leitura_mapeia_as_colunas_novas():
+    fonte = {**_linha_fonte(), "buyer_shipping_fee": Decimal("9.90"),
+             "commercial_null_shipping_fee": 0}
+    conn = FakeConn({"WITH raw_dedup": FakeResult([fonte])})
+    lido = sync.read_source(conn, sync.Window(date(2026, 8, 25), date(2026, 8, 25)))
+    assert lido.rows[0].buyer_shipping_fee == Decimal("9.90")
+
+
+def test_t68_destino_com_coluna_grava_o_frete_em_todas_as_linhas():
+    linhas = [_linha_com_frete("barbours", Decimal("38.90")),
+              _linha_com_frete("apice", Decimal(0))]
+    conn = _conn_destino(True)
+    sync.publish_in_transaction(conn, snap(rows=linhas), "run")
+    lote = lote_staging(conn)
+    assert [p["buyer_shipping_fee"] for p in lote] == [Decimal("38.90"), Decimal(0)]
+    assert all(set(p) == set(sync.TARGET_COLUMNS) for p in lote)
+    # INSERT de staging, INSERT final e EXCEPT citam a coluna.
+    escrita = [q for q in conn.sql if "stg_ftodd" in q and "CREATE TEMP" not in q]
+    assert len(escrita) == 3
+    assert all("buyer_shipping_fee" in q for q in escrita)
+
+
+def test_t68_destino_sem_coluna_publica_exatamente_a_forma_de_antes():
+    """Neon em 040: nenhum SQL de escrita pode citar a coluna nova."""
+    conn = _conn_destino(False)
+    sync.publish_in_transaction(conn, snap(rows=[_linha_com_frete()]), "run")
+    lote = lote_staging(conn)
+    assert set(lote[0]) == set(sync.TARGET_COLUMNS_SEM_FRETE)
+    escrita = [q for q in conn.sql if "pg_attribute" not in q]
+    assert not any("buyer_shipping_fee" in q for q in escrita)
+
+
+@pytest.mark.parametrize("linhas", [[None], [1], ["t"], []])
+def test_t68_resposta_ambigua_da_deteccao_conta_como_ausente(linhas):
+    conn = FakeConn({"pg_attribute": FakeResult(linhas)})
+    assert sync.destino_tem_frete_comprador(conn) is False
+
+
+def test_t68_deteccao_por_pg_attribute_sem_envenenar_a_transacao():
+    sql = " ".join(str(sync.SQL_DESTINO_TEM_FRETE).split())
+    assert "pg_attribute" in sql and "NOT attisdropped" in sql
+    assert "to_regclass('marts.fact_tiktok_order_discounts_daily')" in sql
+    assert "attname = 'buyer_shipping_fee'" in sql
+
+
+def test_t68_colunas_do_insert_vem_de_constantes_nunca_do_dado():
+    assert sync.TARGET_COLUMNS == sync.TARGET_COLUMNS_SEM_FRETE + ("buyer_shipping_fee",)
+    assert sync.SQL_SEM_FRETE.colunas == sync.TARGET_COLUMNS_SEM_FRETE
+    assert sync.SQL_COM_FRETE.colunas == sync.TARGET_COLUMNS
+    for q in (sync.SQL_SEM_FRETE.staging_insert, sync.SQL_SEM_FRETE.insert_do_staging,
+              sync.SQL_SEM_FRETE.except_bidirecional):
+        assert "buyer_shipping_fee" not in str(q)
+    corpo = SYNC_CODE.split("def publish_in_transaction")[1].split("\ndef ")[0]
+    assert ".keys()" not in corpo
+
+
+def test_t68_frete_nulo_passa_como_none_e_vira_warning_nao_bloqueio():
+    s = snap(rows=[_linha_com_frete(frete=None, nulos=2)])
+    avisos = sync.validate_contract(s)            # nao levanta
+    assert any("shipping_fee" in a for a in avisos)
+    conn = _conn_destino(True)
+    sync.publish_in_transaction(conn, s, "run")
+    assert lote_staging(conn)[0]["buyer_shipping_fee"] is None
+    check = next(c for c in sync.build_quality_checks(s, {}, "incremental")
+                 if c["nome"] == "ftodd_frete_comprador_nulo")
+    assert check["status"] == "warn" and check["failed"] == 1
+
+
+def test_t68_frete_negativo_bloqueia():
+    with pytest.raises(sync.DiscountSyncError, match="buyer_shipping_fee negativo"):
+        sync.validate_contract(snap(rows=[_linha_com_frete(frete=Decimal(-1))]))
+
+
+def _apply_com_destino(monkeypatch, tem_coluna):
+    class DM(FakeSession):
+        def connection(self):
+            return FakeConn({"WITH raw_dedup": FakeResult([
+                {**_linha_fonte(date(2026, 8, 25), "barbours"),
+                 "buyer_shipping_fee": Decimal("38.90"),
+                 "commercial_null_shipping_fee": 0}])})
+
+    pub = FakeSession(_conn_destino(tem_coluna))
+    aud = FakeSession(FakeConn(
+        {"INSERT INTO audit.source_sync_run": FakeResult([1]),
+         "UPDATE audit.source_sync_run": FakeResult(rowcount=1)}))
+    sessoes = iter([pub, aud])
+    monkeypatch.setattr(sync, "LocalSession", lambda: next(sessoes))
+    r = sync.run_apply(sync.MODE_WINDOW, AGORA, date(2026, 8, 25),
+                       date(2026, 8, 25), dm_factory=DM)
+    return r, pub
+
+
+def test_t68_apply_com_coluna_publica_o_frete(monkeypatch):
+    r, pub = _apply_com_destino(monkeypatch, True)
+    assert r["buyer_shipping_fee_publicado"] is True
+    assert lote_staging(pub._conn)[0]["buyer_shipping_fee"] == Decimal("38.90")
+    assert not any("041" in w for w in r["warnings"])
+
+
+def test_t68_apply_sem_coluna_publica_sem_frete_e_avisa(monkeypatch):
+    r, pub = _apply_com_destino(monkeypatch, False)
+    assert r["buyer_shipping_fee_publicado"] is False
+    assert pub.commits == 1
+    assert "buyer_shipping_fee" not in lote_staging(pub._conn)[0]
+    assert any("migration 041 nao aplicada" in w for w in r["warnings"])
+
+
+def test_t68_deteccao_acontece_depois_do_lock_na_conexao_da_publicacao():
+    corpo = SYNC_CODE.split("def run_apply")[1]
+    assert (corpo.index("SQL_LOCK")
+            < corpo.index("destino_tem_frete_comprador(conn_pub)")
+            < corpo.index("publish_in_transaction(conn_pub"))
+
+
+def test_t68_dry_run_soma_o_frete_para_conferencia():
+    class DM(FakeSession):
+        def connection(self):
+            return FakeConn({"WITH raw_dedup": FakeResult([
+                {**_linha_fonte(date(2026, 8, 25), "barbours"),
+                 "buyer_shipping_fee": Decimal("38.90"),
+                 "commercial_null_shipping_fee": 0},
+                {**_linha_fonte(date(2026, 8, 25), "apice"),
+                 "buyer_shipping_fee": None, "commercial_null_shipping_fee": 1},
+            ])})
+
+    r = sync.run_dry(sync.MODE_WINDOW, AGORA, date(2026, 8, 25),
+                     date(2026, 8, 25), dm_factory=DM)
+    assert r["buyer_shipping_fee"] == Decimal("38.90")
+    assert r["buyer_shipping_fee_null_keys"] == 1
