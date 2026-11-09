@@ -20,6 +20,7 @@
  * DIARIO da serie, com a mesma regra do backend.
  */
 
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import { temaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -573,6 +574,12 @@ function Comparativo({
  * Dia com denominador zero vira LACUNA (segmento interrompido), nunca queda a
  * zero -- "nao houve venda classificada" nao e' "o FBS caiu a zero".
  */
+/** "2026-11-09" -> "09/11", como no eixo do grafico do Envio ML. */
+function diaCurto(iso: string): string {
+  const [, m, d] = iso.split("-");
+  return `${d}/${m}`;
+}
+
 function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDiaria>; metrica: MetricaSerie }) {
   // TEMA-ESCURO: cores do SVG resolvidas pelo tema, como nos outros graficos.
   const tema = temaDoGrafico(useTema().resolvido);
@@ -583,24 +590,6 @@ function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDi
       </p>
     );
   }
-  const W = 720, H = 180, P = 28;
-  const n = pontos.length;
-  const x = (i: number) => P + (n === 1 ? (W - 2 * P) / 2 : (i * (W - 2 * P)) / (n - 1));
-  const y = (v: number) => H - P - v * (H - 2 * P);
-
-  // Segmentos contiguos: quebra onde o share e' null.
-  const segmentos: string[][] = [];
-  let atual: string[] = [];
-  pontos.forEach((p, i) => {
-    if (p.share === null) {
-      if (atual.length) segmentos.push(atual);
-      atual = [];
-    } else {
-      atual.push(`${x(i).toFixed(1)},${y(p.share).toFixed(1)}`);
-    }
-  });
-  if (atual.length) segmentos.push(atual);
-
   const rotulo = METRICAS.find((m) => m.key === metrica)?.label ?? metrica;
   const comDado = pontos.filter((p) => p.share !== null);
   const min = comDado.length ? Math.min(...comDado.map((p) => p.share!)) : 0;
@@ -608,28 +597,41 @@ function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDi
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto border border-line rounded-xl bg-surface p-2">
-        <svg viewBox={`0 0 ${W} ${H}`} role="img" className="w-full h-auto min-w-[320px]"
-          aria-label={
-            `Share diário de FBS por ${rotulo}, de ${pontos[0].data} a ` +
-            `${pontos[n - 1].data}. Mínimo ${(min * 100).toFixed(1)}%, ` +
-            `máximo ${(max * 100).toFixed(1)}%. ` +
-            `${pontos.length - comDado.length} dia(s) sem denominador.`
-          }>
-          {[0, 0.25, 0.5, 0.75, 1].map((g) => (
-            <g key={g}>
-              <line x1={P} x2={W - P} y1={y(g)} y2={y(g)} stroke={tema.grade} strokeWidth="1" />
-              {/* 12px e o piso de legibilidade da Torre. O SVG escala com o
-                  viewBox, mas o rotulo precisa nascer >= 12 para nao ficar
-                  abaixo do piso quando o grafico encolhe. */}
-              <text x={4} y={y(g) + 4} fontSize="12" fill={tema.eixo}>{g * 100}%</text>
-            </g>
-          ))}
-          {segmentos.map((seg, i) => (
-            <polyline key={i} points={seg.join(" ")} fill="none"
-              stroke={tema.series[0]} strokeWidth="2" strokeLinejoin="round" />
-          ))}
-        </svg>
+      {/* FULL-FBS-EIXO: o SVG proprio (viewBox 720 esticado a w-full) escalava o
+          texto junto -- ~21 px em 1440. Agora o mesmo molde do grafico do Envio
+          ML: recharts, rotulos de 12 px reais e a paleta do tema. */}
+      <div
+        className="h-[220px] w-full rounded-xl border border-line bg-surface p-2"
+        role="img"
+        aria-label={
+          `Share diário de FBS por ${rotulo}, de ${pontos[0].data} a ` +
+          `${pontos[pontos.length - 1].data}. Mínimo ${(min * 100).toFixed(1)}%, ` +
+          `máximo ${(max * 100).toFixed(1)}%. ` +
+          `${pontos.length - comDado.length} dia(s) sem denominador.`
+        }
+      >
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={pontos} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} />
+            <XAxis dataKey="data" tickFormatter={diaCurto} tick={{ fontSize: 12, fill: tema.eixo }} minTickGap={24} />
+            <YAxis
+              domain={[0, 1]}
+              ticks={[0, 0.25, 0.5, 0.75, 1]}
+              tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+              tick={{ fontSize: 12, fill: tema.eixo }}
+              width={48}
+            />
+            <Line
+              type="monotone"
+              dataKey="share"
+              stroke={tema.series[0]}
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
       <details className="text-xs text-ink-muted">
         <summary className="cursor-pointer min-h-11 flex items-center">

@@ -636,13 +636,18 @@ test("/full-ml continua intacto e separado", () => {
 test("nenhum texto da tela nasce abaixo de 12px", () => {
   // Achado do QA em navegador real: os rotulos do eixo Y do grafico estavam
   // com fontSize 11, abaixo do piso de legibilidade da Torre.
-  const fontes = [...CLIENT.matchAll(/fontSize="(\d+)"/g)].map((m) => Number(m[1]));
+  // FULL-FBS-EIXO: o grafico virou recharts (`fontSize: 12` no tick, em px reais).
+  const fontes = [...CLIENT.matchAll(/fontSize(?:="|: )(\d+)/g)].map((m) => Number(m[1]));
   for (const f of fontes) {
     assert.ok(f >= 12, `fontSize ${f} abaixo do piso de 12px`);
   }
   assert.ok(fontes.length > 0, "o grafico precisa declarar fontSize explicito");
   // Nenhuma classe utilitaria abaixo de text-xs (12px) na tela.
   assert.ok(!/text-\[(?:[0-9]|10|11)px\]/.test(CLIENT));
+  // ...nem ACIMA do padrao: um <svg viewBox> esticado a w-full escalava o texto
+  // (~21 px em 1440). O grafico de FBS nao desenha mais SVG proprio.
+  const grafico = CLIENT.split("function ShopeeFbsTrend(")[1]?.split("\nfunction ")[0] ?? "";
+  assert.ok(grafico.includes("<LineChart") && !grafico.includes("<svg"));
 });
 
 test("a flag e' lida por acesso LITERAL a process.env", () => {
