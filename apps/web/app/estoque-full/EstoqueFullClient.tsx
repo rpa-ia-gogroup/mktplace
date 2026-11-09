@@ -36,7 +36,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import KpiCard from "@/components/KpiCard";
+import { AlertCircle, Archive, Boxes, CheckCircle2, Layers, PackageX, Snowflake, TrendingDown } from "lucide-react";
+
+import {
+  ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
+} from "@/components/full/CategoriasEstoque";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
@@ -76,11 +80,15 @@ import {
   temFiltroAtivo,
   VENDA_NAO_INFORMADA,
   type Classificacao,
+  type EstoqueFullOk,
   type EstoqueFullResponse,
   type FiltrosEstoque,
   type ProdutoEstoque,
 } from "@/lib/estoque-full";
 import { brandLabel } from "@/lib/filters/brands";
+import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, textoChip } from "@/lib/estoque-categorias";
+
+const CHAVES_CATEGORIA = CATEGORIAS_SHOPEE.map((c) => c.chave);
 
 /** Rotulo da marca igual ao do resto da Torre ("ÁPICE", "RITUÁRIA"). */
 const tituloMarca = brandLabel;
@@ -282,6 +290,9 @@ export default function EstoqueFullClient() {
   const [erro, setErro] = useState<string | null>(null);
   // CURVA-ABC: filtro so' na tela (a API ja' manda a curva de cada item).
   const [curvas, setCurvas] = useState<OpcaoCurva[]>([]);
+  // Qual busca o payload responde: o clique no card limpa os filtros (nova busca)
+  // e o foco so' vai ao chip depois dela.
+  const [queryCarregada, setQueryCarregada] = useState<string | null>(null);
 
   // Debounce da busca: digitar "capa" nao pode disparar quatro requisicoes.
   const [buscaDigitada, setBuscaDigitada] = useState("");
@@ -313,6 +324,7 @@ export default function EstoqueFullClient() {
     try {
       const resposta = await fetchEstoqueFull(query, ctrl.signal);
       setPayload(resposta);
+      setQueryCarregada(query);
       if (escopoCompleto) {
         setCobertasFotografia(
           isIndisponivel(resposta) ? null : resposta.contas_cobertas,
@@ -354,22 +366,40 @@ export default function EstoqueFullClient() {
         : [...f.classificacoes, c],
     }));
 
+  // CARDS-CLICAVEIS: a categoria do card vive na URL e corta a tabela da aba.
+  const [chaveCategoria, setCategoria] = useCategoriaNaUrl(CHAVES_CATEGORIA);
+  const categoria = categoriaPorChave(CATEGORIAS_SHOPEE, chaveCategoria);
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+  const pedidoRolagem = useRolarAteChip(chipRef, chaveCategoria, !carregando && !!payload && queryCarregada === query);
+
   const limpar = () => {
     setBuscaDigitada("");
     setFiltros(FILTROS_VAZIOS);
     setCurvas([]);
+    if (chaveCategoria) setCategoria(null);
+  };
+
+  /** Card: aplica a categoria (contagem = lista: os outros filtros da tabela saem); de novo, limpa. */
+  const escolherCategoria = (chave: string) => {
+    if (chave === chaveCategoria) return setCategoria(null);
+    setBuscaDigitada("");
+    setFiltros((f) => ({ ...FILTROS_VAZIOS, brands: f.brands }));
+    setCurvas([]);
+    pedidoRolagem.current = true;
+    setCategoria(chave);
   };
 
   // CURVA-ABC: coluna, filtro e ordem por grupos so' com a curva lida.
   const metaCurva = payload && !isIndisponivel(payload) ? payload.curva_meta : null;
   const comCurva = curvaNaTela(metaCurva);
   const filtroCurva = comCurva ? curvas : [];
-  const lista = payload && !isIndisponivel(payload)
-    ? comCurva
-      ? ordenarPorCurva(payload.produtos.filter((p) => passaCurva(p.curva, filtroCurva)), (p) => p.cobertura_torre_dias)
-      : payload.produtos
+  const naCurva = payload && !isIndisponivel(payload)
+    ? payload.produtos.filter((p) => passaCurva(p.curva, filtroCurva))
     : [];
-  const algumFiltro = temFiltroAtivo(filtros) || filtroCurva.length > 0;
+  const lista = categoria
+    ? abrirCategoria(naCurva, categoria)
+    : comCurva ? ordenarPorCurva(naCurva, (p) => p.cobertura_torre_dias) : naCurva;
+  const algumFiltro = temFiltroAtivo(filtros) || filtroCurva.length > 0 || !!categoria;
 
   // Ausencia de conta NUNCA vira zero: so' contas presentes viram filtro, e
   // conta selecionada que nao veio na resposta esconde os numeros.
@@ -559,57 +589,7 @@ export default function EstoqueFullClient() {
             </section>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                <KpiCard
-                  label="Unidades vendáveis"
-                  value={fmtInt(payload.indicadores.unidades_vendaveis_operacional)}
-                  subvalue={`${fmtInt(payload.indicadores.produtos_total)} produtos na fotografia`}
-                  accent="bg-ok"
-                />
-                <KpiCard
-                  label="Exigem ação"
-                  value={fmtInt(payload.indicadores.produtos_exigem_acao)}
-                  subvalue="Ruptura + estoque baixo"
-                  accent="bg-crit"
-                />
-                <KpiCard
-                  label="Ruptura"
-                  value={fmtInt(payload.indicadores.produtos_ruptura)}
-                  subvalue="Sem estoque vendável, com venda na janela"
-                  accent="bg-crit"
-                />
-                <KpiCard
-                  label="Estoque baixo"
-                  value={fmtInt(payload.indicadores.produtos_baixo)}
-                  subvalue={`Abaixo de ${payload.limites.cobertura_baixa_dias} dias de cobertura`}
-                  accent="bg-warn"
-                />
-                <KpiCard
-                  label="Excesso"
-                  value={fmtInt(payload.indicadores.produtos_excesso)}
-                  subvalue={`A partir de ${payload.limites.cobertura_excesso_dias} dias de cobertura`}
-                  accent="bg-kpi-prazo"
-                />
-                <KpiCard
-                  label="Sem giro"
-                  value={fmtInt(payload.indicadores.produtos_sem_giro)}
-                  subvalue="Com estoque, sem venda na janela"
-                  accent="bg-ink-faint"
-                />
-                <KpiCard
-                  label="Suficiente"
-                  value={fmtInt(payload.indicadores.produtos_suficientes)}
-                  subvalue={`Entre ${payload.limites.cobertura_baixa_dias} e ${payload.limites.cobertura_excesso_dias} dias`}
-                  accent="bg-ok"
-                />
-                <KpiCard
-                  label="Kits não conciliados"
-                  value={fmtInt(payload.indicadores.produtos_kit_nao_conciliado)}
-                  subvalue={`${fmtInt(payload.indicadores.unidades_vendaveis_kits_contexto)} unidades, fora do operacional`}
-                  accent="bg-accent"
-                />
-              </div>
-
+              {/* Parcial: UM aviso no topo; nos cards so' title + leitor de tela. */}
               {payload.marcas_nao_cobertas.length > 0 && (
                 <Aviso tom="info">
                   Cobertura parcial: sem{" "}
@@ -617,6 +597,13 @@ export default function EstoqueFullClient() {
                   como ausência, nunca como zero.
                 </Aviso>
               )}
+
+              <FaixaCategorias
+                cards={cardsShopee(payload)}
+                ativa={chaveCategoria}
+                aoEscolher={escolherCategoria}
+                parcial={payload.marcas_nao_cobertas.length > 0}
+              />
 
               {avisoCurvaIndisponivel(metaCurva) && (
                 <Aviso tom="info" role="status">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
@@ -632,6 +619,9 @@ export default function EstoqueFullClient() {
                   <h3 className="text-base font-semibold text-ink">
                     Nenhum produto neste filtro
                   </h3>
+                  {categoria && (
+                    <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
+                  )}
                   {algumFiltro && (
                     <button
                       type="button"
@@ -644,14 +634,21 @@ export default function EstoqueFullClient() {
                 </section>
               ) : (
                 <>
-                  {comCurva && (
-                    <p className="text-sm font-medium text-ink px-1">
-                      {/* Panorama: sem o filtro de curva (os da API ja' valem na lista). */}
-                      {resumoAcao(payload.produtos, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
-                    </p>
-                  )}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+                    {comCurva && (
+                      <p className="text-sm font-medium text-ink">
+                        {/* Panorama: sem o filtro de curva (os da API ja' valem na lista). */}
+                        {resumoAcao(payload.produtos, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
+                      </p>
+                    )}
+                    {categoria && (
+                      <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
+                    )}
+                  </div>
                   <p className="text-xs text-ink-faint px-1">
-                    {filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
+                    {categoria
+                  ? `${fmtInt(lista.length)} na categoria · `
+                  : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
                     {fmtInt(payload.produtos.length)} de{" "}
                     {fmtInt(payload.total_no_filtro)} produtos
                     {payload.truncado && " · lista truncada, refine o filtro"}
@@ -665,4 +662,28 @@ export default function EstoqueFullClient() {
       )}
     </PageContainer>
   );
+}
+
+/** Os 8 cards da aba, na ordem de antes. Cor = familia (identidade), nao status. */
+function cardsShopee(payload: EstoqueFullOk): CardCategoria[] {
+  const i = payload.indicadores;
+  const l = payload.limites;
+  return [
+    { chave: "unidades", rotulo: "Unidades vendáveis", valor: fmtInt(i.unidades_vendaveis_operacional),
+      comparacao: `${fmtInt(i.produtos_total)} produtos na fotografia`, identidade: "gmv", icone: Boxes },
+    { chave: "exigem-acao", rotulo: "Exigem ação", valor: fmtInt(i.produtos_exigem_acao), comparacao: "Ruptura + estoque baixo",
+      identidade: "ads", icone: AlertCircle, tom: i.produtos_exigem_acao > 0 ? "critico" : "neutro" },
+    { chave: "ruptura", rotulo: "Ruptura", valor: fmtInt(i.produtos_ruptura), comparacao: "Sem estoque vendável, com venda na janela",
+      identidade: "ads", icone: PackageX, tom: i.produtos_ruptura > 0 ? "critico" : "neutro" },
+    { chave: "baixo", rotulo: "Estoque baixo", valor: fmtInt(i.produtos_baixo),
+      comparacao: `Abaixo de ${l.cobertura_baixa_dias} dias de cobertura`, identidade: "ads", icone: TrendingDown },
+    { chave: "excesso", rotulo: "Excesso", valor: fmtInt(i.produtos_excesso),
+      comparacao: `A partir de ${l.cobertura_excesso_dias} dias de cobertura`, identidade: "prazo", icone: Archive },
+    { chave: "sem-giro", rotulo: "Sem giro", valor: fmtInt(i.produtos_sem_giro), comparacao: "Com estoque, sem venda na janela",
+      identidade: "prazo", icone: Snowflake },
+    { chave: "suficiente", rotulo: "Suficiente", valor: fmtInt(i.produtos_suficientes),
+      comparacao: `Entre ${l.cobertura_baixa_dias} e ${l.cobertura_excesso_dias} dias`, identidade: "atendimento", icone: CheckCircle2 },
+    { chave: "kits", rotulo: "Kits não conciliados", valor: fmtInt(i.produtos_kit_nao_conciliado),
+      comparacao: `${fmtInt(i.unidades_vendaveis_kits_contexto)} unidades, fora do operacional`, identidade: "ticket", icone: Layers },
+  ];
 }

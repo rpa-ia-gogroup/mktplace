@@ -31,7 +31,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import KpiCard from "@/components/KpiCard";
+import { AlertCircle, Archive, EyeOff, PackageCheck, PackageX, Share2, TrendingDown } from "lucide-react";
+
+import {
+  ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
+} from "@/components/full/CategoriasEstoque";
 import TableScrollHint from "@/components/TableScrollHint";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -42,6 +46,9 @@ import {
   avisoCoberturaCurva, avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao,
   type OpcaoCurva,
 } from "@/lib/estoque-curva";
+import { abrirCategoria, CATEGORIAS_ML, categoriaPorChave, textoChip } from "@/lib/estoque-categorias";
+
+const CHAVES_CATEGORIA = CATEGORIAS_ML.map((c) => c.chave);
 import {
   AVISO_AUSENCIA_ML,
   AVISO_GRAO_ML,
@@ -79,7 +86,6 @@ import {
   subtextoSaldoZeroML,
   seloAnunciosExtrasML,
   subtituloTransferML,
-  subvalorContagemML,
   subvalorDisponivelTotalML,
   temFiltroAtivoML,
   textoVazioML,
@@ -90,6 +96,7 @@ import {
   type FiltrosML,
   type InventarioML,
   type MarcaML,
+  type MLFullEstoqueOk,
   type MLFullEstoqueResponse,
 } from "@/lib/ml-full-estoque";
 
@@ -388,6 +395,9 @@ export default function MLFullEstoqueClient() {
   const [erro, setErro] = useState<ErroML | null>(null);
   // CURVA-ABC: filtro so' na tela (a API ja' manda a curva de cada inventario).
   const [curvas, setCurvas] = useState<OpcaoCurva[]>([]);
+  // Qual busca o payload responde: "Compartilhados"/"Sem leitura" refazem a busca
+  // (com os fora do Full) e o foco so' vai ao chip depois dela.
+  const [queryCarregada, setQueryCarregada] = useState<string | null>(null);
   const primeiroChipRef = useRef<HTMLButtonElement | null>(null);
   const dataRef = useRef<HTMLInputElement | null>(null);
   // O que esta no campo de data. So' vira filtro quando completo (ver
@@ -396,7 +406,15 @@ export default function MLFullEstoqueClient() {
   // Hoje em America/Sao_Paulo (o mesmo relogio da API), uma vez por montagem.
   const hoje = useMemo(() => hojeSaoPauloML(), []);
 
-  const query = useMemo(() => buildQueryML(filtros), [filtros]);
+  // CARDS-CLICAVEIS: a categoria do card vive na URL e corta a tabela da aba.
+  const [chaveCategoria, setCategoria] = useCategoriaNaUrl(CHAVES_CATEGORIA);
+  const categoria = categoriaPorChave(CATEGORIAS_ML, chaveCategoria);
+  // "Compartilhados" e "Sem leitura" contam tambem os fora do Full: a lista vem com eles.
+  const comForaDoFull = filtros.incluirForaDoFull || !!categoria?.foraDoFull;
+  const query = useMemo(
+    () => buildQueryML({ ...filtros, incluirForaDoFull: comForaDoFull }),
+    [filtros, comForaDoFull],
+  );
   const refDate = filtros.refDate;
   const abortRef = useRef<AbortController | null>(null);
 
@@ -409,6 +427,7 @@ export default function MLFullEstoqueClient() {
     try {
       // Estado de marca desconhecido e' erro de contrato, nunca zero.
       setPayload(validarPayloadML(await fetchMLFullEstoque(query, ctrl.signal)));
+      setQueryCarregada(query);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       // Numero velho nunca convive com mensagem de falha.
@@ -440,10 +459,22 @@ export default function MLFullEstoqueClient() {
         : [...f.brands, m],
     }));
 
+  const chipRef = useRef<HTMLButtonElement | null>(null);
+  const pedidoRolagem = useRolarAteChip(chipRef, chaveCategoria, !carregando && !!payload && queryCarregada === query);
+
+  /** Card: aplica a categoria (contagem = lista: o filtro de curva sai); de novo, limpa. */
+  const escolherCategoria = (chave: string) => {
+    if (chave === chaveCategoria) return setCategoria(null);
+    setCurvas([]);
+    pedidoRolagem.current = true;
+    setCategoria(chave);
+  };
+
   const limpar = () => {
     setFiltros(FILTROS_ML_VAZIOS);
     setDataDigitada("");
     setCurvas([]);
+    if (chaveCategoria) setCategoria(null);
     // O botao "Limpar filtros" some ao limpar: o foco vai para o primeiro
     // chip de marca, que esta sempre na tela, em vez de cair no <body>.
     primeiroChipRef.current?.focus();
@@ -475,12 +506,17 @@ export default function MLFullEstoqueClient() {
   const metaCurva = payload && !isIndisponivelML(payload) ? payload.curva_meta : null;
   const comCurva = curvaNaTela(metaCurva);
   const filtroCurva = comCurva ? curvas : [];
-  const lista = payload && !isIndisponivelML(payload)
-    ? comCurva
-      ? ordenarPorCurva(payload.inventarios.filter((i) => passaCurva(i.curva, filtroCurva)), (i) => i.cobertura_torre_dias)
-      : payload.inventarios
+  const naCurva = payload && !isIndisponivelML(payload)
+    ? payload.inventarios.filter((i) => passaCurva(i.curva, filtroCurva))
     : [];
-  const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0;
+  // Sem categoria, os fora do Full so' aparecem se a pessoa pediu (a busca pode te-los trazido).
+  const lista = categoria
+    ? abrirCategoria(naCurva, categoria)
+    : (() => {
+        const base = filtros.incluirForaDoFull ? naCurva : naCurva.filter((i) => i.eh_full);
+        return comCurva ? ordenarPorCurva(base, (i) => i.cobertura_torre_dias) : base;
+      })();
+  const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria;
 
   const filtrosUI = (
     <div className="flex flex-col gap-3 w-full">
@@ -653,73 +689,13 @@ export default function MLFullEstoqueClient() {
             )}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <KpiCard
-              label="Disponível Full"
-              value={fmtOpcional(payload.indicadores.disponivel_full)}
-              subvalue={subvalorDisponivelTotalML({
-                parcial,
-                marcas: payload.marcas,
-                inventariosFullLidos: payload.indicadores.inventarios_full_lidos,
-              })}
-              accent="bg-ok"
-            />
-            {/* Contagens num total PARCIAL: "0" nao e' "nenhum". */}
-            <KpiCard
-              label="Exigem ação"
-              value={fmtInt(payload.indicadores.inventarios_exigem_acao)}
-              subvalue={subvalorContagemML(parcial, "Ruptura + estoque baixo")}
-              accent="bg-crit"
-            />
-            <KpiCard
-              label="Sem leitura"
-              value={fmtInt(payload.indicadores.inventarios_sem_leitura)}
-              subvalue={subvalorContagemML(parcial, "Inventários sem quantidade medida")}
-              accent="bg-warn/60"
-            />
-            <KpiCard
-              label="Compartilhados"
-              value={fmtInt(payload.indicadores.inventarios_compartilhados)}
-              subvalue={subvalorContagemML(
-                parcial,
-                "Inventários com 2+ anúncios (contados uma vez)",
-              )}
-              accent="bg-accent"
-            />
-            <KpiCard
-              label="Ruptura"
-              value={fmtInt(payload.indicadores.inventarios_ruptura)}
-              subvalue={subvalorContagemML(parcial, "Sem disponível, com venda na janela")}
-              accent="bg-crit"
-            />
-            <KpiCard
-              label="Estoque baixo"
-              value={fmtInt(payload.indicadores.inventarios_baixo)}
-              subvalue={subvalorContagemML(
-                parcial,
-                `Abaixo de ${payload.limites.cobertura_baixa_dias} dias de cobertura`,
-              )}
-              accent="bg-warn"
-            />
-            <KpiCard
-              label="Excesso"
-              value={fmtInt(payload.indicadores.inventarios_excesso)}
-              subvalue={subvalorContagemML(
-                parcial,
-                `A partir de ${payload.limites.cobertura_excesso_dias} dias de cobertura`,
-              )}
-              accent="bg-kpi-prazo"
-            />
-            <KpiCard
-              label="Não disponível Full"
-              value={fmtOpcional(payload.indicadores.nao_disponivel_full)}
-              subvalue={subvalorContagemML(
-                parcial,
-                subtituloTransferML(payload.indicadores.transfer_full),
-              )}
-              accent="bg-ink-faint"
-            />
-          </div>
+          {/* O "Total parcial" acima e' o UNICO aviso; nos cards so' title + leitor de tela. */}
+          <FaixaCategorias
+            cards={cardsML(payload)}
+            ativa={chaveCategoria}
+            aoEscolher={escolherCategoria}
+            parcial={!!parcial}
+          />
 
           <TabelaMarcas marcas={payload.marcas} />
 
@@ -735,6 +711,9 @@ export default function MLFullEstoqueClient() {
               <h3 className="text-base font-semibold text-ink">
                 Nenhum inventário neste filtro
               </h3>
+              {categoria && (
+                <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
+              )}
               <p className="text-sm text-ink-muted">
                 {textoVazioML({
                   refDate: payload.frescor.ref_date,
@@ -746,16 +725,23 @@ export default function MLFullEstoqueClient() {
             </section>
           ) : (
             <>
-              {comCurva && (
-                <div className="flex flex-col gap-0.5 px-1">
-                  <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios, exigeAcaoML)}</p>
-                  {avisoCoberturaCurva(metaCurva) && (
-                    <p className="text-xs text-ink-muted">{avisoCoberturaCurva(metaCurva)}</p>
-                  )}
-                </div>
-              )}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
+                {comCurva && (
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full), exigeAcaoML)}</p>
+                    {avisoCoberturaCurva(metaCurva) && (
+                      <p className="text-xs text-ink-muted">{avisoCoberturaCurva(metaCurva)}</p>
+                    )}
+                  </div>
+                )}
+                {categoria && (
+                  <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
+                )}
+              </div>
               <p className="text-xs text-ink-muted px-1">
-                {filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
+                {categoria
+                  ? `${fmtInt(lista.length)} na categoria · `
+                  : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
                 {fmtInt(payload.inventarios.length)} de{" "}
                 {fmtInt(payload.total_no_filtro)} inventários
                 {payload.truncado && " · lista truncada; indicadores cobrem tudo"}
@@ -767,4 +753,30 @@ export default function MLFullEstoqueClient() {
       )}
     </PageContainer>
   );
+}
+
+
+/** Os 8 cards da aba, na ordem de antes. Cor = familia (identidade), nao status. */
+function cardsML(payload: MLFullEstoqueOk): CardCategoria[] {
+  const i = payload.indicadores;
+  const l = payload.limites;
+  return [
+    { chave: "disponivel", rotulo: "Disponível Full", valor: fmtOpcional(i.disponivel_full),
+      comparacao: subvalorDisponivelTotalML({ parcial: false, marcas: payload.marcas, inventariosFullLidos: i.inventarios_full_lidos }),
+      identidade: "gmv", icone: PackageCheck },
+    { chave: "exigem-acao", rotulo: "Exigem ação", valor: fmtInt(i.inventarios_exigem_acao), comparacao: "Ruptura + estoque baixo",
+      identidade: "ads", icone: AlertCircle, tom: i.inventarios_exigem_acao > 0 ? "critico" : "neutro" },
+    { chave: "sem-leitura", rotulo: "Sem leitura", valor: fmtInt(i.inventarios_sem_leitura),
+      comparacao: "Inventários sem quantidade medida", identidade: "ticket", icone: EyeOff },
+    { chave: "compartilhados", rotulo: "Compartilhados", valor: fmtInt(i.inventarios_compartilhados),
+      comparacao: "Inventários com 2+ anúncios (contados uma vez)", identidade: "ticket", icone: Share2 },
+    { chave: "ruptura", rotulo: "Ruptura", valor: fmtInt(i.inventarios_ruptura), comparacao: "Sem disponível, com venda na janela",
+      identidade: "ads", icone: PackageX, tom: i.inventarios_ruptura > 0 ? "critico" : "neutro" },
+    { chave: "baixo", rotulo: "Estoque baixo", valor: fmtInt(i.inventarios_baixo),
+      comparacao: `Abaixo de ${l.cobertura_baixa_dias} dias de cobertura`, identidade: "ads", icone: TrendingDown },
+    { chave: "excesso", rotulo: "Excesso", valor: fmtInt(i.inventarios_excesso),
+      comparacao: `A partir de ${l.cobertura_excesso_dias} dias de cobertura`, identidade: "prazo", icone: Archive },
+    { chave: "nao-disponivel", rotulo: "Não disponível Full", valor: fmtOpcional(i.nao_disponivel_full),
+      comparacao: subtituloTransferML(i.transfer_full), identidade: "gmv", icone: PackageX },
+  ];
 }
