@@ -34,13 +34,27 @@ def _fonte(*, hoje: date, falhas=(), resposta=(), chat=(), pedidos=(), devolucoe
          "conversas_7d": 90, "conversas_30d": 300},
     ], falhas_coleta=falhas)
     fonte.po = _po(hoje)
-    fonte.coleta.update({
-        svc.SQL_RESPOSTA_DIA: ("resposta_dia", list(resposta)),
-        svc.SQL_CHAT_ANTERIOR: ("chat_anterior", list(chat)),
-        svc.SQL_PEDIDOS_DIA: ("pedidos_dia", list(pedidos)),
-        svc.SQL_DEVOLUCOES_DIA: ("devolucoes_dia", list(devolucoes)),
-    })
+    fonte.coleta.update(_rotas_comparacao(False, resposta=resposta, chat=chat, pedidos=pedidos,
+                                          devolucoes=devolucoes))
     return fonte
+
+
+def _linhas(resposta=(), chat=(), pedidos=(), devolucoes=()) -> list[dict]:
+    """As linhas da consulta unica (`parte`, `marca`, `dia`, `a`, `b`)."""
+    return ([{"parte": "resposta", "marca": r["marca"], "dia": r["dia"], "a": r["valor"], "b": None}
+             for r in resposta]
+            + [{"parte": "chat", "marca": r["marca"], "dia": None, "a": r["conversas_7d"], "b": r["conversas_30d"]}
+               for r in chat]
+            + [{"parte": "pedidos", "marca": r["marca"], "dia": r["dia"], "a": r["pedidos"], "b": r["cancelados"]}
+               for r in pedidos]
+            + [{"parte": "devolucoes", "marca": r["marca"], "dia": r["dia"], "a": r["aceitas"], "b": r["reembolsado"]}
+               for r in devolucoes])
+
+
+def _rotas_comparacao(exportar: bool, **dados) -> dict:
+    """A consulta unica em todas as combinacoes; a fonte devolve as linhas de todas as partes."""
+    nome = "comparacao_export" if exportar else "comparacao"
+    return {svc.sql_comparacao(exportar=exportar, com_chat=ch): (nome, _linhas(**dados)) for ch in (True, False)}
 
 
 def _montar(fonte, agora, dias, brands=("apice", "barbours"), torre=None):
@@ -121,16 +135,28 @@ def test_janela_anterior_antes_da_coleta_e_none_com_motivo_e_data():
     assert resp.sem_serie["resposta"].a_partir_de == D(2026, 12, 4)
 
 
+def test_comparacao_e_uma_consulta_so_por_fonte():
+    """Em producao cada consulta vira uma chamada ao Metabase, atendida em fila:
+    4 consultas a mais custaram ~+1 s a frio. A comparacao inteira vai numa so'."""
+    _, fonte = _coberto()
+    assert [nome for nome, _ in fonte.chamadas].count("comparacao") == 1
+    p = next(p for nome, p in fonte.chamadas if nome == "comparacao")
+    assert (p["dev_inicio"], p["dev_fim"]) == (D(2026, 11, 6), D(2026, 11, 19))   # anterior + atual
+    assert (p["ped_inicio"], p["ped_fim"]) == (D(2026, 11, 13), D(2026, 11, 19))
+    assert (p["resp_inicio"], p["resp_fim"]) == (D(2026, 11, 6), D(2026, 11, 20))
+
+
 def test_contact_rate_em_90_dias_nunca_tem_anterior_e_nem_consulta_o_chat():
     fonte = _fonte(hoje=D(2026, 11, 20))
     resp = _montar(fonte, AGORA_COBERTO, 90)
     assert resp.sem_anterior["contact_rate"].motivo == "só em 7 e 30 dias"
     assert resp.sem_anterior["contact_rate"].a_partir_de is None
-    assert "chat_anterior" not in [nome for nome, _ in fonte.chamadas]
+    p = next(p for nome, p in fonte.chamadas if nome == "comparacao")
+    assert "desde" not in p                                     # sem a foto do chat
 
 
 def test_falha_na_comparacao_vira_fonte_indisponivel_sem_vazar_e_sem_derrubar_a_aba():
-    resp, _ = _coberto(falhas=("devolucoes_dia", "pedidos_dia"))
+    resp, _ = _coberto(falhas=("comparacao",))
     assert resp.devolucoes.estado == "dado" and resp.devolucoes.total is not None
     assert all(m.aceitas_anterior is None for m in resp.devolucoes.marcas)
     assert resp.sem_anterior["reembolso"].motivo == "fonte indisponível"
@@ -142,10 +168,7 @@ def test_falha_na_comparacao_vira_fonte_indisponivel_sem_vazar_e_sem_derrubar_a_
 def test_kokeshi_sem_anterior_de_cancelamento_ate_o_export_cobrir():
     torre = TorreCx(pedidos=[{"marca": "kokeshi", "pedidos": 100, "cancelados": 5, "cancelados_comprador": None,
                               "nao_pagos": 2, "atualizado_em": None}])
-    torre.rotas[svc.SQL_PEDIDOS_DIA_EXPORT] = ("pedidos_dia_export", [])
-    torre.rotas[svc.SQL_DEVOLUCOES_DIA_EXPORT] = ("devolucoes_dia_export", [])
-    torre.rotas[svc.SQL_RESPOSTA_DIA_EXPORT] = ("resposta_dia_export", [])
-    torre.rotas[svc.SQL_CHAT_ANTERIOR_EXPORT] = ("chat_anterior_export", [])
+    torre.rotas.update(_rotas_comparacao(True))
     fonte = _fonte(hoje=D(2026, 11, 9))
     resp = _montar(fonte, datetime(2026, 11, 9, 15, 0, tzinfo=timezone.utc), 30, brands=("kokeshi",), torre=torre)
     kok = resp.atendimento.marcas[0]

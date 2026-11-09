@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
@@ -329,11 +330,15 @@ def consultar_datamart(sql: str, params: dict) -> list[dict]:
 
 def _rodar(consultar: Consultar, nome: str, sql: str, params: dict) -> Optional[list[dict]]:
     """None = falhou (o motivo fixo sai na resposta; o log leva so' a classe)."""
+    inicio = time.perf_counter()
     try:
         return consultar(sql, params)
     except Exception as exc:  # noqa: BLE001 — isolamento por fonte e' o contrato
         logger.warning("cx_atendimento: consulta %s falhou (%s)", nome, type(exc).__name__)
         return None
+    finally:
+        # duracao por consulta (com cache = ~0 s): base para achar a que pesa no Render
+        logger.info("cx_atendimento: consulta %s em %.2f s", nome, time.perf_counter() - inicio)
 
 
 # ---------------------------------------------------------------------------
@@ -1152,64 +1157,89 @@ def _desde(indicador: str, marca: str) -> date:
     return DESDE[indicador][1 if marca in SHOPEE_EXPORT else 0]
 
 
-# Mesma regra de `SQL_SHOPEE_MARCAS` / `SQL_SHOPEE_EXPORT_MARCAS`, por dia.
-SQL_PEDIDOS_DIA = """
-SELECT shop_account AS marca, created_date_brt AS dia,
-       COUNT(*) FILTER (WHERE NOT (order_status = 'unpaid'
-                                   OR (order_status = 'cancelled'
-                                       AND lower(trim(cancel_reason)) = :nao_pago))) AS pedidos,
-       COUNT(*) FILTER (WHERE order_status = 'cancelled'
-                          AND lower(trim(coalesce(cancel_reason, ''))) <> :nao_pago) AS cancelados
-  FROM silver.stg_shopee_orders
- WHERE shop_account = ANY(:marcas)
-   AND created_date_brt BETWEEN :inicio AND :fim
- GROUP BY 1, 2
-"""
-SQL_PEDIDOS_DIA_EXPORT = f"""
-SELECT shop_account AS marca, (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
-       COUNT(*) FILTER (WHERE NOT (order_status = 'UNPAID'
-                                   OR (order_status = 'CANCELLED' AND {_NAO_PAGO_EXPORT}))) AS pedidos,
-       COUNT(*) FILTER (WHERE order_status = 'CANCELLED' AND NOT {_NAO_PAGO_EXPORT}) AS cancelados
-  FROM marts.expedicao_shopee_export_pedido
- WHERE shop_account = ANY(:marcas)
-   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
- GROUP BY 1, 2
-"""
-
-# Mesma regra de `SQL_DEVOLUCOES_MARCAS` (so' ACCEPTED vira reembolso), por dia.
-_SQL_DEVOLUCOES_DIA = """
-SELECT brand AS marca, (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
-       COUNT(*) FILTER (WHERE status = 'ACCEPTED') AS aceitas,
-       SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED') AS reembolsado
-  FROM {tabela}
+# Em producao cada consulta do Data Mart vira uma chamada ao Metabase, que as
+# atende em fila: 4 chamadas a mais custaram ~+1 s a frio (medido 09/11/2026).
+# Por isso as partes da comparacao vao numa consulta so' por fonte; `parte`
+# diz de qual veio cada linha. Regras: pedidos = `SQL_SHOPEE_MARCAS` /
+# `SQL_SHOPEE_EXPORT_MARCAS` por dia; devolucoes = `SQL_DEVOLUCOES_MARCAS`
+# (so' ACCEPTED vira reembolso) por dia; chat = a foto de `agora - dias`.
+_TABELAS_COMPARACAO = {
+    False: ("raw.shopee_returns", "raw.shopee_account_health_metric", "raw.shopee_chat_snapshot"),
+    True: ("marts.shopee_returns_export", "marts.shopee_saude_metrica_export", "marts.shopee_chat_export"),
+}
+_PARTE_DEVOLUCOES = """
+SELECT 'devolucoes' AS parte, brand AS marca, (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
+       (COUNT(*) FILTER (WHERE status = 'ACCEPTED'))::numeric AS a,
+       (SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED'))::numeric AS b
+  FROM {devolucoes}
  WHERE brand = ANY(:marcas)
-   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
- GROUP BY 1, 2
-"""
-SQL_DEVOLUCOES_DIA = _SQL_DEVOLUCOES_DIA.format(tabela="raw.shopee_returns")
-SQL_DEVOLUCOES_DIA_EXPORT = _SQL_DEVOLUCOES_DIA.format(tabela="marts.shopee_returns_export")
-
-_SQL_RESPOSTA_DIA = """
-SELECT brand AS marca, captured_date AS dia, current_period AS valor
-  FROM {tabela}
+   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :dev_inicio AND :dev_fim
+ GROUP BY 2, 3"""
+_PARTE_RESPOSTA = """
+SELECT 'resposta', brand, captured_date, current_period::numeric, NULL::numeric
+  FROM {metricas}
  WHERE brand = ANY(:marcas)
    AND metric_id = :metrica
-   AND captured_date BETWEEN :inicio AND :fim
-"""
-SQL_RESPOSTA_DIA = _SQL_RESPOSTA_DIA.format(tabela="raw.shopee_account_health_metric")
-SQL_RESPOSTA_DIA_EXPORT = _SQL_RESPOSTA_DIA.format(tabela="marts.shopee_saude_metrica_export")
+   AND captured_date BETWEEN :resp_inicio AND :resp_fim"""
+_PARTE_CHAT = """
+(SELECT DISTINCT ON (brand) 'chat', brand, NULL::date,
+        (to_jsonb(s) ->> 'conversas_7d')::numeric, (to_jsonb(s) ->> 'conversas_30d')::numeric
+   FROM {chat} s
+  WHERE brand = ANY(:marcas)
+    AND captured_at BETWEEN :desde AND :ate
+  ORDER BY brand, captured_at DESC)"""
+_PARTE_PEDIDOS = """
+SELECT 'pedidos', shop_account, created_date_brt,
+       (COUNT(*) FILTER (WHERE NOT (order_status = 'unpaid'
+                                    OR (order_status = 'cancelled'
+                                        AND lower(trim(cancel_reason)) = :nao_pago))))::numeric,
+       (COUNT(*) FILTER (WHERE order_status = 'cancelled'
+                           AND lower(trim(coalesce(cancel_reason, ''))) <> :nao_pago))::numeric
+  FROM silver.stg_shopee_orders
+ WHERE shop_account = ANY(:marcas)
+   AND created_date_brt BETWEEN :ped_inicio AND :ped_fim
+ GROUP BY 2, 3"""
+_PARTE_PEDIDOS_EXPORT = f"""
+SELECT 'pedidos', shop_account, (create_time AT TIME ZONE 'America/Sao_Paulo')::date,
+       (COUNT(*) FILTER (WHERE NOT (order_status = 'UNPAID'
+                                    OR (order_status = 'CANCELLED' AND {_NAO_PAGO_EXPORT}))))::numeric,
+       (COUNT(*) FILTER (WHERE order_status = 'CANCELLED' AND NOT {_NAO_PAGO_EXPORT}))::numeric
+  FROM marts.expedicao_shopee_export_pedido
+ WHERE shop_account = ANY(:marcas)
+   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :ped_inicio AND :ped_fim
+ GROUP BY 2, 3"""
+#: Colunas de cada parte, no lugar de `a` e `b`.
+_COLUNAS_PARTE = {"devolucoes": ("aceitas", "reembolsado"), "resposta": ("valor", None),
+                  "chat": ("conversas_7d", "conversas_30d"), "pedidos": ("pedidos", "cancelados")}
 
-_SQL_CHAT_ANTERIOR = """
-SELECT DISTINCT ON (brand) brand AS marca, captured_at,
-       (to_jsonb(s) ->> 'conversas_7d')::int  AS conversas_7d,
-       (to_jsonb(s) ->> 'conversas_30d')::int AS conversas_30d
-  FROM {tabela} s
- WHERE brand = ANY(:marcas)
-   AND captured_at BETWEEN :desde AND :ate
- ORDER BY brand, captured_at DESC
-"""
-SQL_CHAT_ANTERIOR = _SQL_CHAT_ANTERIOR.format(tabela="raw.shopee_chat_snapshot")
-SQL_CHAT_ANTERIOR_EXPORT = _SQL_CHAT_ANTERIOR.format(tabela="marts.shopee_chat_export")
+
+def sql_comparacao(*, exportar: bool, com_chat: bool) -> str:
+    """A consulta unica da comparacao (texto fixo para cada combinacao)."""
+    dev, met, chat = _TABELAS_COMPARACAO[exportar]
+    partes = [_PARTE_DEVOLUCOES.format(devolucoes=dev), _PARTE_RESPOSTA.format(metricas=met)]
+    if com_chat:
+        partes.append(_PARTE_CHAT.format(chat=chat))
+    partes.append(_PARTE_PEDIDOS_EXPORT if exportar else _PARTE_PEDIDOS)
+    return "\nUNION ALL".join(partes) + "\n"
+
+
+def _separar_partes(linhas: Optional[list[dict]], sufixo: str,
+                    com_chat: bool) -> dict[str, Optional[list[dict]]]:
+    """Linhas da consulta unica -> uma lista por parte, com os nomes de antes."""
+    nomes = ["devolucoes", "resposta", "pedidos"] + (["chat"] if com_chat else [])
+    if linhas is None:
+        return {n + sufixo: None for n in nomes}
+    out: dict[str, Optional[list[dict]]] = {n + sufixo: [] for n in nomes}
+    for r in linhas:
+        parte = str(r.get("parte"))
+        if parte + sufixo not in out:
+            continue
+        col_a, col_b = _COLUNAS_PARTE[parte]
+        linha = {"marca": r.get("marca"), "dia": r.get("dia"), col_a: r.get("a")}
+        if col_b:
+            linha[col_b] = r.get("b")
+        out[parte + sufixo].append(linha)
+    return out
 
 
 def _dia(v: Any) -> Optional[date]:
@@ -1235,26 +1265,23 @@ def _rodar_juntas(tarefas: dict[str, tuple[Consultar, str, dict]]) -> dict[str, 
 
 def _tarefas_comparacao(consultar: Consultar, consultar_torre: Consultar, api: list[str], exp: list[str],
                         janela: Janela, anterior: Janela, agora: datetime, hoje: date) -> dict:
-    """Uma consulta por fonte; a de devolucoes cobre a janela anterior e a atual juntas."""
+    """Uma consulta por fonte (`sql_comparacao`): anterior e serie juntos."""
     t: dict[str, tuple[Consultar, str, dict]] = {}
-    alvo = agora - timedelta(days=janela.dias)
+    n = janela.dias
+    alvo = agora - timedelta(days=n)
     for marcas, c, sufixo in ((api, consultar, ""), (exp, consultar_torre, "_export")):
         if not marcas:
             continue
         exportar = bool(sufixo)
-        p_ped = {"marcas": marcas, "inicio": janela.inicio, "fim": janela.fim}
+        p = {"marcas": marcas, "dev_inicio": anterior.inicio, "dev_fim": janela.fim,
+             # da foto mais velha que a comparacao pede (a de inicio - dias) ate' hoje
+             "resp_inicio": janela.inicio - timedelta(days=n), "resp_fim": hoje,
+             "metrica": METRICA_RESPOSTA, "ped_inicio": janela.inicio, "ped_fim": janela.fim}
+        if n <= 30:
+            p.update(desde=alvo - TOLERANCIA_FOTO_CHAT, ate=alvo)
         if not exportar:
-            p_ped["nao_pago"] = SHOPEE_NAO_PAGO
-        t["pedidos" + sufixo] = (c, SQL_PEDIDOS_DIA_EXPORT if exportar else SQL_PEDIDOS_DIA, p_ped)
-        t["devolucoes" + sufixo] = (c, SQL_DEVOLUCOES_DIA_EXPORT if exportar else SQL_DEVOLUCOES_DIA,
-                                    {"marcas": marcas, "inicio": anterior.inicio, "fim": janela.fim})
-        # da foto mais velha que a comparacao pede (a de inicio - dias) ate' hoje
-        t["resposta" + sufixo] = (c, SQL_RESPOSTA_DIA_EXPORT if exportar else SQL_RESPOSTA_DIA,
-                                  {"marcas": marcas, "inicio": janela.inicio - timedelta(days=janela.dias),
-                                   "fim": hoje, "metrica": METRICA_RESPOSTA})
-        if janela.dias <= 30:
-            t["chat" + sufixo] = (c, SQL_CHAT_ANTERIOR_EXPORT if exportar else SQL_CHAT_ANTERIOR,
-                                  {"marcas": marcas, "desde": alvo - TOLERANCIA_FOTO_CHAT, "ate": alvo})
+            p["nao_pago"] = SHOPEE_NAO_PAGO
+        t["comparacao" + sufixo] = (c, sql_comparacao(exportar=exportar, com_chat=n <= 30), p)
         if exportar and anterior.inicio >= _desde("cancelamento", marcas[0]):
             t["pedidos_anterior_export"] = (c, SQL_SHOPEE_EXPORT_MARCAS,
                                             {"marcas": marcas, "inicio": anterior.inicio, "fim": anterior.fim})
@@ -1302,6 +1329,10 @@ def _aplicar_comparacao(res: dict, *, janela: Janela, anterior: Janela, agora: d
                         lojas: list[str]) -> dict:
     """Preenche os `*_anterior` e devolve os campos da resposta (API-3)."""
     n = janela.dias
+    res = dict(res)
+    for sufixo in ("", "_export"):
+        if "comparacao" + sufixo in res:
+            res.update(_separar_partes(res.pop("comparacao" + sufixo), sufixo, n <= 30))
     sem_anterior: dict[str, SemComparacao] = {}
     sem_serie: dict[str, SemComparacao] = {}
 

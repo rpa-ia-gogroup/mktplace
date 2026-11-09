@@ -190,8 +190,9 @@ coberto, `detalhe`), nunca zero e nunca número parcial.
 
 `serie_diaria` vem por dia × loja; o front agrega com a regra do card, e loja `null` no dia anula o ponto.
 Início de cada fonte (medido em 08/11/2026): pedidos Silver 01/2026 e export Kokeshi 04/10; devoluções 05/10
-(Kokeshi 07/10); Saúde da Conta e chat 04/11 (Kokeshi 06/11); NPS `cx_nps` 28/08. As consultas novas rodam em
-paralelo com as da aba.
+(Kokeshi 07/10); Saúde da Conta e chat 04/11 (Kokeshi 06/11); NPS `cx_nps` 28/08. Na Shopee, a comparação
+inteira é UMA consulta por fonte (`sql_comparacao`), em paralelo com as da aba: em produção cada consulta vira
+uma chamada ao Metabase, atendida em fila (4 consultas separadas custaram ~+1 s a frio, 09/11/2026).
 
 ## 8. Arquitetura e fases
 
