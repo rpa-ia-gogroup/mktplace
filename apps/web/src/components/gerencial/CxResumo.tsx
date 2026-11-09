@@ -86,11 +86,10 @@ export function pilula(c: ComparacaoCard): ReactNode {
 /**
  * Rodape de comparacao do card: a pilula + "antes" quando ha' periodo anterior;
  * sem ele, a linha neutra da API-3 ("comparação a partir de dd/mm"); e o mini
- * grafico quando ha' serie real. Nunca vermelho, nunca zero. `emReais`: o
- * reembolso em R$ (card da Gerencial), com o delta em %.
+ * grafico quando ha' serie real. Nunca vermelho, nunca zero.
  */
-export function rodapeComparacao(r: ResumoCx, i: IndicadorCx, emReais = false): RodapeCard {
-  const comp = emReais ? r.comparacaoReembolsoReais : r.comparacao[i];
+export function rodapeComparacao(r: ResumoCx, i: IndicadorCx): RodapeCard {
+  const comp = r.comparacao[i];
   const grafico = comp?.serie ? { serie: comp.serie, granularidade: comp.granularidade } : {};
   // cancelamento: com sem_anterior da API (faltou loja no anterior), vale a regra geral: sem pilula, so' a linha neutra
   const c =
@@ -292,7 +291,8 @@ function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: I
       {card("contactRate", SPAN_TOPO, r.contactRate, null, rodapeComparacao(r, "contactRate"))}
       {card("resposta", SPAN_TOPO, r.resposta, null, rodapeComparacao(r, "resposta"))}
       {card("cancelamento", SPAN_TOPO, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
-      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null, rodapeComparacao(r, "reembolso", true))}
+      {/* % antes do absoluto, como na /cx: a taxa no numero, o R$ embaixo */}
+      {card("reembolso", SPAN_BASE, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? <span className="whitespace-nowrap">{r.reembolsado} reembolsado</span> : null, rodapeComparacao(r, "reembolso"))}
       <div className={`${CARD} ${SPAN_BASE}`}>
         <KpiTile
           variante="gerencial"

@@ -901,9 +901,6 @@ test("API-3 Shopee: anterior com as mesmas lojas do valor; delta em p.p.; respos
   assert.deepEqual([r.comparacao.reembolso?.delta?.toFixed(1), r.comparacao.reembolso?.antes], ["0.4", "antes 0,4%"]);
   // resposta: media simples (rituaria sem conversas) de 80 e 50 = 65 contra 64 hoje; subir e' melhor
   assert.deepEqual([r.comparacao.resposta?.delta?.toFixed(1), r.comparacao.resposta?.tone], ["-1.0", "higher_is_better"]);
-  // reembolso em R$ (Gerencial): 450,50 contra 300 = +50,2%
-  assert.deepEqual([r.comparacaoReembolsoReais?.delta?.toFixed(1), r.comparacaoReembolsoReais?.unidade], ["50.2", "pct"]);
-  assert.match(r.comparacaoReembolsoReais?.antes ?? "", /^antes R\$\s300,00$/);
 });
 
 test("API-3 Shopee: falta o anterior de uma loja do valor, nao compara (nunca parcial)", () => {
@@ -926,7 +923,6 @@ test("API-3 Shopee: serie diaria agrega as lojas com a regra do card; loja sem m
   const r = resumoCxGerencial(p, rotulo);
   assert.deepEqual(r.comparacao.cancelamento?.serie, [1, 1.5, 2, 2.5], "Σcanc/Σped por dia");
   assert.deepEqual(r.comparacao.reembolso?.serie, [0.5, 0.5, 0.5, 0.5]);
-  assert.deepEqual(r.comparacaoReembolsoReais?.serie, [10, 10, 10, 10]);
   assert.equal(r.comparacao.cancelamento?.delta, null, "cancelamento: o delta de hoje segue em cancelamentoDelta");
   p.serie_diaria[3] = { ...p.serie_diaria[3], cancelamentos: null };
   assert.equal(resumoCxGerencial(p, rotulo).comparacao.cancelamento?.serie ?? null, null, "um ponto nulo: sem grafico");
@@ -962,4 +958,10 @@ test("periodo da Gerencial: 7, 30 e 90 dias fechados ate' ontem viram a janela d
   const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(pagina, /dateFrom=\{filters\.dateFrom\}\s+dateTo=\{filters\.dateTo\}/);
   assert.match(pagina, /dias: dialog\.dias \}\)/, "o detalhe tambem leva o periodo");
+});
+
+test("Gerencial: card Reembolso com o % no numero e o R$ embaixo, como na /cx", () => {
+  const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.match(resumo, /card\("reembolso", SPAN_BASE, r\.reembolsoPct \?\? "—", r\.reembolsado !== "—" \?/);
+  assert.match(resumo, /\{r\.reembolsado\} reembolsado/);
 });
