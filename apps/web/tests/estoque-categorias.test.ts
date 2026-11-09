@@ -140,7 +140,7 @@ test("parcial: UM aviso no topo das abas; nenhum card repete o prefixo", () => {
   }
   const kpi = ler("src/components/ui/KpiTile.tsx");
   assert.match(kpi, /aria-pressed=\{filtra \? ativo : undefined\}/);
-  assert.match(kpi, /aria-haspopup=\{filtra \? undefined : "dialog"\}/);
+  assert.ok(kpi.includes('aria-haspopup={!filtra && acaoFalada === "abrir detalhe" ? "dialog" : undefined}'));
 });
 
 test("Shopee: card com chip de Classificação equivalente marca o chip e não mostra 'Mostrando'", async () => {

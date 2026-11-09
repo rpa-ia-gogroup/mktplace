@@ -265,7 +265,7 @@ function KpiCardIdentidade({
       </span>
     </>
   );
-  const base = `w-full min-w-0 h-full text-left bg-surface border rounded-xl p-3.5 ${folgaRodape ? "pb-11" : ""} flex flex-col gap-1 ${borda}`;
+  const base = `w-full min-w-0 h-full text-left bg-surface border rounded-xl p-3.5 flex flex-col gap-1 ${borda}${folgaRodape ? " pb-11" : ""}`;
   if (onAbrir) {
     return (
       <button
