@@ -970,13 +970,15 @@ export default function ExpedicaoClient({
       <span aria-hidden="true" className="text-xs text-ink-faint">
         Período
       </span>
-      <Segmented
-        rotulo="Período"
-        opcoes={opcoesDoSeletor(REGRA)}
-        valor={valorDoSeletor(janela, REGRA, personalizado)}
-        aoEscolher={escolherJanela}
-      />
-      {periodoConsultado ? <InfoDica texto={periodoConsultado} /> : null}
+      <span className="inline-flex items-center gap-2">
+        <Segmented
+          rotulo="Período"
+          opcoes={opcoesDoSeletor(REGRA)}
+          valor={valorDoSeletor(janela, REGRA, personalizado)}
+          aoEscolher={escolherJanela}
+        />
+        {periodoConsultado ? <InfoDica texto={periodoConsultado} /> : null}
+      </span>
       {valorDoSeletor(janela, REGRA, personalizado) === OPCAO_PERSONALIZADA && (
         <JanelaPersonalizada max={REGRA.max} diasAplicados={janela} aoAplicar={aplicarJanela} />
       )}
@@ -1140,7 +1142,9 @@ export default function ExpedicaoClient({
         variante="gerencial"
         icone={ICONE_DA_MEDIDA[k.chave]}
         ajuda={chaveDoKpiDaFila(filtros.channel, k.chave)}
-        rotulo={ROTULO_CURTO[k.chave] ?? k.rotulo}
+        // Com a divisao, "perto de vencer" e' da fila publicada (com FBS): a
+        // base fica escrita, porque a do heroi e' so' a do vendedor.
+        rotulo={divisao && k.chave === "due_soon" ? "Perto de vencer · com FBS" : (ROTULO_CURTO[k.chave] ?? k.rotulo)}
         valor={k.valorTexto ?? (ausente ? "—" : (pct ?? numero(v ?? 0)))}
         comparacao={
           ausente

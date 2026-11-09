@@ -207,3 +207,17 @@ test("Shopee usa a reserva do Data Mart so' sem publicacao oficial", () => {
   assert.equal(precisaReserva({ availability: "available", brands: [] }), false);
 });
 
+
+test("fila: metrica oficial fora do limite le '41,8% · meta ≥ 60%', como na CX", async () => {
+  const { detalheForaDoLimite } = await import("../src/lib/expedicao-performance.ts");
+  assert.equal(
+    detalheForaDoLimite({ valor: 41.84, unidade: "pct", meta: 60, comparador: ">=", rotulo_meta: "Meta >= 60" }),
+    "41,8% · meta ≥ 60%",
+  );
+  assert.equal(
+    detalheForaDoLimite({ valor: 2.5, unidade: "pct", meta: 1.5, comparador: "<=", rotulo_meta: null }),
+    "2,5% · meta ≤ 1,5%",
+  );
+  // Sem meta numerica, vale o rotulo da API; sem valor, "—" (nunca 0).
+  assert.equal(detalheForaDoLimite({ valor: null, unidade: "pct", meta: null, comparador: null, rotulo_meta: "Meta >= 60" }), "— · Meta >= 60");
+});

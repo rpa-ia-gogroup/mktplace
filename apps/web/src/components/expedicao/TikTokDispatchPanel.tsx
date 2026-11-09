@@ -106,8 +106,6 @@ import {
   ROTULO_LIMIAR_INTERNO,
   ROTULO_META,
   ROTULO_SEVERIDADE,
-  SELO_ACIMA_DA_META,
-  SELO_DENTRO_DA_META,
   TITULO_FLUXO,
   TITULO_LDR,
   VALOR_SEM_TAXA,
@@ -123,6 +121,7 @@ import {
   formatarTaxa,
   fotografiaDoTikTok,
   marcasForaDaMeta,
+  alertasNaFila,
   montarAtencaoDoTikTok,
   montarBarraDeQualidadeTikTok,
   queryDoTikTok,
@@ -465,13 +464,24 @@ export default function TikTokDispatchPanel({
       variante="gerencial"
       icone={Gauge}
       rotulo="LDR da janela"
-      // T-0010: a taxa PUBLICADA pela API com a base ("3,35% · 62 de 1.820");
-      // `linha`: a base desce para uma linha menor, sem quebrar o valor em 390 px.
-      valor={<TaxaComBase numerador={ldr.late} base={ldr.base} taxa={ldr.rate} linha />}
+      // A taxa PUBLICADA pela API, com 1 casa como os outros cartoes; a base
+      // ("6.883 de 56.970") em title + sr-only. "Medição interna" fica no ⓘ.
+      valor={
+        ldr.rate === null ? (
+          "—"
+        ) : (
+          <span className="relative" title={`${formatarInteiro(ldr.late)} de ${formatarInteiro(ldr.base)}`}>
+            {formatarTaxa(ldr.rate, 1)}
+            <span className="sr-only">
+              {" "}· {formatarInteiro(ldr.late)} de {formatarInteiro(ldr.base)}
+            </span>
+          </span>
+        )
+      }
       comparacao={
         ldr.rate === null
           ? "Sem vencimento maduro na janela."
-          : `referência ${formatarTaxa(META_TIKTOK_LDR, 0)} · ${ldr.above_target ? SELO_ACIMA_DA_META : SELO_DENTRO_DA_META}`
+          : `referência ${formatarTaxa(META_TIKTOK_LDR, 0)} · ${ldr.above_target ? "acima da meta" : "dentro da meta"}`
       }
       // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
       tom={ldr.rate === null ? "ausente" : ldr.above_target ? "critico" : "bom"}
@@ -489,11 +499,7 @@ export default function TikTokDispatchPanel({
   const ondeAgir = ondeAgirTikTok(abertos);
   const itensFila: ItemFila[] = [
     ...(ondeAgir ? [ondeAgir] : []),
-    ...atencao.map((i) => ({
-      chave: i.chave,
-      severidade: i.tom === "critico" || i.tom === "atencao" ? i.tom : ("info" as const),
-      titulo: i.texto,
-    })),
+    ...alertasNaFila(atencao),
     ...itensOficiais,
   ];
   const fila = <FilaAtencao itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;

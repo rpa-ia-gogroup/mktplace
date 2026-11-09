@@ -50,7 +50,9 @@ import { brandLabel } from "@/lib/filters/brands";
 type Carga = { tipo: "carregando" } | { tipo: "erro" } | { tipo: "ok"; dados: RespostaAbertos };
 
 function pct(n: number, base: number): string {
-  return base > 0 ? `${((n / base) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—";
+  return base > 0
+    ? `${((n / base) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+    : "—";
 }
 
 // ---------------------------------------------------------------------------

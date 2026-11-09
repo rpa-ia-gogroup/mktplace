@@ -10,6 +10,7 @@ import { buscarExpedicao } from "@/lib/expedicao-demo";
 import {
   ROTULO_OFICIAL,
   ROTULO_SITUACAO,
+  detalheForaDoLimite,
   diaCurto,
   problemaNaPerformance,
   quantidadeMetrica,
@@ -85,7 +86,7 @@ export function itensForaDoLimite(estado: Estado): ItemFila[] {
         chave: `perf-${c.marca}-${m.codigo}`,
         severidade: "critico" as const,
         titulo: `${brandLabel(c.marca)}: ${m.rotulo} fora do limite oficial`,
-        detalhe: `${valorMetrica(m)}${m.rotulo_meta ? ` · ${m.rotulo_meta}` : ""}`,
+        detalhe: detalheForaDoLimite(m),
       })),
   );
 }
