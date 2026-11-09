@@ -49,6 +49,13 @@ class ImpactoAnterior(BaseModel):
     motivo_pct: Optional[str] = None
 
 
+class DiferencaRecorte(BaseModel):
+    """API-4: por que a foto anterior nao compara (marcas no ML, contas na Shopee)."""
+    ref_date_anterior: date
+    so_na_atual: list[str]
+    so_na_anterior: list[str]
+
+
 class CanalImpactoOk(BaseModel):
     canal: Literal["ml", "shopee"]
     status: Literal["ok"] = "ok"
@@ -75,6 +82,8 @@ class CanalImpactoOk(BaseModel):
     #: diferente; nesses dois casos o motivo vem em `motivo_anterior`).
     anterior: Optional[ImpactoAnterior] = None
     motivo_anterior: Optional[str] = None
+    #: So' com recorte diferente: o que so' existe numa das fotos.
+    diferenca_recorte: Optional[DiferencaRecorte] = None
 
 
 class CanalImpactoIndisponivel(BaseModel):

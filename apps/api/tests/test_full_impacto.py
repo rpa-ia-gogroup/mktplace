@@ -182,6 +182,7 @@ def test_sem_foto_anterior_ou_recorte_diferente_nao_tem_antes():
     s = Sessao(ant_ml=ant, recortes={("ml", REF_ML): ["barbours"], ("ml", ant): ["barbours", "kokeshi"]})
     ml = _bloco(s, anterior=True)["ml"]
     assert ml["anterior"] is None and ml["motivo_anterior"] == svc.MOTIVO_RECORTE_DIFERENTE
+    assert ml["diferenca_recorte"] == {"ref_date_anterior": ant, "so_na_atual": [], "so_na_anterior": ["kokeshi"]}
     assert not [p for n, p in s.params if n == "SQL_ML_RUPTURAS" and p["ref_date"] == ant], "nao calcula o que nao vai usar"
 
 

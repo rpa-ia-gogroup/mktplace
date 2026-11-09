@@ -28,6 +28,7 @@ import {
   tituloMarca,
   type MLFullEstoqueResponse,
 } from "./ml-full-estoque.ts";
+import { doCanal } from "./canal-preposicao.ts";
 
 export type Canal = "ml" | "shopee";
 
@@ -413,6 +414,8 @@ export interface CanalImpactoOk {
   /** API-4 (so' com `?anterior=true`): os totais na foto anterior, mesmo recorte. */
   anterior?: ImpactoAnterior | null;
   motivo_anterior?: string | null;
+  /** So' com recorte diferente: marcas (ML) ou contas (Shopee) que so' existem numa das fotos. */
+  diferenca_recorte?: { ref_date_anterior: string; so_na_atual: string[]; so_na_anterior: string[] } | null;
 }
 
 export interface ImpactoAnterior {
@@ -627,5 +630,24 @@ export function antesHeroi(canais: ResumoCanal[], antes: { ml: ResumoCanal | nul
   const a = taxa(agora), b = taxa([ml, sh]);
   if (a === null || b === null) return null;
   return { pp: (a - b) * 100, texto: `antes ${fmtPct(b)} · fotos de ${diaMes(ml.refDate)} (ML) e ${diaMes(sh.refDate)} (Shopee)` };
+}
+
+/**
+ * Por que o cartao ficou sem pilula, para title + sr-only (sem texto novo na
+ * tela). So' depois da 2a chamada; `null` quando ha' comparacao.
+ * Ex.: "sem comparação: a foto anterior do ML (04/11) tem RITUÁRIA e a atual não".
+ */
+export function semComparacao(canal: Canal, comAnterior: ImpactoRuptura | null): string | null {
+  const c = impactosOk(comAnterior).find((x) => x.canal === canal);
+  if (!c || c.anterior) return null;
+  const d = c.diferenca_recorte;
+  if (!d) return `sem comparação: não há foto anterior ${doCanal(canal, NOME_CANAL[canal])}`;
+  const lista = (xs: string[]) => xs.map(tituloMarca).join(", ");
+  const quando = diaMes(d.ref_date_anterior);
+  const partes = [
+    d.so_na_anterior.length ? `a foto anterior ${doCanal(canal, NOME_CANAL[canal])} (${quando}) tem ${lista(d.so_na_anterior)} e a atual não` : null,
+    d.so_na_atual.length ? `a foto atual ${doCanal(canal, NOME_CANAL[canal])} tem ${lista(d.so_na_atual)} e a anterior (${quando}) não` : null,
+  ].filter(Boolean);
+  return `sem comparação: ${partes.join("; ")}`;
 }
 

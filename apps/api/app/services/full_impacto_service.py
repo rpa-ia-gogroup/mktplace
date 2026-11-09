@@ -375,8 +375,13 @@ def _com_anterior(db: Session, atual: dict, ant: Optional[date], sql_recorte,
     if ant is None:
         return {**atual, "anterior": None, "motivo_anterior": MOTIVO_SEM_FOTO_ANTERIOR}
     recorte = lambda d: db.execute(sql_recorte, {**params, "ref_date": d}).scalar() or []
-    if list(recorte(atual["ref_date"])) != list(recorte(ant)):
-        return {**atual, "anterior": None, "motivo_anterior": MOTIVO_RECORTE_DIFERENTE}
+    agora, antes_ = set(recorte(atual["ref_date"])), set(recorte(ant))
+    if agora != antes_:
+        # O que muda entre as fotos, para a tela dizer POR QUE nao ha' comparacao.
+        dif = {"ref_date_anterior": ant, "so_na_atual": sorted(agora - antes_),
+               "so_na_anterior": sorted(antes_ - agora)}
+        return {**atual, "anterior": None, "motivo_anterior": MOTIVO_RECORTE_DIFERENTE,
+                "diferenca_recorte": dif}
     antes = calcular(ant)
     return {**atual, "anterior": {k: antes[k] for k in CAMPOS_ANTERIOR}, "motivo_anterior": None}
 

@@ -13,6 +13,7 @@ import {
   antesImpacto,
   antesParamVenda,
   antesHeroi,
+  semComparacao,
   kpiParamVenda,
   impactoPorMarca,
   mediana,
@@ -588,5 +589,19 @@ test("antes do 'param a venda' e do heroi: so' com os dois lados medidos", () =>
   const h = antesHeroi(canais, { ml: resumoML(ML), shopee: resumoShopee(SHOPEE) })!;
   assert.equal(h.pp, 0);
   assert.match(h.texto, /^antes 37,5% · fotos de \d\d\/\d\d \(ML\) e \d\d\/\d\d \(Shopee\)$/);
+});
+
+test("sem comparacao: o motivo diz o que difere entre as fotos (title + sr-only)", () => {
+  const recorte = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: null, motivo_anterior: "recorte",
+    diferenca_recorte: { ref_date_anterior: "2026-11-04", so_na_atual: [], so_na_anterior: ["rituaria"] } } as CanalImpactoOk };
+  assert.equal(semComparacao("ml", recorte), "sem comparação: a foto anterior do ML (04/11) tem RITUÁRIA e a atual não");
+  const semFoto = { ...IMPACTO, shopee: { ...IMPACTO.shopee, anterior: null, motivo_anterior: "x", diferenca_recorte: null } as CanalImpactoOk };
+  assert.equal(semComparacao("shopee", semFoto), "sem comparação: não há foto anterior da Shopee");
+  const nova = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: null, diferenca_recorte: { ref_date_anterior: "2026-11-04", so_na_atual: ["apice"], so_na_anterior: [] } } as CanalImpactoOk };
+  assert.equal(semComparacao("ml", nova), "sem comparação: a foto atual do ML tem ÁPICE e a anterior (04/11) não");
+  // com comparacao (ou antes da 2a chamada): nada
+  const comAnt = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: { ref_date: "2026-11-03", rupturas: 1, sem_estoque_vendedor: null, perda_dia: 1, perda_dia_sem_vendedor: null, dias_gmv: 28, pct_gmv_full: 0.1, pct_gmv_full_sem_vendedor: null, motivo_pct: null } } as CanalImpactoOk };
+  assert.equal(semComparacao("ml", comAnt), null);
+  assert.equal(semComparacao("ml", null), null);
 });
 

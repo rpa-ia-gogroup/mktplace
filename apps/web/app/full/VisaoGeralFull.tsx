@@ -49,6 +49,7 @@ import {
   antesHeroi,
   antesImpacto,
   antesParamVenda,
+  semComparacao,
   heroiRuptura,
   impactoPorMarca,
   kpiImpacto,
@@ -266,6 +267,10 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
   const ok = oks(canais);
   const heroi = heroiRuptura(canais);
   const aHeroi = antesHeroi(canais, antes);
+  // Sem pilula depois da 2a chamada: o motivo vai para title + sr-only (sem texto na tela).
+  const motivoHeroi = antes && !aHeroi
+    ? semComparacao("ml", antes.impacto) ?? semComparacao("shopee", antes.impacto) ?? "sem comparação: falta a foto anterior de um dos canais"
+    : null;
   const shopee = canais.find((c) => c.canal === "shopee");
   const semVendedor = shopee?.status === "ok" ? shopee.semVendedor : null;
   const tot = total(canais);
@@ -298,7 +303,7 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
         valor={heroi.valor}
         tom={heroi.critico ? "critico" : "neutro"}
         delta={aHeroi && <><Pilula a={aHeroi} /><span className="text-ink-faint">{aHeroi.texto}</span></>}
-        contexto={<Escondido texto={heroi.contexto} detalhe={heroi.detalhe} />}
+        contexto={<Escondido texto={heroi.contexto} detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
         meio={
           <ul className="grid grid-cols-1 gap-2">
             {canais.map((c) => (
@@ -323,6 +328,7 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
         {CANAIS.map((canal) => {
           const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
           const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
+          const motivo = antes && !a ? semComparacao(canal, antes.impacto) : null;
           return (
             <KpiTile
               key={canal}
@@ -332,7 +338,7 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
               rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
               ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
               valor={k.valor}
-              comparacao={<Escondido texto={k.comparacao} detalhe={k.detalhe} />}
+              comparacao={<Escondido texto={k.comparacao} detalhe={[k.detalhe, motivo].filter(Boolean).join(" · ") || null} />}
               delta={a && <Pilula a={a} />}
               antes={a?.texto}
               onAbrir={() => setDrill(canal)}
@@ -342,6 +348,9 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
         {(() => {
           const k = kpiParamVenda(shopee);
           const a = antesParamVenda(shopee, antes?.shopee ?? null);
+          const motivo = antes && !a
+            ? semComparacao("shopee", antes.impacto) ?? (antes.shopee?.status === "ok" ? null : "sem comparação: sem o estoque da Shopee na foto anterior")
+            : null;
           return (
             <KpiTile
               variante="gerencial"
@@ -350,7 +359,7 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
               rotulo="Param a venda · Shopee"
               ajuda={<InfoDica texto={NOTA_VENDEDOR} />}
               valor={<Escondido texto={k.valor} detalhe={k.detalhe} />}
-              comparacao={k.comparacao}
+              comparacao={<Escondido texto={k.comparacao} detalhe={motivo} />}
               delta={a && <Pilula a={a} />}
               antes={a?.texto}
             />
