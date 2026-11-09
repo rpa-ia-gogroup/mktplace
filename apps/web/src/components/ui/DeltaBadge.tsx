@@ -1,7 +1,7 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 import type { DeltaTone } from "@/lib/gerencial/kpi-band";
-import { fmtPctBr } from "@/lib/formatters";
+import { fmtDelta } from "@/lib/formatters";
 
 /**
  * Pilula de variacao do card de KPI (extraida da KpiBand da Gerencial, mesmo
@@ -9,7 +9,8 @@ import { fmtPctBr } from "@/lib/formatters";
  * variacao sem cor de juizo (gastar mais nao e' bom nem ruim por si).
  *
  * `unidade="pp"` escreve pontos percentuais ("+0,6 p.p.") para variacao de
- * uma taxa; o padrao "pct" e' o da Gerencial.
+ * uma taxa; "pts" para indice como o NPS ("+3 pts"); o padrao "pct" e' o da
+ * Gerencial.
  */
 export default function DeltaBadge({
   pct,
@@ -18,7 +19,7 @@ export default function DeltaBadge({
 }: {
   pct: number;
   tone?: DeltaTone;
-  unidade?: "pct" | "pp";
+  unidade?: "pct" | "pp" | "pts";
 }) {
   const up = pct >= 0;
   const Seta = up ? ArrowUpRight : ArrowDownRight;
@@ -33,7 +34,7 @@ export default function DeltaBadge({
       className={`inline-flex w-fit items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${pele}`}
     >
       <Seta aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.25} />
-      {unidade === "pp" ? fmtPctBr(pct).replace("%", " p.p.") : fmtPctBr(pct)}
+      {fmtDelta(pct, unidade)}
     </span>
   );
 }

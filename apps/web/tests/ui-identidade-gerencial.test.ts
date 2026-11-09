@@ -146,3 +146,14 @@ test("tokens novos kpi-prazo e kpi-atendimento nos dois temas, no brilho e no Ta
   const tw = ler("tailwind.config.ts");
   assert.ok(tw.includes('prazo: token("kpi-prazo")') && tw.includes('atendimento: token("kpi-atendimento")'));
 });
+
+test("DeltaBadge: 'pct' igual ao da Gerencial; 'pp' para taxa; 'pts' para NPS", async () => {
+  const { fmtDelta, fmtPctBr } = await import("../src/lib/formatters.ts");
+  for (const v of [3.6, -11.1, 0]) assert.equal(fmtDelta(v), fmtPctBr(v), "padrao = o texto de antes");
+  assert.equal(fmtDelta(0.6, "pp"), "+0,6 p.p.");
+  assert.equal(fmtDelta(-1.25, "pp"), "−1,3 p.p.");
+  assert.equal(fmtDelta(3, "pts"), "+3 pts");
+  assert.equal(fmtDelta(-2.5, "pts"), "−2,5 pts");
+  assert.equal(fmtDelta(0, "pts"), "0 pts");
+  assert.ok(ler("src/components/ui/DeltaBadge.tsx").includes("{fmtDelta(pct, unidade)}"));
+});
