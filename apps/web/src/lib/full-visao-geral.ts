@@ -16,6 +16,7 @@ import {
   CONTAS_ESPERADAS_API,
   contasAusentes,
   fmtDecimal,
+  fmtInt,
   fotografiaEstaVelha,
   frescorLabel,
   nomeExibido,
@@ -56,6 +57,11 @@ export interface ItemRuptura {
   mediaDiaria: number;
   /** Shopee: estoque do vendedor (fora do Full). `undefined` no ML: nao se aplica. */
   estoqueVendedor?: number | null;
+  /** Estoque no Full que a rota ja' manda (ML: disponivel; Shopee: vendavel). `null`/`undefined` = nao informado. */
+  estoqueFull?: number | null;
+  /** ML: nao disponivel no Full (reservado, em transferencia etc.) e, dele, o que esta em transferencia. */
+  naoDisponivel?: number | null;
+  transferencia?: number | null;
   /** Impacto POTENCIAL em R$/dia. `null` = sem preco; `undefined` = impacto nao carregado. */
   perdaDia?: number | null;
   /** Perda bruta do item (Shopee com estoque do vendedor: so' como apoio). */
@@ -133,6 +139,7 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
       canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p), sku: p.item_name?.trim() ? p.item_sku?.trim() || null : null,
       codigo: p.item_sku?.trim() || null, kit: p.is_kit || ehKit(p.item_sku),
       mediaDiaria: numero(p.avg_daily_units_28d) ?? 0, estoqueVendedor: p.seller_stock_total,
+      estoqueFull: p.full_stock_saleable,
     }));
   const rupturasCompletas = rupturas.length === i.produtos_ruptura;
   const faltam = contasAusentes(CONTAS_ESPERADAS_API, r.contas_cobertas);
@@ -172,7 +179,8 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
   const rupturas = itens
     .filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA")
     .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0,
-      codigo: v.sku?.trim() || null, kit: ehKit(v.sku) }));
+      codigo: v.sku?.trim() || null, kit: ehKit(v.sku),
+      estoqueFull: v.disponivel, naoDisponivel: v.nao_disponivel, transferencia: v.transfer }));
 
   return {
     canal: "ml",
@@ -377,13 +385,10 @@ export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; com
 }
 
 /** Descricao do top: o que ordena, "todos do ML" quando a lista e' de um canal so', e se esta' incompleta. */
-export function descricaoTop(top: ItemRuptura[], comImpacto: boolean, incompleta: boolean, comCurva = false): string {
+export function descricaoTop(top: ItemRuptura[], _comImpacto: boolean, incompleta: boolean, _comCurva = false): string {
   const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
-  // Com a curva, a ordem e' por grupo (AA, A, demais): a descricao diz isso.
-  const base = comCurva && comImpacto
-    ? "Produtos-chave primeiro (AA, depois A); dentro do grupo, pelo impacto potencial por dia"
-    : `Rupturas ${comImpacto ? "de maior impacto potencial por dia" : "com mais venda por dia"}`;
-  return `${base}${unico}${incompleta ? " · lista incompleta" : ""}`;
+  // A ordem (curva, impacto) mora no ⓘ da fila; o subtitulo diz o que a lista E'.
+  return `Sem estoque no Full, com venda nos últimos 28 dias${unico}${incompleta ? " · lista incompleta" : ""}`;
 }
 
 /** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
@@ -996,6 +1001,26 @@ export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; 
     return { texto: "sem perda", apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
   }
   return { texto: fmtReais(t.perdaDia) };
+}
+
+/**
+ * Celula "Estoque" da fila: onde esta' o estoque que repoe o Full.
+ * ML: "0 no Full" + "N não disponível · M em transferência"; Shopee: "0 no Full" + "N com o vendedor".
+ * Dado nao informado = ausencia com motivo, nunca 0.
+ */
+export function celulaEstoque(t: ItemRuptura): { texto: string; apoio?: string; ausente?: string } {
+  // "0" so' quando medido: ausencia e' "—" com motivo (a lista ja' diz que sao rupturas).
+  const full = t.estoqueFull == null ? null : fmtInt(t.estoqueFull);
+  const texto = `${full ?? "—"} no Full`;
+  const semFull = full === null ? "estoque no Full não informado" : undefined;
+  if (t.canal === "shopee") {
+    return t.estoqueVendedor == null
+      ? { texto, ausente: semFull ?? "estoque do vendedor não informado" }
+      : { texto, apoio: `${fmtInt(t.estoqueVendedor)} com o vendedor`, ausente: semFull };
+  }
+  if (t.naoDisponivel == null) return { texto, ausente: semFull ?? "estoque fora do Full não informado" };
+  const transf = t.transferencia ? ` · ${fmtInt(t.transferencia)} em transferência` : "";
+  return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}`, ausente: semFull };
 }
 
 export const DICA_IMPACTO_FILA =
