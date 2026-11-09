@@ -34,8 +34,10 @@ import {
   ROTULO_INDICADOR,
   carregarCxShopee,
   hrefCx,
+  janelaCxDoPeriodo,
   resumoCxGerencial,
   type IndicadorCx,
+  type JanelaDias,
   type ComparacaoCard,
   type ResultadoCx,
   type ResumoCx,
@@ -43,7 +45,7 @@ import {
 import { brandLabel } from "@/lib/filters/brands";
 import { torreFetch } from "@/lib/torre-fetch";
 
-const DIAS = 30;
+const DIAS: JanelaDias = 30;
 const SEM_HISTORICO_CHAT = "Sem comparação ainda: a coleta do chat começou em 04/11.";
 const SEM_HISTORICO_DEVOLUCAO = "Sem comparação ainda: as devoluções são coletadas desde 05/10.";
 
@@ -115,7 +117,7 @@ export function LinhaSemComparacao({ texto, detalhe }: { texto: string; detalhe:
  * As ressalvas de cada card: o ⓘ do card e o rodape do detalhe dizem o mesmo.
  * `dias`: janela da comparacao (a Gerencial usa sempre 30; a aba CX, o filtro).
  */
-export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] {
+export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias: number = DIAS): string[] {
   // API-3: com anterior, como a seta compara; sem ele, o motivo da API; API antiga, o texto de antes
   const comparacao = (semApi: string) =>
     r.comparacao[i]?.delta != null
@@ -157,37 +159,45 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias = DIAS): string[] 
 
 export default function CxResumo({
   brands,
+  dateFrom,
+  dateTo,
   onOpen,
 }: {
   brands: string[];
-  /** Abre o dialogo unico da Gerencial com o detalhe por marca do card. */
-  onOpen: (indicador: IndicadorCx, resumo: ResumoCx, geradoEm: string) => void;
+  /** Periodo da Gerencial: o CX segue quando for 7, 30 ou 90 dias fechados; senao, 30. */
+  dateFrom?: string;
+  dateTo?: string;
+  /** Abre o dialogo unico da Gerencial com o detalhe por marca do card (e os dias do recorte). */
+  onOpen: (indicador: IndicadorCx, resumo: ResumoCx, geradoEm: string, dias: JanelaDias) => void;
 }) {
   const marca = brands.length ? brands.join(",") : null;
+  const segue = dateFrom && dateTo ? janelaCxDoPeriodo(dateFrom, dateTo) : null;
+  const dias = segue ?? DIAS;
+  const subtitulo = segue || !dateFrom ? `Últimos ${dias} dias até ontem` : `Últimos ${DIAS} dias até ontem · o CX não segue este período`;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
 
   const carregar = useCallback(() => {
     let vivo = true;
     setResultado(null);
-    carregarCxShopee({ marca, dias: DIAS }, torreFetch as typeof fetch).then((r) => {
+    carregarCxShopee({ marca, dias }, torreFetch as typeof fetch).then((r) => {
       if (vivo) setResultado(r);
     });
     return () => {
       vivo = false;
     };
-  }, [marca]);
+  }, [marca, dias]);
 
   useEffect(() => carregar(), [carregar]);
 
   // A /cx so' le' uma marca na URL; com varias, abre em "Todas".
-  const href = hrefCx({ marca: brands.length === 1 ? brands[0] : null, dias: DIAS });
+  const href = hrefCx({ marca: brands.length === 1 ? brands[0] : null, dias });
   const r = resultado?.ok ? resumoCxGerencial(resultado.dados, brandLabel) : null;
 
   return (
     <Panel
       titulo="CX · Shopee"
       icone={MessageCircle}
-      descricao="Últimos 30 dias até ontem"
+      descricao={subtitulo}
       aria-label="CX Shopee"
       acao={
         <Link
@@ -210,7 +220,7 @@ export default function CxResumo({
         />
       ) : (
         <div className="flex flex-col gap-3">
-          <Tiles r={r} abrir={(i) => onOpen(i, r, resultado.dados.gerado_em)} />
+          <Tiles r={r} dias={dias} abrir={(i) => onOpen(i, r, resultado.dados.gerado_em, dias)} />
           <LinhaAtencao r={r} />
         </div>
       )}
@@ -236,7 +246,7 @@ const IDENT: Record<IndicadorCx, { identidade: IdentidadeKpi; icone: LucideIcon 
   reembolso: { identidade: "gmv", icone: Undo2 },
 };
 
-function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
+function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: IndicadorCx) => void }) {
   // CARDS-KPI (09/11): a cor de identidade da /cx; a resposta em kpi-ticket para nao repetir o contact rate ao lado
 
   const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode, extra: RodapeCard = {}) => (
@@ -270,7 +280,7 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
         ajuda={
           <InfoDica
             emControle
-            texto={[i === "resposta" ? `${ROTULO_INDICADOR[i]}.` : null, ...notasDoTile(r, i)].filter(Boolean).join(" ")}
+            texto={[i === "resposta" ? `${ROTULO_INDICADOR[i]}.` : null, ...notasDoTile(r, i, dias)].filter(Boolean).join(" ")}
           />
         }
       />

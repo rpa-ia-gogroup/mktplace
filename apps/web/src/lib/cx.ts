@@ -25,6 +25,7 @@ import {
 import { formatarInstante, MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS } from "./performance-contas.ts";
 import { valorMetrica, type ContaOficial } from "./expedicao-performance.ts";
 import type { DeltaTone } from "./gerencial/kpi-band.ts";
+import { presetRange } from "./filters/presets.ts";
 
 export { JANELAS_DIAS, JANELA_PADRAO, type JanelaDias };
 
@@ -187,6 +188,19 @@ export function lerFiltrosCx(
     marca: marca && marcasPermitidas.includes(marca) ? marca : null,
     dias: (JANELAS_DIAS as readonly number[]).includes(dias) ? (dias as JanelaDias) : JANELA_PADRAO,
   };
+}
+
+/**
+ * GERENCIAL-CX-PERIODO (09/11): o card CX da Gerencial segue o periodo dela so'
+ * quando ele e' 7, 30 ou 90 dias fechados ate' ontem (os presets da Gerencial,
+ * o mesmo recorte da /cx). Qualquer outro (Hoje, mes, intervalo livre): null.
+ */
+export function janelaCxDoPeriodo(dateFrom: string, dateTo: string, hoje: Date = new Date()): JanelaDias | null {
+  for (const d of JANELAS_DIAS) {
+    const p = presetRange(`${d}d` as "7d" | "30d" | "90d", hoje);
+    if (p.dateFrom === dateFrom && p.dateTo === dateTo) return d;
+  }
+  return null;
 }
 
 export function hrefCx(f: FiltrosCx): string {
