@@ -1120,6 +1120,87 @@ def _por_grupo(rows: list[dict], chave) -> dict:
     return grupos
 
 
+#: Rotulo da linha de total do mes no resumo mes x marca.
+RESUMO_TOTAL = "TOTAL"
+
+
+def _soma_decimal(rows: list[dict], col: str):
+    """Soma Decimal so' dos presentes; todos ausentes => None (nunca zero)."""
+    presentes = [Decimal(str(r[col])) for r in rows if r.get(col) is not None]
+    return sum(presentes, Decimal("0")) if presentes else None
+
+
+def resumo_mes_marca(atual: list[dict], novo: list[dict]) -> list[dict]:
+    """GMV e pedidos ANTES (destino hoje) x DEPOIS (fonte), por mes x marca.
+
+    T-0074: e' a saida que se compara com a medicao da T-0072 (excesso da Torre
+    por mes x marca). `delta` = depois - antes, entao um excesso da Torre aparece
+    como delta NEGATIVO de mesmo modulo. Uma linha `TOTAL` fecha cada mes.
+
+    Puro: nao toca banco nem escreve. `None` continua `None` — mes x marca sem
+    linha num dos lados fica com o valor daquele lado ausente, nunca zero, e o
+    delta so' existe quando os dois lados tem valor.
+    """
+    def marca(r):
+        return LOJA_TO_BRAND.get(r["loja_id"], str(r["loja_id"]))
+
+    grupos: dict[tuple[str, str], dict[str, list[dict]]] = {}
+    for lado, rows in (("antes", atual), ("depois", novo)):
+        for r in rows:
+            for m in (marca(r), RESUMO_TOTAL):
+                g = grupos.setdefault((_mes(r["date"]), m), {"antes": [], "depois": []})
+                g[lado].append(r)
+
+    def ordem(k):
+        mes, m = k
+        return (mes, m == RESUMO_TOTAL, m)
+
+    saida = []
+    for mes, m in sorted(grupos, key=ordem):
+        g = grupos[(mes, m)]
+        gmv_a, gmv_d = _soma_decimal(g["antes"], "gmv"), _soma_decimal(g["depois"], "gmv")
+        delta = None if gmv_a is None or gmv_d is None else gmv_d - gmv_a
+        pct = (None if delta is None or not gmv_a
+               else (delta / gmv_a * 100).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
+        saida.append({
+            "mes": mes, "marca": m,
+            "gmv_antes": None if gmv_a is None else str(gmv_a),
+            "gmv_depois": None if gmv_d is None else str(gmv_d),
+            "delta_gmv": None if delta is None else str(delta),
+            "delta_gmv_pct": None if pct is None else str(pct),
+            "orders_antes": sum(int(r.get("orders") or 0) for r in g["antes"]),
+            "orders_depois": sum(int(r.get("orders") or 0) for r in g["depois"]),
+            "linhas_antes": len(g["antes"]),
+            "linhas_depois": len(g["depois"]),
+        })
+    return saida
+
+
+def formatar_resumo_mes_marca(resumo: list[dict]) -> list[str]:
+    """Tabela de texto do resumo, para o terminal do operador."""
+    def v(x):
+        return "-" if x is None else str(x)
+
+    cab = (f"{'mes':7s}  {'marca':9s}  {'gmv_antes':>15s}  {'gmv_depois':>15s}  "
+           f"{'delta_gmv':>13s}  {'delta_%':>8s}  {'pedidos_antes':>13s}  "
+           f"{'pedidos_depois':>14s}  {'linhas_a/d':>10s}")
+    linhas = [
+        "RESUMO MES x MARCA (antes = destino hoje; depois = fonte; NADA foi gravado)",
+        "delta = depois - antes; excesso da Torre aparece como delta negativo",
+        cab,
+        "-" * len(cab),
+    ]
+    for r in resumo:
+        linhas.append(
+            f"{r['mes']:7s}  {r['marca']:9s}  {v(r['gmv_antes']):>15s}  "
+            f"{v(r['gmv_depois']):>15s}  {v(r['delta_gmv']):>13s}  "
+            f"{v(r['delta_gmv_pct']):>8s}  {r['orders_antes']:>13d}  "
+            f"{r['orders_depois']:>14d}  "
+            f"{str(r['linhas_antes']) + '/' + str(r['linhas_depois']):>10s}"
+        )
+    return linhas
+
+
 def compute_impact(atual: list[dict], novo: list[dict],
                    date_from: date, date_to: date) -> dict:
     """O que MUDARIA. Puro: nao toca banco, nao escreve, nao fabrica linha.
@@ -1186,6 +1267,7 @@ def compute_impact(atual: list[dict], novo: list[dict],
             atual, lambda r: LOJA_TO_BRAND.get(r["loja_id"], str(r["loja_id"]))),
         "por_marca_novo": _por_grupo(
             novo, lambda r: LOJA_TO_BRAND.get(r["loja_id"], str(r["loja_id"]))),
+        "por_mes_marca": resumo_mes_marca(atual, novo),
         "cobertura_atual": cobertura(atual),
         "cobertura_nova": cobertura(novo),
         "combinacoes_marca_dia_ausentes": ausentes,
@@ -1405,6 +1487,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     for k, v in rel.items():
         print(f"{k:24s}: {v}")
+    impacto = rel.get("impacto")
+    if not args.apply and isinstance(impacto, dict) and "por_mes_marca" in impacto:
+        # T-0074: a mesma informacao de `impacto.por_mes_marca`, legivel.
+        print()
+        for linha in formatar_resumo_mes_marca(impacto["por_mes_marca"]):
+            print(linha)
     return 0
 
 

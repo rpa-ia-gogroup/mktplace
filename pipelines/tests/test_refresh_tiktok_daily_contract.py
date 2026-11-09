@@ -1282,3 +1282,115 @@ def test_precondicoes_nao_exigem_produto_cartesiano():
     provas = rf.assert_source_contract(_snapshot(raw=raw))
     assert provas["combinacoes_marca_dia_ausentes"] == 1
     assert provas["dias"] == provas["dias_esperados"] == 2
+
+
+# ===========================================================================
+# T-0074 — resumo mes x marca no dry-run (comparacao com a T-0072)
+# ===========================================================================
+
+AGO, SET = date(2026, 8, 15), date(2026, 9, 10)
+
+
+def _linha_resumo(resumo, mes, marca):
+    return next(r for r in resumo if r["mes"] == mes and r["marca"] == marca)
+
+
+def test_resumo_mes_marca_cruza_mes_e_marca_com_total_por_mes():
+    atual = [_fact_row(AGO, 1, gmv=Decimal("1000.00"), orders=10),
+             _fact_row(AGO, 2, gmv=Decimal("500.00"), orders=5),
+             _fact_row(SET, 1, gmv=Decimal("200.00"), orders=2)]
+    novo = [_fact_row(AGO, 1, gmv=Decimal("990.00"), orders=9),
+            _fact_row(AGO, 2, gmv=Decimal("500.00"), orders=5),
+            _fact_row(SET, 1, gmv=Decimal("150.00"), orders=1)]
+    resumo = rf.resumo_mes_marca(atual, novo)
+
+    assert [(r["mes"], r["marca"]) for r in resumo] == [
+        ("2026-08", "apice"), ("2026-08", "barbours"), ("2026-08", rf.RESUMO_TOTAL),
+        ("2026-09", "apice"), ("2026-09", rf.RESUMO_TOTAL)]
+    apice = _linha_resumo(resumo, "2026-08", "apice")
+    # excesso da Torre (destino acima da fonte) aparece como delta NEGATIVO
+    assert apice["gmv_antes"] == "1000.00" and apice["gmv_depois"] == "990.00"
+    assert apice["delta_gmv"] == "-10.00" and apice["delta_gmv_pct"] == "-1.00"
+    assert (apice["orders_antes"], apice["orders_depois"]) == (10, 9)
+    total_ago = _linha_resumo(resumo, "2026-08", rf.RESUMO_TOTAL)
+    assert total_ago["gmv_antes"] == "1500.00" and total_ago["gmv_depois"] == "1490.00"
+    assert total_ago["delta_gmv_pct"] == "-0.67"
+    assert (total_ago["linhas_antes"], total_ago["linhas_depois"]) == (2, 2)
+    assert _linha_resumo(resumo, "2026-09", "apice")["delta_gmv_pct"] == "-25.00"
+
+
+def test_resumo_mes_marca_nao_transforma_ausencia_em_zero():
+    """Chave orfa (so' no destino) e chave nova (so' na fonte): o lado ausente
+    fica None e o delta nao e' inventado."""
+    resumo = rf.resumo_mes_marca([_fact_row(AGO, 3, gmv=Decimal("80.00"))],
+                                 [_fact_row(AGO, 4, gmv=Decimal("70.00"))])
+    orfa = _linha_resumo(resumo, "2026-08", "kokeshi")
+    assert orfa["gmv_antes"] == "80.00" and orfa["gmv_depois"] is None
+    assert orfa["delta_gmv"] is None and orfa["delta_gmv_pct"] is None
+    assert (orfa["linhas_antes"], orfa["linhas_depois"]) == (1, 0)
+    nova = _linha_resumo(resumo, "2026-08", "lescent")
+    assert nova["gmv_antes"] is None and nova["delta_gmv"] is None
+    total = _linha_resumo(resumo, "2026-08", rf.RESUMO_TOTAL)
+    assert total["delta_gmv"] == "-10.00"
+
+
+def test_resumo_mes_marca_gmv_nulo_e_antes_zero_nao_dividem():
+    resumo = rf.resumo_mes_marca([_fact_row(AGO, 1, gmv=None),
+                                  _fact_row(SET, 1, gmv=Decimal("0"))],
+                                 [_fact_row(AGO, 1, gmv=None),
+                                  _fact_row(SET, 1, gmv=Decimal("5.00"))])
+    ago = _linha_resumo(resumo, "2026-08", "apice")
+    assert ago["gmv_antes"] is None and ago["delta_gmv"] is None
+    set_ = _linha_resumo(resumo, "2026-09", "apice")
+    assert set_["delta_gmv"] == "5.00" and set_["delta_gmv_pct"] is None
+
+
+def test_compute_impact_inclui_o_resumo_mes_marca():
+    imp = rf.compute_impact([_fact_row(D_FROM, 1, gmv=Decimal("100.00"))],
+                            [_fact_row(D_FROM, 1, gmv=Decimal("90.00"))], D_FROM, D_TO)
+    assert imp["por_mes_marca"] == rf.resumo_mes_marca(
+        [_fact_row(D_FROM, 1, gmv=Decimal("100.00"))],
+        [_fact_row(D_FROM, 1, gmv=Decimal("90.00"))])
+    assert _linha_resumo(imp["por_mes_marca"], "2026-08", "apice")["delta_gmv"] == "-10.00"
+
+
+def test_dry_run_real_devolve_o_resumo_sem_escrever(monkeypatch, tmp_path):
+    """Ponta a ponta com fakes: fonte com gmv 100 por linha, destino com 110 na
+    apice — o resumo mostra o excesso e nada e' escrito."""
+    snap = _snapshot()
+    destino = [dict(r) for r in snap.canonical_rows]
+    for r in destino:
+        if r["loja_id"] == 1:
+            r["gmv"] = Decimal("110.00")
+    ro = FakeConn(rules=[(r"SELECT date, loja_id", destino)])
+    _wire(monkeypatch, neon=None, snapshot=snap, readonly=ro)
+    monkeypatch.setattr(rf, "_neon_session",
+                        lambda url: pytest.fail("dry-run nao abre conexao gravavel"))
+    rel = rf.run_refresh(D_FROM, D_TO, False, None, tmp_path, agora=AGORA)
+    apice = _linha_resumo(rel["impacto"]["por_mes_marca"], "2026-08", "apice")
+    assert apice["gmv_antes"] == "220.00" and apice["gmv_depois"] == "200.00"
+    assert apice["delta_gmv"] == "-20.00"
+    assert not any(re.search(r"^\s*(DELETE|INSERT|UPDATE)", s, re.I) for s in ro.sqls())
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_main_dry_run_imprime_tabela_mes_marca(monkeypatch, capsys):
+    resumo = rf.resumo_mes_marca([_fact_row(AGO, 2, gmv=Decimal("1000.00"))],
+                                 [_fact_row(AGO, 2, gmv=Decimal("976.50"))])
+    monkeypatch.setattr(rf, "run_refresh", lambda *a, **k: {
+        "modo": "refresh", "applied": False,
+        "impacto": {"por_mes_marca": resumo}, "resultado": "dry-run; nada escrito"})
+    assert rf.main(["--date-from", "2026-08-01", "--date-to", "2026-08-31"]) == 0
+    out = capsys.readouterr().out
+    assert "RESUMO MES x MARCA" in out and "NADA foi gravado" in out
+    linha = next(l for l in out.splitlines() if l.startswith("2026-08  barbours"))
+    assert "1000.00" in linha and "976.50" in linha and "-23.50" in linha and "-2.35" in linha
+    assert any(l.startswith("2026-08  TOTAL") for l in out.splitlines())
+
+
+def test_main_apply_nao_imprime_tabela_de_ensaio(monkeypatch, capsys):
+    monkeypatch.setattr(rf, "run_refresh", lambda *a, **k: {
+        "modo": "refresh", "applied": True, "resultado": "publicado"})
+    assert rf.main(["--date-from", "2026-08-01", "--date-to", "2026-08-31", "--apply",
+                    "--run-id", "t", "--backup-dir", "."]) == 0
+    assert "RESUMO MES x MARCA" not in capsys.readouterr().out
