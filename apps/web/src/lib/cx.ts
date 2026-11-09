@@ -976,8 +976,6 @@ export interface ResumoCx {
   semHistoricoCancelamento: string[];
   /** API-3: delta, "antes" e serie de cada card da /cx (taxas em p.p.). */
   comparacao: Record<IndicadorCx, ComparacaoCard | null>;
-  /** API-3: o reembolso em R$ (card da Gerencial): delta em %, "antes R$". */
-  comparacaoReembolsoReais: ComparacaoCard | null;
   /** Linha neutra do card sem periodo anterior (API-3): "comparação a partir de 04/12" (motivo no title). */
   semAnterior: Partial<Record<IndicadorCx, { texto: string; detalhe: string | null }>>;
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
@@ -1214,16 +1212,6 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
         granularidade: "day",
       };
     }),
-    comparacaoReembolsoReais: (() => {
-      const ms = devOk ? dev.marcas.filter((m) => m.reembolsado != null).map((m) => m.marca) : [];
-      const ok = todasCom(ms, (m) => devs.get(m)?.reembolsado_anterior);
-      const ant = ok ? somar(ok.map((m) => devs.get(m)?.reembolsado_anterior)) : null;
-      const atual = devOk ? dev.reembolsado ?? null : null;
-      const serie = serieDe((rows) => (rows.some((r) => r.reembolsado == null) ? null : somar(rows.map((r) => r.reembolsado))));
-      const delta = ant && atual != null ? (atual / ant - 1) * 100 : null;
-      if (delta == null && !serie) return null;
-      return { delta, unidade: "pct", tone: "lower_is_better", antes: delta != null ? `antes ${reais(ant)}` : null, serie, granularidade: "day" };
-    })(),
     cancelamentoBase: delta && semHistoricoCancelamento.length ? { anterior: pct(cancAnt), atual: pct(cancAtual) } : null,
     totais,
     medianas,
