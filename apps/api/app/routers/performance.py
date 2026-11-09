@@ -50,6 +50,8 @@ from app.services import shopee_fbs_stock_service as fbs_stock_svc
 from app.services import ml_full_stock_service as ml_stock_svc
 from app.services import full_impacto_service as impacto_svc
 from app.schemas.full_impacto import ImpactoRupturaResponse
+from app.services import full_curva_abc_service as curva_abc_svc
+from app.schemas.full_curva_abc import CurvaAbcResponse
 from app.services.ml_fulfillment_service import (
     MLFulfillmentUnavailable,
     get_ml_fulfillment_block,
@@ -1151,6 +1153,17 @@ def ml_full_estoque(
 # Cada canal responde a' flag do PROPRIO estoque: desligada, o canal sai
 # `unavailable` sem consulta. Com as duas desligadas nem exigimos sessao.
 # ===========================================================================
+
+@router.get("/full-curva-abc", response_model=CurvaAbcResponse)
+def full_curva_abc(db: Session = Depends(get_db)):
+    """Curva ABC (planilha "Sortimento Gobeaute") por "marca|SKU do canal".
+
+    Le a aba com a service account de `GOOGLE_SA_JSON_ABC`, com cache de 1 h.
+    Sem a variavel ou com a leitura falhando: 200 `unavailable` com motivo;
+    o /full segue sem curva. So' leitura.
+    """
+    return curva_abc_svc.get_curva_abc(db)
+
 
 @router.get("/full-impacto-ruptura", response_model=ImpactoRupturaResponse)
 def full_impacto_ruptura(

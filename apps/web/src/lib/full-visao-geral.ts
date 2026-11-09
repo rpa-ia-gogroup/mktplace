@@ -60,6 +60,9 @@ export interface ItemRuptura {
   perdaDia?: number | null;
   /** Perda bruta do item (Shopee com estoque do vendedor: so' como apoio). */
   perdaBruta?: number | null;
+  /** CURVA-ABC: o SKU do canal cru (chave da curva) e se e' kit (kit nao tem curva). */
+  codigo?: string | null;
+  kit?: boolean;
 }
 
 export interface ResumoOk {
@@ -126,6 +129,7 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
     .filter((p) => p.classificacao_torre === "RUPTURA_CANDIDATA")
     .map((p) => ({
       canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p), sku: p.item_name?.trim() ? p.item_sku?.trim() || null : null,
+      codigo: p.item_sku?.trim() || null, kit: p.is_kit || ehKit(p.item_sku),
       mediaDiaria: numero(p.avg_daily_units_28d) ?? 0, estoqueVendedor: p.seller_stock_total,
     }));
   const rupturasCompletas = rupturas.length === i.produtos_ruptura;
@@ -164,7 +168,8 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
 
   const rupturas = itens
     .filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA")
-    .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0 }));
+    .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0,
+      codigo: v.sku?.trim() || null, kit: ehKit(v.sku) }));
 
   return {
     canal: "ml",
@@ -319,13 +324,25 @@ export function rupturaPorMarca(canais: ResumoCanal[], impacto: ImpactoRuptura |
  * Top N rupturas. Canal com impacto: itens da rota de impacto, por perda R$/dia
  * (sem preco no fim). Canal sem impacto: itens do estoque, depois, por venda/dia.
  */
-export function topRupturas(canais: ResumoCanal[], n = 10, impacto: ImpactoRuptura | null = null): ItemRuptura[] {
+export function topRupturas(
+  canais: ResumoCanal[], n = 10, impacto: ImpactoRuptura | null = null,
+  abc: CurvaAbc | null = null, filtro: FiltroCurva = "todas",
+): ItemRuptura[] {
+  return rankingRupturas(canais, impacto, abc).filter((t) => passaFiltro(curvaDe(t, abc), filtro)).slice(0, n);
+}
+
+/**
+ * O ranking inteiro (o filtro de curva corta ANTES do top 10): impacto R$/dia
+ * desc; a curva desempata (AA > A > B > C > sem curva); depois a venda/dia.
+ */
+export function rankingRupturas(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null = null): ItemRuptura[] {
   const comImpacto = new Map(impactosOk(impacto).map((c) => [c.canal, c]));
   return oks(canais)
     .flatMap((c) => comImpacto.get(c.canal)?.itens.map((i) => itemDoImpacto(c.canal, i)) ?? c.rupturas)
     .sort((a, b) =>
-      (b.perdaDia ?? -1) - (a.perdaDia ?? -1) || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome))
-    .slice(0, n);
+      (b.perdaDia ?? -1) - (a.perdaDia ?? -1)
+      || ORDEM_CURVA[curvaDe(a, abc) ?? "sem"] - ORDEM_CURVA[curvaDe(b, abc) ?? "sem"]
+      || b.mediaDiaria - a.mediaDiaria || a.nome.localeCompare(b.nome));
 }
 
 /** Nome sem o codigo: titulo; sem titulo, o SKU. O SKU so' sobra quando o nome e' o titulo. */
@@ -475,6 +492,7 @@ function itemDoImpacto(canal: Canal, i: ItemImpacto): ItemRuptura {
     estoqueVendedor: canal === "shopee" ? i.estoque_vendedor : undefined,
     perdaDia: canal === "shopee" ? perdaDestaqueShopee(i) : i.perda_dia,
     perdaBruta: i.perda_dia,
+    codigo: i.sku?.trim() || null, kit: ehKit(i.sku),
   };
 }
 
@@ -649,5 +667,135 @@ export function semComparacao(canal: Canal, comAnterior: ImpactoRuptura | null):
     d.so_na_atual.length ? `a foto atual ${doCanal(canal, NOME_CANAL[canal])} tem ${lista(d.so_na_atual)} e a anterior (${quando}) não` : null,
   ].filter(Boolean);
   return `sem comparação: ${partes.join("; ")}`;
+}
+
+// ---------------------------------------------------------------------------
+// CURVA-ABC -- curva ABC dos produtos (planilha "Sortimento Gobeaute", via
+// /full-curva-abc). Kit, codigo sem ponte e marca fora da planilha = sem
+// curva, nunca "C". Leitura em falha = sem curva agora (nunca 0).
+// ---------------------------------------------------------------------------
+
+export type Curva = "AA" | "A" | "B" | "C";
+export type FiltroCurva = "todas" | "aa_a" | "b" | "c" | "sem";
+
+export interface CurvaAbc {
+  status: "ok" | "unavailable";
+  motivo?: string | null;
+  fonte: string;
+  lida_em?: string | null;
+  itens_planilha?: number | null;
+  pela_ponte_gtin?: number | null;
+  duplicadas: string[];
+  curva_por_sku: Record<string, Curva>;
+  aviso?: string | null;
+}
+
+const ORDEM_CURVA: Record<Curva | "sem", number> = { AA: 0, A: 1, B: 2, C: 3, sem: 4 };
+export const CURVAS: Curva[] = ["AA", "A", "B", "C"];
+
+/** Kit nao tem curva propria (ML "Kit110"/"KIT005"; a Shopee tambem traz `is_kit`). */
+export function ehKit(sku: string | null | undefined): boolean {
+  return /^kit/i.test(String(sku ?? "").trim());
+}
+
+export function curvaDe(t: Pick<ItemRuptura, "marca" | "codigo" | "kit">, abc: CurvaAbc | null): Curva | null {
+  if (abc?.status !== "ok" || t.kit || !t.codigo) return null;
+  return abc.curva_por_sku[`${t.marca}|${t.codigo}`] ?? null;
+}
+
+export function passaFiltro(c: Curva | null, f: FiltroCurva): boolean {
+  if (f === "todas") return true;
+  if (f === "sem") return c === null;
+  if (f === "aa_a") return c === "AA" || c === "A";
+  return c === f.toUpperCase();
+}
+
+/** Contagem de cada opcao do filtro, sobre o ranking inteiro. */
+export function contarFiltros(itens: ItemRuptura[], abc: CurvaAbc | null): Record<FiltroCurva, number> {
+  const n: Record<FiltroCurva, number> = { todas: itens.length, aa_a: 0, b: 0, c: 0, sem: 0 };
+  for (const t of itens) {
+    const c = curvaDe(t, abc);
+    if (c === "AA" || c === "A") n.aa_a++;
+    else if (c === "B") n.b++;
+    else if (c === "C") n.c++;
+    else n.sem++;
+  }
+  return n;
+}
+
+/** Rupturas de um canal com o impacto de destaque (Shopee: so' quem para a venda). */
+function rupturasDoCanal(canal: Canal, impacto: ImpactoRuptura | null): ItemRuptura[] | null {
+  const c = impactosOk(impacto).find((x) => x.canal === canal);
+  return c ? c.itens.map((i) => itemDoImpacto(canal, i)) : null;
+}
+
+/** Limiar da spec: com menos de 50% do impacto com curva, o % de AA/A enganaria. */
+export const COBERTURA_MINIMA = 0.5;
+
+export type LinhaCurvaCanal =
+  | { estado: "ok"; pct: number; itens: number; detalhe: string }
+  | { estado: "pouca"; texto: string }
+  | { estado: "ausente"; texto: string; motivo: string };
+
+/** Linha do cartao "Rupturas da curva AA/A": % do impacto do canal nas rupturas AA/A. */
+export function linhaCurvaCanal(canal: Canal, impacto: ImpactoRuptura | null, abc: CurvaAbc | null): LinhaCurvaCanal {
+  if (abc?.status !== "ok") return { estado: "ausente", texto: "sem curva agora", motivo: abc?.motivo ?? "curva ABC não carregou" };
+  const its = rupturasDoCanal(canal, impacto);
+  if (!its) return { estado: "ausente", texto: "impacto indisponível agora", motivo: "impacto potencial do canal indisponível" };
+  const valor = (t: ItemRuptura) => t.perdaDia ?? 0;
+  const total = its.reduce((s, t) => s + valor(t), 0);
+  const comCurva = its.filter((t) => curvaDe(t, abc) !== null);
+  const aaA = comCurva.filter((t) => ["AA", "A"].includes(curvaDe(t, abc)!));
+  const cobertura = total > 0 ? comCurva.reduce((s, t) => s + valor(t), 0) / total : 0;
+  const quantas = `curva em ${comCurva.length} de ${its.length} rupturas`;
+  if (total <= 0 || cobertura < COBERTURA_MINIMA) return { estado: "pouca", texto: quantas };
+  return { estado: "ok", pct: aaA.reduce((s, t) => s + valor(t), 0) / total, itens: aaA.length, detalhe: `${quantas} · ${fmtPct(cobertura)} do impacto` };
+}
+
+export interface LinhaPorCurva {
+  curva: Curva | "sem"; pct: number | null; perda: number; rupturas: number;
+  /** Shopee: R$ 0 MEDIDO porque o vendedor tem estoque (a venda segue fora do Full). */
+  vendedorCobre?: boolean;
+}
+
+/** Drilldown: R$/dia potencial por curva (AA, A, B, C, sem curva) e o total do canal. */
+export function impactoPorCurva(canal: Canal, impacto: ImpactoRuptura | null, abc: CurvaAbc | null): { linhas: LinhaPorCurva[]; total: LinhaPorCurva } | null {
+  const its = rupturasDoCanal(canal, impacto);
+  if (!its || abc?.status !== "ok") return null;
+  const valor = (t: ItemRuptura) => t.perdaDia ?? 0;
+  const total = its.reduce((s, t) => s + valor(t), 0);
+  const linhas = ([...CURVAS, "sem"] as const).map((cv) => {
+    const g = its.filter((t) => (curvaDe(t, abc) ?? "sem") === cv);
+    const perda = g.reduce((s, t) => s + valor(t), 0);
+    const vendedorCobre = canal === "shopee" && perda === 0 && g.length > 0 && g.every((t) => (t.estoqueVendedor ?? 0) > 0);
+    return { curva: cv, pct: total > 0 ? perda / total : null, perda, rupturas: g.length, vendedorCobre };
+  });
+  return { linhas, total: { curva: "sem", pct: total > 0 ? 1 : null, perda: total, rupturas: its.length } };
+}
+
+/** ⓘ do cartao e do filtro: fonte, hora da leitura, cobertura por canal, regra do "sem curva" e duplicatas. */
+export function dicaCurva(abc: CurvaAbc | null, impacto: ImpactoRuptura | null): string {
+  if (abc?.status !== "ok") return `Curva ABC sem leitura agora${abc?.motivo ? `: ${abc.motivo}` : "."} O Full segue sem curva; nada vira "C".`;
+  const hora = abc.lida_em ? new Date(abc.lida_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : null;
+  const cobertura = (["ml", "shopee"] as const).map((canal) => {
+    const its = rupturasDoCanal(canal, impacto);
+    if (!its) return null;
+    const n = its.filter((t) => curvaDe(t, abc) !== null).length;
+    return `${NOME_CANAL[canal]}: curva em ${n} de ${its.length} rupturas`;
+  }).filter(Boolean).join("; ");
+  const dup = abc.duplicadas.length
+    ? ` A fonte tem ${abc.duplicadas.length} SKUs repetidos (vale a linha de maior faturamento).`
+    : "";
+  return `Fonte: ${abc.fonte}${hora ? `, lida às ${hora}` : ""} (atualiza a cada 1 h). ${cobertura ? `${cobertura}. ` : ""}`
+    + `Sem curva: kit, código sem ligação com a planilha ou marca fora dela; nunca vira "C". `
+    + `O % é do impacto potencial R$/dia do canal; R$ não é somado entre canais.${dup}`;
+}
+
+/** % de uma fatia: nao nula que arredonda a 0 = "<0,1%"; abaixo de 100 que arredonda a 100 = ">99,9%" (regra do #279). */
+export function fmtFatia(v: number): string {
+  const t = fmtPct(v);
+  if (v > 0 && t === fmtPct(0)) return "<0,1%";
+  if (v < 1 && t === fmtPct(1)) return ">99,9%";
+  return t;
 }
 

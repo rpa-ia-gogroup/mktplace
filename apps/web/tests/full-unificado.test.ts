@@ -14,6 +14,16 @@ import {
   antesParamVenda,
   antesHeroi,
   semComparacao,
+  curvaDe,
+  ehKit,
+  linhaCurvaCanal,
+  impactoPorCurva,
+  rankingRupturas,
+  contarFiltros,
+  dicaCurva,
+  fmtFatia,
+  type CurvaAbc,
+  type ItemImpacto,
   kpiParamVenda,
   impactoPorMarca,
   mediana,
@@ -603,5 +613,105 @@ test("sem comparacao: o motivo diz o que difere entre as fotos (title + sr-only)
   const comAnt = { ...IMPACTO, ml: { ...IMPACTO.ml, anterior: { ref_date: "2026-11-03", rupturas: 1, sem_estoque_vendedor: null, perda_dia: 1, perda_dia_sem_vendedor: null, dias_gmv: 28, pct_gmv_full: 0.1, pct_gmv_full_sem_vendedor: null, motivo_pct: null } } as CanalImpactoOk };
   assert.equal(semComparacao("ml", comAnt), null);
   assert.equal(semComparacao("ml", null), null);
+});
+// ---------------------------------------------------------------------------
+// CURVA-ABC -- curva ABC no /full (planilha "Sortimento Gobeaute")
+// ---------------------------------------------------------------------------
+
+function itemImp(brand: string, sku: string, perda: number | null, extra: Partial<ItemImpacto> = {}): ItemImpacto {
+  return { brand, sku, titulo: `Produto ${sku}`, media_diaria_28d: 1, preco_medio: 10, fonte_preco: "vendas_30d", mes_preco: null, estoque_vendedor: null, perda_dia: perda, ...extra };
+}
+
+function impactoCom(ml: ItemImpacto[], shopee: ItemImpacto[] = []): ImpactoRuptura {
+  return {
+    ...IMPACTO,
+    ml: { ...(IMPACTO.ml as CanalImpactoOk), itens: ml },
+    shopee: { ...(IMPACTO.shopee as CanalImpactoOk), itens: shopee },
+  };
+}
+
+const ABC: CurvaAbc = {
+  status: "ok", fonte: "Planilha 'Sortimento Gobeaute', aba 'ABC Curve'", lida_em: "2026-11-09T12:00:00Z",
+  duplicadas: ["apice|20690", "apice|20563"],
+  curva_por_sku: { "kokeshi|K1": "AA", "kokeshi|K2": "A", "kokeshi|K3": "C", "kokeshi|Kit9": "AA", "barbours|B1": "B" },
+};
+
+test("curva: kit e codigo fora da planilha ficam sem curva, nunca C", () => {
+  assert.equal(curvaDe({ marca: "kokeshi", codigo: "K1", kit: false }, ABC), "AA");
+  assert.equal(curvaDe({ marca: "kokeshi", codigo: "Kit9", kit: true }, ABC), null, "kit nao tem curva");
+  assert.equal(curvaDe({ marca: "kokeshi", codigo: "X99", kit: false }, ABC), null);
+  assert.equal(curvaDe({ marca: "lescent", codigo: "K1", kit: false }, ABC), null, "a chave e' marca + codigo");
+  assert.equal(curvaDe({ marca: "kokeshi", codigo: "K1", kit: false }, { ...ABC, status: "unavailable" }), null);
+  assert.equal(ehKit("Kit110"), true);
+  assert.equal(ehKit("KIT005"), true);
+  assert.equal(ehKit("10009"), false);
+});
+
+test("cartao AA/A: % do impacto do canal; abaixo de 50% de cobertura vira '—' com a contagem", () => {
+  // 60 + 20 com curva AA/A de 100 = 80% de cobertura, 80% do impacto em AA/A
+  const imp = impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "K2", 20), itemImp("kokeshi", "X99", 20)]);
+  const l = linhaCurvaCanal("ml", imp, ABC);
+  assert.equal(l.estado, "ok");
+  if (l.estado === "ok") {
+    assert.ok(Math.abs(l.pct - 0.8) < 1e-9);
+    assert.equal(l.itens, 2);
+    assert.equal(l.detalhe, "curva em 2 de 3 rupturas · 80,0% do impacto");
+  }
+  // 40 de 100 com curva: 40% < 50%, sem %
+  const pouca = linhaCurvaCanal("ml", impactoCom([itemImp("kokeshi", "K1", 40), itemImp("kokeshi", "X1", 60)]), ABC);
+  assert.deepEqual(pouca, { estado: "pouca", texto: "curva em 1 de 2 rupturas" });
+  // exatamente 50%: entra
+  assert.equal(linhaCurvaCanal("ml", impactoCom([itemImp("kokeshi", "K3", 50), itemImp("kokeshi", "X1", 50)]), ABC).estado, "ok");
+});
+
+test("leitura em falha: '—' com motivo, nunca 0", () => {
+  const imp = impactoCom([itemImp("kokeshi", "K1", 60)]);
+  const falha: CurvaAbc = { status: "unavailable", motivo: "Curva ABC indisponível agora: credencial da planilha não configurada.", fonte: "", duplicadas: [], curva_por_sku: {} };
+  const l = linhaCurvaCanal("ml", imp, falha);
+  assert.deepEqual(l, { estado: "ausente", texto: "sem curva agora", motivo: falha.motivo });
+  assert.equal(impactoPorCurva("ml", imp, falha), null);
+  assert.match(dicaCurva(falha, imp), /nada vira "C"/);
+  assert.equal(linhaCurvaCanal("ml", null, ABC).estado, "ausente", "impacto fora tambem nao vira 0");
+});
+
+test("fila: impacto desc, curva desempata (AA > A > B > C > sem), filtro corta antes do top 10", () => {
+  const ml = [
+    itemImp("kokeshi", "X99", 50), itemImp("kokeshi", "K3", 50), itemImp("kokeshi", "K1", 50),
+    itemImp("kokeshi", "K2", 80),
+  ];
+  const imp = impactoCom(ml);
+  const canais: ResumoCanal[] = [resumoML(ML)];
+  const ordem = rankingRupturas(canais, imp, ABC).map((t) => t.codigo);
+  assert.deepEqual(ordem, ["K2", "K1", "K3", "X99"], "80 primeiro; nos 50 empatados, AA > C > sem curva");
+  // filtro + top 10: muitos sem curva acima nao escondem o AA/A
+  const muitos = Array.from({ length: 12 }, (_, i) => itemImp("kokeshi", `Z${i}`, 1000 - i));
+  const imp2 = impactoCom([...muitos, itemImp("kokeshi", "K1", 1)]);
+  assert.ok(!topRupturas(canais, 10, imp2, ABC).some((t) => t.codigo === "K1"), "sem filtro, o K1 fica fora do top 10");
+  assert.deepEqual(topRupturas(canais, 10, imp2, ABC, "aa_a").map((t) => t.codigo), ["K1"]);
+  const n = contarFiltros(rankingRupturas(canais, imp2, ABC), ABC);
+  assert.deepEqual(n, { todas: 13, aa_a: 1, b: 0, c: 0, sem: 12 });
+});
+
+test("drilldown por curva: % e R$/dia por curva + total; ⓘ cita as duplicatas da fonte", () => {
+  const imp = impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "K3", 30), itemImp("kokeshi", "Kit9", 10, {}), itemImp("kokeshi", "X1", null)]);
+  const t = impactoPorCurva("ml", imp, ABC)!;
+  assert.deepEqual(t.linhas.map((l) => [l.curva, l.perda, l.rupturas]), [["AA", 60, 1], ["A", 0, 0], ["B", 0, 0], ["C", 30, 1], ["sem", 10, 2]]);
+  assert.equal(t.total.perda, 100);
+  assert.equal(t.total.rupturas, 4);
+  assert.match(dicaCurva(ABC, imp), /A fonte tem 2 SKUs repetidos \(vale a linha de maior faturamento\)/);
+  assert.match(dicaCurva(ABC, imp), /ML: curva em 2 de 4 rupturas/);
+});
+
+test("fatia por curva: nao nula nunca '0,0%', quase toda nunca '100,0%'; zero da Shopee coberto pelo vendedor e' marcado", () => {
+  assert.equal(fmtFatia(0.0003), "<0,1%");
+  assert.equal(fmtFatia(0), "0,0%");
+  assert.equal(fmtFatia(0.9997), ">99,9%");
+  assert.equal(fmtFatia(1), "100,0%");
+  assert.equal(fmtFatia(0.25), "25,0%");
+  const imp = impactoCom([], [itemImp("barbours", "B1", 40, { estoque_vendedor: 3 }), itemImp("barbours", "X1", 40, { estoque_vendedor: 0 })]);
+  const b = impactoPorCurva("shopee", imp, ABC)!.linhas.find((l) => l.curva === "B")!;
+  assert.equal(b.perda, 0);
+  assert.equal(b.vendedorCobre, true);
+  assert.equal(impactoPorCurva("shopee", imp, ABC)!.linhas.find((l) => l.curva === "sem")!.vendedorCobre, false);
 });
 
