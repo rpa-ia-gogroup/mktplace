@@ -50,15 +50,14 @@ test("a lista usa a rota da fila: so' travados, mais antigos primeiro, da marca 
 });
 
 test("tela: cartao de travados com % e abre a lista; popup montado uma vez", () => {
-  // EXPEDICAO-PERTO-DE-VENCER: todo cartao do Risco atual e' o `CartaoDeRisco`
-  // clicavel ("Ver pedidos →" no hover), com a fatia da fila na linha de baixo.
+  // IDENTIDADE-GERENCIAL: cada cartao da faixa e' um KpiTile "gerencial"
+  // clicavel; o valor e' o % da fila e a contagem vem embaixo.
   assert.match(CLIENTE, /stalled: "travados"/);
-  assert.match(CLIENTE, /secundarios=\{secundariosDoRisco\.map\(cartaoDeRisco\)\}/);
-  // EXPEDICAO-ATRASO-7D: travados seguem com a fatia da fila; vencidos usam
-  // a regra oficial da Shopee (sufixo proprio).
-  assert.match(CLIENTE, /pct \? `\$\{pct\} \$\{sufixo\}` : undefined/);
-  assert.match(CLIENTE, /const sufixo = k\.chave === "overdue" \? SUFIXO_ATRASO_7D : "da fila";/);
-  assert.match(CLIENTE, /aoAbrir=\{abrirLista\(k, LISTA_DO_KPI\[k\.chave\]\)\}/);
+  assert.match(CLIENTE, /const cartoesDaFaixa = chavesDaFaixa[\s\S]*?\.map\(cartaoDaFaixa\);/);
+  assert.match(CLIENTE, /const pct = !ausente && base != null \? percentualDaFila\(v \?\? 0, base\) : null;/);
+  assert.match(CLIENTE, /valor=\{k\.valorTexto \?\? \(ausente \? "—" : \(pct \?\? numero\(v \?\? 0\)\)\)\}/);
+  assert.match(CLIENTE, /`\$\{numero\(v \?\? 0\)\} \$\{v === 1 \? "pedido" : "pedidos"\}`/);
+  assert.match(CLIENTE, /onAbrir=\{abrirLista\(k, LISTA_DO_KPI\[k\.chave\]\)\}/);
   assert.equal((CLIENTE.match(/<TravadosDialog\b/g) ?? []).length, 1);
   assert.match(CLIENTE, /pctTravados: percentualDaFila\(a\.stalled_count, a\.backlog_count\)/);
 });
@@ -81,16 +80,19 @@ test("tabela: o numero de travados abre a lista e mostra o %", () => {
     }),
   );
   assert.match(html, /aria-label="Ver os 17 pedidos travados de ÁPICE"[^>]*>17<\/button>/);
-  assert.match(html, />5,3%</);
-  assert.doesNotMatch(html, />0,0%</, "zero travado nao mostra %");
+  // IDENTIDADE-GERENCIAL: o % sai da tela e vai para title + sr-only da celula.
+  assert.match(html, /title="5,3% da fila"/);
+  assert.match(html, /<span class="sr-only"> · 5,3% da fila<\/span>/);
+  assert.doesNotMatch(html, />5,3%</);
+  assert.doesNotMatch(html, /0,0%/, "zero travado nao mostra %");
   assert.equal(aberto, 0);
 });
 
-test("menos texto: Prazo some sem LDR; jornada so' com coorte; convite curto", () => {
-  assert.match(CLIENTE, /const secaoPrazo = temPrazo && !ldrNaSecao && destaque && temBarraDePrazo \? null/);
+test("menos texto: Prazo so' com LDR (em Mais detalhes); jornada so' com coorte; convite curto", () => {
+  assert.match(CLIENTE, /\{ldrNaSecao \? \(\s*<SecaoGerencial titulo="Prazo">/);
+  assert.equal((CLIENTE.match(/<SecaoGerencial titulo="Prazo"/g) ?? []).length, 1);
   assert.match(CLIENTE, /<JornadaPedidos [^>]*compacta \/>/);
   assert.match(CLIENTE, /conteudo="Lista de pedidos, mais críticos e fonte por conta\."/);
-  assert.match(CLIENTE, /<SecaoGerencial titulo="Prazo" dica=\{SEM_PRAZO_CANAL_ML\}>/);
   const JORNADA = fonte("src/components/expedicao/JornadaPedidos.tsx");
   assert.match(JORNADA, /if \(!comFila && !comCoorte\) return null;/);
 });
@@ -120,7 +122,7 @@ test("revisao #124: popup sem coluna inutil, remonta por alvo e diz quando inclu
   const compacto = JORNADA.slice(JORNADA.indexOf("if (compacta) {"));
   assert.match(compacto, /avisoDeMarcaNaoAplicada\(marca, resposta\)/);
   // EXPEDICAO-SEM-TEXTAO: as limitacoes da fila seguem acessiveis, no "ⓘ".
-  assert.match(JORNADA, /<AjudaMetrica chave="jornada\.fila_aberta" extras=\{f\.limitacoes\} \/>/);
+  assert.match(JORNADA, /<AjudaMetrica\s+chave="jornada\.fila_aberta"\s+extras=\{\[\s*\.\.\.f\.limitacoes,/);
 });
 
 

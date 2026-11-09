@@ -18,7 +18,6 @@
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
-import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import Panel from "@/components/ui/Panel";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -252,15 +251,16 @@ function BlocoFilaAberta({ r, compacta = false }: { r: RespostaJornada; compacta
       // O "ⓘ" fica fora do h3: o nome do titulo continua so' o titulo.
       // EXPEDICAO-ULTIMA-ATUALIZACAO: a hora fica so' no topo da tela; aqui,
       // so' o aviso quando a leitura esta' velha.
+      // IDENTIDADE-GERENCIAL: "Desatualizada" fica UMA vez, no chip do
+      // cabecalho; aqui o aviso vai para o "ⓘ" (nada some).
       acao={
-        <span className="flex flex-wrap items-center gap-1.5">
-          <AjudaMetrica chave="jornada.fila_aberta" extras={f.limitacoes} />
-          {f.snapshot_at && filaDesatualizada(f) ? (
-            <Chip ponto tom="atencao" title="Os números descrevem o instante da publicação, não agora.">
-              Desatualizada
-            </Chip>
-          ) : null}
-        </span>
+        <AjudaMetrica
+          chave="jornada.fila_aberta"
+          extras={[
+            ...f.limitacoes,
+            ...(f.snapshot_at && filaDesatualizada(f) ? ["Desatualizada: os números descrevem o instante da publicação, não agora."] : []),
+          ]}
+        />
       }
     >
       {!f.etapas_fecham ? (
@@ -286,32 +286,28 @@ function BlocoCoorte({ r }: { r: RespostaJornada }) {
     <Panel
       titulo={rotulo.charAt(0).toUpperCase() + rotulo.slice(1)}
       descricao={`${formatarInteiro(c.base)} pedidos, pela etapa em que terminaram.`}
+      // IDENTIDADE-GERENCIAL: sem chip nem nota "Desatualizada" proprios (o
+      // cabecalho ja' diz); o aviso e a ultima publicacao vao para o "ⓘ".
       acao={
-        // EXPEDICAO-ULTIMA-ATUALIZACAO: sem "publicado em" nem "Atualizada" —
-        // a hora fica so' no topo da tela. O aviso ESCRITO so' quando velha
-        // (a publicacao vai no `title`). O "ⓘ" fica fora do h3.
-        <span className="flex flex-wrap items-center gap-1.5">
-          <AjudaMetrica chave="jornada.coorte" extras={[...c.limitacoes, ...foraDaContagem(c)]} />
-          {velha ? (
-            <Chip
-              ponto
-              tom="atencao"
-              title={c.publicado_em ? `Última publicação dos dias desta coorte: ${dataHoraCurta(c.publicado_em)}.` : undefined}
-            >
-              Desatualizada
-            </Chip>
-          ) : null}
-        </span>
+        <AjudaMetrica
+          chave="jornada.coorte"
+          extras={[
+            ...c.limitacoes,
+            ...foraDaContagem(c),
+            ...(velha
+              ? [
+                  `Desatualizada: publicação ou fonte fora do prazo esperado.${
+                    c.publicado_em ? ` Última publicação dos dias desta coorte: ${dataHoraCurta(c.publicado_em)}.` : ""
+                  }`,
+                ]
+              : []),
+          ]}
+        />
       }
     >
       {!c.etapas_fecham ? (
         <div className="mb-2">
           <EstadoSecao tipo="parcial" titulo="as etapas não fecham com a base." />
-        </div>
-      ) : null}
-      {velha ? (
-        <div className="mb-2" data-testid="exp-jornada-coorte-desatualizada">
-          <EstadoSecao tipo="desatualizado" titulo="publicação ou fonte fora do prazo esperado." />
         </div>
       ) : null}
       <ListaDeEtapas etapas={c.etapas} base={c.base} evento={evento} rotulo="Etapas da coorte" canal={r.channel} />

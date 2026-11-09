@@ -182,12 +182,6 @@ export const PRAZO_DO_CANAL: Record<Canal, string> = {
   mercadolivre: "prazo Mercado Livre",
 };
 
-/** O prazo na frase de atencao: "ja' passaram ___". */
-const PRAZO_NA_FRASE: Record<Canal, string> = {
-  shopee: "do prazo da Shopee",
-  mercadolivre: "do prazo de despacho do Mercado Livre",
-};
-
 /** O "ⓘ" do limiar de 48 h, que precisa dizer DE ONDE vem o prazo do canal. */
 export function explicacaoLimiar48h(canal: Canal, temPrazo: boolean): string {
   if (!temPrazo) return EXPLICACAO_LIMIAR_48H_SEM_PRAZO;
@@ -1162,155 +1156,102 @@ type MedidaDeConta =
   | "over_48h_count";
 
 /**
- * A conta com a MAIOR contagem da MESMA medida, para dizer onde comecar.
- * E' selecao sobre o que a API publicou por conta, nao calculo: nenhuma conta
- * e' somada a outra. Empate fica com a primeira na ordem da API.
+ * IDENTIDADE-GERENCIAL — um item de "O que exige atenção agora" por CONTA.
+ * `lista` e' a lista de pedidos que a linha abre (TravadosDialog).
  */
-/** A conta com a MAIOR contagem da medida (zero nao concentra nada). */
-function maiorConta(contas: ResumoConta[], medida: MedidaDeConta): ResumoConta | null {
-  let maior: ResumoConta | null = null;
-  for (const c of contas) {
-    if (c[medida] > 0 && (maior === null || c[medida] > maior[medida])) maior = c;
-  }
-  return maior;
+export interface ItemDaFilaPorConta {
+  chave: string;
+  severidade: "critico" | "atencao" | "info";
+  titulo: string;
+  detalhe?: string;
+  marca: string;
+  conta: string;
+  lista: "vencidos" | "perto_de_vencer" | "acima_48h" | "travados";
+  /** Contagem da lista aberta (o numero inicial do dialogo). */
+  valor: number;
+  backlog: number;
 }
 
-function concentracao(contas: ResumoConta[], medida: MedidaDeConta): string {
-  const maior = maiorConta(contas, medida);
-  return maior ? ` Maior concentração: ${nomeDaConta(maior, contas)}, com ${inteiro(maior[medida])}.` : "";
+/** Maximo de itens da fila (spec do Prumo: ate' 6). */
+export const MAX_ITENS_DA_FILA = 6;
+
+function plural(n: number, um: string, varios: string): string {
+  return `${inteiro(n)} ${n === 1 ? um : varios}`;
 }
 
 /**
- * "O que exige atenção agora" da fila.
+ * Contas que exigem acao, da maior concentracao para a menor. Selecao sobre o
+ * que a API publicou por conta: nenhuma conta e' somada a outra.
  *
- * Cada linha restitui uma contagem que a API JA' publicou em `totals`, com a
- * conta que mais concentra aquela mesma medida. Nenhuma taxa, nenhuma soma de
- * contas, nenhum limiar novo.
- *
- * - Vencidos e "vence em 24h" so' existem no canal que publica prazo. No
- *   Mercado Livre a pergunta nao existe, e uma frase dizendo "nenhum vencido"
- *   leria como desempenho — ela simplesmente nao e' feita.
- * - "Acima de 48h" e' o limiar interno da Torre e e' dito assim, nunca como
- *   prazo do marketplace.
- * - Sem nenhuma contagem acesa, a frase e' NEUTRA e presa a fotografia: a
- *   fotografia pode estar velha, entao "tudo certo" seria uma afirmacao sobre
- *   agora que ninguem mediu.
+ * - Com prazo: critico = conta com vencidos ("{Marca}: X dos Y vencidos");
+ *   atencao = conta sem vencido, com perto de vencer ou travados.
+ * - Sem prazo (ML): atencao = conta acima de 48 h (limiar interno, nunca
+ *   critico) ou com travados.
+ * - Com UMA conta no recorte, o titulo nao repete os numeros do heroi e da
+ *   faixa: diz so' que ela concentra tudo.
  */
-export function montarAtencaoDaFila(
+export function montarFilaPorConta(
   t: Totais | null,
   contas: ResumoConta[],
   canal: Canal = CANAL_PADRAO,
   fotografia: FotografiaComPrazo | null = null,
-): ItemAtencao[] {
+): ItemDaFilaPorConta[] {
   if (!t) return [];
   const temPrazo = canalTemPrazo(canal, fotografia);
-  const itens: ItemAtencao[] = [];
-  if (temPrazo && t.overdue_count > 0) {
+  const unica = contas.length < 2;
+  const itens: ItemDaFilaPorConta[] = [];
+  const principal: MedidaDeConta = temPrazo ? "overdue_count" : "over_48h_count";
+  const nomeMedida = temPrazo ? "vencidos" : "acima de 48 h";
+  const total = t[principal];
+  const comPrincipal = contas.filter((c) => c[principal] > 0).sort((a, b) => b[principal] - a[principal]);
+  for (const c of comPrincipal) {
+    const nome = nomeDaConta(c, contas);
+    const parte = c[principal];
+    const detalhe = [
+      c.stalled_count > 0 ? plural(c.stalled_count, "travado", "travados") : null,
+      temPrazo && (c.due_soon_count ?? 0) > 0 ? `${inteiro(c.due_soon_count ?? 0)} perto de vencer` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
     itens.push({
-      chave: "overdue",
-      tom: "critico",
-      texto:
-        `${inteiro(t.overdue_count)} pedido(s) já passaram ${PRAZO_NA_FRASE[canal]} e seguem ` +
-        `sem expedição.${concentracao(contas, "overdue_count")}`,
+      chave: `${principal}-${c.shop_account}`,
+      severidade: temPrazo ? "critico" : "atencao",
+      titulo: unica
+        ? `${nome}: concentra todos os ${nomeMedida}`
+        : total === 1
+          ? `${nome}: o único pedido ${temPrazo ? "vencido" : "acima de 48 h"}`
+          : parte >= total
+            ? `${nome}: todos os ${inteiro(total)} ${nomeMedida}`
+            : `${nome}: ${inteiro(parte)} dos ${inteiro(total)} ${nomeMedida}`,
+      ...(detalhe && !unica ? { detalhe } : {}),
+      marca: c.brand,
+      conta: c.shop_account,
+      lista: temPrazo ? "vencidos" : "acima_48h",
+      valor: parte,
+      backlog: c.backlog_count,
     });
   }
-  if (temPrazo && t.due_within_24h_count > 0) {
+  const semPrincipal = contas
+    .filter((c) => c[principal] === 0 && ((temPrazo && (c.due_soon_count ?? 0) > 0) || c.stalled_count > 0))
+    .sort((a, b) => (b.due_soon_count ?? 0) + b.stalled_count - ((a.due_soon_count ?? 0) + a.stalled_count));
+  for (const c of semPrincipal) {
+    const perto = temPrazo ? (c.due_soon_count ?? 0) : 0;
+    const partes = [
+      perto > 0 ? `${inteiro(perto)} perto de vencer` : null,
+      c.stalled_count > 0 ? plural(c.stalled_count, "travado", "travados") : null,
+    ].filter(Boolean);
     itens.push({
-      chave: "due24h",
-      tom: "atencao",
-      texto:
-        `${inteiro(t.due_within_24h_count)} pedido(s) vencem nas próximas 24 h e ainda ` +
-        `podem sair no prazo.${concentracao(contas, "due_within_24h_count")}`,
-    });
-  }
-  if (t.stalled_count > 0) {
-    itens.push({
-      chave: "stalled",
-      tom: "atencao",
-      texto:
-        `${inteiro(t.stalled_count)} pedido(s) travados (lentos ou zumbis, sem contar ` +
-        `duas vezes).${concentracao(contas, "stalled_count")}`,
-    });
-  }
-  if (t.over_48h_count > 0) {
-    itens.push({
-      chave: "over48h",
-      tom: "atencao",
-      texto:
-        `${inteiro(t.over_48h_count)} pedido(s) abertos há mais de 48 h — limiar interno ` +
-        `da Torre, não prazo do marketplace.${concentracao(contas, "over_48h_count")}`,
-    });
-  }
-  if (!itens.length) {
-    itens.push({
-      chave: "nada_aceso",
-      tom: "neutro",
-      texto: temPrazo
-        ? "Nesta fotografia, nenhum pedido vencido, a vencer em 24 h, travado ou acima de 48 h."
-        : "Nesta fotografia, nenhum pedido travado ou acima de 48 h.",
+      chave: `aviso-${c.shop_account}`,
+      severidade: "atencao",
+      titulo: unica ? `${nomeDaConta(c, contas)}: sem ${nomeMedida}, com pedidos a acompanhar` : `${nomeDaConta(c, contas)}: ${partes.join(" · ")}`,
+      marca: c.brand,
+      conta: c.shop_account,
+      lista: perto > 0 ? "perto_de_vencer" : "travados",
+      valor: perto > 0 ? perto : c.stalled_count,
+      backlog: c.backlog_count,
     });
   }
   return itens;
-}
-
-/** Nome de cada medida na frase "onde agir", no plural. */
-const NOME_DA_MEDIDA: Record<MedidaDeConta, string> = {
-  overdue_count: "vencidos",
-  due_within_24h_count: "a vencer em 24 h",
-  stalled_count: "travados",
-  over_48h_count: "acima de 48 h",
-};
-
-const NOME_NO_SINGULAR: Record<MedidaDeConta, string> = {
-  overdue_count: "vencido",
-  due_within_24h_count: "a vencer em 24 h",
-  stalled_count: "travado",
-  over_48h_count: "acima de 48 h",
-};
-
-/** A medida em destaque do canal: vencidos com prazo publicado; sem ele, +48 h. */
-export function medidasDoDestaque(
-  canal: Canal = CANAL_PADRAO,
-  fotografia: FotografiaComPrazo | null = null,
-): MedidaDeConta[] {
-  return canalTemPrazo(canal, fotografia)
-    ? ["overdue_count", "due_within_24h_count", "stalled_count", "over_48h_count"]
-    : ["over_48h_count", "stalled_count"];
-}
-
-/**
- * UI-EXPEDICAO-1 — "onde agir": UMA frase com a marca que concentra a medida
- * mais grave acesa. Os numeros ja' estao no destaque; aqui so' entra o que o
- * destaque nao diz (quem concentra). Selecao sobre o que a API publicou por
- * conta, nunca soma. Com uma conta so' no recorte, a frase nao acrescenta
- * nada e nao existe.
- */
-export function ondeAgirNaFila(
-  t: Totais | null,
-  contas: ResumoConta[],
-  canal: Canal = CANAL_PADRAO,
-  fotografia: FotografiaComPrazo | null = null,
-): ItemAtencao | null {
-  if (!t || contas.length < 2) return null;
-  for (const medida of medidasDoDestaque(canal, fotografia)) {
-    if (t[medida] <= 0) continue;
-    const maior = maiorConta(contas, medida);
-    if (!maior) return null;
-    const nome = nomeDaConta(maior, contas);
-    const total = t[medida];
-    const parte = maior[medida];
-    return {
-      chave: medida,
-      tom: medida === "overdue_count" ? "critico" : "atencao",
-      texto:
-        total === 1
-          ? `${nome} tem o único pedido ${NOME_NO_SINGULAR[medida]}.`
-          : parte >= total
-          ? `${nome} concentra todos os ${inteiro(total)} ${NOME_DA_MEDIDA[medida]}.`
-          : `${nome} concentra ${inteiro(parte)} dos ${inteiro(total)} ${NOME_DA_MEDIDA[medida]}.`,
-    };
-  }
-  return null;
 }
 
 // ---------------------------------------------------------------------------

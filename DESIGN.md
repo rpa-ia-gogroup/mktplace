@@ -287,73 +287,69 @@ The primitives live in `apps/web/src/components/ui/`, plus `layout/` and
 | Empty / loading / error / unavailable | `ui/StateBlock.tsx` | Canais, Financeiro, Expedição (TikTok) |
 | Expedição channel header + photo/freshness chips | `expedicao/CabecalhoExpedicao.tsx` | Expedição queue (Shopee/ML), Expedição TikTok |
 | Single data-quality bar | `expedicao/BarraDeQualidade.tsx` | Expedição queue, Expedição TikTok |
-| "O que exige atenção agora", KPI strip, detail invitation | `expedicao/SecoesExpedicao.tsx` | Expedição queue, Expedição TikTok |
+| KPI strip, section title, detail invitation | `expedicao/SecoesExpedicao.tsx` | Expedição queue, Expedição TikTok |
 
 ### Expedição — one product, two depths (EXPEDICAO-UX-UNIFICADA-1)
 
 - One channel selector (`Shopee | Mercado Livre | TikTok Shop`, identity
   dots) owned by `ExpedicaoShell`. `?channel=` keeps its old values.
-- Same hierarchy on every channel: header → photo time/age/freshness (no publication-mode chip until the API proves the batch origin)
-  chips → ONE quality bar → attention list → KPIs → evolution →
-  concentration → operational detail.
 - Depth is a segmented control, in the URL (`?visao=detalhe`): **Visão do
-  gestor** (default) shows attention → KPIs → evolution → concentration;
-  **Detalhe operacional** shows KPIs plus the channel's own detail (queue,
-  most critical, source by brand; or cohorts and the payment-date flow).
+  gestor** (default) and **Detalhe operacional** (queue, most critical,
+  source by brand; or cohorts and the payment-date flow).
 - Bodies stay separate: the queue and the TikTok cohort never share a
   component with channel `if`s. Shared pieces receive view models built by
   each channel's contract.
-- States are distinct: loading, error (with retry), absent (dashed, never
-  zero), empty (zero measured), partial (named), stale (written "Desatualizada",
-  not only amber). A stale or empty series collapses its chart to one line.
+- States are distinct: loading, error (with retry), absent (`—`, never
+  zero), empty (zero measured), partial (named), stale (written
+  "Desatualizada", not only amber).
 - The sticky band carries identity and freshness only; depth and filters
   scroll with the page, so the band stays short on a 390px screen.
 
-### Expedição — one managerial hierarchy for three channels (EXPEDICAO-UX-3)
+### Expedição — the Gerencial skeleton (IDENTIDADE-GERENCIAL, 08/11/2026)
 
-Same section titles, same order, on Shopee, Mercado Livre and TikTok Shop;
-each channel shows only what its source sustains.
+The manager view follows the Gerencial: one question per fold, numbers
+first, depth in "Mais detalhes". Same order on the three channels; each shows
+only what its source sustains (`CorpoGestor` owns the order).
 
-1. **Header** — channel, photo/series time, written state ("Atualizada" /
-   "Desatualizada", with age when the API publishes it), source watermark
-   (TikTok) and one line defining the measurement. Brand filter
-   (`?marca=`, shared by the three channels) and depth live in the controls
-   row.
-2. **Risco atual** — KPI strip plus "O que exige atenção agora". Shopee: seven
-   tiles (backlog, vencidos, vence em 24 h, vence no próximo dia de prazo —
-   "Vence amanhã", or "Vence ter 03/11" on a Friday —, acima de 48 h,
-   travados, marcas em alerta). ML: the Shopee tiles when the photo carries
-   the ML dispatch SLA (`snapshot.deadline_published`), labelled "prazo
-   Mercado Livre"; without it, four — no deadline tiles at all. TikTok
-   (EXPEDICAO-TIKTOK-PADRAO, 05/11/2026): the same hero layout as Shopee,
-   from the live open orders — Vencidos in the hero ("de N em fila", the
-   stage split and "Onde agir"), then Vence hoje, Vence no próximo dia útil
-   and Acima de 48 h. Every tile with a count carries its ⓘ next to the label (never in the
-   footer), its share of the queue ("0,7% da fila") and "ver quais", which
-   opens the same order list (number, stage, CSV) filtered by that tile.
-3. **Prazo** — Shopee: backlog partitioned by deadline status (ship_by_date),
-   plus the sentence that LDR is not computed yet. ML with SLA: the same
-   partition; without it, "indisponível" and queue ageing. TikTok: LDR, with collection and dispatch as
-   separate events, plus the window's pending counts (vencem hoje/amanhã,
-   pendentes no prazo, lojas acima da meta) — they measure the LDR window,
-   not the live queue, so they never sit next to the Risco atual tiles.
-   The reconstructed-deadline caveat is a short chip ("Prazo reconstruído ·
-   medição interna") with the full text in its ⓘ, not a banner.
+0. **Header** — `CabecalhoExpedicao` (channel in the title, "Última
+   atualização" chip, "Desatualizada" chip written, once) + `BarraDeQualidade`.
+   The bar never repeats what the top already says: photo/series age and
+   brands with the source on alert stay only in its "Ver N limitações" list.
+1. **Herói** (`ui/Heroi`) — Shopee/ML with a published deadline: "Vencidos"
+   as **% of the queue**, context "N pedidos de M em fila", the queue split by
+   deadline status (Vencidos / Perto de vencer / No prazo / Sem prazo
+   publicado, each with number and ⓘ) in the middle, seal "Com atraso" /
+   "Em dia", chips "inclui FBS" (with ⓘ) and "N marcas em alerta" next to the
+   number, "Ver pedidos →" always visible. ML without deadline: "Acima de
+   48 h" (internal threshold, said in the ⓘ), seal "Acima do limiar" /
+   "Dentro do limiar", backlog bar with +48 h and travados overlaid. TikTok:
+   "Vencidos" as % of the open orders, split "aguardando coleta · aguardando
+   envio". A brand with several accounts shows "—" with the reason (never 0).
+2. **Faixa** — `KpiTile variante="gerencial"`, % of the queue as value and
+   the count below, each card opens the order list. Shopee: Perto de vencer ·
+   Acima de 48 h · Travados. ML without deadline: Travados · Pedido mais
+   antigo em fila. TikTok: Vence hoje · Vence dd/mm · Acima de 48 h · LDR da
+   janela. Never repeats the hero.
+3. **O que exige atenção agora** (`ui/FilaAtencao`, up to 6 on the queue) —
+   accounts with vencidos by concentration ("{Marca}: X dos Y vencidos", the
+   old "Onde agir"), official Performance metrics outside the limit, then
+   accounts with perto de vencer or travados. TikTok: the API alerts. A brand
+   without an account is an info item ("não é backlog zero").
+4. **Backlog por marca** — Agora | Últimos 7 dias. One number per cell; the
+   "% da fila" goes to `title` + `sr-only`; "conta i de n · atualizada hh:mm"
+   is a second line only when the brand has more than one account. "Inclui
+   FBS" is `title` + `sr-only` of the title (the visible chip is the hero's).
+5. **TikTok only**: Evolução por dia de vencimento (7/12) | Concentração por
+   marca (5/12).
+6. **LDR · últimos 7 dias** (`LdrTopo`) — the only 7-day LDR in this view.
+7. **Mais detalhes** (`ui/MaisDetalhes`, closed): Prazo (Shopee LDR panel
+   with its flag; TikTok window KPIs, "Vencem hoje ou amanhã (janela da
+   LDR)"), Jornada (its own staleness goes to the ⓘ), Pedidos FBS with the
+   reconciliation line, Performance oficial.
+8. Invitation to the operational detail.
 
-TikTok controls share the single controls row: Profundidade · Marca · Evento
-(short labels "Coleta" / "Despacho") · Período. Jornada is the compact one, as
-on the queue. "Backlog por marca" (open orders by brand, with "Não coletados
-no prazo" in its footer) sits where the queue's table sits; the evolution
-chart and the LDR by shop share the next row.
-4. **Evolução** — queue: a compact table, one row per account titled by
-   brand (Backlog atual · Variação · Acima de 48 h · Travados · Tendência).
-   Sparklines in neutral ink, no written scale; a constant series reads
-   "Estável em N"; a percentage only with base ≥ 20 and ≥ 21 h of history;
-   short history reads "desde o início da série". TikTok: the daily chart by
-   due date.
-5. **Concentração por marca** — brand first; the account id is a small
-   secondary line only when it differs from the brand. "Fonte avançou"
-   became "Recebeu atualização" / "Sem atualização nova".
+Detalhe operacional: KPI cards in the `gerencial` variant; secondary
+indicators inside `MaisDetalhes`. The rest is unchanged.
 
 ### Sidebar
 

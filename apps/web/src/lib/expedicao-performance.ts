@@ -125,6 +125,21 @@ export function valorMetrica(m: Pick<MetricaOficial, "valor" | "unidade">): stri
   }
 }
 
+const SINAL_META: Record<string, string> = { ">=": "≥", "<=": "≤", ">": ">", "<": "<" };
+const UM_DECIMAL = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+/** "41,8% · meta ≥ 60%" (1 casa, sinal tipografico, unidade na meta). */
+export function detalheForaDoLimite(m: Pick<MetricaOficial, "valor" | "unidade" | "meta" | "comparador" | "rotulo_meta">): string {
+  const pctOuValor = (v: number, casas: boolean) =>
+    m.unidade === "pct" ? `${casas ? UM_DECIMAL.format(v) : v.toLocaleString("pt-BR")}%` : valorMetrica({ valor: v, unidade: m.unidade });
+  const valor = m.valor == null ? "—" : pctOuValor(m.valor, true);
+  const meta =
+    m.meta != null && m.comparador
+      ? `meta ${SINAL_META[m.comparador] ?? m.comparador} ${pctOuValor(m.meta, false)}`
+      : m.rotulo_meta;
+  return meta ? `${valor} · ${meta}` : valor;
+}
+
 export function quantidadeMetrica(m: Pick<MetricaOficial, "quantidade">): string | null {
   return num(m.quantidade) ? `${FMT_INT.format(m.quantidade)} vendas` : null;
 }

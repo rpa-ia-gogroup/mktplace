@@ -416,6 +416,39 @@ export function montarAtencaoDoTikTok(p: TikTokPayload | null): ItemAtencao[] {
     .map((a) => ({ chave: a.code, tom: TOM_DO_ALERTA[a.severity] ?? "neutro", texto: a.message }));
 }
 
+/** Alertas da API sobre a LDR da janela: ja' estao no cartao "LDR da janela". */
+const ALERTAS_DA_LDR = new Set(["fora_da_meta_tiktok", "dentro_da_meta_tiktok"]);
+
+export interface AlertaNaFila {
+  chave: string;
+  severidade: "critico" | "atencao" | "info";
+  titulo: string;
+  detalhe?: string;
+}
+
+/**
+ * IDENTIDADE-GERENCIAL — os alertas da API como itens de "O que exige atenção
+ * agora", SEM reescrever o texto: a 1a frase vira o titulo, o resto o
+ * detalhe. Sai o alerta da LDR da janela (pelo `code`, nunca pelo texto). O
+ * "vencem hoje ou amanhã" (`em_risco`) e' da janela da LDR, outra base que a
+ * dos cartoes da fila ao vivo, e o titulo diz isso.
+ */
+export function alertasNaFila(itens: ItemAtencao[]): AlertaNaFila[] {
+  return itens
+    .filter((i) => !ALERTAS_DA_LDR.has(i.chave))
+    .map((i) => {
+      const m = /^([\s\S]+?[.!?])\s+(\S[\s\S]*)$/.exec(i.texto.trim());
+      let titulo = m ? m[1] : i.texto.trim();
+      if (i.chave === "em_risco") titulo = titulo.replace(/\.?$/, " (janela da LDR).");
+      return {
+        chave: i.chave,
+        severidade: i.tom === "critico" || i.tom === "atencao" ? i.tom : "info",
+        titulo,
+        ...(m ? { detalhe: m[2] } : {}),
+      };
+    });
+}
+
 /**
  * A barra de qualidade do TikTok — a mesma barra da fila, preenchida com o
  * que este contrato sabe. Substitui a pilha de banners (aviso de prazo +

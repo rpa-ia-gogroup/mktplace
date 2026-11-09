@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 
 import Chip from "@/components/ui/Chip";
 import StateBlock from "@/components/ui/StateBlock";
+import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import { brandLabel } from "@/lib/filters/brands";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import {
   ROTULO_OFICIAL,
   ROTULO_SITUACAO,
+  detalheForaDoLimite,
   diaCurto,
   problemaNaPerformance,
   quantidadeMetrica,
@@ -36,19 +38,19 @@ const TOM_SITUACAO: Record<Situacao, "bom" | "critico" | "neutro"> = { ok: "bom"
 const COR_TERMOMETRO_ML = ["bg-crit", "bg-[#f97316]", "bg-[#facc15]", "bg-[#84cc16]", "bg-ok"];
 const COR_TERMOMETRO_SHOPEE = ["bg-crit", "bg-warn", "bg-[#84cc16]", "bg-ok"];
 
-export default function PerformanceOficial({
-  api,
-  canal,
-  marca,
-}: {
-  api: string;
-  canal: CanalOficial;
-  marca: string | null;
-}) {
+export type EstadoPerformance = Estado;
+
+/**
+ * IDENTIDADE-GERENCIAL: a busca saiu do componente para a casca, que tambem
+ * leva as metricas "fora do limite" para "O que exige atenção agora".
+ * `ligada=false` nao busca nada (flag da Performance desligada).
+ */
+export function usePerformanceOficial(api: string, canal: CanalOficial, marca: string | null, ligada = true): Estado {
   const url = urlPerformance(api, canal, marca);
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
 
   useEffect(() => {
+    if (!ligada) return;
     let vivo = true;
     setEstado({ tipo: "carregando" });
     buscarExpedicao(url, { headers: { Accept: "application/json" } })
@@ -70,8 +72,26 @@ export default function PerformanceOficial({
     return () => {
       vivo = false;
     };
-  }, [url]);
+  }, [url, ligada]);
+  return estado;
+}
 
+/** "{conta}: {métrica} fora do limite oficial" — um item por metrica fora. */
+export function itensForaDoLimite(estado: Estado): ItemFila[] {
+  if (estado.tipo !== "ok" || estado.dados.estado !== "dado") return [];
+  return estado.dados.contas.flatMap((c) =>
+    c.metricas
+      .filter((m) => m.situacao === "fora")
+      .map((m) => ({
+        chave: `perf-${c.marca}-${m.codigo}`,
+        severidade: "critico" as const,
+        titulo: `${brandLabel(c.marca)}: ${m.rotulo} fora do limite oficial`,
+        detalhe: detalheForaDoLimite(m),
+      })),
+  );
+}
+
+export default function PerformanceOficial({ estado }: { estado: Estado }) {
   return (
     <section aria-labelledby="perf-oficial-titulo" className="flex flex-col gap-3" data-testid="exp-performance">
       <div className="flex flex-wrap items-baseline justify-between gap-2">

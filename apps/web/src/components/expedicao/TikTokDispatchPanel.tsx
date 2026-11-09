@@ -35,11 +35,14 @@
  * EXPEDICAO-UX-UNIFICADA-1 — A MESMA HIERARQUIA DA FILA
  * ----------------------------------------------------
  * Cabecalho, fotografia e barra de qualidade sao os componentes da fila
- * (`CabecalhoExpedicao`, `BarraDeQualidade`, `AtencaoAgora`). O CORPO continua
+ * (`CabecalhoExpedicao`, `BarraDeQualidade`, `FilaAtencao`). O CORPO continua
  * sendo deste painel: nao existe fila do TikTok e nenhuma foi inventada.
  *
- *   visao do gestor   atencao agora (alertas da API) -> LDR -> evolucao por
- *                     vencimento -> lojas
+ *   visao do gestor   (IDENTIDADE-GERENCIAL) heroi (vencidos dos abertos) ->
+ *                     faixa (vence hoje/proximo dia util/+48 h/LDR) -> fila de
+ *                     atencao -> backlog por marca -> evolucao 7/12 | lojas
+ *                     5/12 -> LDR 7 dias -> "Mais detalhes" (janela da LDR,
+ *                     jornada, nota oficial)
  *   detalhe           LDR -> coortes por vencimento -> lojas -> fluxo por
  *                     data de pagamento (visao auxiliar, NUNCA a LDR)
  *
@@ -62,7 +65,9 @@ import JanelaPersonalizada from "@/components/expedicao/JanelaPersonalizada";
 import JornadaPedidos, { useJornada } from "@/components/expedicao/JornadaPedidos";
 import {
   BacklogPorMarcaTikTok,
-  RiscoAtualTikTok,
+  HeroiTikTok,
+  cartoesDosAbertos,
+  ondeAgirTikTok,
   useTikTokAbertos,
 } from "@/components/expedicao/TikTokPedidosAbertos";
 import { PopupColetaPerdida } from "@/components/expedicao/TikTokColetaPerdida";
@@ -75,13 +80,11 @@ import LayoutExpedicao, {
   TEXTO_ESTADO,
 } from "@/components/expedicao/LayoutExpedicao";
 import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
-import {
-  AtencaoAgora,
-  ConviteAoDetalhe,
-  FaixaKpis,
-  SecaoGerencial,
-} from "@/components/expedicao/SecoesExpedicao";
+import { ConviteAoDetalhe, FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
+import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
+import MaisDetalhes from "@/components/ui/MaisDetalhes";
+import { Gauge } from "lucide-react";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
@@ -103,8 +106,6 @@ import {
   ROTULO_LIMIAR_INTERNO,
   ROTULO_META,
   ROTULO_SEVERIDADE,
-  SELO_ACIMA_DA_META,
-  SELO_DENTRO_DA_META,
   TITULO_FLUXO,
   TITULO_LDR,
   VALOR_SEM_TAXA,
@@ -120,6 +121,7 @@ import {
   formatarTaxa,
   fotografiaDoTikTok,
   marcasForaDaMeta,
+  alertasNaFila,
   montarAtencaoDoTikTok,
   montarBarraDeQualidadeTikTok,
   queryDoTikTok,
@@ -298,6 +300,8 @@ export default function TikTokDispatchPanel({
   marca = null,
   aoTrocarMarca,
   faixaTopo,
+  performance,
+  itensOficiais = [],
 }: {
   seletorCanal?: ReactNode;
   visao?: Visao;
@@ -305,8 +309,12 @@ export default function TikTokDispatchPanel({
   /** EXPEDICAO-UX-3: marca da casca; vai para a API como `brands`. */
   marca?: string | null;
   aoTrocarMarca?: (m: string | null) => void;
-  /** CX-MKT-3: faixa de LDR da casca, repassada ao esqueleto. */
+  /** CX-MKT-3: faixa de LDR da casca (LdrTopo), repassada ao esqueleto. */
   faixaTopo?: ReactNode;
+  /** CX-MKT-2: Performance oficial, dentro de "Mais detalhes" no gestor. */
+  performance?: ReactNode;
+  /** Metricas oficiais fora do limite: sobem para "O que exige atenção agora". */
+  itensOficiais?: ItemFila[];
 }) {
   const [evento, setEvento] = useState<Evento>(EVENTO_PADRAO);
   const [inicial] = useState(janelaInicial);
@@ -445,105 +453,117 @@ export default function TikTokDispatchPanel({
     </>
   );
 
-  // EXPEDICAO-TIKTOK-PADRAO — "Risco atual" no MESMO desenho da Shopee e do
-  // ML: os pedidos em aberto agora (vencidos em destaque, com "Onde agir"),
-  // e a lista de atencao da API logo abaixo. Os pendentes da JANELA da LDR
-  // desceram para "Prazo": medem outra coisa e brigavam com estes numeros.
+  // IDENTIDADE-GERENCIAL — 1a dobra: heroi (vencidos dos abertos de AGORA),
+  // faixa (vence hoje, proximo dia util, +48 h e a LDR da janela) e a fila.
   const abertos = useTikTokAbertos(BASE, marca);
-  const secaoRisco = ldr ? (
-    <RiscoAtualTikTok abertos={abertos}>
-      <AtencaoAgora itens={atencao} />
-    </RiscoAtualTikTok>
+
+  // A LDR da janela sobe da secao "Prazo" para a faixa.
+  const cartaoLdr = ldr ? (
+    <KpiComAjuda
+      ajuda="tiktok.ldr"
+      variante="gerencial"
+      icone={Gauge}
+      rotulo="LDR da janela"
+      // A taxa PUBLICADA pela API, com 1 casa como os outros cartoes; a base
+      // ("6.883 de 56.970") em title + sr-only. "Medição interna" fica no ⓘ.
+      valor={
+        ldr.rate === null ? (
+          "—"
+        ) : (
+          <span className="relative" title={`${formatarInteiro(ldr.late)} de ${formatarInteiro(ldr.base)}`}>
+            {formatarTaxa(ldr.rate, 1)}
+            <span className="sr-only">
+              {" "}· {formatarInteiro(ldr.late)} de {formatarInteiro(ldr.base)}
+            </span>
+          </span>
+        )
+      }
+      comparacao={
+        ldr.rate === null
+          ? "Sem vencimento maduro na janela."
+          : `referência ${formatarTaxa(META_TIKTOK_LDR, 0)} · ${ldr.above_target ? "acima da meta" : "dentro da meta"}`
+      }
+      // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
+      tom={ldr.rate === null ? "ausente" : ldr.above_target ? "critico" : "bom"}
+    />
   ) : null;
 
-  // "Prazo": a LDR, que so' o TikTok sustenta. Coleta e despacho continuam
-  // sendo eventos separados, escolhidos no cabecalho, com prazos diferentes.
-  const secaoLdr = ldr ? (
-    <SecaoGerencial
-      titulo="Prazo"
-      descricao={`${TITULO_LDR} · evento: ${ROTULO_EVENTO[evento]}${sla ? ` (${sla} dia(s) útil(eis))` : ""}.`}
-      // A meta e' de referencia e o prazo e' reconstruido: sem isso o numero
-      // vira "o TikTok nos penalizou". O "medição interna" fica no selo do cartao.
-      dica={EXPLICACAO_META}
-    >
-      {/* Periodo da RESPOSTA (`ldr.from`, `ldr.to`, `ldr.days`), nao do
-          seletor. O prazo reconstruido fica colado a ele: e' a ressalva que
-          qualifica TODOS os numeros desta faixa. */}
-      <p className="text-xs text-ink-muted" data-testid="tk-periodo-consultado">
-        <span className="font-medium text-ink">
-          Vencimentos de {formatarDiaLongo(ldr.from)} a {formatarDiaLongo(ldr.to)}
-        </span>{" "}
-        ({ldr.days} {ldr.days === 1 ? "dia" : "dias"} + hoje)
-        {dados?.deadline_is_reconstructed ? " · prazo reconstruído" : ""}
-      </p>
-      <FaixaKpis rotulo="Indicadores da janela" colunas={3}>
-        <KpiComAjuda
-          ajuda="tiktok.ldr"
-          rotulo="LDR da janela"
-          valor={<TaxaComBase numerador={ldr.late} base={ldr.base} taxa={ldr.rate} />}
-          destaque
-          comparacao={
-            ldr.rate === null
-              ? "Sem vencimento maduro na janela."
-              : // T-0010: a base ao lado da taxa ("62 de 1.820"), com a taxa
-                // PUBLICADA pela API — a tela nao divide de novo.
-                `${ROTULO_META}: ${formatarTaxa(
-                  META_TIKTOK_LDR,
-                  0,
-                )} · ${ldr.above_target ? SELO_ACIMA_DA_META : SELO_DENTRO_DA_META}`
-          }
-          // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
-          tom={ldr.rate === null ? "ausente" : ldr.above_target ? "critico" : "bom"}
-        />
-        {/* `base` e `late` da LDR somam SO' vencimentos fechados. Sem nenhum
-            fechado (o caso da serie vencida) eles valem zero por construcao,
-            nao por medicao: a tela mostra ausencia, nao "0 venciam". */}
-        <KpiComAjuda
-          ajuda="tiktok.venciam"
-          rotulo="Venciam no período"
-          valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.base)}
-          destaque
-          comparacao={`${ldr.mature_due_days} dia(s) fechado(s), ${ldr.partial_due_days} ainda no prazo.`}
-          tom={semVencimentoFechado ? "ausente" : "neutro"}
-        />
-        <KpiComAjuda
-          ajuda="tiktok.atrasaram"
-          rotulo="Já atrasaram"
-          valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.late)}
-          destaque
-          comparacao={`${formatarInteiro(ldr.pending_overdue)} venceram e ainda não saíram.`}
-          tom={semVencimentoFechado ? "ausente" : ldr.late > 0 ? "critico" : "bom"}
-        />
-        {/* Pendentes DA JANELA (antes no "Risco atual"): mesmos campos da LDR. */}
-        <KpiComAjuda
-          ajuda="tiktok.vence_hoje_amanha"
-          rotulo="Vencem hoje ou amanhã"
-          valor={formatarInteiro(ldr.pending_at_risk)}
-          destaque
-          tom={ldr.pending_at_risk > 0 ? "atencao" : "neutro"}
-        />
-        <KpiComAjuda
-          ajuda="tiktok.pendente_no_prazo"
-          rotulo="Pendentes no prazo"
-          valor={formatarInteiro(ldr.pending_on_time)}
-          destaque
-        />
-        {/* Sem loja com base suficiente, a contagem nao existe: "—", nunca 0. */}
-        <KpiComAjuda
-          ajuda="tiktok.lojas_acima_meta"
-          rotulo="Lojas acima da meta"
-          valor={dados?.brands.length ? formatarInteiro(piores.length) : VALOR_SEM_TAXA}
-          destaque
-          comparacao={
-            dados?.brands.length
-              ? `De ${formatarInteiro(dados.brands.length)} com base suficiente.`
-              : "Nenhuma loja com base suficiente."
-          }
-          tom={!dados?.brands.length ? "ausente" : piores.length > 0 ? "critico" : "neutro"}
-        />
-      </FaixaKpis>
-    </SecaoGerencial>
-  ) : null;
+  const faixa = (
+    <FaixaKpis rotulo="Pedidos em aberto e LDR da janela">
+      {cartoesDosAbertos(abertos)}
+      {cartaoLdr}
+    </FaixaKpis>
+  );
+
+  // Alertas da API, sem reescrita, como itens da fila; "onde agir" primeiro.
+  const ondeAgir = ondeAgirTikTok(abertos);
+  const itensFila: ItemFila[] = [
+    ...(ondeAgir ? [ondeAgir] : []),
+    ...alertasNaFila(atencao),
+    ...itensOficiais,
+  ];
+  const fila = <FilaAtencao itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;
+
+  // "Prazo": a janela da LDR, que so' o TikTok sustenta. Coleta e despacho
+  // continuam sendo eventos separados, escolhidos no cabecalho. No gestor a
+  // LDR esta' na faixa; aqui ficam os pendentes DA JANELA (outra base que a
+  // fila ao vivo, por isso o rotulo diz "janela da LDR").
+  // "Lojas acima da meta" saiu como cartao: e' o chip da Concentracao.
+  const secaoPrazo = (comLdr: boolean) =>
+    ldr ? (
+      <SecaoGerencial
+        titulo="Prazo"
+        descricao={`${TITULO_LDR} · evento: ${ROTULO_EVENTO[evento]}${sla ? ` (${sla} dia(s) útil(eis))` : ""}.`}
+        // A meta e' de referencia e o prazo e' reconstruido: sem isso o numero
+        // vira "o TikTok nos penalizou".
+        dica={EXPLICACAO_META}
+      >
+        {/* Periodo da RESPOSTA (`ldr.from`, `ldr.to`, `ldr.days`), nao do
+            seletor. O prazo reconstruido fica colado a ele. */}
+        <p className="text-xs text-ink-muted" data-testid="tk-periodo-consultado">
+          <span className="font-medium text-ink">
+            Vencimentos de {formatarDiaLongo(ldr.from)} a {formatarDiaLongo(ldr.to)}
+          </span>{" "}
+          ({ldr.days} {ldr.days === 1 ? "dia" : "dias"} + hoje)
+          {dados?.deadline_is_reconstructed ? " · prazo reconstruído" : ""}
+        </p>
+        <FaixaKpis rotulo="Indicadores da janela" colunas={comLdr ? 3 : 4}>
+          {comLdr ? cartaoLdr : null}
+          {/* `base` e `late` da LDR somam SO' vencimentos fechados. Sem nenhum
+              fechado (o caso da serie vencida) eles valem zero por construcao,
+              nao por medicao: a tela mostra ausencia, nao "0 venciam". */}
+          <KpiComAjuda
+            ajuda="tiktok.venciam"
+            variante="gerencial"
+            rotulo="Venciam no período"
+            valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.base)}
+            comparacao={`${ldr.mature_due_days} dia(s) fechado(s), ${ldr.partial_due_days} ainda no prazo.`}
+            tom={semVencimentoFechado ? "ausente" : "neutro"}
+          />
+          <KpiComAjuda
+            ajuda="tiktok.atrasaram"
+            variante="gerencial"
+            rotulo="Já atrasaram"
+            valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.late)}
+            comparacao={`${formatarInteiro(ldr.pending_overdue)} venceram e ainda não saíram.`}
+            tom={semVencimentoFechado ? "ausente" : ldr.late > 0 ? "critico" : "bom"}
+          />
+          <KpiComAjuda
+            ajuda="tiktok.vence_hoje_amanha"
+            variante="gerencial"
+            rotulo="Vencem hoje ou amanhã (janela da LDR)"
+            valor={formatarInteiro(ldr.pending_at_risk)}
+            tom={ldr.pending_at_risk > 0 ? "atencao" : "neutro"}
+          />
+          <KpiComAjuda
+            ajuda="tiktok.pendente_no_prazo"
+            variante="gerencial"
+            rotulo="Pendentes no prazo"
+            valor={formatarInteiro(ldr.pending_on_time)}
+          />
+        </FaixaKpis>
+      </SecaoGerencial>
+    ) : null;
 
   // 6. EVOLUCAO — quando comecou. Sem nenhum vencimento fechado o grafico
   // seria um retangulo sem barra: a tela diz por que nao ha o que desenhar.
@@ -588,9 +608,15 @@ export default function TikTokDispatchPanel({
       titulo={
         <span className="flex items-center gap-2">
           Concentração por marca
-          {piores.length ? (
-            <Chip tom="critico" ponto>
+          {/* Antes tambem era o cartao "Lojas acima da meta"; a base vai no `title`. */}
+          {dados?.brands.length ? (
+            <Chip
+              tom={piores.length ? "critico" : "neutro"}
+              ponto
+              title={`De ${formatarInteiro(dados.brands.length)} com base suficiente.`}
+            >
               {piores.length} acima da meta
+              <span className="sr-only"> de {formatarInteiro(dados.brands.length)} lojas com base suficiente</span>
             </Chip>
           ) : null}
         </span>
@@ -897,19 +923,21 @@ export default function TikTokDispatchPanel({
           // RISCO ATUAL -> PRAZO (LDR) -> JORNADA -> EVOLUCAO -> CONCENTRACAO:
           // a ordem e' do esqueleto, a mesma dos tres canais.
           <CorpoGestor
-            risco={secaoRisco}
-            ldr={faixaTopo}
-            prazo={secaoLdr}
-            jornada={<JornadaPedidos carga={jornada.carga} aoTentarDeNovo={jornada.tentarDeNovo} marca={marca} compacta />}
+            heroi={<HeroiTikTok abertos={abertos} />}
+            faixa={faixa}
+            atencao={fila}
             // EXPEDICAO-TIKTOK-PADRAO: "Backlog por marca" no lugar e no
-            // formato da Shopee/ML; a evolucao por vencimento e a LDR por loja
-            // dividem a linha seguinte, como no detalhe.
-            evolucao={<BacklogPorMarcaTikTok abertos={abertos} api={BASE} marca={marca} />}
-            concentracao={
-              <div className="grid gap-3 lg:grid-cols-5">
-                <div className="min-w-0 lg:col-span-3">{painelEvolucao}</div>
-                {painelLojas("lg:col-span-2")}
-              </div>
+            // formato da Shopee/ML; evolucao (7/12) e lojas (5/12) a seguir.
+            backlog={<BacklogPorMarcaTikTok abertos={abertos} api={BASE} marca={marca} />}
+            evolucao={painelEvolucao}
+            concentracao={painelLojas("h-full")}
+            ldr={faixaTopo}
+            maisDetalhes={
+              <MaisDetalhes resumo="janela da LDR, jornada e nota oficial">
+                {secaoPrazo(false)}
+                <JornadaPedidos carga={jornada.carga} aoTentarDeNovo={jornada.tentarDeNovo} marca={marca} compacta />
+                {performance}
+              </MaisDetalhes>
             }
             convite={
               aoTrocarVisao ? (
@@ -922,9 +950,10 @@ export default function TikTokDispatchPanel({
           />
         ) : (
           <>
-            <RiscoAtualTikTok abertos={abertos} />
+            <HeroiTikTok abertos={abertos} />
+            <FaixaKpis rotulo="Pedidos em aberto">{cartoesDosAbertos(abertos)}</FaixaKpis>
             <BacklogPorMarcaTikTok abertos={abertos} api={BASE} marca={marca} />
-            {secaoLdr}
+            {secaoPrazo(true)}
             {/* DETALHE: coorte, loja e fluxo */}
             {painelCoortes}
             <div className="grid gap-3 lg:grid-cols-5">

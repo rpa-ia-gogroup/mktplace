@@ -13,20 +13,20 @@
  * RECONSTRUIDO da politica (despacho 1 dia util, coleta 2 dias uteis), como
  * na LDR do TikTok — dito na descricao da secao e no rodape do popup.
  */
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, Clock, Hourglass } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
-import CartaoDeRisco from "@/components/expedicao/CartaoDeRisco";
 import TikTokColetaPerdida, { BotaoCsvCompleto, baixarCsv } from "@/components/expedicao/TikTokColetaPerdida";
 import { CLASSE_CABECALHO, CLASSE_TABELA, EstadoSecao } from "@/components/expedicao/LayoutExpedicao";
-import RiscoEmDestaque from "@/components/expedicao/RiscoEmDestaque";
-import { SecaoGerencial, SeloLeitura } from "@/components/expedicao/SecoesExpedicao";
+import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
+import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
+import KpiTile from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
-import { formatarHoras, type Kpi } from "@/lib/expedicao-contract";
+import { formatarHoras } from "@/lib/expedicao-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { formatarInteiro } from "@/lib/expedicao-formato";
 import {
@@ -50,7 +50,9 @@ import { brandLabel } from "@/lib/filters/brands";
 type Carga = { tipo: "carregando" } | { tipo: "erro" } | { tipo: "ok"; dados: RespostaAbertos };
 
 function pct(n: number, base: number): string {
-  return base > 0 ? `${((n / base) * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—";
+  return base > 0
+    ? `${((n / base) * 100).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+    : "—";
 }
 
 // ---------------------------------------------------------------------------
@@ -314,72 +316,117 @@ function prontos(abertos: AbertosTikTok): RespostaAbertos | null {
 }
 
 // ---------------------------------------------------------------------------
-// Risco atual — o MESMO desenho da Shopee e do ML
+// Heroi, faixa e "onde agir" — IDENTIDADE-GERENCIAL (spec do Prumo, 08/11/2026)
 // ---------------------------------------------------------------------------
-export function RiscoAtualTikTok({ abertos, children }: { abertos: AbertosTikTok; children?: ReactNode }) {
-  const d = prontos(abertos);
-  if (!d) {
-    return (
-      <SecaoGerencial titulo="Risco atual" dica={DICA_ABERTOS} selo={<SeloLeitura>agora</SeloLeitura>}>
-        <EstadoAbertos abertos={abertos} />
-        {children}
-      </SecaoGerencial>
-    );
-  }
-  const t = d.totals;
-  const proximo = diaCurto(d.next_business_day);
-  const principal: Kpi = { chave: "overdue", rotulo: "Vencidos", valor: t.overdue, alerta: t.overdue > 0 };
-  const backlog: Kpi = { chave: "backlog", rotulo: "Em aberto", valor: t.open, alerta: false };
-  const etapas =
-    t.overdue > 0 ? (
-      <p className="text-sm text-ink-muted">
-        {formatarInteiro(t.overdue_collection)} aguardando coleta · {formatarInteiro(t.overdue_shipment)} aguardando envio
-      </p>
-    ) : undefined;
+/** Vencidos por etapa: duas faixas do MESMO vencido (tom unico, tons de crit). */
+function BarraDasEtapas({ coleta, envio }: { coleta: number; envio: number }) {
+  const total = coleta + envio;
+  const larg = (n: number) => (total > 0 ? `${(n / total) * 100}%` : "0%");
+  const texto = `${formatarInteiro(coleta)} aguardando coleta · ${formatarInteiro(envio)} aguardando envio`;
   return (
-    <SecaoGerencial titulo="Risco atual" dica={DICA_ABERTOS} selo={<SeloLeitura>agora</SeloLeitura>}>
-      <div data-testid="exp-tiktok-abertos">
-        <RiscoEmDestaque
-          principal={principal}
-          backlog={backlog}
-          prazo={etapas}
-          ondeAgir={ondeAgirNosAbertos(t, d.brands, brandLabel)}
-          aoAbrir={t.overdue > 0 ? () => abertos.abrir("overdue", t.overdue) : undefined}
-          secundarios={
-            <>
-              <CartaoDeRisco
-                chave="due24h"
-                rotulo="Vence hoje"
-                valor={formatarInteiro(t.due_today)}
-                detalhe={`${pct(t.due_today, t.open)} do total`}
-                tom={t.due_today > 0 ? "atencao" : "neutro"}
-                aoAbrir={t.due_today > 0 ? () => abertos.abrir("due_today", t.due_today) : undefined}
-                rotuloAbrir={`Ver os ${formatarInteiro(t.due_today)} pedidos do TikTok que vencem hoje`}
-              />
-              <CartaoDeRisco
-                chave="due_next_day"
-                rotulo={`Vence ${proximo}`}
-                valor={formatarInteiro(t.due_next_day)}
-                detalhe="próximo dia útil"
-                aoAbrir={t.due_next_day > 0 ? () => abertos.abrir("due_next_day", t.due_next_day) : undefined}
-                rotuloAbrir={`Ver os ${formatarInteiro(t.due_next_day)} pedidos do TikTok que vencem ${proximo}`}
-              />
-              <CartaoDeRisco
-                chave="over48h"
-                rotulo="Acima de 48 h"
-                valor={formatarInteiro(t.over_48h)}
-                detalhe={`${pct(t.over_48h, t.open)} do total`}
-                tom={t.over_48h > 0 ? "atencao" : "neutro"}
-                aoAbrir={t.over_48h > 0 ? () => abertos.abrir("over_48h", t.over_48h) : undefined}
-                rotuloAbrir={`Ver os ${formatarInteiro(t.over_48h)} pedidos do TikTok abertos há mais de 48 h`}
-              />
-            </>
-          }
-        />
+    <div data-testid="exp-tiktok-etapas">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Vencidos por etapa</p>
+      <div className="flex h-3.5 overflow-hidden rounded-full bg-raised" role="img" aria-label={texto}>
+        <div className="tc-barra bg-crit" style={{ width: larg(coleta) }} />
+        <div className="tc-barra bg-crit/45" style={{ width: larg(envio) }} />
       </div>
-      {children}
-    </SecaoGerencial>
+      <ul className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-ink-muted tabular-nums" aria-hidden="true">
+        <li className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-crit" />
+          <b className="font-semibold text-ink">{formatarInteiro(coleta)}</b> aguardando coleta
+        </li>
+        <li className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm bg-crit/45" />
+          <b className="font-semibold text-ink">{formatarInteiro(envio)}</b> aguardando envio
+        </li>
+      </ul>
+    </div>
   );
+}
+
+const ACAO =
+  "inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+
+/** Heroi: vencidos sobre os abertos de AGORA (o cabecalho ja' diz o frescor). */
+export function HeroiTikTok({ abertos }: { abertos: AbertosTikTok }) {
+  const d = prontos(abertos);
+  const t = d?.totals ?? null;
+  return (
+    <div data-testid="exp-tiktok-abertos">
+      <Heroi
+        rotulo="Vencidos"
+        ajuda={<InfoDica texto={DICA_ABERTOS} />}
+        carregando={abertos.carga.tipo === "carregando"}
+        erro={
+          t ? undefined : (
+            <>
+              Não foi possível carregar os pedidos em aberto do TikTok.{" "}
+              <button type="button" onClick={abertos.carregar} className="min-h-11 font-semibold underline underline-offset-4">
+                Tentar de novo
+              </button>
+            </>
+          )
+        }
+        valor={t ? pct(t.overdue, t.open) : "—"}
+        tom={t && t.overdue > 0 ? "critico" : "neutro"}
+        contexto={t ? `${formatarInteiro(t.overdue)} pedidos de ${formatarInteiro(t.open)} em aberto` : undefined}
+        meio={t ? <BarraDasEtapas coleta={t.overdue_collection} envio={t.overdue_shipment} /> : undefined}
+        selo={t ? (t.overdue > 0 ? { texto: "Com atraso", tom: "critico" } : { texto: "Em dia", tom: "ok" }) : undefined}
+        acao={
+          t ? (
+            <button type="button" aria-haspopup="dialog" onClick={() => abertos.abrir("overdue", t.overdue)} className={ACAO}>
+              Ver pedidos →
+            </button>
+          ) : undefined
+        }
+      />
+    </div>
+  );
+}
+
+/**
+ * Os tres cartoes dos abertos para a faixa (o quarto, a LDR da janela, e' do
+ * painel). Sem a carga, "—" com o motivo no `title`: ausencia nunca vira 0.
+ */
+export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
+  const d = prontos(abertos);
+  const t = d?.totals ?? null;
+  const motivo = abertos.carga.tipo === "carregando" ? "Carregando os pedidos em aberto." : "Pedidos em aberto indisponíveis agora.";
+  const proximo = d ? diaCurto(d.next_business_day) : "próximo dia útil";
+  const cartao = (
+    lista: ListaAbertos,
+    rotulo: string,
+    n: number | undefined,
+    icone: typeof Clock,
+    alerta: boolean,
+    extra = "",
+  ) => (
+    <KpiTile
+      key={lista}
+      variante="gerencial"
+      icone={icone}
+      rotulo={rotulo}
+      valor={t && n !== undefined ? pct(n, t.open) : "—"}
+      comparacao={t && n !== undefined ? `${formatarInteiro(n)} pedidos${extra}` : undefined}
+      contexto={t ? undefined : motivo}
+      tom={!t ? "ausente" : alerta && (n ?? 0) > 0 ? "atencao" : "neutro"}
+      onAbrir={t && n ? () => abertos.abrir(lista, n) : undefined}
+    />
+  );
+  return (
+    <>
+      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true)}
+      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, " · próximo dia útil")}
+      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true)}
+    </>
+  );
+}
+
+/** "Onde agir": a marca que concentra os vencidos — 1º item da fila. */
+export function ondeAgirTikTok(abertos: AbertosTikTok): ItemFila | null {
+  const d = prontos(abertos);
+  const o = d ? ondeAgirNosAbertos(d.totals, d.brands, brandLabel) : null;
+  return o ? { chave: `onde-agir-${o.chave}`, severidade: o.tom, titulo: o.texto } : null;
 }
 
 // ---------------------------------------------------------------------------

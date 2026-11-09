@@ -36,6 +36,7 @@
  * fica no catalogo (`expedicao-definicoes.ts`), fora da tela.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, CalendarClock, Clock, Hourglass, PauseCircle, type LucideIcon } from "lucide-react";
 
 import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
 import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
@@ -49,24 +50,18 @@ import {
   type DivisaoDaFila,
 } from "@/lib/expedicao-shopee-ldr";
 import CabecalhoExpedicao, { SeletorMarca } from "@/components/expedicao/CabecalhoExpedicao";
-import CartaoDeRisco from "@/components/expedicao/CartaoDeRisco";
-import RiscoEmDestaque from "@/components/expedicao/RiscoEmDestaque";
 import TabelaSeteDias, { type LinhaSeteDias } from "@/components/expedicao/TabelaSeteDias";
 import TravadosDialog from "@/components/expedicao/TravadosDialog";
 import {
-  SUFIXO_ATRASO_7D,
-  percentualAtraso7d,
   percentualDaFila,
   type AlvoTravados,
   type TipoLista,
 } from "@/lib/expedicao-travados";
-import {
-  AtencaoAgora,
-  ConviteAoDetalhe,
-  FaixaKpis,
-  SecaoGerencial,
-  SeloLeitura,
-} from "@/components/expedicao/SecoesExpedicao";
+import { ConviteAoDetalhe, FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
+import Chip from "@/components/ui/Chip";
+import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
+import Heroi from "@/components/ui/Heroi";
+import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import InfoDica from "@/components/ui/InfoDica";
 import { Ajuda, KpiComAjuda } from "@/components/expedicao/KpiComAjuda";
 import Note from "@/components/ui/Note";
@@ -103,8 +98,8 @@ import {
   estadoDaTendencia,
   formatarHoras,
   fotografiaDaFila,
-  montarAtencaoDaFila,
-  ondeAgirNaFila,
+  montarFilaPorConta,
+  MAX_ITENS_DA_FILA,
   montarBarraDeQualidade,
   montarFrescor,
   montarKpisPrincipais,
@@ -240,6 +235,26 @@ const ROTULO_CURTO: Partial<Record<string, string>> = {
   over48h: "Acima de 48 h",
 };
 
+/** IDENTIDADE-GERENCIAL: o ladrilho de cada cartao da faixa. */
+const ICONE_DA_MEDIDA: Partial<Record<string, LucideIcon>> = {
+  overdue: AlertTriangle,
+  due_soon: Clock,
+  due24h: Clock,
+  due_next_day: CalendarClock,
+  over48h: Hourglass,
+  stalled: PauseCircle,
+};
+
+/** Titulo do dialogo aberto por um item de "O que exige atenção agora". */
+const ROTULO_DA_LISTA: Record<TipoLista, string> = {
+  vencidos: "Vencidos",
+  perto_de_vencer: "Perto de vencer",
+  vence_24h: "Vence em 24 h",
+  vence_proximo: "Vence no próximo dia de prazo",
+  acima_48h: "Acima de 48 h",
+  travados: "Travados",
+};
+
 const ROTULO_ORDEM: Record<Ordenacao, string> = {
   criticidade: "Criticidade",
   deadline: "Prazo",
@@ -325,6 +340,8 @@ function CelulaKpi({
       contexto={kpi.nota}
       tom={tomDoKpi(kpi)}
       destaque={destaque || numeroGrande}
+      variante="gerencial"
+      icone={ICONE_DA_MEDIDA[kpi.chave]}
     />
   );
 }
@@ -343,10 +360,10 @@ function BlocoFbs({ divisao }: { divisao: DivisaoDaFila }) {
         Pedidos FBS — despacho da Shopee
       </h4>
       <FaixaKpis rotulo="Pedidos FBS" secundaria>
-        <KpiComAjuda ajuda="shopee.fbs" rotulo="Em aberto (FBS)" valor={numero(f.backlog_count)} />
-        <KpiComAjuda ajuda="shopee.fbs" rotulo="Vencidos (FBS)" valor={numero(f.overdue_count)} />
-        <KpiComAjuda ajuda="shopee.fbs" rotulo="Acima de 48 h (FBS)" valor={numero(f.over_48h_count)} />
-        <KpiComAjuda ajuda="shopee.fbs" rotulo="Travados (FBS)" valor={numero(f.stalled_count)} />
+        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Em aberto (FBS)" valor={numero(f.backlog_count)} />
+        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Vencidos (FBS)" valor={numero(f.overdue_count)} />
+        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Acima de 48 h (FBS)" valor={numero(f.over_48h_count)} />
+        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Travados (FBS)" valor={numero(f.stalled_count)} />
       </FaixaKpis>
       <p className="mt-2 text-xs text-ink-muted" data-testid="exp-fila-conferencia">
         {textoDaReconciliacao(divisao)}
@@ -408,6 +425,20 @@ function BarraDeRisco({
   );
 }
 
+/**
+ * IDENTIDADE-GERENCIAL: o selo "inclui FBS" fica so' no heroi. Nas tabelas da
+ * fila publicada (que nao separa FBS) ele vira `title` + `sr-only` do titulo.
+ */
+function TituloComFbs({ titulo, incluiFbs }: { titulo: string; incluiFbs: boolean }) {
+  if (!incluiFbs) return <>{titulo}</>;
+  return (
+    <span title="Fila publicada por conta: inclui pedidos FBS.">
+      {titulo}
+      <span className="sr-only"> (inclui pedidos FBS)</span>
+    </span>
+  );
+}
+
 function ItemLegenda({ cor, children }: { cor: string; children: React.ReactNode }) {
   return (
     <li className="flex items-center gap-1.5">
@@ -425,6 +456,8 @@ export default function ExpedicaoClient({
   marca,
   aoTrocarMarca,
   faixaTopo,
+  performance,
+  itensOficiais,
 }: {
   /** Canal da fila ja' sanitizado pela casca (flag do ML aplicada la'). */
   canal: Canal;
@@ -434,8 +467,12 @@ export default function ExpedicaoClient({
   /** EXPEDICAO-UX-3: marca escolhida na casca (`?marca=`), ou nenhuma. */
   marca?: string | null;
   aoTrocarMarca?: (m: string | null) => void;
-  /** CX-MKT-3: faixa de LDR da casca, repassada ao esqueleto. */
+  /** CX-MKT-3: LDR de 7 dias da casca (LdrTopo), depois de "Backlog por marca". */
   faixaTopo?: ReactNode;
+  /** CX-MKT-2: Performance oficial, dentro de "Mais detalhes" (visao do gestor). */
+  performance?: ReactNode;
+  /** Metricas oficiais fora do limite, para "O que exige atenção agora". */
+  itensOficiais?: ItemFila[];
 }) {
   const marcaAtiva = marca ?? null;
   // A casca so' monta este componente depois de ler a URL, entao o canal da
@@ -685,12 +722,6 @@ export default function ExpedicaoClient({
   const mostrarRef = mostrarColunaReferencia(dados?.queue ?? []);
   const pag = paginaAtual(dados?.pagination ?? null);
   const temPrazo = canalTemPrazo(filtros.channel, fotografiaDoPrazo);
-  // EXPEDICAO-ATRASO-7D — % de vencidos pela regra oficial da Shopee, do canal
-  // ou da marca (recorte). Nao usa a divisao vendedor x FBS: o pipeline ja'
-  // calcula a base do vendedor (sem FBS) na Shopee.
-  const taxaAtraso7d = temPrazo
-    ? percentualAtraso7d(recorte.totais?.late_7d_count, recorte.totais?.due_7d_count)
-    : null;
   // EXPEDICAO-ABA-7D: linhas da aba "Ultimos 7 dias". O % de cada medida e'
   // sobre a base do LDR (`due_7d_count`), o mesmo do topo (04/11/2026).
   const linhaSeteDias = (conta: string, titulo: string, t: Partial<Totais> | null | undefined): LinhaSeteDias => ({
@@ -743,7 +774,6 @@ export default function ExpedicaoClient({
   // enquanto a resposta nova nao chega, eles nao descrevem a fotografia antiga.
   const fotografia =
     dados && dados.channel === filtros.channel ? fotografiaDaFila(relogios) : null;
-  const atencao = montarAtencaoDaFila(totaisRisco, contasRisco, filtros.channel, fotografiaDoPrazo);
   // "Agora" e' o instante da fotografia. Com ela velha, a secao diz isso em
   // vez de deixar o gestor agir sobre o passado sem saber. Com a divisao, a
   // fotografia do risco e' a da divisao (outra leitura, outro instante).
@@ -769,12 +799,6 @@ export default function ExpedicaoClient({
     kpiDestaque && kpiDestaque.valor !== null && kpiDestaque.valorTexto === undefined
       ? curto(kpiDestaque)
       : null;
-  const secundariosDoRisco = risco
-    .filter((k) => k.chave !== chaveDestaque && k.chave !== "backlog" && k.chave !== "marcas_alerta")
-    .map(curto);
-  // "Onde agir": so' a marca que concentra — os numeros ja' estao no destaque.
-  const ondeAgir = ondeAgirNaFila(totaisRisco, contasRisco, filtros.channel, fotografiaDoPrazo);
-
   /**
    * Barra de situacao de prazo, so' no painel "Prazo" (sem o destaque).
    * EXPEDICAO-PERTO-DE-VENCER: saiu do destaque — a particao ja' esta' nos
@@ -901,34 +925,6 @@ export default function ExpedicaoClient({
           })
       : undefined;
 
-  /**
-   * EXPEDICAO-PERTO-DE-VENCER — cartao limpo ao lado do destaque: rotulo com
-   * "ⓘ", numero e uma linha. "Perto de vencer" e' a prioridade (ambar com
-   * valor); acima de 48 h e travados ficam neutros, so' com a fatia da fila.
-   */
-  const cartaoDeRisco = (k: Kpi) => {
-    const valor = k.valor ?? 0;
-    // O % usa a fila do proprio numero: "perto de vencer" vem da fila
-    // publicada mesmo com a divisao vendedor x FBS.
-    const base = divisao && k.chave === "due_soon" ? recorte.totais?.backlog_count : totaisRisco?.backlog_count;
-    // EXPEDICAO-ATRASO-7D: o % de VENCIDOS e' o da regra oficial da Shopee.
-    const pct = k.chave === "overdue" ? taxaAtraso7d : percentualDaFila(valor, base ?? 0);
-    const sufixo = k.chave === "overdue" ? SUFIXO_ATRASO_7D : "da fila";
-    return (
-      <CartaoDeRisco
-        key={k.chave}
-        chave={k.chave}
-        rotulo={k.rotulo}
-        ajuda={ajudaDaFila(k.chave)}
-        valor={k.valorTexto ?? (k.valor === null ? "—" : numero(valor))}
-        detalhe={k.chave === "due_soon" ? k.notaCurta : pct ? `${pct} ${sufixo}` : undefined}
-        tom={k.chave === "due_soon" && valor > 0 ? "atencao" : "neutro"}
-        aoAbrir={abrirLista(k, LISTA_DO_KPI[k.chave])}
-        rotuloAbrir={`Ver os ${numero(valor)} pedidos: ${k.rotulo}`}
-      />
-    );
-  };
-
   /** Legenda da barra por conta — a mesma na tabela unica e na do detalhe. */
   const legendaDaBarra = (
     <ul className="flex flex-wrap gap-x-4 gap-y-1">
@@ -974,13 +970,15 @@ export default function ExpedicaoClient({
       <span aria-hidden="true" className="text-xs text-ink-faint">
         Período
       </span>
-      <Segmented
-        rotulo="Período"
-        opcoes={opcoesDoSeletor(REGRA)}
-        valor={valorDoSeletor(janela, REGRA, personalizado)}
-        aoEscolher={escolherJanela}
-      />
-      {periodoConsultado ? <InfoDica texto={periodoConsultado} /> : null}
+      <span className="inline-flex items-center gap-2">
+        <Segmented
+          rotulo="Período"
+          opcoes={opcoesDoSeletor(REGRA)}
+          valor={valorDoSeletor(janela, REGRA, personalizado)}
+          aoEscolher={escolherJanela}
+        />
+        {periodoConsultado ? <InfoDica texto={periodoConsultado} /> : null}
+      </span>
       {valorDoSeletor(janela, REGRA, personalizado) === OPCAO_PERSONALIZADA && (
         <JanelaPersonalizada max={REGRA.max} diasAplicados={janela} aoAplicar={aplicarJanela} />
       )}
@@ -1000,130 +998,252 @@ export default function ExpedicaoClient({
     </FaixaKpis>
   );
 
-  // EXPEDICAO-UX-3 — "Risco atual": os indicadores que o CANAL sustenta.
-  // A divisao vem recortada pela marca no SERVIDOR (rota da LDR), entao o aviso
-  // de "a tela nao soma contas" so' vale sem ela.
-  const avisoRecorte = recorte.variasContas && !divisao ? (
-    <Note tom="neutro" papel="status">
-      {brandLabel(recorte.marca ?? "")}: {recorte.contas.length} contas, sem total — veja “Backlog por marca”.
-    </Note>
-  ) : null;
+  // EXPEDICAO-UX-3 — o recorte de uma marca com varias contas nao tem total:
+  // a tela nao soma contas. Com a divisao, o recorte vem do servidor.
+  const avisoRecorte =
+    recorte.variasContas && !divisao
+      ? `${brandLabel(recorte.marca ?? "")}: ${recorte.contas.length} contas, sem total — veja “Backlog por marca”.`
+      : null;
 
-  const secaoRisco = (
-    <SecaoGerencial titulo="Risco atual"
-      // UI-EXPEDICAO-1: de quando e' a fila vai para o "ⓘ". Pedido do usuario
-      // (30/10/2026): o selo "agora" saiu — o cabecalho ja' mostra a hora da
-      // fotografia. Fica so' o aviso "desatualizada", que nunca se esconde.
-      dica={quando}
-      selo={
-        <>
-          {fotografiaVelha ? <SeloLeitura tom="atencao">desatualizada</SeloLeitura> : null}
-          {filtros.channel === "shopee" && !divisao && recorte.totais ? (
-            <span data-testid="exp-aviso-fbs" className="inline-flex items-center gap-1">
-              <SeloLeitura tom="atencao">inclui FBS</SeloLeitura>
-              <InfoDica texto={AVISO_FILA_COM_FBS} />
-            </span>
-          ) : null}
-        </>
+  // ---- IDENTIDADE-GERENCIAL (spec do Prumo, 08/11/2026) ----
+  // Heroi -> faixa -> "O que exige atenção agora" -> backlog por marca -> LDR
+  // -> "Mais detalhes". Percentual antes do absoluto; ausencia e' "—".
+  const ldrNaSecao = LDR_SHOPEE_LIGADA && filtros.channel === "shopee";
+  const backlogRisco = totaisRisco?.backlog_count ?? null;
+  const valorHeroi = destaque?.valor ?? null;
+  const pctHeroi = valorHeroi !== null && backlogRisco !== null ? percentualDaFila(valorHeroi, backlogRisco) : null;
+  const qtdAlerta = risco.find((k) => k.chave === "marcas_alerta")?.valor ?? 0;
+  // O "ⓘ" do heroi: a definicao da medida + de quando e' a fila (com o
+  // "desatualizada: confirme antes de agir") + o que o canal nao mede.
+  const chaveAjudaHeroi = chaveDoKpiDaFila(filtros.channel, chaveDestaque);
+  const extrasHeroi = [
+    quando,
+    !temPrazo ? SEM_PRAZO_CANAL_ML : !ldrNaSecao ? dicaDaSecaoPrazo(filtros.channel) : null,
+  ].filter((x): x is string => Boolean(x));
+  const ajudaHeroi = chaveAjudaHeroi ? (
+    <Ajuda chave={chaveAjudaHeroi} extras={extrasHeroi} />
+  ) : extrasHeroi.length ? (
+    <InfoDica texto={extrasHeroi.join(" ")} />
+  ) : null;
+  const abrirHeroi = destaque ? abrirLista(destaque, LISTA_DO_KPI[destaque.chave]) : undefined;
+  const avisoHeroi = (
+    <>
+      {filtros.channel === "shopee" && !divisao && recorte.totais ? (
+        <span data-testid="exp-aviso-fbs" className="inline-flex items-center gap-1">
+          <Chip tom="atencao">inclui FBS</Chip>
+          <InfoDica texto={AVISO_FILA_COM_FBS} />
+        </span>
+      ) : null}
+      {qtdAlerta > 0 ? (
+        <Chip ponto tom="atencao" title="Marcas com a fonte em alerta: veja as limitações do dado.">
+          {numero(qtdAlerta)} {qtdAlerta === 1 ? "marca em alerta" : "marcas em alerta"}
+        </Chip>
+      ) : null}
+    </>
+  );
+  // Meio do heroi: a barra de prazo (Shopee; ML com SLA) ou, sem prazo, a
+  // barra do backlog com +48 h e travados sobrepostos (nunca empilhados).
+  const meioHeroi = temPrazo ? (
+    temBarraDePrazo ? (
+      <div data-testid="exp-barra-prazo">
+        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          {divisao ? "Fila do vendedor por situação de prazo" : "Pedidos em fila por situação de prazo"}
+          <Ajuda chave={`${filtros.channel}.prazo_situacao`} />
+        </p>
+        {barraDePrazo()}
+      </div>
+    ) : undefined
+  ) : totaisRisco && totaisRisco.backlog_count > 0 ? (
+    <div data-testid="exp-barra-idade">
+      <BarraDeRisco
+        linha={{
+          conta: "total",
+          marca: "",
+          backlog: totaisRisco.backlog_count,
+          segmentos: [],
+          sobreposicoes: [
+            { chave: "over48h", rotulo: "Acima de 48h", valor: totaisRisco.over_48h_count },
+            { chave: "stalled", rotulo: "Travados", valor: totaisRisco.stalled_count },
+          ],
+        }}
+        maximo={totaisRisco.backlog_count}
+        empilhavel={false}
+      />
+      <ul className="mt-2 grid grid-cols-2 gap-2 text-xs text-ink-muted sm:grid-cols-3">
+        <ItemLegenda cor="bg-accent/70">
+          Backlog <span className="ml-auto font-semibold tabular-nums text-ink">{numero(totaisRisco.backlog_count)}</span>
+        </ItemLegenda>
+        <ItemLegenda cor="bg-warn">
+          Acima de 48 h <span className="ml-auto font-semibold tabular-nums text-ink">{numero(totaisRisco.over_48h_count)}</span>
+        </ItemLegenda>
+        <ItemLegenda cor="bg-crit">
+          Travados <span className="ml-auto font-semibold tabular-nums text-ink">{numero(totaisRisco.stalled_count)}</span>
+        </ItemLegenda>
+      </ul>
+    </div>
+  ) : undefined;
+  const heroi = (
+    <Heroi
+      rotulo={temPrazo ? "Vencidos" : "Acima de 48 h"}
+      ajuda={ajudaHeroi}
+      valor={
+        valorHeroi === null ? (
+          <span title={avisoRecorte ?? "Medida não publicada nesta fotografia."}>—</span>
+        ) : (
+          pctHeroi ?? <span title="Fila vazia nesta fotografia.">—</span>
+        )
       }
-    >
-      {avisoRecorte}
-      {destaque ? (
-        <RiscoEmDestaque
-          principal={destaque}
-          backlog={risco.find((k) => k.chave === "backlog")}
-          marcasAlerta={risco.find((k) => k.chave === "marcas_alerta")}
-          ajuda={ajudaDaFila(chaveDestaque)}
-          taxaAtraso7d={taxaAtraso7d}
-          // EXPEDICAO-PERTO-DE-VENCER: o cartao inteiro abre a lista; a barra
-          // de prazo saiu do destaque (a particao esta' nos cartoes e na tabela).
-          aoAbrir={abrirLista(destaque, LISTA_DO_KPI[destaque.chave])}
-          secundarios={secundariosDoRisco.map(cartaoDeRisco)}
-          ondeAgir={ondeAgir}
-        />
-      ) : (
-        <FaixaKpis rotulo="Risco atual" colunas={risco.length === 6 ? 6 : 4}>
-          {risco.map((k) => (
-            <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} destaque />
-          ))}
-        </FaixaKpis>
-      )}
-      {divisao ? <BlocoFbs divisao={divisao} /> : null}
-      {/* Com o destaque, a lista repetiria os numeros dele: vira o "onde agir". */}
-      {destaque ? null : (
-        <AtencaoAgora
-          itens={atencao}
-          semItens={recorte.variasContas ? "Leitura por conta: veja “Backlog por marca”." : undefined}
-        />
-      )}
-    </SecaoGerencial>
+      tom={valorHeroi === null || valorHeroi === 0 ? "neutro" : temPrazo ? "critico" : "atencao"}
+      aviso={avisoHeroi}
+      contexto={
+        avisoRecorte ??
+        (valorHeroi !== null && backlogRisco !== null
+          ? `${numero(valorHeroi)} ${valorHeroi === 1 ? "pedido" : "pedidos"} de ${numero(backlogRisco)} em fila`
+          : undefined)
+      }
+      meio={meioHeroi}
+      selo={
+        valorHeroi === null
+          ? undefined
+          : temPrazo
+            ? valorHeroi > 0
+              ? { texto: "Com atraso", tom: "critico" }
+              : { texto: "Em dia", tom: "ok" }
+            : valorHeroi > 0
+              ? { texto: "Acima do limiar", tom: "critico" }
+              : { texto: "Dentro do limiar", tom: "ok" }
+      }
+      acao={
+        abrirHeroi ? (
+          <button
+            type="button"
+            onClick={abrirHeroi}
+            aria-haspopup="dialog"
+            aria-label={`Ver os ${numero(valorHeroi ?? 0)} pedidos: ${temPrazo ? "Vencidos" : "Acima de 48 h"}`}
+            className="inline-flex min-h-[44px] items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Ver pedidos →
+          </button>
+        ) : undefined
+      }
+    />
   );
 
-  // "Prazo": a Shopee publica `ship_by_date`; o Mercado Livre, o SLA do envio
-  // quando a fotografia o traz (EXPEDICAO-ML-PRAZO). Sem SLA, o bloco de baixo.
-  // EXPEDICAO-TRAVADOS-1: sem LDR e com a barra ja' no destaque, a secao
-  // "Prazo" so' teria um paragrafo dizendo o que falta — sai da tela.
-  // A LDR operacional existe so' na Shopee.
-  const ldrNaSecao = LDR_SHOPEE_LIGADA && filtros.channel === "shopee";
-  const secaoPrazo = temPrazo && !ldrNaSecao && destaque && temBarraDePrazo ? null : temPrazo ? (
-    // Sem LDR, o que falta medir vira o "ⓘ" do titulo.
-    <SecaoGerencial titulo="Prazo" dica={ldrNaSecao ? undefined : dicaDaSecaoPrazo(filtros.channel)}>
-      {/* UI-EXPEDICAO-1: com o destaque, a barra de prazo ja' esta' no topo. */}
-      {destaque && temBarraDePrazo ? null : (
-        <Panel
-          titulo={divisao ? "Fila do vendedor por situação de prazo" : "Pedidos em fila por situação de prazo"}
-          acao={<Ajuda chave={`${filtros.channel}.prazo_situacao`} />}
-        >
-          {barraDePrazo() ?? (
-            <p className="text-sm text-ink-muted">
-              {recorte.variasContas
-                ? "Situação de prazo por conta em “Backlog por marca”."
-                : "Sem pedidos em fila nesta fotografia."}
-            </p>
-          )}
-        </Panel>
-      )}
-      {ldrNaSecao ? <LdrShopeePanel ldr={ldr} marca={marcaAtiva} /> : null}
-    </SecaoGerencial>
-  ) : (
-    <SecaoGerencial titulo="Prazo" dica={SEM_PRAZO_CANAL_ML}>
-      <Panel titulo="Prazo de despacho" acao={<Ajuda chave={AJUDA_CANAL_SEM_PRAZO.prazo} />}>
-        {envelhecimento ? (
-          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
-            {/* Com o destaque, "acima de 48 h" ja' e' o numero do topo. */}
-            {destaque ? null : (
-            <div className="rounded-lg bg-raised px-3 py-2">
-              <dt className="text-xs text-ink-muted">
-                Acima de 48 h{" "}
-                <Ajuda chave={`${filtros.channel}.over48h`} />
-              </dt>
-              <dd className="text-sm text-ink">
-                <span className="text-xl font-semibold tabular-nums">{numero(envelhecimento.acima48h)}</span>{" "}
-                de {numero(envelhecimento.backlog)} pedidos em fila
-              </dd>
-            </div>
-            )}
-            <div className="rounded-lg bg-raised px-3 py-2">
-              <dt className="text-xs text-ink-muted">
-                Pedido mais antigo em fila <Ajuda chave={AJUDA_CANAL_SEM_PRAZO.maisAntigo} />
-              </dt>
-              <dd className="text-sm text-ink">
-                {envelhecimento.maisAntigo ? (
-                  <>
-                    <span className="text-xl font-semibold tabular-nums">
-                      {formatarHoras(envelhecimento.maisAntigo.horas)}
-                    </span>{" "}
-                    · {brandLabel(envelhecimento.maisAntigo.marca)}
-                  </>
-                ) : (
-                  "não informado pela fonte"
-                )}
-              </dd>
-            </div>
-          </dl>
-        ) : null}
-      </Panel>
-    </SecaoGerencial>
+  // Faixa de apoio: "% da fila" como valor, a contagem embaixo. Nao repete o heroi.
+  const cartaoDaFaixa = (k: Kpi) => {
+    const v = k.valor;
+    const ausente = k.valorTexto !== undefined || v === null;
+    // "Perto de vencer" vem da fila publicada mesmo com a divisao vendedor x FBS.
+    const base = divisao && k.chave === "due_soon" ? recorte.totais?.backlog_count : totaisRisco?.backlog_count;
+    const pct = !ausente && base != null ? percentualDaFila(v ?? 0, base) : null;
+    return (
+      <KpiComAjuda
+        key={k.chave}
+        variante="gerencial"
+        icone={ICONE_DA_MEDIDA[k.chave]}
+        ajuda={chaveDoKpiDaFila(filtros.channel, k.chave)}
+        // Com a divisao, "perto de vencer" e' da fila publicada (com FBS): a
+        // base fica escrita, porque a do heroi e' so' a do vendedor.
+        rotulo={divisao && k.chave === "due_soon" ? "Perto de vencer · com FBS" : (ROTULO_CURTO[k.chave] ?? k.rotulo)}
+        valor={k.valorTexto ?? (ausente ? "—" : (pct ?? numero(v ?? 0)))}
+        comparacao={
+          ausente
+            ? undefined
+            : k.chave === "due_soon" && k.notaCurta
+              ? k.notaCurta
+              : `${numero(v ?? 0)} ${v === 1 ? "pedido" : "pedidos"}`
+        }
+        contexto={k.nota}
+        tom={ausente ? "ausente" : k.chave === "due_soon" && (v ?? 0) > 0 ? "atencao" : "neutro"}
+        onAbrir={abrirLista(k, LISTA_DO_KPI[k.chave])}
+      />
+    );
+  };
+  const chavesDaFaixa = temPrazo ? ["due_soon", "over48h", "stalled"] : ["stalled"];
+  const cartoesDaFaixa = chavesDaFaixa
+    .map((c) => risco.find((k) => k.chave === c))
+    .filter((k): k is Kpi => k !== undefined)
+    .map(cartaoDaFaixa);
+  const faixa = (
+    <FaixaKpis rotulo="Indicadores de apoio" colunas={temPrazo ? 3 : 2}>
+      {cartoesDaFaixa}
+      {/* Sem prazo publicado (ML): o pedido mais antigo sai do painel Prazo. */}
+      {!temPrazo ? (
+        <KpiComAjuda
+          variante="gerencial"
+          icone={Hourglass}
+          ajuda={AJUDA_CANAL_SEM_PRAZO.maisAntigo}
+          rotulo="Pedido mais antigo em fila"
+          valor={envelhecimento?.maisAntigo ? formatarHoras(envelhecimento.maisAntigo.horas) : "—"}
+          comparacao={envelhecimento?.maisAntigo ? brandLabel(envelhecimento.maisAntigo.marca) : "não informado pela fonte"}
+          tom={envelhecimento?.maisAntigo ? "neutro" : "ausente"}
+        />
+      ) : null}
+    </FaixaKpis>
+  );
+
+  // "O que exige atenção agora": as contas que pedem acao (o antigo "Onde
+  // agir" e' o 1o item), as metricas oficiais fora do limite e os avisos.
+  // Ate' MAX_ITENS_DA_FILA; o resto esta' em "Backlog por marca".
+  const porConta = montarFilaPorConta(totaisRisco, contasRisco, filtros.channel, fotografiaDoPrazo).map(
+    (i): ItemFila => ({
+      chave: i.chave,
+      severidade: i.severidade,
+      titulo: i.titulo,
+      detalhe: i.detalhe,
+      onAbrir: () =>
+        setAlvoTravados({
+          titulo: `${ROTULO_DA_LISTA[i.lista]} · ${brandLabel(i.marca)}`,
+          marca: i.marca,
+          conta: i.conta,
+          travados: i.valor,
+          backlog: i.backlog,
+          lista: i.lista,
+        }),
+    }),
+  );
+  const itensDaFila = [
+    ...porConta.filter((i) => i.severidade === "critico"),
+    ...(itensOficiais ?? []),
+    ...porConta.filter((i) => i.severidade !== "critico"),
+  ].slice(0, MAX_ITENS_DA_FILA);
+  const filaDeAtencao = (
+    <FilaAtencao
+      itens={itensDaFila}
+      vazio={
+        recorte.variasContas && !divisao
+          ? "Leitura por conta: veja “Backlog por marca”."
+          : temPrazo
+            ? "Nesta fotografia, nenhum pedido vencido, perto de vencer ou travado."
+            : "Nesta fotografia, nenhum pedido acima de 48 h ou travado."
+      }
+    />
+  );
+
+  // "Mais detalhes": o que nao responde a pergunta da primeira dobra.
+  const partesDoResumo = [
+    ldrNaSecao ? "prazo" : null,
+    "jornada",
+    divisao ? "FBS" : null,
+    performance ? "nota oficial" : null,
+  ].filter((x): x is string => Boolean(x));
+  const maisDetalhes = (
+    <MaisDetalhes
+      resumo={
+        partesDoResumo.length > 1
+          ? `${partesDoResumo.slice(0, -1).join(", ")} e ${partesDoResumo[partesDoResumo.length - 1]}`
+          : partesDoResumo[0]
+      }
+    >
+      {ldrNaSecao ? (
+        <SecaoGerencial titulo="Prazo">
+          <LdrShopeePanel ldr={ldr} marca={marcaAtiva} />
+        </SecaoGerencial>
+      ) : null}
+      <JornadaPedidos carga={jornada.carga} aoTentarDeNovo={jornada.tentarDeNovo} marca={marcaAtiva} compacta />
+      {divisao ? <BlocoFbs divisao={divisao} /> : null}
+      {performance}
+    </MaisDetalhes>
   );
 
   const painelMaisCriticos =
@@ -1168,11 +1288,9 @@ export default function ExpedicaoClient({
 
   const painelEvolucao = (
     <Panel
-      titulo="Backlog por marca"
+      titulo={<TituloComFbs titulo="Backlog por marca" incluiFbs={filtros.channel === "shopee"} />}
       acao={
         <div className="flex flex-wrap items-center gap-1.5">
-          {/* Fila publicada por conta: nao separa FBS, ao contrario do "Risco atual". */}
-          {filtros.channel === "shopee" ? <SeloLeitura tom="atencao">inclui FBS</SeloLeitura> : null}
           <InfoDica texto={mapa.nota} />
           {/* "Ver dados" so' existe quando HA dados a revelar.
               Com a tendencia vazia — o caso da Shopee quando a
@@ -1314,16 +1432,9 @@ export default function ExpedicaoClient({
   const painelContas = (classe: string) => (
     <Panel
       className={classe}
-      titulo="Concentração por marca"
+      titulo={<TituloComFbs titulo="Concentração por marca" incluiFbs={filtros.channel === "shopee"} />}
       semPadding
-      // A tabela e' a fila PUBLICADA, que nao separa FBS: o selo avisa, para
-      // que ninguem compare com o "Risco atual" do vendedor sem saber.
-      acao={
-        <span className="flex items-center gap-1.5">
-          {filtros.channel === "shopee" ? <SeloLeitura tom="atencao">inclui FBS</SeloLeitura> : null}
-          <InfoDica texto={mapa.nota} />
-        </span>
-      }
+      acao={<InfoDica texto={mapa.nota} />}
       rodape={legendaDaBarra}
     >
       {/* UMA tabela, com a barra DENTRO dela. Antes eram duas leituras do
@@ -1661,25 +1772,33 @@ export default function ExpedicaoClient({
     >
       {/* Marca escolhida sem conta neste canal: ausencia, nao backlog zero. */}
       {mostraCorpo && recorte.semConta ? (
-        <p role="status" className="rounded-xl border border-dashed border-line-strong bg-surface p-4 text-sm text-ink-muted">
-          {brandLabel(recorte.marca ?? "")}{" "}
-          {recorte.foraDaCobertura
-            ? "não é coberta pela fonte deste canal — não é backlog zero."
-            : "não tem conta nesta fotografia do canal."}
-        </p>
+        // IDENTIDADE-GERENCIAL: vira item informativo de "O que exige atenção agora".
+        <FilaAtencao
+          itens={[
+            {
+              chave: "sem-conta",
+              severidade: "info",
+              titulo: `${brandLabel(recorte.marca ?? "")}: ${
+                recorte.foraDaCobertura
+                  ? "não é coberta pela fonte deste canal — não é backlog zero"
+                  : "não tem conta nesta fotografia do canal"
+              }`,
+            },
+          ]}
+          vazio=""
+        />
       ) : null}
       {mostraCorpo && !recorte.semConta &&
         (visao === "gestor" ? (
           // RISCO ATUAL -> PRAZO -> JORNADA -> EVOLUCAO -> CONCENTRACAO: a
           // ordem e' do esqueleto, a mesma dos tres canais.
           <CorpoGestor
-            risco={secaoRisco}
+            heroi={heroi}
+            faixa={faixa}
+            atencao={filaDeAtencao}
+            backlog={painelEvolucao}
             ldr={faixaTopo}
-            prazo={secaoPrazo}
-            // Compacta: a fila aberta so' com etapa real (sem repetir o
-            // "Risco atual") e a coorte do periodo quando existe.
-            jornada={<JornadaPedidos carga={jornada.carga} aoTentarDeNovo={jornada.tentarDeNovo} marca={marcaAtiva} compacta />}
-            evolucao={painelEvolucao}
+            maisDetalhes={maisDetalhes}
             convite={
               aoTrocarVisao && (
                 <ConviteAoDetalhe
@@ -1692,11 +1811,14 @@ export default function ExpedicaoClient({
         ) : (
           <>
             {faixaPrincipal}
-            <FaixaKpis rotulo="Indicadores secundários" secundaria>
-              {secundarios.map((k) => (
-                <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} destaque={false} />
-              ))}
-            </FaixaKpis>
+            {/* [detalhe] IDENTIDADE-GERENCIAL: secundarios sob demanda. */}
+            <MaisDetalhes resumo="indicadores secundários">
+              <FaixaKpis rotulo="Indicadores secundários" secundaria>
+                {secundarios.map((k) => (
+                  <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} destaque={false} />
+                ))}
+              </FaixaKpis>
+            </MaisDetalhes>
             <div className="grid gap-3 lg:grid-cols-3">
               {painelMaisCriticos}
               {painelContas(timeline.length > 0 ? "lg:col-span-2" : "lg:col-span-3")}

@@ -83,34 +83,51 @@ export default function LayoutExpedicao({
 /**
  * A visao do gestor, na MESMA ordem nos tres canais. A ordem e' do
  * esqueleto, nao de quem chama: trocar as props de lugar nao muda a tela.
+ *
+ * IDENTIDADE-GERENCIAL (spec do Prumo, 08/11/2026) — o esqueleto da Gerencial:
+ *   heroi -> faixa de KPIs -> "O que exige atenção agora" -> backlog por
+ *   marca -> evolucao | concentracao (7/12 | 5/12, so' o TikTok) -> LDR 7 dias
+ *   -> "Mais detalhes" (fechado) -> convite ao detalhe operacional.
  */
 export function CorpoGestor({
-  risco,
-  ldr,
-  prazo,
-  jornada,
+  heroi,
+  faixa,
+  atencao,
+  backlog,
   evolucao,
   concentracao,
+  ldr,
+  maisDetalhes,
   convite,
 }: {
-  risco: ReactNode;
-  /** CX-MKT-3: LDR de 7 dias por marca, logo abaixo de "Risco atual". */
-  ldr?: ReactNode;
-  prazo: ReactNode;
-  jornada?: ReactNode;
-  evolucao: ReactNode;
-  /** UI-EXPEDICAO-1: opcional — a fila junta concentracao e evolucao numa tabela. */
+  heroi: ReactNode;
+  faixa?: ReactNode;
+  atencao: ReactNode;
+  backlog: ReactNode;
+  /** TikTok: evolucao por dia de vencimento (7/12). */
+  evolucao?: ReactNode;
+  /** TikTok: concentracao por marca (5/12). */
   concentracao?: ReactNode;
+  /** CX-MKT-3: LDR de 7 dias por marca (LdrTopo), o unico da visao do gestor. */
+  ldr?: ReactNode;
+  /** `MaisDetalhes` com o que nao responde a pergunta da dobra. */
+  maisDetalhes?: ReactNode;
   convite?: ReactNode;
 }) {
   return (
     <>
-      {risco}
+      {heroi}
+      {faixa}
+      {atencao}
+      {backlog}
+      {evolucao || concentracao ? (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+          {evolucao ? <div className="min-w-0 lg:col-span-7">{evolucao}</div> : null}
+          {concentracao ? <div className="min-w-0 lg:col-span-5">{concentracao}</div> : null}
+        </div>
+      ) : null}
       {ldr}
-      {prazo}
-      {jornada}
-      {evolucao}
-      {concentracao}
+      {maisDetalhes}
       {convite}
     </>
   );

@@ -26,7 +26,7 @@ import {
   explicacaoLimiar48h,
   envelhecimentoDaFila,
   faixasDePrazo,
-  montarAtencaoDaFila,
+  montarFilaPorConta,
   montarRiscoAtual,
   recortarPorMarca,
   rotuloFonte,
@@ -111,13 +111,13 @@ test("a marca vai para a API como `brands` — a tela nao filtra serie sozinha",
 test("a casca le a marca na montagem e no voltar/avancar e a repassa aos dois corpos", () => {
   assert.match(CASCA, /setMarca\(lerMarca\(window\.location\.search\)\)/);
   assert.match(CASCA, /urlComMarca\(window\.location\.href, nova\)/);
-  // Os dois corpos de canal + (CX-MKT-2/3) a faixa de LDR e a Performance oficial,
-  // que seguem a mesma marca.
-  assert.equal((CASCA.match(/marca=\{marca\}/g) ?? []).length, 4);
+  // Os dois corpos de canal + (CX-MKT-2/3) a faixa de LDR, que seguem a mesma
+  // marca; a Performance oficial e' buscada na casca com a mesma marca.
+  assert.equal((CASCA.match(/marca=\{marca\}/g) ?? []).length, 3);
   assert.match(CASCA, /<ExpedicaoClient[\s\S]*?marca=\{marca\}[\s\S]*?\/>/);
   assert.match(CASCA, /<TikTokDispatchPanel[\s\S]*?marca=\{marca\}[\s\S]*?\/>/);
   assert.match(CASCA, /<LdrTopo api=\{API\} marca=\{marca\} \/>/);
-  assert.match(CASCA, /<PerformanceOficial api=\{API\} canal=\{canal\} marca=\{marca\} \/>/);
+  assert.match(CASCA, /usePerformanceOficial\(API, canal, marca,/);
 });
 
 // ===========================================================================
@@ -154,7 +154,8 @@ test("marca fora da cobertura: ausencia, nao backlog zero", () => {
   assert.equal(rec.semConta, true);
   assert.equal(rec.foraDaCobertura, true);
   assert.equal(rec.totais, null);
-  assert.match(CLIENTE, /não é coberta pela fonte deste canal — não é backlog zero\./);
+  // IDENTIDADE-GERENCIAL: dito como item informativo de "O que exige atenção agora".
+  assert.match(CLIENTE, /severidade: "info",[\s\S]*?"não é coberta pela fonte deste canal — não é backlog zero"/);
 });
 
 // ===========================================================================
@@ -197,17 +198,17 @@ test("a nota de 48 h do Mercado Livre nao fala de vencidos nem da Shopee", () =>
   assert.doesNotMatch(explicacaoLimiar48h("mercadolivre", true), /Shopee|ship_by_date/);
 });
 
-test("a frase de atencao nomeia a marca, nao o seller_id", () => {
-  const um = montarAtencaoDaFila(totais({ over_48h_count: 9 }), [conta("2227056661", "kokeshi", { over_48h_count: 9 })], "mercadolivre");
-  assert.match(um.find((i) => i.chave === "over48h")!.texto, /Maior concentração: KOKESHI, com 9\./);
-  assert.doesNotMatch(um.map((i) => i.texto).join(" "), /2227056661/);
+test("o item de atencao nomeia a marca, nao o seller_id", () => {
+  const um = montarFilaPorConta(totais({ over_48h_count: 9 }), [conta("2227056661", "kokeshi", { over_48h_count: 9 })], "mercadolivre");
+  assert.match(um[0].titulo, /^KOKESHI:/);
+  assert.doesNotMatch(um.map((i) => i.titulo).join(" "), /2227056661/);
   // duas contas da mesma marca: a conta volta, para dizer QUAL delas
-  const dois = montarAtencaoDaFila(
+  const dois = montarFilaPorConta(
     totais({ over_48h_count: 9 }),
     [conta("111", "barbours", { over_48h_count: 2 }), conta("222", "barbours", { over_48h_count: 7 })],
     "mercadolivre",
   );
-  assert.match(dois.find((i) => i.chave === "over48h")!.texto, /BARBOURS \(conta 222\), com 7\./);
+  assert.equal(dois[0].titulo, "BARBOURS (conta 222): 7 dos 9 acima de 48 h");
 });
 
 // ===========================================================================
@@ -223,7 +224,9 @@ test("Shopee: particao do backlog por situacao de prazo, que fecha o total", () 
 test("Shopee: a secao diz que NAO ha LDR e por que", () => {
   assert.match(SEM_LDR_SHOPEE, /LDR/);
   assert.match(SEM_LDR_SHOPEE, /só os\s+pedidos em aberto/);
-  assert.match(CLIENTE, /dica=\{ldrNaSecao \? undefined : dicaDaSecaoPrazo\(filtros\.channel\)\}/);
+  // IDENTIDADE-GERENCIAL: sem a LDR na tela, o aviso vai para o ⓘ do heroi.
+  assert.match(CLIENTE, /!ldrNaSecao \? dicaDaSecaoPrazo\(filtros\.channel\) : null/);
+  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} \/>/);
   assert.equal(dicaDaSecaoPrazo("shopee"), SEM_LDR_SHOPEE);
 });
 
@@ -237,11 +240,14 @@ test("Mercado Livre: prazo indisponivel pelo canal e envelhecimento da fila", ()
   const e = envelhecimentoDaFila(totais({ over_48h_count: 30 }), [frescor("a", 50), frescor("b", 200), frescor("c", null)])!;
   assert.deepEqual(e, { acima48h: 30, backlog: 100, maisAntigo: { marca: "b", horas: 200 } });
   assert.equal(envelhecimentoDaFila(totais(), [frescor("a", null)])!.maisAntigo, null, "idade ausente nao vira zero");
-  assert.match(CLIENTE, /\{SEM_PRAZO_CANAL_ML\}/);
+  assert.match(CLIENTE, /!temPrazo \? SEM_PRAZO_CANAL_ML :/);
+  // O envelhecimento da fila: +48 h no heroi; o pedido mais antigo na faixa (ausente = "—").
+  assert.match(CLIENTE, /rotulo=\{temPrazo \? "Vencidos" : "Acima de 48 h"\}/);
+  assert.match(CLIENTE, /rotulo="Pedido mais antigo em fila"\s*valor=\{envelhecimento\?\.maisAntigo \? formatarHoras\(envelhecimento\.maisAntigo\.horas\) : "—"\}/);
 });
 
 test("TikTok: a secao de prazo e' a LDR, com o evento (coleta/despacho) nomeado", () => {
-  assert.match(TIKTOK, /const secaoLdr = ldr \? \(\s*<SecaoGerencial\s+titulo="Prazo"/);
+  assert.match(TIKTOK, /const secaoPrazo = \(comLdr: boolean\) =>\s*ldr \? \(\s*<SecaoGerencial\s+titulo="Prazo"/);
   assert.match(TIKTOK, /evento: \$\{ROTULO_EVENTO\[evento\]\}/);
   assert.match(TIKTOK, /rotulo="Evento"/);
 });
@@ -264,12 +270,13 @@ test("os tres canais tem uma definicao curta da medicao", () => {
 test("as secoes tem o mesmo titulo nos tres canais", () => {
   // EXPEDICAO-TIKTOK-PADRAO: o "Risco atual" e o "Backlog por marca" do
   // TikTok moram no componente dos pedidos em aberto.
+  // IDENTIDADE-GERENCIAL: o "Risco atual" virou o heroi "Vencidos" nos tres.
   const ABERTOS = fonte("src/components/expedicao/TikTokPedidosAbertos.tsx");
-  for (const f of [CLIENTE, ABERTOS]) {
-    assert.match(f, /<SecaoGerencial titulo="Risco atual"/);
-    assert.match(f, /titulo="Backlog por marca"/);
-  }
-  assert.match(TIKTOK, /<RiscoAtualTikTok abertos=\{abertos\}>/);
+  assert.match(CLIENTE, /rotulo=\{temPrazo \? "Vencidos" : "Acima de 48 h"\}/);
+  assert.match(ABERTOS, /<Heroi\s+rotulo="Vencidos"/);
+  assert.match(CLIENTE, /titulo="Backlog por marca"/);
+  assert.match(ABERTOS, /titulo="Backlog por marca"/);
+  assert.match(TIKTOK, /<HeroiTikTok abertos=\{abertos\}/);
   assert.match(TIKTOK, /<BacklogPorMarcaTikTok /);
   for (const f of [CLIENTE, TIKTOK]) {
     assert.match(f, /titulo="Prazo"/);
@@ -299,7 +306,9 @@ test("TikTok com marca sem serie: nao diz 'nenhuma fotografia publicada'", () =>
 });
 
 test("TikTok: lojas acima da meta sem base suficiente e' ausencia", () => {
-  assert.match(TIKTOK, /valor=\{dados\?\.brands\.length \? formatarInteiro\(piores\.length\) : VALOR_SEM_TAXA\}/);
+  // O cartao virou o chip da Concentracao: sem base, o chip nao existe (nunca "0").
+  assert.match(TIKTOK, /\{dados\?\.brands\.length \? \(\s*<Chip/);
+  assert.match(TIKTOK, /title=\{`De \$\{formatarInteiro\(dados\.brands\.length\)\} com base suficiente\.`\}/);
 });
 
 // ===========================================================================
@@ -596,46 +605,16 @@ test("KpiComAjuda poe o ⓘ ao lado do rotulo do KPI", () => {
 // ===========================================================================
 // T-0021 — ML, secao Prazo: frase no padrao "Indisponível neste canal: …"
 // ===========================================================================
-test("ML Prazo: a secao le 'Indisponível neste canal: …' no ⓘ (a frase antiga sai)", async () => {
-  const { SecaoGerencial } = await import("../src/components/expedicao/SecoesExpedicao.tsx");
-  // #124: a frase saiu do corpo do painel e virou o ⓘ da secao Prazo.
-  assert.match(CLIENTE, /<SecaoGerencial titulo="Prazo" dica=\{SEM_PRAZO_CANAL_ML\}>/);
-  const html = renderToStaticMarkup(
-    h(SecaoGerencial, { titulo: "Prazo", dica: SEM_PRAZO_CANAL_ML }, h("div", null)),
-  );
+test("ML Prazo: 'Indisponível neste canal: …' no ⓘ do heroi (a frase antiga sai)", () => {
+  // IDENTIDADE-GERENCIAL: a secao "Prazo" do ML (sem SLA) esvaziou — +48 h e'
+  // o heroi e o pedido mais antigo e' a faixa —, e a frase foi para o ⓘ do heroi.
+  assert.match(CLIENTE, /!temPrazo \? SEM_PRAZO_CANAL_ML :/);
+  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} \/>/);
+  const html = renderToStaticMarkup(h(AjudaMetrica, { chave: "mercadolivre.over48h", extras: [SEM_PRAZO_CANAL_ML] }));
   // O leitor de tela le' a frase inteira pelo `aria-label` do ⓘ.
-  assert.match(
-    html,
-    /aria-label="Indisponível neste canal: o Mercado Livre não publica prazo de despacho na fonte atual\./,
-  );
-  assert.doesNotMatch(html, /Prazo indisponível pelo canal:/);
-});
-
-test("ML Prazo: titulo do painel e' 'Prazo de despacho', com o ⓘ em `acao`; a ausencia fica no ⓘ da secao", async () => {
-  const { default: Panel } = await import("../src/components/ui/Panel.tsx");
-  const { SecaoGerencial } = await import("../src/components/expedicao/SecoesExpedicao.tsx");
-  // #130..#133: o ⓘ do painel saiu do titulo e foi para `acao`; so' o texto
-  // do titulo e' da T-0021.
-  assert.match(
-    CLIENTE,
-    /<Panel titulo="Prazo de despacho" acao=\{<Ajuda chave=\{AJUDA_CANAL_SEM_PRAZO\.prazo\} \/>\}>/,
-  );
-  assert.doesNotMatch(CLIENTE, /Prazo indisponível pelo canal/, "titulo antigo fora");
-  // Mesma montagem do cliente: secao com o ⓘ da frase + painel com titulo e ⓘ.
-  const html = renderToStaticMarkup(
-    h(
-      SecaoGerencial,
-      { titulo: "Prazo", dica: SEM_PRAZO_CANAL_ML },
-      h(Panel, {
-        titulo: "Prazo de despacho",
-        acao: h(AjudaMetrica, { chave: AJUDA_CANAL_SEM_PRAZO.prazo }),
-      }),
-    ),
-  );
-  assert.match(html, />Prazo de despacho</);
-  assert.match(html, /aria-label="Não medido: o canal não publica prazo de despacho nesta fotografia\./);
-  assert.match(html, /Indisponível neste canal: o Mercado Livre não publica prazo de despacho na fonte atual\./);
-  assert.doesNotMatch(html, /Prazo indisponível pelo canal/);
+  assert.match(html, /aria-label="[^"]*Indisponível neste canal: o Mercado Livre não publica prazo de despacho na fonte atual\./);
+  assert.doesNotMatch(CLIENTE, /Prazo indisponível pelo canal/, "frase antiga fora");
+  assert.doesNotMatch(CLIENTE, /<Panel titulo="Prazo de despacho"/, "painel vazio nao volta");
 });
 
 // ===========================================================================

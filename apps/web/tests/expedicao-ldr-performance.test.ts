@@ -172,20 +172,27 @@ test("valor ausente e' travessao; unidades da plataforma", () => {
 test("casca: LDR no topo e Performance so' com a flag, Performance so' na visao do gestor", () => {
   const fonte = readFileSync(join(AQUI, "..", "app", "expedicao", "ExpedicaoShell.tsx"), "utf-8");
   assert.match(fonte, /process\.env\.NEXT_PUBLIC_EXPEDICAO_PERFORMANCE_ENABLED === "true"/);
-  assert.match(fonte, /PERFORMANCE_LIGADA \?/);
-  const iLdr = fonte.indexOf("<LdrTopo");
-  const iCorpo = fonte.indexOf("{corpoDoCanal}");
-  const iPerf = fonte.indexOf("<PerformanceOficial");
-  assert.ok(iLdr > 0 && iLdr < iCorpo && iCorpo < iPerf, "ordem: LDR, corpo do canal, Performance");
-  assert.match(fonte, /visao === "gestor" \? \(\s*<div[^>]*>\s*<PerformanceOficial/);
+  // Desligada, nada monta nem busca: LDR, Performance e os itens "fora do limite".
+  assert.match(fonte, /const destaque = PERFORMANCE_LIGADA \? <LdrTopo api=\{API\} marca=\{marca\} \/> : undefined;/);
+  assert.match(fonte, /const extras = PERFORMANCE_LIGADA\s*\?\s*\{ performance: <PerformanceOficial estado=\{performance\} \/>, itensOficiais: itensForaDoLimite\(performance\) \}\s*:\s*\{\}/);
+  assert.match(fonte, /usePerformanceOficial\(API, canal, marca, PERFORMANCE_LIGADA && pronta\)/);
+  // IDENTIDADE-GERENCIAL: a Performance vai em "Mais detalhes", que so' existe no gestor.
+  const cliente = readFileSync(join(AQUI, "..", "app", "expedicao", "ExpedicaoClient.tsx"), "utf-8");
+  assert.equal((cliente.match(/\{performance\}/g) ?? []).length, 1);
+  assert.match(cliente, /const maisDetalhes = \([\s\S]*?\{performance\}[\s\S]*?<\/MaisDetalhes>/);
+  assert.equal((cliente.match(/\{maisDetalhes\}/g) ?? []).length, 1);
+  assert.match(cliente, /<CorpoGestor[\s\S]*?maisDetalhes=\{maisDetalhes\}[\s\S]*?\/>\s*\) : \(/);
+  const tiktok = readFileSync(join(AQUI, "..", "src", "components", "expedicao", "TikTokDispatchPanel.tsx"), "utf-8");
+  assert.equal((tiktok.match(/\{performance\}/g) ?? []).length, 1);
+  assert.match(tiktok, /<CorpoGestor[\s\S]*?maisDetalhes=\{[\s\S]*?\{performance\}[\s\S]*?\/>\s*\) : \(/);
 });
 
-test("esqueleto: LDR logo abaixo de Risco atual, nos dois corpos de canal", () => {
+test("esqueleto: LDR depois de 'Backlog por marca', antes de 'Mais detalhes', nos dois corpos", () => {
   const layout = readFileSync(join(AQUI, "..", "src", "components", "expedicao", "LayoutExpedicao.tsx"), "utf-8");
-  assert.match(layout, /\{risco\}\s*\{ldr\}\s*\{prazo\}/);
+  assert.match(layout, /\{backlog\}[\s\S]*?\{ldr\}\s*\{maisDetalhes\}/);
   for (const arq of [["app", "expedicao", "ExpedicaoClient.tsx"], ["src", "components", "expedicao", "TikTokDispatchPanel.tsx"]]) {
     const fonte = readFileSync(join(AQUI, "..", ...arq), "utf-8");
-    assert.match(fonte, /risco=\{secaoRisco\}\s*ldr=\{faixaTopo\}/);
+    assert.match(fonte, /ldr=\{faixaTopo\}/);
     assert.doesNotMatch(fonte, /destaque=\{faixaTopo\}/);
   }
 });
@@ -200,3 +207,17 @@ test("Shopee usa a reserva do Data Mart so' sem publicacao oficial", () => {
   assert.equal(precisaReserva({ availability: "available", brands: [] }), false);
 });
 
+
+test("fila: metrica oficial fora do limite le '41,8% · meta ≥ 60%', como na CX", async () => {
+  const { detalheForaDoLimite } = await import("../src/lib/expedicao-performance.ts");
+  assert.equal(
+    detalheForaDoLimite({ valor: 41.84, unidade: "pct", meta: 60, comparador: ">=", rotulo_meta: "Meta >= 60" }),
+    "41,8% · meta ≥ 60%",
+  );
+  assert.equal(
+    detalheForaDoLimite({ valor: 2.5, unidade: "pct", meta: 1.5, comparador: "<=", rotulo_meta: null }),
+    "2,5% · meta ≤ 1,5%",
+  );
+  // Sem meta numerica, vale o rotulo da API; sem valor, "—" (nunca 0).
+  assert.equal(detalheForaDoLimite({ valor: null, unidade: "pct", meta: null, comparador: null, rotulo_meta: "Meta >= 60" }), "— · Meta >= 60");
+});

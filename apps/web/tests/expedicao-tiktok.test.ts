@@ -429,7 +429,11 @@ test("LDR do TikTok e da Shopee (KPI e tabelas) usam TaxaComBase", async () => {
   const raiz = juntar(import.meta.dirname, "..");
   const tk = lerFonte(juntar(raiz, "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
   const sh = lerFonte(juntar(raiz, "src/components/expedicao/LdrShopeePanel.tsx"), "utf8");
-  assert.match(tk, /valor=\{<TaxaComBase numerador=\{ldr\.late\} base=\{ldr\.base\} taxa=\{ldr\.rate\} \/>\}/);
+  // Cartao "LDR da janela" (revisao do Prumo no #258): a taxa PUBLICADA com 1
+  // casa, como os outros cartoes; a base em title + sr-only, nunca apagada.
+  assert.match(tk, /\{formatarTaxa\(ldr\.rate, 1\)\}/);
+  assert.match(tk, /title=\{`\$\{formatarInteiro\(ldr\.late\)\} de \$\{formatarInteiro\(ldr\.base\)\}`\}/);
+  assert.match(tk, /<span className="sr-only">\s*\{" "\}· \{formatarInteiro\(ldr\.late\)\} de \{formatarInteiro\(ldr\.base\)\}/);
   assert.match(tk, /<TaxaComBase numerador=\{m\.late\} base=\{m\.base\} taxa=\{m\.rate\} linha \/>/);
   assert.match(tk, /<TaxaComBase numerador=\{d\.late\} base=\{d\.base\} taxa=\{d\.rate\} linha \/>/);
   assert.match(tk, /<TaxaComBase numerador=\{f\.late\} base=\{f\.base\} taxa=\{f\.rate\} linha \/>/);
@@ -532,4 +536,21 @@ test("filtros do TikTok numa linha: Evento curto e 'Período' como nos outros ca
   const tk = lerFonte(juntar(import.meta.dirname, "..", "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
   assert.match(tk, /rotulo="Período"/);
   assert.doesNotMatch(tk, /rotulo="Janela"/);
+});
+
+test("fila do TikTok: alertas da API sem o da LDR, 1a frase no titulo, janela da LDR dita", async () => {
+  const { alertasNaFila } = await import("../src/lib/expedicao-tiktok-contract.ts");
+  const itens = alertasNaFila([
+    { chave: "fora_da_meta_tiktok", tom: "critico", texto: "Acima da meta — medição interna: LDR de 12,08%. Base: 56970." },
+    { chave: "dentro_da_meta_tiktok", tom: "bom", texto: "Dentro da meta — medição interna." },
+    { chave: "dias_criticos_internos", tom: "critico", texto: "1 vencimento(s) acima do limiar interno de 10%. Pior: 04/11/2026 com 18,7%." },
+    { chave: "em_risco", tom: "atencao", texto: "3035 pedido(s) vencem hoje ou amanhã e ainda podem ser tratados." },
+    { chave: "marcas_concentram", tom: "neutro", texto: "Acima da meta em: apice (21,9%)." },
+  ]);
+  assert.deepEqual(itens.map((i) => i.chave), ["dias_criticos_internos", "em_risco", "marcas_concentram"]);
+  assert.equal(itens[0].titulo, "1 vencimento(s) acima do limiar interno de 10%.");
+  assert.equal(itens[0].detalhe, "Pior: 04/11/2026 com 18,7%.");
+  assert.equal(itens[1].titulo, "3035 pedido(s) vencem hoje ou amanhã e ainda podem ser tratados (janela da LDR).");
+  assert.equal(itens[1].detalhe, undefined);
+  assert.equal(itens[2].severidade, "info");
 });
