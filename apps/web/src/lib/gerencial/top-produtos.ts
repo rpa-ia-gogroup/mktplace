@@ -210,8 +210,22 @@ export interface CompararCanaisResponse {
   marcas: MarcaComparada[];
 }
 
-export function buscarComparacao(q: URLSearchParams, signal: AbortSignal) {
-  return pedir<CompararCanaisResponse>(`/api/v1/gerencial/top-produtos/comparar-canais?${q}`, signal);
+/**
+ * Como o `repetirSeEstourar` (#296): busca de novo UMA vez se a primeira falhar
+ * (a frio a API pode estourar o tempo; o que ela ja' leu fica no cache e a 2a
+ * volta rapido). Cancelamento (troca de filtro) nao repete. GET de leitura.
+ */
+export async function buscarComparacao(
+  q: URLSearchParams, signal: AbortSignal,
+  buscar: typeof pedir<CompararCanaisResponse> = pedir,
+): Promise<CompararCanaisResponse> {
+  const url = `/api/v1/gerencial/top-produtos/comparar-canais?${q}`;
+  try {
+    return await buscar(url, signal);
+  } catch (e) {
+    if (signal.aborted) throw e;
+    return buscar(url, signal);
+  }
 }
 
 /** Selo so' acima do piso (produto pequeno nao gera ruido), 2x e 3 p.p. */

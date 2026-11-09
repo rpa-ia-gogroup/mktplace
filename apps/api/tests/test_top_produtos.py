@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 
+from app.services.gold_service import BRANDS_IN_SCOPE
 from app.services.top_produtos_service import canais_do_filtro, eh_kit, get_detalhe, get_top_produtos
 
 
@@ -168,15 +169,32 @@ def test_sem_seller_sku_fica_fora_e_baixa_a_cobertura():
     assert [p.chave for p in m.produtos] == ["R1"]
 
 
-def test_rota_consulta_os_tres_canais_e_os_apelidos_em_paralelo():
+def test_rota_periodo_numa_consulta_so_e_pares_com_parametros_fixos_no_dia():
+    """Em producao cada consulta entra na fila do Metabase: os 3 canais vao numa
+    so'; os pares do TikTok nao dependem do periodo nem da marca (cache comum)."""
     vistos = []
 
     def consultar(sql, params):
-        vistos.append(sql)
-        assert params["ini_apelidos"] == date(2026, 5, 12)  # fim - 180 dias
-        return []
+        vistos.append((sql, params))
+        if "parte" not in sql:  # pares product_id <-> seller SKU
+            assert params == {"marcas": list(BRANDS_IN_SCOPE), "desde": date(2026, 5, 13)}  # hoje - 180 dias
+            return [{"produto": "P1", "sku": "20002"}, {"produto": "P1", "sku": "KS03043"},
+                    {"produto": "P2", "sku": "40100"}]
+        return [
+            {"parte": "ml", "marca": "kokeshi", "sku": "KS03043", "chave": "KS03043", "nome": "Gota ML", "receita": 10.0},
+            {"parte": "ml", "marca": "kokeshi", "sku": "40100", "chave": "40100", "nome": "Kit", "receita": 90.0},
+            # TikTok pelo gold: por produto, sem seller SKU
+            {"parte": "tiktok", "marca": "kokeshi", "sku": None, "chave": "P1", "nome": "Gota", "receita": 50.0},
+            {"parte": "tiktok", "marca": "kokeshi", "sku": None, "chave": "P2", "nome": "Kit", "receita": 40.0},
+            {"parte": "tiktok", "marca": "kokeshi", "sku": None, "chave": "P9", "nome": "Sem par", "receita": 10.0},
+        ]
 
-    r = get_comparar_canais(consultar, date(2026, 10, 10), date(2026, 11, 8), ["kokeshi"])
-    assert r.marcas == [] and len(vistos) == 4
-    assert any("stg_tiktok_line_items" in s and "seller_sku" in s for s in vistos)
+    [m] = get_comparar_canais(consultar, date(2026, 10, 10), date(2026, 11, 8), ["kokeshi"], hoje=date(2026, 11, 9)).marcas
+    periodo = [sql for sql, _ in vistos if "parte" in sql]
+    assert len(vistos) == 2 and len(periodo) == 1 and periodo[0].count("UNION ALL") == 2
+    assert "gold.fct_tiktok_product_daily" in periodo[0] and "stg_tiktok_orders" not in periodo[0]
+    gota = next(p for p in m.produtos if p.produto == "Gota")
+    assert {c.canal: (c.fatia, c.sku) for c in gota.celulas} == {"tiktok": (0.5, "P1"), "ml": (0.1, "KS03043")}
+    assert [c.canal for c in m.canais] == ["tiktok", "ml"]  # Shopee sem venda: sem coluna
+    assert {c.canal: c.cobertura for c in m.canais}["tiktok"] == 0.9  # produto sem par so' entra na cobertura
     assert get_comparar_canais(consultar, date(2026, 10, 10), date(2026, 11, 8), ["fora"]).marcas == []

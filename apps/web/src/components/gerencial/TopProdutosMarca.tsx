@@ -57,7 +57,7 @@ const OPCOES_MODO: { valor: Modo; texto: string }[] = [
 const DICA_COMPARAR =
   "Mesmo produto em cada canal pelo seller SKU (códigos antigos e novos juntados; Lescent por fragrância, com os volumes somados). " +
   "A fatia é a parte da receita da marca naquele canal: compara canais de tamanhos diferentes sem somar R$. " +
-  "O TikTok entra por seller SKU, com cerca de 95% do GMV: serve para fatia, não para R$. " +
+  "O TikTok entra pelo GMV de cada produto (o mesmo do Ranking), ligado ao seller SKU pelas vendas dos últimos 180 dias. " +
   "Selo “forte no canal”: fatia de pelo menos 3%, 2× a maior dos outros canais e 3 p.p. acima. " +
   "“Sem venda”: o produto tem 3% ou mais num canal e nenhuma venda em outro que a marca tem. Respeita o período do filtro.";
 const rotuloMarca = (id: string) => MARCAS.find((m) => m.id === id)?.label ?? id.toUpperCase();
