@@ -162,7 +162,7 @@ def test_falha_de_conexao_sem_chave_sobe_o_erro(monkeypatch):
     assert chamadas == []
 
 
-def test_falha_de_conexao_pula_o_direto_por_um_tempo(monkeypatch):
+def test_falha_de_conexao_pula_o_direto_ate_reiniciar(monkeypatch):
     tentativas = []
 
     def cai(sql, p):
@@ -175,9 +175,35 @@ def test_falha_de_conexao_pula_o_direto_por_um_tempo(monkeypatch):
     dl.consultar("SELECT 1", {})
     dl.consultar("SELECT 2", {})          # dentro da pausa: nem tenta o direto
     assert tentativas == ["SELECT 1"] and chamadas == ["SELECT 1", "SELECT 2"]
-    relogio[0] += dl.PAUSA_DIRETO_S + 1   # passou a pausa: tenta o direto de novo
+    relogio[0] += 7 * 24 * 3600          # uma semana depois: segue sem tentar (so' reiniciando)
     dl.consultar("SELECT 3", {})
-    assert tentativas == ["SELECT 1", "SELECT 3"]
+    assert tentativas == ["SELECT 1"]
+
+
+def test_flag_desligada_vai_direto_ao_metabase_sem_tentar_a_conexao(monkeypatch):
+    tentativas = []
+
+    def nao_deveria(sql, p):
+        tentativas.append(sql)
+        raise AssertionError("tentou a conexao direta")
+    chamadas = _troca(monkeypatch, nao_deveria)
+    monkeypatch.setattr(settings, "metabase_api_key", "chave")
+    monkeypatch.setattr(settings, "datamart_leitura_direta", False)
+    dl.consultar("SELECT :x", {"x": 1})
+    assert tentativas == [] and chamadas == ["SELECT 1"]
+
+
+def test_flag_desligada_sem_chave_ainda_tenta_o_direto(monkeypatch):
+    """Sem Metabase nao ha' para onde ir: desligar a flag nao pode zerar a leitura."""
+    _troca(monkeypatch, lambda sql, p: [{"ok": 1}])
+    monkeypatch.setattr(settings, "metabase_api_key", "")
+    monkeypatch.setattr(settings, "datamart_leitura_direta", False)
+    assert dl.consultar("SELECT 1", {}) == [{"ok": 1}]
+
+
+def test_flag_nasce_ligada():
+    from app.config import Settings
+    assert Settings.model_fields["datamart_leitura_direta"].default is True
 
 
 def test_permissao_negada_nao_suspende_o_direto(monkeypatch):

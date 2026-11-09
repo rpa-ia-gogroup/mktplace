@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     # Default conservador para nao atrapalhar o uso local via VPN em rede lenta;
     # faixa validada pelo proprio Pydantic (sem dependencia nova).
     datamart_connect_timeout_seconds: int = Field(default=10, ge=1, le=30)
+    # `datamart_leitura`: False = nem tenta a conexao direta, vai ao Metabase
+    # (se houver `metabase_api_key`). No Render a conexao direta nao passa:
+    # sem isto, o 1o acesso depois de cada reinicio esperava o timeout acima
+    # (10 s) antes do Metabase e estourava os 15 s do front. Padrao True =
+    # comportamento de antes (uso local com VPN le direto).
+    datamart_leitura_direta: bool = True
     app_env: str = "development"
     log_level: str = "INFO"
     api_port: int = 8080

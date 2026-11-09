@@ -145,10 +145,11 @@ def _ler_metabase(sql: str, timeout: Optional[float] = None) -> list[dict]:
     return metabase_client.query(sql, timeout=timeout)
 
 
-#: Depois de uma falha de CONEXAO, por quanto tempo ir direto ao Metabase. A
-#: conexao direta so' desiste no `datamart_connect_timeout_seconds` (10 s):
-#: sem isto, TODA chamada pagava 10 s antes da reserva (medido: 11-14 s).
-PAUSA_DIRETO_S = 3600.0
+#: Depois de uma falha de CONEXAO, ir direto ao Metabase ate' o processo
+#: reiniciar. A conexao direta so' desiste no `datamart_connect_timeout_seconds`
+#: (10 s): sem isto, TODA chamada pagava 10 s antes da reserva (medido: 11-14 s),
+#: e com uma pausa de 1 h a primeira chamada de cada hora pagava de novo.
+PAUSA_DIRETO_S = float("inf")
 _direto_suspenso_ate = 0.0
 
 
@@ -191,7 +192,8 @@ def _consultar_sem_cache(sql: str, params: dict, timeout_metabase: Optional[floa
             return normalizar(_ler_metabase(consulta))
         return normalizar(_ler_metabase(consulta, timeout_metabase))
 
-    if settings.metabase_api_key and _agora() < _direto_suspenso_ate:
+    if settings.metabase_api_key and (not settings.datamart_leitura_direta
+                                      or _agora() < _direto_suspenso_ate):
         return _metabase()
     try:
         return _ler_direto(sql, params)
