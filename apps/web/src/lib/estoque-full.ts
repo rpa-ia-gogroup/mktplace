@@ -14,6 +14,7 @@
  * formata e rotula. Reclassificar no cliente criaria uma segunda implementacao
  * da mesma regra, e a que o gestor veria seria a errada.
  */
+import type { Curva, CurvaMeta, CurvaMotivo } from "./estoque-curva.ts";
 
 /** Dominio FECHADO, espelhando o CHECK da migration 021. */
 export const CLASSIFICACOES = [
@@ -95,6 +96,9 @@ export interface ProdutoEstoque {
   summary_available_stock: number | null;
   units_sold_28d_legado_com_unpaid: number | null;
   ref_date: string;
+  /** PR3 (#302): curva ABC do item; `null` = sem curva (nunca C). Opcional: API anterior nao envia. */
+  curva?: Curva | null;
+  curva_motivo?: CurvaMotivo | null;
 }
 
 export interface Indicadores {
@@ -138,6 +142,8 @@ export interface EstoqueFullOk {
   truncado: boolean;
   frescor: Frescor;
   limites: LimitesProvisorios;
+  /** PR3 (#302): estado da curva nesta lista. */
+  curva_meta?: CurvaMeta | null;
   contas_cobertas: string[];
   marcas_nao_cobertas: string[];
   limitacoes: string[];

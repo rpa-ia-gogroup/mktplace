@@ -278,7 +278,9 @@ test("QA4: estado vazio sem filtro nao fala em filtros; transfer ausente diz 'se
   assert.match(soFora, /nenhum no Full/);
   const com = textoVazioML({ refDate: "2026-10-25", inventarios: 7, filtroAtivo: true });
   assert.match(com, /nenhum casa com os filtros atuais/);
-  assert.ok(CLIENT_SRC.includes("filtroAtivo: temFiltroAtivoML(filtros)"));
+  // PR4: o filtro de curva (so' na tela) tambem conta como filtro ativo.
+  assert.ok(CLIENT_SRC.includes("filtroAtivo: algumFiltro"));
+  assert.ok(CLIENT_SRC.includes("const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0"));
 
   assert.equal(subtituloTransferML(null), "Transferência interna sem medida");
   assert.equal(subtituloTransferML(0), "0 em transferência interna");

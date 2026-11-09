@@ -35,8 +35,13 @@ import KpiCard from "@/components/KpiCard";
 import TableScrollHint from "@/components/TableScrollHint";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
+import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import { MLFullEstoqueError, fetchMLFullEstoque } from "@/lib/api-client";
+import {
+  avisoCoberturaCurva, avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao,
+  type OpcaoCurva,
+} from "@/lib/estoque-curva";
 import {
   AVISO_AUSENCIA_ML,
   AVISO_GRAO_ML,
@@ -246,19 +251,26 @@ function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
   );
 }
 
-function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
+/** Ruptura + estoque baixo: o mesmo recorte do cartao "Exigem ação". */
+const exigeAcaoML = (i: InventarioML) =>
+  i.classificacao_torre === "RUPTURA_CANDIDATA" || i.classificacao_torre === "BAIXO_CANDIDATO";
+
+function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioML[]; comCurva: boolean }) {
   return (
     <div className="bg-surface rounded-2xl border border-line overflow-hidden">
       <TableScrollHint>
         <RegiaoRolavel rotulo="Inventários (role na horizontal para ver todas as colunas)">
           <table className="w-full text-sm">
             <caption className="sr-only">
-              Estoque Full por inventário, ordenado por urgência de reposição
+              {comCurva
+                ? "Estoque Full por inventário: AA, depois A, depois os demais; dentro de cada grupo, menos dias de cobertura primeiro"
+                : "Estoque Full por inventário, ordenado por urgência de reposição"}
             </caption>
             <thead>
               <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
                 <th scope="col" className="px-4 py-3">Marca</th>
                 <th scope="col" className="px-4 py-3">Identificação</th>
+                {comCurva && <th scope="col" className="hidden px-4 py-3 sm:table-cell">Curva</th>}
                 <th scope="col" className="px-4 py-3 text-right">
                   <span className="inline-flex items-center gap-1">
                     Disponível
@@ -295,10 +307,17 @@ function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
                   <td className="px-4 py-3 whitespace-nowrap text-ink-muted">{tituloMarca(i.brand)}</td>
                   <td className="px-4 py-3 min-w-[14rem] max-w-xs">
                     {/* Rotulo do anuncio-ancora: atributo da linha, nunca soma estoque. */}
+                    {/* Celular: a curva na 1a dobra, antes do texto (a coluna fica escondida). */}
                     {ident.identificado ? (
-                      <span className="block text-ink break-words">{ident.texto}</span>
+                      <span className="block text-ink break-words">
+                        {comCurva && <span className="mr-1.5 inline-flex align-middle sm:hidden"><CelulaCurva item={i} /></span>}
+                        {ident.texto}
+                      </span>
                     ) : (
-                      <span className="block text-ink-muted italic">{ident.texto}</span>
+                      <span className="block text-ink-muted italic">
+                        {comCurva && <span className="mr-1.5 inline-flex align-middle not-italic sm:hidden"><CelulaCurva item={i} /></span>}
+                        {ident.texto}
+                      </span>
                     )}
                     {ident.avisoVariacao && (
                       <span className="block text-xs text-ink-muted">{ident.avisoVariacao}</span>
@@ -309,6 +328,11 @@ function TabelaInventarios({ inventarios }: { inventarios: InventarioML[] }) {
                       </span>
                     )}
                   </td>
+                  {comCurva && (
+                    <td className="hidden px-4 py-3 sm:table-cell">
+                      <CelulaCurva item={i} />
+                    </td>
+                  )}
                   <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
                     {/* `null` = sem leitura: travessao, nunca 0. */}
                     {fmtOpcional(i.disponivel)}
@@ -362,6 +386,8 @@ export default function MLFullEstoqueClient() {
   const [payload, setPayload] = useState<MLFullEstoqueResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<ErroML | null>(null);
+  // CURVA-ABC: filtro so' na tela (a API ja' manda a curva de cada inventario).
+  const [curvas, setCurvas] = useState<OpcaoCurva[]>([]);
   const primeiroChipRef = useRef<HTMLButtonElement | null>(null);
   const dataRef = useRef<HTMLInputElement | null>(null);
   // O que esta no campo de data. So' vira filtro quando completo (ver
@@ -417,6 +443,7 @@ export default function MLFullEstoqueClient() {
   const limpar = () => {
     setFiltros(FILTROS_ML_VAZIOS);
     setDataDigitada("");
+    setCurvas([]);
     // O botao "Limpar filtros" some ao limpar: o foco vai para o primeiro
     // chip de marca, que esta sempre na tela, em vez de cair no <body>.
     primeiroChipRef.current?.focus();
@@ -444,6 +471,17 @@ export default function MLFullEstoqueClient() {
     else setFiltros((f) => ({ ...f, refDate: aplicar }));
   };
 
+  // CURVA-ABC: coluna, filtro e ordem por grupos so' com a curva lida.
+  const metaCurva = payload && !isIndisponivelML(payload) ? payload.curva_meta : null;
+  const comCurva = curvaNaTela(metaCurva);
+  const filtroCurva = comCurva ? curvas : [];
+  const lista = payload && !isIndisponivelML(payload)
+    ? comCurva
+      ? ordenarPorCurva(payload.inventarios.filter((i) => passaCurva(i.curva, filtroCurva)), (i) => i.cobertura_torre_dias)
+      : payload.inventarios
+    : [];
+  const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0;
+
   const filtrosUI = (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-wrap items-center gap-2">
@@ -467,6 +505,7 @@ export default function MLFullEstoqueClient() {
           </button>
         ))}
       </div>
+      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} />}
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           Data da fotografia
@@ -494,7 +533,7 @@ export default function MLFullEstoqueClient() {
           />
           Listar também inventários fora do Full
         </label>
-        {temFiltroAtivoML(filtros) && (
+        {algumFiltro && (
           <button
             type="button"
             onClick={limpar}
@@ -684,7 +723,11 @@ export default function MLFullEstoqueClient() {
 
           <TabelaMarcas marcas={payload.marcas} />
 
-          {payload.total_no_filtro === 0 ? (
+          {avisoCurvaIndisponivel(metaCurva) && (
+            <Aviso tom="info">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
+          )}
+
+          {payload.total_no_filtro === 0 || lista.length === 0 ? (
             <section
               role="status"
               className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
@@ -696,19 +739,28 @@ export default function MLFullEstoqueClient() {
                 {textoVazioML({
                   refDate: payload.frescor.ref_date,
                   inventarios: payload.indicadores.inventarios,
-                  filtroAtivo: temFiltroAtivoML(filtros),
+                  filtroAtivo: algumFiltro,
                   semEstoqueFull: todasSemEstoqueFullML(payload.marcas),
                 })}
               </p>
             </section>
           ) : (
             <>
+              {comCurva && (
+                <div className="flex flex-col gap-0.5 px-1">
+                  <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios, exigeAcaoML)}</p>
+                  {avisoCoberturaCurva(metaCurva) && (
+                    <p className="text-xs text-ink-muted">{avisoCoberturaCurva(metaCurva)}</p>
+                  )}
+                </div>
+              )}
               <p className="text-xs text-ink-muted px-1">
+                {filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
                 {fmtInt(payload.inventarios.length)} de{" "}
                 {fmtInt(payload.total_no_filtro)} inventários
                 {payload.truncado && " · lista truncada; indicadores cobrem tudo"}
               </p>
-              <TabelaInventarios inventarios={payload.inventarios} />
+              <TabelaInventarios inventarios={lista} comCurva={comCurva} />
             </>
           )}
         </>
