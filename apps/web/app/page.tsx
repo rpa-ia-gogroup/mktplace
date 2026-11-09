@@ -77,7 +77,7 @@ import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/ger
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
 import CxResumo, { notasDoTile } from "@/components/gerencial/CxResumo";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { ROTULO_INDICADOR, hrefCx, type IndicadorCx, type ResumoCx } from "@/lib/cx";
+import { ROTULO_INDICADOR, hrefCx, type IndicadorCx, type JanelaDias, type ResumoCx } from "@/lib/cx";
 import MovementsPanels from "@/components/gerencial/MovementsPanels";
 import AttentionQueue from "@/components/gerencial/AttentionQueue";
 import MetaHero from "@/components/gerencial/MetaHero";
@@ -136,7 +136,7 @@ type DialogView =
   | { kind: "concentration"; entry: ConcentrationEntry }
   | { kind: "commercial"; item: CommercialAttentionItem }
   | { kind: "dataWarning"; item: DataConfidenceItem }
-  | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string };
+  | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
 
 function GerencialInner() {
   // GERENCIAL-METAS-1: abre no mes corrente, porque e' nele que a meta ainda
@@ -701,7 +701,10 @@ function GerencialInner() {
       {isMarketplaceSelected(filters.channels, "shopee") && (
         <CxResumo
           brands={filters.brands}
-          onOpen={(indicador, resumo, geradoEm) => setDialog({ kind: "cx", indicador, resumo, geradoEm })}
+          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
+          dateFrom={filters.dateFrom}
+          dateTo={filters.dateTo}
+          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
         />
       )}
 
@@ -952,10 +955,12 @@ function GerencialInner() {
           <CxDrilldownContent
             indicador={dialog.indicador}
             resumo={dialog.resumo}
-            notas={notasDoTile(dialog.resumo, dialog.indicador)}
+            notas={notasDoTile(dialog.resumo, dialog.indicador, dialog.dias)}
             geradoEm={dialog.geradoEm}
-            // a /cx so' le' uma marca na URL; com varias, abre em "Todas"
-            cxHref={hrefCx({ marca: filters.brands.length === 1 ? filters.brands[0] : null, dias: 30 })}
+            periodo={`Últimos ${dialog.dias} dias até ontem`}
+            dias={dialog.dias}
+            // a /cx so' le' uma marca na URL; com varias, abre em "Todas"; o mesmo periodo do card
+            cxHref={hrefCx({ marca: filters.brands.length === 1 ? filters.brands[0] : null, dias: dialog.dias })}
           />
         )}
 

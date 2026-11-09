@@ -18,6 +18,7 @@ import {
   montarAvaliacaoLoja,
   montarPedidosMotivo,
   montarStatusMarcas,
+  janelaCxDoPeriodo,
   simbolosMeta,
   textoSemComparacao,
   marcaUnica,
@@ -804,7 +805,7 @@ test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalh
   assert.doesNotMatch(tela, /· acum\. \{i\.acumulado\}/);
   assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
-  assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias = DIAS\)/, "Gerencial segue com 30 dias por padrao");
+  assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias: number = DIAS\)/, "Gerencial segue com 30 dias por padrao");
   // Linha "Atenção" (390 px): o "·" fecha o item ANTERIOR, dentro do mesmo bloco
   // inquebravel; a linha nova comeca pelo ponto da marca, nunca por "· ●".
   assert.doesNotMatch(resumo, /idx > 0 && <span aria-hidden="true" className="text-ink-faint">·<\/span>/);
@@ -942,4 +943,23 @@ test("cancelamento: com sem_anterior da API, regra geral (linha neutra, sem a pi
     sem_anterior: { cancelamento: { motivo: "pedidos desde 04/10", a_partir_de: "2026-12-03", detalhe: "x" } } }, rotulo);
   assert.equal(r.semAnterior.cancelamento?.texto, "comparação a partir de 03/12");
   assert.ok(r.cancelamentoDelta, "o delta parcial continua calculado, mas a tela nao o mostra");
+});
+
+// ---------------------------------------------------------------------------
+// GERENCIAL-CX-PERIODO (09/11): o card CX segue o periodo da Gerencial em 7/30/90 dias fechados
+// ---------------------------------------------------------------------------
+test("periodo da Gerencial: 7, 30 e 90 dias fechados ate' ontem viram a janela da CX; o resto, null", () => {
+  const hoje = new Date(2026, 10, 9); // 09/11, local
+  assert.equal(janelaCxDoPeriodo("2026-11-02", "2026-11-08", hoje), 7);
+  assert.equal(janelaCxDoPeriodo("2026-10-10", "2026-11-08", hoje), 30);
+  assert.equal(janelaCxDoPeriodo("2026-08-11", "2026-11-08", hoje), 90);
+  assert.equal(janelaCxDoPeriodo("2026-11-09", "2026-11-09", hoje), null, "Hoje");
+  assert.equal(janelaCxDoPeriodo("2026-11-01", "2026-11-08", hoje), null, "mes atual");
+  assert.equal(janelaCxDoPeriodo("2026-11-01", "2026-11-07", hoje), null, "7 dias que nao terminam ontem");
+  const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.ok(resumo.includes("o CX não segue este período"), "fora dos 3 recortes, o subtitulo avisa");
+  assert.match(resumo, /hrefCx\(\{ marca: brands\.length === 1 \? brands\[0\] : null, dias \}\)/, "Ver CX completo leva o mesmo periodo");
+  const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(pagina, /dateFrom=\{filters\.dateFrom\}\s+dateTo=\{filters\.dateTo\}/);
+  assert.match(pagina, /dias: dialog\.dias \}\)/, "o detalhe tambem leva o periodo");
 });
