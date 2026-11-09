@@ -263,12 +263,12 @@ export default function MarcasMeta({
                     />
                     {tende != null && (
                       <span
-                        className="flex flex-wrap items-center justify-end gap-x-1 text-xs text-ink-muted"
+                        className="flex flex-col items-end gap-x-1 text-xs text-ink-muted sm:flex-row sm:items-center"
                         title={`Pelo ritmo dos dias com dado até ontem${p ? ", na curva da meta (o mesmo cálculo do total)" : ""}.`}
                       >
-                        <span>
+                        <span className="whitespace-nowrap">
                           tende a <b className="font-semibold text-ink">{fmtCompacto(tende)}</b>
-                          {p && " ·"}
+                          {p && <span className="hidden sm:inline"> ·</span>}
                         </span>
                         {p && (
                           <span className={`rounded px-1.5 font-semibold ${CHIP[p.status]}`}>
