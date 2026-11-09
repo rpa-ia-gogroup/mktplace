@@ -2,7 +2,8 @@
 
   * `/shopee`      chat (Saude da Conta) + cancelamentos e devolucoes da Shopee;
   * `/atendimento` cancelamentos e devolucoes dos tres canais (base do CX-MKT-1);
-  * `/shopee/pedidos` os pedidos de um motivo do Pareto (CX-PEDIDOS-MOTIVO).
+  * `/shopee/pedidos` os pedidos de um motivo do Pareto (CX-PEDIDOS-MOTIVO);
+  * `/shopee/avaliacoes` nota e avaliacoes de produto da Shopee, por marca e produto.
 
 Flag `settings.cx_api_enabled` (ligada por padrao): desligada, toda requisicao
 responde 404 antes de qualquer consulta.
@@ -22,7 +23,9 @@ from app.schemas.cx_atendimento import (
     CxShopeeResponse,
     PedidosMotivoResponse,
 )
+from app.schemas.cx_avaliacoes import CxAvaliacoesResponse
 from app.services import cx_atendimento_service as svc
+from app.services import cx_avaliacoes_service
 from app.services import cx_pedidos_service
 
 
@@ -100,3 +103,9 @@ def cx_shopee_pedidos(
     if not _RE_CODIGO.match(motivo):
         raise HTTPException(422, _MSG_MOTIVO)
     return cx_pedidos_service.montar_pedidos_motivo(tipo=tipo, codigo=motivo, brands=brands, dias=dias)
+
+
+@router.get("/shopee/avaliacoes", response_model=CxAvaliacoesResponse)
+def cx_shopee_avaliacoes(brands: Optional[list[str]] = Depends(brands_query)):
+    """Nota acumulada das avaliacoes de produto da Shopee, por marca e por produto (sem texto)."""
+    return cx_avaliacoes_service.montar_avaliacoes(brands=brands)
