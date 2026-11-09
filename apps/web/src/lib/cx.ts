@@ -24,6 +24,7 @@ import {
 } from "./performance-contas-atendimento.ts";
 import { formatarInstante, MOTIVO_TIMEOUT, TIMEOUT_API_MS } from "./performance-contas.ts";
 import { valorMetrica, type ContaOficial } from "./expedicao-performance.ts";
+import type { DeltaTone } from "./gerencial/kpi-band.ts";
 
 export { JANELAS_DIAS, JANELA_PADRAO, type JanelaDias };
 
@@ -39,6 +40,8 @@ export interface NaoLidas {
   aguardando_resposta?: number | null;
   /** true = a leitura bateu o teto de paginas: o numero e' um piso. */
   conversas_truncado?: boolean | null;
+  /** API-3: conversas da foto de N dias atras; null = coleta ainda nao cobre (90 d: sempre null). */
+  conversas_anterior?: number | null;
   /** Fila: das que aguardam resposta, quantas esperam ate' 1 h, 1-4 h, 4-24 h, mais de 24 h. */
   aguardando_ate_1h?: number | null;
   aguardando_1a4h?: number | null;
@@ -59,7 +62,8 @@ export interface ChatShopee {
   estado: "dado" | "sem_fonte" | "erro";
   motivo?: string | null;
   fonte: string;
-  contas: ContaOficial[];
+  /** API-3: `resposta_anterior_pct` = shopee_11 na foto de N dias antes (nao o last_period). */
+  contas: (ContaOficial & { resposta_anterior_pct?: number | null })[];
   sem_foto: { marca: string; motivo: string }[];
   /** Coleta propria (`shopee_cx_coleta`), a cada 2 h. Ausente na API antiga. */
   nao_lidas_estado?: EstadoBloco;
@@ -84,7 +88,21 @@ export interface DevolucoesShopee {
     em_andamento?: number | null;
     canceladas?: number | null;
     reembolsado: number | null;
+    /** API-3: na `janela_anterior`; null = coleta nao cobre. */
+    aceitas_anterior?: number | null;
+    reembolsado_anterior?: number | null;
   }[];
+}
+
+/** API-3: um ponto por dia x loja do recorte; campo null = nao medido naquele dia/loja. */
+export interface PontoDiarioCx {
+  dia: string;
+  marca: string;
+  pedidos: number | null;
+  cancelamentos: number | null;
+  devolucoes_aceitas: number | null;
+  reembolsado: number | null;
+  resposta_pct: number | null;
 }
 
 export interface CxShopeeResponse {
@@ -101,6 +119,22 @@ export interface CxShopeeResponse {
    * A chave so' vem quando falta; `a_partir_de` null = nunca (ex.: contact rate em 90 dias).
    */
   sem_anterior?: Partial<Record<ChaveApiCx, SemComparacao>> | null;
+  /** API-3: serie diaria por loja (o front agrega com a regra do card). */
+  serie_diaria?: PontoDiarioCx[] | null;
+  sem_serie?: Partial<Record<ChaveApiCx, SemComparacao>> | null;
+}
+
+/**
+ * Comparacao de um card (API-3): delta na unidade do card, "antes" no formato
+ * do valor e a serie do periodo. null = sem medida (sem pilula / sem grafico).
+ */
+export interface ComparacaoCard {
+  delta: number | null;
+  unidade: "pp" | "pct" | "pts";
+  tone: DeltaTone;
+  antes: string | null;
+  serie: number[] | null;
+  granularidade: "day" | "week" | "month";
 }
 
 /** API-3 (contrato com o Sextante, 09/11): por que falta a comparacao e quando ela passa a existir. */
@@ -918,6 +952,10 @@ export interface ResumoCx {
   cancelamentoAntes: string | null;
   /** Marcas com pedido e sem historico de cancelamento (fora do delta). */
   semHistoricoCancelamento: string[];
+  /** API-3: delta, "antes" e serie de cada card da /cx (taxas em p.p.). */
+  comparacao: Record<IndicadorCx, ComparacaoCard | null>;
+  /** API-3: o reembolso em R$ (card da Gerencial): delta em %, "antes R$". */
+  comparacaoReembolsoReais: ComparacaoCard | null;
   /** Linha neutra do card sem periodo anterior (API-3): "comparação a partir de 04/12" (motivo no title). */
   semAnterior: Partial<Record<IndicadorCx, { texto: string; detalhe: string | null }>>;
   /** Base da seta quando ela exclui marcas: "antes → agora" so' das marcas com historico. */
@@ -1056,6 +1094,44 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
   const cancAtual = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
   const cancAnt = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
 
+  // ---- API-3: periodo anterior com as MESMAS lojas do valor; faltou uma, sem comparacao (nunca parcial)
+  const medidasDe = (i: IndicadorCx) => chaves.filter((m) => valor(i, m) != null);
+  const todasCom = (ms: string[], f: (m: string) => Num) => (ms.length && ms.every((m) => f(m) != null) ? ms : null);
+  const anteriorDe = (i: IndicadorCx): number | null => {
+    const ms = medidasDe(i);
+    if (i === "contactRate") {
+      const ok = comCr ? todasCom(ms, (m) => (fotos.get(m)?.conversas_anterior != null ? linhas.get(m)?.pedidos_anterior : null)) : null;
+      return ok ? razaoPct(ok.map((m) => [fotos.get(m)?.conversas_anterior, linhas.get(m)?.pedidos_anterior])) : null;
+    }
+    if (i === "reembolso") {
+      const ok = todasCom(ms, (m) => (devs.get(m)?.aceitas_anterior != null ? linhas.get(m)?.pedidos_anterior : null));
+      return ok ? razaoPct(ok.map((m) => [devs.get(m)?.aceitas_anterior, linhas.get(m)?.pedidos_anterior])) : null;
+    }
+    if (i === "resposta") {
+      // mesmos pesos do valor atual (conversas de hoje): compara a taxa, nao a mistura
+      const ok = todasCom(ms, (m) => contas.get(m)?.resposta_anterior_pct);
+      return ok ? mediaResposta(ok.map((m) => ({ valor: contas.get(m)!.resposta_anterior_pct ?? null, peso: conv(m) }))).valor : null;
+    }
+    return null; // cancelamento: o delta de hoje (marcas com historico) segue em cancelamentoDelta
+  };
+  // serie diaria: um ponto por dia; uma loja sem medida no dia anula o ponto; um ponto nulo, sem grafico
+  const dias = [...new Set((dados.serie_diaria ?? []).map((p) => p.dia))].sort();
+  const serieDe = (f: (rows: PontoDiarioCx[]) => number | null): number[] | null => {
+    if (!dias.length) return null;
+    const pts = dias.map((d) => f((dados.serie_diaria ?? []).filter((p) => p.dia === d)));
+    return pts.every((v): v is number => v != null && Number.isFinite(v)) ? pts : null;
+  };
+  const taxaDia = (num: keyof PontoDiarioCx) => (rows: PontoDiarioCx[]) =>
+    rows.some((r) => r[num] == null || r.pedidos == null) ? null : razaoPct(rows.map((r) => [r[num] as number, r.pedidos]));
+  const series: Record<IndicadorCx, number[] | null> = {
+    contactRate: null, // nao ha conversa por dia
+    resposta: serieDe((rows) =>
+      rows.some((r) => r.resposta_pct == null) ? null : mediaResposta(rows.map((r) => ({ valor: r.resposta_pct, peso: conv(r.marca) }))).valor,
+    ),
+    cancelamento: serieDe(taxaDia("cancelamentos")),
+    reembolso: serieDe(taxaDia("devolucoes_aceitas")),
+  };
+
   const porMarca = chaves.map((m) => ({ m, valores: porIndicador((i) => valor(i, m)) }));
   const medianas = porIndicador((i) =>
     medianaRisco(porMarca.map((x) => x.valores[i]).filter((v): v is number => v != null)),
@@ -1102,6 +1178,30 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     cancelamentoAntes: delta ? pct(cancAnt) : null,
     semHistoricoCancelamento,
     semAnterior: textosSemAnterior(dados.sem_anterior),
+    comparacao: porIndicador((i): ComparacaoCard | null => {
+      const ant = anteriorDe(i);
+      const atual = totais[i];
+      const delta = ant != null && atual != null ? atual - ant : null;
+      if (delta == null && !series[i]) return null;
+      return {
+        delta,
+        unidade: "pp",
+        tone: MENOR_E_PIOR.has(i) ? "higher_is_better" : "lower_is_better",
+        antes: delta != null ? `antes ${pct(ant)}` : null,
+        serie: series[i],
+        granularidade: "day",
+      };
+    }),
+    comparacaoReembolsoReais: (() => {
+      const ms = devOk ? dev.marcas.filter((m) => m.reembolsado != null).map((m) => m.marca) : [];
+      const ok = todasCom(ms, (m) => devs.get(m)?.reembolsado_anterior);
+      const ant = ok ? somar(ok.map((m) => devs.get(m)?.reembolsado_anterior)) : null;
+      const atual = devOk ? dev.reembolsado ?? null : null;
+      const serie = serieDe((rows) => (rows.some((r) => r.reembolsado == null) ? null : somar(rows.map((r) => r.reembolsado))));
+      const delta = ant && atual != null ? (atual / ant - 1) * 100 : null;
+      if (delta == null && !serie) return null;
+      return { delta, unidade: "pct", tone: "lower_is_better", antes: delta != null ? `antes ${reais(ant)}` : null, serie, granularidade: "day" };
+    })(),
     cancelamentoBase: delta && semHistoricoCancelamento.length ? { anterior: pct(cancAnt), atual: pct(cancAtual) } : null,
     totais,
     medianas,

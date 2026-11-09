@@ -17,6 +17,8 @@ import {
   problemaNoPayloadSite,
   RESSALVA_REENVIO,
   frescorDoBloco,
+  semanaDe,
+  seriePorSemana,
   textoSafra,
   urlCxSite,
   type CxSiteResponse,
@@ -145,4 +147,37 @@ test("sem chips no topo do bloco: periodo no subtitulo, frescor e Vision CX no â
   assert.match(bloco, /frescorDoBloco\(blocoDoCard\[t\.rotulo\]\)\.texto/);
   assert.match(bloco, /<Chip tom="critico" ponto>Desatualizado<\/Chip>/);
   assert.doesNotMatch(bloco, /text-crit-ink" data-testid="cx-site-aviso-reviews"/, "sem a linha vermelha solta");
+});
+
+// ---------------------------------------------------------------------------
+// API-3 (#290): delta, "antes" e serie semanal/mensal nos cards do site
+// ---------------------------------------------------------------------------
+test("semana: segunda-feira em UTC; NPS da semana recalculado das contagens, nunca media", () => {
+  assert.equal(semanaDe("2026-11-04"), "2026-11-02");
+  assert.equal(semanaDe("2026-11-02"), "2026-11-02");
+  assert.equal(semanaDe("2026-11-08"), "2026-11-02", "domingo fecha a semana");
+  const dias = ["2026-10-12", "2026-10-13", "2026-10-19", "2026-10-26", "2026-11-02", "2026-11-03"];
+  const serie = dias.map((dia, i) => ({ dia, respostas: 10, promotores: 6 + (i % 2), detratores: 1, nps: null }));
+  // semana 12/10: (6+7-2)/20 = 55; 19/10: (6-1)/10 = 50; 26/10: (7-1)/10 = 60; 02/11: (6+7-2)/20 = 55
+  const pts = seriePorSemana(serie, (p) => [p.promotores, p.detratores, p.respostas], ([pr, de, re]) => ((pr - de) / re) * 100);
+  assert.deepEqual(pts?.map((v) => Math.round(v * 10) / 10), [55, 50, 60, 55]);
+  const furada = serie.map((p, i) => (i === 3 ? { ...p, promotores: null } : p));
+  assert.equal(seriePorSemana(furada, (p) => [p.promotores, p.detratores, p.respostas], () => 1), null, "dia sem contagem: sem grafico");
+});
+
+test("cards do site: delta e antes so' com o anterior; safra com 2 pontos tem delta e nao tem grafico", () => {
+  const sem = montarTilesSite(payload());
+  assert.ok(sem.every((t) => !t.comp), "API antiga: nenhum card compara");
+  const p = payload();
+  p.nps = { ...p.nps, nps_anterior: 40.3 };
+  p.reenvio_reembolso = {
+    ...p.reenvio_reembolso, taxa_reenvio_pct_anterior: 0.8, taxa_reembolso_pct_anterior: null,
+    serie: [{ safra: "2026-09-01", taxa_reenvio_pct: 0.8, taxa_reembolso_pct: 0.63 }, { safra: "2026-10-01", taxa_reenvio_pct: 1, taxa_reembolso_pct: 0.5 }],
+  };
+  const [nps, reenvio, reembolso, reviews] = montarTilesSite(p);
+  assert.deepEqual([nps.comp?.delta?.toFixed(1), nps.comp?.unidade, nps.comp?.tone, nps.comp?.antes], ["3.0", "pts", "higher_is_better", "antes 40,3"]);
+  assert.deepEqual([reenvio.comp?.delta?.toFixed(1), reenvio.comp?.antes, reenvio.comp?.serie?.length, reenvio.comp?.granularidade], ["0.2", "antes 0,8%", 2, "month"]);
+  assert.equal(reembolso.comp?.delta, null, "sem anterior: sem pilula");
+  assert.equal(reembolso.comp?.antes, null);
+  assert.equal(reviews.comp, null, "carga parada: sem anterior nem serie");
 });

@@ -27,7 +27,7 @@ import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { notasDoTile, rodapeComparacao } from "@/components/gerencial/CxResumo";
+import { notasDoTile, pilula, rodapeComparacao, type RodapeCard } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao from "@/components/ui/FilaAtencao";
@@ -178,6 +178,8 @@ function Corpo({ dados, filtros, site }: { dados: CxShopeeResponse; filtros: Fil
         ajuda={<InfoDica titulo={ROTULO_INDICADOR.resposta} texto={notasDoTile(r, "resposta", filtros.dias).join(" ")} />}
         valor={r.resposta}
         tom={r.resposta === "—" ? "ausente" : "neutro"}
+        // API-3: o heroi ganha so' a pilula (sem grafico)
+        delta={r.comparacao.resposta ? pilula(r.comparacao.resposta) : undefined}
         contexto={heroi.contexto}
         aviso={aviso ? <Chip>{aviso}</Chip> : undefined}
         selo={heroi.selo ?? undefined}
@@ -409,7 +411,7 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
     icone: typeof Ban,
     valor: string,
     comparacao: ReactNode,
-    extra: { delta?: ReactNode; antes?: ReactNode } = {},
+    extra: RodapeCard = {},
   ) => (
     <KpiTile
       variante="gerencial"
@@ -420,6 +422,8 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
       tom={valor === "—" ? "ausente" : "neutro"}
       delta={extra.delta}
       antes={extra.antes}
+      serie={extra.serie}
+      granularidade={extra.granularidade}
       comparacao={comparacao}
       // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
       ajuda={<InfoDica emControle texto={notasDoTile(r, i, dias).join(" ")} />}

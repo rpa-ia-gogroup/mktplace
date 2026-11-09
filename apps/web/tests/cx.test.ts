@@ -874,7 +874,59 @@ test("sem periodo anterior: linha neutra com motivo e data; sem a API-3, nada", 
   assert.equal(r.semAnterior.reembolso?.detalhe, "devoluções desde 05/10 · y");
   assert.equal(r.semAnterior.cancelamento, undefined);
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
-  assert.match(resumo, /c\.delta \? c : sem \? \{ antes: <LinhaSemComparacao \{\.\.\.sem\} \/> \} : \{\}/, "a pilula vence; sem ela, a linha");
+  assert.match(resumo, /if \(c\.delta\) return \{ \.\.\.c, \.\.\.grafico \};[\s\S]{0,250}antes: <LinhaSemComparacao \{\.\.\.sem\} \/>/, "a pilula vence; sem ela, a linha");
   assert.match(resumo, /const sem = r\.totais\[i\] == null \? undefined : r\.semAnterior\[i\];/, "valor '—': sem linha de comparacao");
   assert.doesNotMatch(resumo, /LinhaSemComparacao[\s\S]{0,200}crit/, "nunca vermelho");
+});
+
+// ---------------------------------------------------------------------------
+// API-3 (#290): delta, "antes" e serie diaria nos cards da Shopee
+// ---------------------------------------------------------------------------
+function comApi3() {
+  const p = comConversas(7);
+  p.chat.nao_lidas = p.chat.nao_lidas.map((n) => ({ ...n, conversas_anterior: n.marca === "apice" ? 30 : null }));
+  p.chat.contas = p.chat.contas.map((c) => ({ ...c, resposta_anterior_pct: c.marca === "apice" ? 80 : 50 }));
+  p.atendimento = { ...p.atendimento, marcas: p.atendimento.marcas.map((m) => ({ ...m, pedidos_anterior: m.marca === "apice" ? 1000 : 300, cancelamentos_anterior: 10 })) };
+  p.devolucoes = { ...p.devolucoes!, marcas: p.devolucoes!.marcas.map((m) => ({ ...m, aceitas_anterior: 4, reembolsado_anterior: 300 })) };
+  return p;
+}
+
+test("API-3 Shopee: anterior com as mesmas lojas do valor; delta em p.p.; resposta com os pesos de hoje", () => {
+  const r = resumoCxGerencial(comApi3(), rotulo);
+  // contact rate 7 d: so' apice tem conversas (40/1000 = 4%); antes 30/1000 = 3%
+  assert.deepEqual([r.comparacao.contactRate?.delta?.toFixed(1), r.comparacao.contactRate?.antes, r.comparacao.contactRate?.tone], ["1.0", "antes 3,0%", "lower_is_better"]);
+  assert.equal(r.comparacao.contactRate?.serie, null, "contact rate nunca tem serie");
+  // reembolso: 8 aceitas / 1000 = 0,8% contra 4 / 1000 = 0,4%
+  assert.deepEqual([r.comparacao.reembolso?.delta?.toFixed(1), r.comparacao.reembolso?.antes], ["0.4", "antes 0,4%"]);
+  // resposta: media simples (rituaria sem conversas) de 80 e 50 = 65 contra 64 hoje; subir e' melhor
+  assert.deepEqual([r.comparacao.resposta?.delta?.toFixed(1), r.comparacao.resposta?.tone], ["-1.0", "higher_is_better"]);
+  // reembolso em R$ (Gerencial): 450,50 contra 300 = +50,2%
+  assert.deepEqual([r.comparacaoReembolsoReais?.delta?.toFixed(1), r.comparacaoReembolsoReais?.unidade], ["50.2", "pct"]);
+  assert.match(r.comparacaoReembolsoReais?.antes ?? "", /^antes R\$\s300,00$/);
+});
+
+test("API-3 Shopee: falta o anterior de uma loja do valor, nao compara (nunca parcial)", () => {
+  const p = comApi3();
+  p.chat.contas[1] = { ...p.chat.contas[1], resposta_anterior_pct: null };
+  p.devolucoes = { ...p.devolucoes!, marcas: p.devolucoes!.marcas.map((m) => ({ ...m, aceitas_anterior: null })) };
+  const r = resumoCxGerencial(p, rotulo);
+  assert.equal(r.comparacao.resposta, null);
+  assert.equal(r.comparacao.reembolso, null);
+  assert.deepEqual(resumoCxGerencial(comConversas(30), rotulo).comparacao, { contactRate: null, resposta: null, cancelamento: null, reembolso: null }, "API antiga: nada");
+});
+
+test("API-3 Shopee: serie diaria agrega as lojas com a regra do card; loja sem medida anula o ponto", () => {
+  const p = comApi3();
+  const dias = ["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"];
+  p.serie_diaria = dias.flatMap((dia, i) => [
+    { dia, marca: "apice", pedidos: 100, cancelamentos: 2 + i, devolucoes_aceitas: 1, reembolsado: 10, resposta_pct: 80 },
+    { dia, marca: "rituaria", pedidos: 100, cancelamentos: 0, devolucoes_aceitas: 0, reembolsado: 0, resposta_pct: 50 },
+  ]);
+  const r = resumoCxGerencial(p, rotulo);
+  assert.deepEqual(r.comparacao.cancelamento?.serie, [1, 1.5, 2, 2.5], "Σcanc/Σped por dia");
+  assert.deepEqual(r.comparacao.reembolso?.serie, [0.5, 0.5, 0.5, 0.5]);
+  assert.deepEqual(r.comparacaoReembolsoReais?.serie, [10, 10, 10, 10]);
+  assert.equal(r.comparacao.cancelamento?.delta, null, "cancelamento: o delta de hoje segue em cancelamentoDelta");
+  p.serie_diaria[3] = { ...p.serie_diaria[3], cancelamentos: null };
+  assert.equal(resumoCxGerencial(p, rotulo).comparacao.cancelamento?.serie ?? null, null, "um ponto nulo: sem grafico");
 });
