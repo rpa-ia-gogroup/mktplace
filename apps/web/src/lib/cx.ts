@@ -306,12 +306,24 @@ function tempoDaLoja(n: NaoLidas | undefined): { tempo: string; detalhe: string 
   return { tempo: duracao(n.tempo_resposta_s), detalhe: partes.length ? partes.join(" · ") : null };
 }
 
+type MetricaCx = ContaOficial["metricas"][number];
+
+/** Um nome so' para a mesma metrica oficial na aba (heroi, fila, tabela): "Taxa de resposta". */
+export function rotuloOficial(m: Pick<MetricaCx, "codigo" | "rotulo">): string {
+  return m.codigo === COD_RESPONDIDO ? "Taxa de resposta" : m.rotulo;
+}
+
+/** % com 1 casa, como o resto da aba; nota com 2 (com uma, 4,77 e 4,83 viram o mesmo 4,8 e a pior some). */
+export function valorOficial(m: Pick<MetricaCx, "codigo" | "valor" | "unidade">): string {
+  if (m.valor == null || !Number.isFinite(m.valor)) return valorMetrica(m);
+  if (m.codigo === COD_NOTA) return FMT_NOTA.format(m.valor);
+  return m.unidade === "pct" ? pct(m.valor) : valorMetrica(m);
+}
+
 function celulaMeta(conta: ContaOficial | undefined, codigo: string): CelulaMeta | null {
   const m = conta?.metricas.find((x) => x.codigo === codigo);
   if (!m) return null;
-  // nota com duas casas: com uma, 4,77 e 4,83 viram o mesmo 4,8 e a pior some
-  const valor = codigo === COD_NOTA && m.valor != null && Number.isFinite(m.valor) ? FMT_NOTA.format(m.valor) : valorMetrica(m);
-  return { valor, fora: m.situacao === "fora", meta: m.rotulo_meta ?? null };
+  return { valor: valorOficial(m), fora: m.situacao === "fora", meta: m.rotulo_meta ?? null };
 }
 
 export function montarAtendimentoCx(
@@ -537,7 +549,7 @@ export function montarStatusMarcas(
       }
       const alertas = conta.metricas
         .filter((x) => x.situacao === "fora")
-        .map((x) => `${x.rotulo} ${valorMetrica(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
+        .map((x) => `${rotuloOficial(x)} ${valorOficial(x)}${x.rotulo_meta ? ` (${x.rotulo_meta.toLowerCase()})` : ""}`);
       // Tom e' o da propria Shopee (nivel); metrica fora da meta nunca fica verde.
       const tom: TomStatus = alertas.length && conta.tom === "bom" ? "atencao" : conta.tom;
       return { ...base, tom, rotulo: conta.nivel ?? "Sem nível", alertas };
@@ -1137,7 +1149,7 @@ export function itensAtencaoCx(
       itens.push({
         chave: `${s.chave}:${m.codigo}`,
         severidade: "critico",
-        titulo: `${s.marca}: ${m.rotulo} ${valorMetrica(m)}`,
+        titulo: `${s.marca}: ${rotuloOficial(m)} ${valorOficial(m)}`,
         detalhe: metaDaMetrica(m),
         abre: { marca: s.chave },
       });

@@ -22,7 +22,7 @@
  * Um dialogo unico (`KpiDrilldownDialog`) para todos os detalhes.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessagesSquare, Repeat2, Undo2 } from "lucide-react";
+import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -40,7 +40,6 @@ import StateBlock from "@/components/ui/StateBlock";
 import {
   AJUDA_CX,
   AJUDA_RISCO,
-  MOTIVO_REENVIO,
   ROTULO_INDICADOR,
   avisoColetaChat,
   carregarCxShopee,
@@ -398,24 +397,16 @@ function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaF
 }
 
 // ---------------------------------------------------------------------------
-// 2. Faixa de KPIs: os do card CX da Gerencial, menos a resposta (heroi)
+// 2. Faixa de KPIs: os do card CX da Gerencial, menos a resposta (heroi) e o
+//    Reenvio sem fonte (cartao sem numero nao entra na 1a dobra; a nota esta'
+//    em Mais detalhes)
 // ---------------------------------------------------------------------------
 function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: IndicadorCx) => void }) {
   const tile = (i: IndicadorCx, icone: typeof Ban, valor: string, comparacao: ReactNode, delta?: ReactNode) => (
     <KpiTile
       variante="gerencial"
       icone={icone}
-      rotulo={
-        i === "cancelamento" ? (
-          // "Cancelamento" + ⓘ encosta no icone em 390 px; o nome inteiro segue no leitor de tela
-          <>
-            <span className="sm:hidden" aria-hidden="true">Cancel.</span>
-            <span className="sr-only sm:not-sr-only">Cancelamento</span>
-          </>
-        ) : (
-          ROTULO_INDICADOR[i]
-        )
-      }
+      rotulo={ROTULO_INDICADOR[i]}
       valor={valor}
       tom={valor === "—" ? "ausente" : "neutro"}
       delta={delta}
@@ -428,7 +419,7 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
   const delta = r.cancelamentoDelta;
   return (
     <section aria-label="Indicadores do período">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="cx-faixa">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
         {tile("contactRate", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null)}
         {tile(
           "cancelamento",
@@ -439,19 +430,6 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
         )}
         {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
         {tile("reembolso", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null)}
-        <KpiTile
-          variante="gerencial"
-          icone={Repeat2}
-          rotulo="Reenvio"
-          tom="ausente"
-          valor="Sem fonte"
-          ajuda={
-            <InfoDica
-              titulo="Reenvio"
-              texto={`${MOTIVO_REENVIO[0].toUpperCase()}${MOTIVO_REENVIO.slice(1)}. Entra quando houver fonte; nunca aparece como zero.`}
-            />
-          }
-        />
       </div>
     </section>
   );
@@ -504,7 +482,7 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
                   onClick={() => setAberto(aberto?.chave === i.chave ? null : i)}
                   aria-expanded={aberto?.chave === i.chave}
                   aria-controls="cx-pedidos-motivo"
-                  title="Ver os pedidos deste motivo"
+                  title={`Acumulado ${i.acumulado} · ver os pedidos deste motivo`}
                   className={`flex min-h-11 w-full flex-col justify-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     aberto?.chave === i.chave ? "bg-raised ring-1 ring-line-strong" : ""
                   }`}
@@ -516,7 +494,8 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
                       <span className="ml-1.5 text-xs text-ink-faint">{i.tipo} · {i.natureza}</span>
                     </span>
                     <span className="shrink-0 tabular-nums text-ink-muted">
-                      {i.pct} <span className="text-xs">· {i.quantidade} · acum. {i.acumulado}</span>
+                      {i.pct} <span className="text-xs">· {i.quantidade}</span>
+                      <span className="sr-only"> · acumulado {i.acumulado}</span>
                     </span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-raised" aria-hidden="true">
@@ -620,7 +599,7 @@ function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimento
                 <ThAjuda ajuda={AJUDA_CX.conversas} dica={v.rotuloConversas}>Conversas</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
-                <ThAjuda dica={metaResposta}>% respondido</ThAjuda>
+                <ThAjuda dica={metaResposta}>Taxa de resposta</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.avaliacao} dica={metaNota}>Nota</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.tempoResposta}>Tempo resp.</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.contactRate}>Contact rate</ThAjuda>

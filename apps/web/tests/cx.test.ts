@@ -180,7 +180,7 @@ test("atendimento: conversas, aguardando, % respondido e contact rate por loja",
   assert.equal(v.rotuloConversas, "Conversas (30 dias)");
   const apice = v.linhas.find((l) => l.chave === "apice")!;
   assert.deepEqual([apice.conversas, apice.aguardando, apice.naoLidas, apice.contactRate], ["200", "3", "4", "20,0%"]);
-  assert.equal(apice.respondido?.valor, "82,65%");
+  assert.equal(apice.respondido?.valor, "82,7%", "% com 1 casa, como o resto da aba");
   assert.equal(apice.aguardandoPct, "1,5%", "3 aguardando / 200 conversas");
   const rit = v.linhas.find((l) => l.chave === "rituaria")!;
   assert.equal(rit.conversas, "—", "sem a leitura nova: traco, nunca zero");
@@ -297,7 +297,7 @@ test("status por marca: nivel oficial, metrica fora da meta em alerta, pior prim
   assert.equal(rit.tom, "atencao");
   assert.equal(rit.rotulo, "Bom");
   assert.equal(rit.alertas.length, 1);
-  assert.match(rit.alertas[0], /^Taxa de resposta do chat 45,31% \(meta >= 60\)$/);
+  assert.match(rit.alertas[0], /^Taxa de resposta 45,3% \(meta >= 60\)$/);
   const apice = s[1];
   assert.deepEqual([apice.tom, apice.alertas, apice.aguardando, apice.cancelamento, apice.devolucoes], ["bom", [], "3", "2,0%", "10"]);
   const lescent = s[2];
@@ -730,7 +730,7 @@ test("fila de atencao: metrica fora da meta, >24 h, fora da curva sem repetir e 
   assert.deepEqual(
     itens.map((i) => [i.severidade, i.titulo, i.detalhe]),
     [
-      ["critico", "RITUARIA: Taxa de resposta do chat 45,31%", "meta ≥ 60%"],
+      ["critico", "RITUARIA: Taxa de resposta 45,3%", "meta ≥ 60%"],
       ["critico", "APICE: 2 conversas há mais de 24 h", "mais antiga: 2 d"],
       ["info", "LESCENT: Sem fotografia capturada ainda.", null],
     ],
@@ -771,6 +771,12 @@ test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalh
   assert.ok(tela.lastIndexOf("<Heroi") < tela.indexOf("<Faixa ") && tela.indexOf("<Faixa ") < tela.indexOf("<FilaAtencao"), "ordem da spec");
   assert.match(tela, /<PageHeader[\s\S]*icon=\{MessageCircle\}/);
   assert.doesNotMatch(tela, /subtitle=/, "subtitulo virou chip");
+  // revisao do Prumo: sem cartao sem numero na faixa; um nome so' para a taxa; Pareto com 2 numeros por motivo
+  assert.doesNotMatch(tela, /rotulo="Reenvio"/);
+  assert.ok(tela.includes("grid grid-cols-1 gap-3 sm:grid-cols-3"));
+  assert.ok(tela.includes(">Taxa de resposta</ThAjuda>") && !tela.includes("% respondido</ThAjuda>"));
+  assert.doesNotMatch(tela, /· acum\. \{i\.acumulado\}/);
+  assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /notasDoTile\(r: ResumoCx, i: IndicadorCx, dias = DIAS\)/, "Gerencial segue com 30 dias por padrao");
 });
