@@ -27,7 +27,7 @@ import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { deltaCancelamento, notasDoTile } from "@/components/gerencial/CxResumo";
+import { notasDoTile, rodapeComparacao } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao from "@/components/ui/FilaAtencao";
@@ -430,10 +430,10 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
         {/* cor de identidade (spec do Prumo, 09/11): a mesma do card CX da Gerencial */}
-        {tile("contactRate", "atendimento", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null)}
-        {tile("cancelamento", "ads", Ban, r.cancelamento, null, deltaCancelamento(r))}
+        {tile("contactRate", "atendimento", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null, dias > 30 ? {} : rodapeComparacao(r, "contactRate"))}
+        {tile("cancelamento", "ads", Ban, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
         {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
-        {tile("reembolso", "gmv", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null)}
+        {tile("reembolso", "gmv", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
       </div>
     </section>
   );

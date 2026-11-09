@@ -61,8 +61,29 @@ export function deltaCancelamento(r: ResumoCx): { delta?: ReactNode; antes?: Rea
   return {
     delta: <DeltaBadge pct={estavel ? 0 : r.cancelamentoDeltaPp} unidade="pp" tone={estavel ? "neutral" : "lower_is_better"} />,
     // base sem as marcas sem historico: "antes X" ao lado do valor de todas as marcas enganaria; a conta fica no ⓘ
-    antes: r.cancelamentoBase ? `sem ${r.semHistoricoCancelamento.join(", ")}` : `antes ${r.cancelamentoAntes}`,
+    antes: r.cancelamentoBase ? `comparação sem ${r.semHistoricoCancelamento.join(", ")}` : `antes ${r.cancelamentoAntes}`,
   };
+}
+
+/**
+ * Rodape de comparacao do card: a pilula + "antes" quando ha' periodo anterior;
+ * sem ele, a linha neutra da API-3 ("sem comparação: … · a partir de dd/mm").
+ * Nunca vermelho, nunca zero.
+ */
+export function rodapeComparacao(r: ResumoCx, i: IndicadorCx): { delta?: ReactNode; antes?: ReactNode } {
+  const c = i === "cancelamento" ? deltaCancelamento(r) : {};
+  const sem = r.semAnterior[i];
+  return c.delta ? c : sem ? { antes: <LinhaSemComparacao {...sem} /> } : {};
+}
+
+/** A linha neutra, com o texto longo no title e para o leitor de tela. */
+export function LinhaSemComparacao({ texto, detalhe }: { texto: string; detalhe: string | null }) {
+  return (
+    <span title={detalhe ?? undefined}>
+      {texto}
+      {detalhe && <span className="sr-only"> ({detalhe})</span>}
+    </span>
+  );
 }
 
 /**
@@ -170,7 +191,7 @@ export default function CxResumo({
 // ---------------------------------------------------------------------------
 // Tiles: rotulo, valor e uma linha (reservada) — clicaveis, como a KpiBand
 // ---------------------------------------------------------------------------
-/** 2 colunas no celular, 3 + 2 de 640 a 1024 px (grade de 6), 5 em linha acima. */
+/** 1 coluna no celular (rotulo inteiro ao lado do icone), 3 + 2 de 640 a 1024 px (grade de 6), 5 em linha acima. */
 const SPAN_TOPO = "sm:col-span-2 lg:col-span-1";
 const SPAN_BASE = "sm:col-span-3 lg:col-span-1";
 /** Conteudo no topo do card: o valor fica na mesma altura com ou sem linha. */
@@ -207,19 +228,12 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
         // do botao e no ⓘ.
         rotulo={
           <span className="min-w-0 truncate" title={ROTULO_INDICADOR[i]}>
-            {i === "resposta" ? (
-              <>
-                <span className="sm:hidden">Resposta</span>
-                <span className="hidden sm:inline">Resposta do chat</span>
-              </>
-            ) : (
-              ROTULO_INDICADOR[i]
-            )}
+            {i === "resposta" ? "Resposta do chat" : ROTULO_INDICADOR[i]}
           </span>
         }
         valor={valor}
         tom={valor === "—" ? "ausente" : "neutro"}
-        comparacao={linha ?? (extra.delta ? undefined : SEM_LINHA)}
+        comparacao={linha ?? (extra.delta || extra.antes ? undefined : SEM_LINHA)}
         // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
         ajuda={
           <InfoDica
@@ -232,12 +246,12 @@ function Tiles({ r, abrir }: { r: ResumoCx; abrir: (i: IndicadorCx) => void }) {
   );
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo">
-      {card("contactRate", SPAN_TOPO, r.contactRate, null)}
-      {card("resposta", SPAN_TOPO, r.resposta, null)}
-      {card("cancelamento", SPAN_TOPO, r.cancelamento, null, deltaCancelamento(r))}
-      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null)}
-      <div className={`col-span-2 ${CARD} ${SPAN_BASE}`}>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo">
+      {card("contactRate", SPAN_TOPO, r.contactRate, null, rodapeComparacao(r, "contactRate"))}
+      {card("resposta", SPAN_TOPO, r.resposta, null, rodapeComparacao(r, "resposta"))}
+      {card("cancelamento", SPAN_TOPO, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
+      {card("reembolso", SPAN_BASE, r.reembolsado, r.reembolsoPct ? <span className="whitespace-nowrap">{r.reembolsoPct} dos pedidos</span> : null, rodapeComparacao(r, "reembolso"))}
+      <div className={`${CARD} ${SPAN_BASE}`}>
         <KpiTile
           variante="gerencial"
           identidade="ads"

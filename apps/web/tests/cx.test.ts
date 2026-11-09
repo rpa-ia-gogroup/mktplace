@@ -19,6 +19,7 @@ import {
   montarPedidosMotivo,
   montarStatusMarcas,
   simbolosMeta,
+  textoSemComparacao,
   marcaUnica,
   resumoFiltrosCx,
   reais,
@@ -690,7 +691,7 @@ test("seta do cancelamento: base explicita quando exclui marca sem historico", (
   );
   assert.deepEqual(r.cancelamentoBase, { anterior: "1,0%", atual: "2,0%" }); // so' apice; o tile mostra 1,8% com rituaria
   const resumoFonte = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
-  assert.match(resumoFonte, /r\.cancelamentoBase \? `sem \$\{r\.semHistoricoCancelamento\.join\(", "\)\}` : `antes \$\{r\.cancelamentoAntes\}`/,
+  assert.match(resumoFonte, /r\.cancelamentoBase \? `comparação sem \$\{r\.semHistoricoCancelamento\.join\(", "\)\}` : `antes \$\{r\.cancelamentoAntes\}`/,
     "com base parcial o card diz 'sem MARCA', nunca 'antes X' ao lado do valor de todas as marcas");
   const todas = resumoCxGerencial(
     {
@@ -841,7 +842,7 @@ test("meta: sinais matematicos em todo texto de meta da CX e da Gerencial", () =
 test("cards com cor de identidade: faixa da /cx, CX do site e card CX da Gerencial", () => {
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
   assert.match(tela, /tile\("contactRate", "atendimento"/);
-  assert.match(tela, /tile\("cancelamento", "ads", Ban, r\.cancelamento, null, deltaCancelamento\(r\)\)/);
+  assert.match(tela, /tile\("cancelamento", "ads", Ban, r\.cancelamento, null, rodapeComparacao\(r, "cancelamento"\)\)/);
   assert.match(tela, /tile\("reembolso", "gmv"/);
   const site = readFileSync(new URL("../app/cx/CxSite.tsx", import.meta.url), "utf8");
   for (const par of ['"NPS do site": { identidade: "atendimento"', '"Taxa de reenvio": { identidade: "ads"', '"Taxa de reembolso": { identidade: "gmv"', '"Reviews 1–3 ★": { identidade: "pedidos"']) {
@@ -852,4 +853,27 @@ test("cards com cor de identidade: faixa da /cx, CX do site e card CX da Gerenci
   assert.match(resumo, /identidade="ads"\s+icone=\{Repeat2\}\s+rotulo="Reenvio"\s+tom="ausente"/);
   assert.match(resumo, /<DeltaBadge pct=\{[^}]+\} unidade="pp" tone=\{estavel \? "neutral" : "lower_is_better"\}/);
   assert.match(resumo, /title=\{ROTULO_INDICADOR\[i\]\}/, "o truncate + title do #263 continua");
+  assert.match(resumo, /grid grid-cols-1 gap-3 sm:grid-cols-6 lg:grid-cols-5/, "1 coluna no celular: rotulo inteiro");
+});
+
+// ---------------------------------------------------------------------------
+// Sem comparacao (pedido da operacao, 09/11): motivo e data, vindos da API-3
+// ---------------------------------------------------------------------------
+test("sem periodo anterior: linha neutra com motivo e data; sem a API-3, nada", () => {
+  assert.deepEqual(textoSemComparacao({ motivo: "coleta desde 04/11", a_partir_de: "2026-12-04", detalhe: "A coleta de conversas começou em 04/11." }),
+    { texto: "sem comparação: coleta desde 04/11 · a partir de 04/12", detalhe: "A coleta de conversas começou em 04/11." });
+  assert.deepEqual(textoSemComparacao({ motivo: "só em 7 e 30 dias", a_partir_de: null }), { texto: "sem comparação: só em 7 e 30 dias", detalhe: null }, "nunca: sem data");
+  assert.equal(textoSemComparacao(null), null);
+  const p = comConversas(30);
+  assert.deepEqual(resumoCxGerencial(p, rotulo).semAnterior, {}, "API sem o campo: nenhuma linha (nada inventado)");
+  const r = resumoCxGerencial({ ...p, sem_anterior: {
+    contact_rate: { motivo: "coleta desde 04/11", a_partir_de: "2026-12-04", detalhe: "x" },
+    reembolso: { motivo: "devoluções desde 05/10", a_partir_de: "2026-12-04", detalhe: "y" },
+  } }, rotulo);
+  assert.equal(r.semAnterior.contactRate?.texto, "sem comparação: coleta desde 04/11 · a partir de 04/12");
+  assert.equal(r.semAnterior.reembolso?.texto, "sem comparação: devoluções desde 05/10 · a partir de 04/12");
+  assert.equal(r.semAnterior.cancelamento, undefined);
+  const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.match(resumo, /c\.delta \? c : sem \? \{ antes: <LinhaSemComparacao \{\.\.\.sem\} \/> \} : \{\}/, "a pilula vence; sem ela, a linha");
+  assert.doesNotMatch(resumo, /LinhaSemComparacao[\s\S]{0,200}crit/, "nunca vermelho");
 });

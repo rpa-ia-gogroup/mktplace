@@ -9,13 +9,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Repeat2, Smile, Star, Undo2, type LucideIcon } from "lucide-react";
 
 import TableScrollHint from "@/components/TableScrollHint";
+import { LinhaSemComparacao } from "@/components/gerencial/CxResumo";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import type { FiltrosCx } from "@/lib/cx";
+import { textoSemComparacao, type FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_SITE,
   avisoRecorte,
@@ -111,6 +112,11 @@ export default function CxSite({ filtros }: { filtros: FiltrosCx }) {
                 )
               }
               tom={t.ausente ? "ausente" : "neutro"}
+              antes={(() => {
+                // API-3: sem periodo anterior, a linha neutra com o motivo e a data
+                const sem = textoSemComparacao(blocoDoCard[t.rotulo].sem_anterior);
+                return sem ? <LinhaSemComparacao {...sem} /> : undefined;
+              })()}
               ajuda={<InfoDica texto={`${t.ajuda} ${frescorDoBloco(blocoDoCard[t.rotulo]).texto}`} titulo={t.rotulo} />}
             />
           ))}

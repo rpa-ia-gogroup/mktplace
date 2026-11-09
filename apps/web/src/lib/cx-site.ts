@@ -6,13 +6,15 @@
  * e reviews do Judge.me por produto. Funcoes puras testadas em node --test; o
  * componente `app/cx/CxSite.tsx` so' desenha.
  */
-import type { FiltrosCx } from "./cx.ts";
+import type { FiltrosCx, SemComparacao } from "./cx.ts";
 import { fmtBrlCurto, fmtNumCurto } from "./formatters.ts";
 import { MOTIVO_TIMEOUT, TIMEOUT_API_MS, formatarInstante } from "./performance-contas.ts";
 
 export type EstadoBloco = "dado" | "vazio_legitimo" | "sem_fonte" | "erro";
 
 interface BlocoBase {
+  /** API-3: por que o bloco nao tem periodo anterior e quando passa a ter. */
+  sem_anterior?: SemComparacao | null;
   estado: EstadoBloco;
   fonte: string;
   atualizado_em?: string | null;
