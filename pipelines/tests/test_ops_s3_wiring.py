@@ -290,8 +290,10 @@ def test_f26_os_outros_dois_pipelines_nao_mudaram():
     # monitoramento de precos. O inventario segue FECHADO: o que este
     # teste trava e' que S3 nao criou pipeline, nao que nunca existira um.
     # OPS-AUTOMATION-2 acrescentou `daily_chain` (composicao, sem step novo).
+    # T-0074 acrescentou `tiktok_weekly_reprocess` (reprocesso semanal TikTok).
     assert sorted(orch.PIPELINES) == ["daily_chain", "full_daily", "pma_refresh",
-                                      "serving_refresh", "shopee_manual_refresh"]
+                                      "serving_refresh", "shopee_manual_refresh",
+                                      "tiktok_weekly_reprocess"]
 
 
 # ===========================================================================
