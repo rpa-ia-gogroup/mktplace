@@ -555,6 +555,11 @@ nova fonte atinge a meta (0,93% de erro, 85,4% de redução).
 
 ### 11.1 TikTok — hardening da regra aprovada
 
+> **Regra superada (nota de 09/11/2026).** O `SUM(sub_total)` com 3 status descrito
+> nesta seção vale para o Gate R2/R2.1. A regra vigente é `SUM(total_amount)`, com
+> frete do comprador, e 5 status (`COMPLETED`, `DELIVERED`, `IN_TRANSIT`,
+> `AWAITING_COLLECTION`, `AWAITING_SHIPMENT`). Ver `docs/tiktok_gmv_maturacao.md`.
+
 A regra em si não mudou: **GMV = `SUM(sub_total)` dos status elegíveis**
 (`COMPLETED`, `DELIVERED`, `IN_TRANSIT`; `CANCELLED` fora). O que mudou foi
 o hardening do conector (`pipelines/connectors/tiktok/connector.py`):

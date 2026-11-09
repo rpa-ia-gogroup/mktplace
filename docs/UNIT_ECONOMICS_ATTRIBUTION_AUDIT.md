@@ -254,7 +254,7 @@ Confiabilidade: **Alta** = reconciliado contra referência externa · **Média**
 
 | Campo/métrica | Marketplace | Fonte | Tabela/endpoint | Grão | Chave | Data/competência | Cobertura | Confiab. | Observação |
 |---|---|---|---|---|---|---|---|---|---|
-| GMV canônico | TK | Raw→mart | `marts.fact_marketplace_daily_performance` | dia×loja | `(date, loja_id, marketplace_id)` | `created_at` do pedido | 2025-12 → hoje | Alta | `SUM(sub_total)`, allowlist de status |
+| GMV canônico | TK | Raw→mart | `marts.fact_marketplace_daily_performance` | dia×loja | `(date, loja_id, marketplace_id)` | `created_at` do pedido | 2025-12 → hoje | Alta | `SUM(total_amount)` (com frete do comprador), allowlist de 5 status; `sub_total` era o Gate R2. Valor dos últimos 35 dias ainda pode cair: `docs/tiktok_gmv_maturacao.md` |
 | GMV canônico | ML, SH | idem | idem | dia×loja | idem | idem | ML 2025-12→ · SH 2026-01→ | Alta | Reconciliado com XLSX |
 | GMV linhagem conteúdo | TK | Gold | `gold.tiktok_brand_daily.gmv` | dia×marca | `(date, brand)` | idem | 2025-06 → hoje | Média | ≈ `total_amount`; **+6,85%** acima do canônico |
 | Receita atribuída a Ads | ML | Gold→mart | `.ad_revenue` | dia×loja | idem | janela do ML | 2026-01→ | Média | 44,73% do GMV — **não é partição** |

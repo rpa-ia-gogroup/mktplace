@@ -66,6 +66,9 @@ em `raw.tiktok_shop_orders`, dedup por `order_id`.
 - **PopulaÃ§Ã£o comercial** (`COMMERCIAL_ORDER_STATUSES`): `COMPLETED`,
   `DELIVERED`, `IN_TRANSIT`, `AWAITING_COLLECTION`, `AWAITING_SHIPMENT`.
 - **Fora** (`NON_COMMERCIAL_ORDER_STATUSES`): `UNPAID`, `CANCELLED`, `ON_HOLD`.
+- **Em maturação (T-0074, 09/11/2026):** o GMV de um dia ainda pode cair até
+  ~D+30 por cancelamentos tardios. A API e a tela marcam os dias com menos de 35
+  dias, sem mudar o número. Regra, medição e decisão em `docs/tiktok_gmv_maturacao.md`.
 - `AWAITING_COLLECTION`/`AWAITING_SHIPMENT` entraram com prova dupla: 100% com
   `paid_at` preenchido em 01â€“24/08/2026 (3.876/3.876 e 4/4, contra 0/611 em
   `UNPAID`), e o contrato de status em `data_contracts.md` Â§2 que descreve
