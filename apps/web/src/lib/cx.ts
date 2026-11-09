@@ -123,7 +123,8 @@ export function textoSemComparacao(x: SemComparacao | null | undefined): { texto
   const [a, m, d] = (x.a_partir_de ?? "").slice(0, 10).split("-");
   return {
     texto: a && m && d ? `comparação a partir de ${d}/${m}` : "sem comparação",
-    detalhe: [x.motivo, x.detalhe].filter(Boolean).join(" · "),
+    // o detalhe ja' diz o motivo por extenso; sem ele, o motivo curto
+    detalhe: x.detalhe || x.motivo,
   };
 }
 
