@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
@@ -43,6 +44,7 @@ from app.schemas.account_performance import Cobertura, Indicador, MarcaFora
 from app.schemas.cx_atendimento import (
     AtendimentoResponse,
     ChatShopee,
+    ContaCx,
     CxShopeeResponse,
     DevolucoesShopee,
     LinhaDevolucao,
@@ -53,6 +55,8 @@ from app.schemas.cx_atendimento import (
     LinhaMarca,
     Motivo,
     Pendencia,
+    PontoDiaShopee,
+    SemComparacao,
 )
 from app.services.gold_service import BRAND_LABELS, BRANDS_IN_SCOPE, ML_BRANDS, TZ_OPERACIONAL
 
@@ -685,7 +689,8 @@ def _chat_shopee(brands: Optional[list[str]], consultar: Consultar, agora: datet
     for conta in oficial.contas:
         metricas = [m for m in conta.metricas if m.grupo == GRUPO_ATENDIMENTO]
         fora = sum(1 for m in metricas if m.situacao == "fora")
-        contas.append(conta.model_copy(update={
+        contas.append(ContaCx(**{
+            **conta.model_dump(),
             "metricas": metricas,
             "destaques": [],
             "resumo": (f"{fora} métrica(s) de atendimento fora da meta" if fora
@@ -1073,6 +1078,21 @@ def montar_cx_shopee(*, brands: Optional[list[str]] = None, dias: int = JANELA_P
     janela = calcular_janela(dias, agora)
     marcas_shopee = [m for m in marcas if m in SHOPEE_MARCAS]
     marcas_exp = [m for m in marcas if m in SHOPEE_EXPORT]
+    anterior = Janela(inicio=janela.inicio - timedelta(days=janela.dias),
+                      fim=janela.inicio - timedelta(days=1), dias=janela.dias)
+    hoje = agora.astimezone(TZ_OPERACIONAL).date()
+    # API-3: as consultas da comparacao correm em paralelo com as da aba
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        comparacao = pool.submit(_rodar_juntas, _tarefas_comparacao(
+            consultar, consultar_torre, marcas_shopee, marcas_exp, janela, anterior, agora, hoje))
+        return _montar_cx_shopee(consultar, consultar_torre, marcas, marcas_shopee, marcas_exp, brands,
+                                 janela, anterior, agora, hoje, comparacao.result)
+
+
+def _montar_cx_shopee(consultar: Consultar, consultar_torre: Consultar, marcas: list[str],
+                      marcas_shopee: list[str], marcas_exp: list[str], brands: Optional[list[str]],
+                      janela: Janela, anterior: Janela, agora: datetime, hoje: date,
+                      comparacao: Callable[[], dict]) -> CxShopeeResponse:
     # sem loja com app no filtro: nada a checar no Data Mart (bloco vazio legitimo)
     tabelas = _tabelas_cx(consultar) if marcas_shopee else {"returns": True, "chat": True}
     tab_exp = _tabelas_cx_export(consultar_torre, marcas_exp)
@@ -1090,21 +1110,315 @@ def montar_cx_shopee(*, brands: Optional[list[str]] = None, dias: int = JANELA_P
         estado_nl = estado_exp if not marcas_shopee else _juntar_estados(estado_nl, estado_exp)
         nao_lidas = nao_lidas + nl_exp
     chat = chat.model_copy(update={"nao_lidas_estado": estado_nl, "nao_lidas": nao_lidas})
-    # Comparacao so' de cancelamento: devolucoes (raw.shopee_returns) so' existem
-    # desde 05/10/2026 e o chat e' fotografia desde 04/11/2026.
-    anterior = Janela(inicio=janela.inicio - timedelta(days=janela.dias),
-                      fim=janela.inicio - timedelta(days=1), dias=janela.dias)
-    return CxShopeeResponse(
-        gerado_em=agora,
-        janela=janela,
-        janela_anterior=anterior,
-        chat=chat,
-        atendimento=_canal_shopee(consultar, marcas, janela, agora, consultar_torre, anterior),
-        devolucoes=_devolucoes_shopee(
-            consultar, marcas_shopee, janela, None if tabelas is None else tabelas["returns"],
-            consultar_torre=consultar_torre,
-            exp=(marcas_exp, None if tab_exp is None else tab_exp["returns"])),
-    )
+    atendimento = _canal_shopee(consultar, marcas, janela, agora, consultar_torre, anterior)
+    devolucoes = _devolucoes_shopee(
+        consultar, marcas_shopee, janela, None if tabelas is None else tabelas["returns"],
+        consultar_torre=consultar_torre,
+        exp=(marcas_exp, None if tab_exp is None else tab_exp["returns"]))
+    novos = _aplicar_comparacao(comparacao(), janela=janela, anterior=anterior, agora=agora, hoje=hoje,
+                                chat=chat, atendimento=atendimento, devolucoes=devolucoes,
+                                lojas=marcas_shopee + marcas_exp)
+    return CxShopeeResponse(gerado_em=agora, janela=janela, janela_anterior=anterior, **novos)
+
+
+# ---------------------------------------------------------------------------
+# API-3 (09/11/2026): periodo anterior e serie diaria da aba CX
+# ---------------------------------------------------------------------------
+#: Primeiro dia com dado de cada fonte (lojas com app, Kokeshi), medido em
+#: 08/11/2026. Janela anterior que comeca antes disso = None com motivo, nunca
+#: um numero parcial. Dia da serie antes disso = None.
+DESDE: dict[str, tuple[date, date]] = {
+    "cancelamento": (date(2026, 1, 1), date(2026, 10, 4)),   # Silver / export 034
+    "reembolso": (date(2026, 10, 5), date(2026, 10, 7)),     # raw.shopee_returns / export 036
+    "resposta": (date(2026, 11, 4), date(2026, 11, 6)),      # Saude da Conta
+    "contact_rate": (date(2026, 11, 4), date(2026, 11, 6)),  # foto do chat
+}
+#: Nome curto da fonte no motivo ("coleta desde 04/11").
+FONTE_CURTA = {"cancelamento": "pedidos", "reembolso": "devoluções",
+               "resposta": "coleta", "contact_rate": "coleta"}
+#: Foto do chat aceita como "a de N dias atras": a coleta roda a cada 2 h.
+TOLERANCIA_FOTO_CHAT = timedelta(hours=6)
+METRICA_RESPOSTA = 11  # shopee_11, "Taxa de resposta do chat"
+
+SEM_SERIE_CONTACT = SemComparacao(
+    motivo="sem contagem diária", a_partir_de=None,
+    detalhe="As conversas vêm de uma foto acumulada (7 ou 30 dias), sem contagem por dia.")
+SEM_CONTACT_90 = SemComparacao(motivo="só em 7 e 30 dias", a_partir_de=None,
+                               detalhe="Contact rate só existe nas janelas de 7 e 30 dias.")
+SEM_FONTE_ERRO = SemComparacao(motivo="fonte indisponível", a_partir_de=None, detalhe=MOTIVO_ERRO)
+
+
+def _desde(indicador: str, marca: str) -> date:
+    return DESDE[indicador][1 if marca in SHOPEE_EXPORT else 0]
+
+
+# Mesma regra de `SQL_SHOPEE_MARCAS` / `SQL_SHOPEE_EXPORT_MARCAS`, por dia.
+SQL_PEDIDOS_DIA = """
+SELECT shop_account AS marca, created_date_brt AS dia,
+       COUNT(*) FILTER (WHERE NOT (order_status = 'unpaid'
+                                   OR (order_status = 'cancelled'
+                                       AND lower(trim(cancel_reason)) = :nao_pago))) AS pedidos,
+       COUNT(*) FILTER (WHERE order_status = 'cancelled'
+                          AND lower(trim(coalesce(cancel_reason, ''))) <> :nao_pago) AS cancelados
+  FROM silver.stg_shopee_orders
+ WHERE shop_account = ANY(:marcas)
+   AND created_date_brt BETWEEN :inicio AND :fim
+ GROUP BY 1, 2
+"""
+SQL_PEDIDOS_DIA_EXPORT = f"""
+SELECT shop_account AS marca, (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
+       COUNT(*) FILTER (WHERE NOT (order_status = 'UNPAID'
+                                   OR (order_status = 'CANCELLED' AND {_NAO_PAGO_EXPORT}))) AS pedidos,
+       COUNT(*) FILTER (WHERE order_status = 'CANCELLED' AND NOT {_NAO_PAGO_EXPORT}) AS cancelados
+  FROM marts.expedicao_shopee_export_pedido
+ WHERE shop_account = ANY(:marcas)
+   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
+ GROUP BY 1, 2
+"""
+
+# Mesma regra de `SQL_DEVOLUCOES_MARCAS` (so' ACCEPTED vira reembolso), por dia.
+_SQL_DEVOLUCOES_DIA = """
+SELECT brand AS marca, (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia,
+       COUNT(*) FILTER (WHERE status = 'ACCEPTED') AS aceitas,
+       SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED') AS reembolsado
+  FROM {tabela}
+ WHERE brand = ANY(:marcas)
+   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
+ GROUP BY 1, 2
+"""
+SQL_DEVOLUCOES_DIA = _SQL_DEVOLUCOES_DIA.format(tabela="raw.shopee_returns")
+SQL_DEVOLUCOES_DIA_EXPORT = _SQL_DEVOLUCOES_DIA.format(tabela="marts.shopee_returns_export")
+
+_SQL_RESPOSTA_DIA = """
+SELECT brand AS marca, captured_date AS dia, current_period AS valor
+  FROM {tabela}
+ WHERE brand = ANY(:marcas)
+   AND metric_id = :metrica
+   AND captured_date BETWEEN :inicio AND :fim
+"""
+SQL_RESPOSTA_DIA = _SQL_RESPOSTA_DIA.format(tabela="raw.shopee_account_health_metric")
+SQL_RESPOSTA_DIA_EXPORT = _SQL_RESPOSTA_DIA.format(tabela="marts.shopee_saude_metrica_export")
+
+_SQL_CHAT_ANTERIOR = """
+SELECT DISTINCT ON (brand) brand AS marca, captured_at,
+       (to_jsonb(s) ->> 'conversas_7d')::int  AS conversas_7d,
+       (to_jsonb(s) ->> 'conversas_30d')::int AS conversas_30d
+  FROM {tabela} s
+ WHERE brand = ANY(:marcas)
+   AND captured_at BETWEEN :desde AND :ate
+ ORDER BY brand, captured_at DESC
+"""
+SQL_CHAT_ANTERIOR = _SQL_CHAT_ANTERIOR.format(tabela="raw.shopee_chat_snapshot")
+SQL_CHAT_ANTERIOR_EXPORT = _SQL_CHAT_ANTERIOR.format(tabela="marts.shopee_chat_export")
+
+
+def _dia(v: Any) -> Optional[date]:
+    """Data direto do banco ou texto ISO (reserva pelo Metabase)."""
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except ValueError:
+        return None
+
+
+def _rodar_juntas(tarefas: dict[str, tuple[Consultar, str, dict]]) -> dict[str, Optional[list[dict]]]:
+    """Consultas independentes em paralelo (a comparacao nao pode deixar a rota lenta)."""
+    if not tarefas:
+        return {}
+    with ThreadPoolExecutor(max_workers=len(tarefas)) as pool:
+        futuros = {nome: pool.submit(_rodar, c, nome, sql, p) for nome, (c, sql, p) in tarefas.items()}
+        return {nome: f.result() for nome, f in futuros.items()}
+
+
+def _tarefas_comparacao(consultar: Consultar, consultar_torre: Consultar, api: list[str], exp: list[str],
+                        janela: Janela, anterior: Janela, agora: datetime, hoje: date) -> dict:
+    """Uma consulta por fonte; a de devolucoes cobre a janela anterior e a atual juntas."""
+    t: dict[str, tuple[Consultar, str, dict]] = {}
+    alvo = agora - timedelta(days=janela.dias)
+    for marcas, c, sufixo in ((api, consultar, ""), (exp, consultar_torre, "_export")):
+        if not marcas:
+            continue
+        exportar = bool(sufixo)
+        p_ped = {"marcas": marcas, "inicio": janela.inicio, "fim": janela.fim}
+        if not exportar:
+            p_ped["nao_pago"] = SHOPEE_NAO_PAGO
+        t["pedidos" + sufixo] = (c, SQL_PEDIDOS_DIA_EXPORT if exportar else SQL_PEDIDOS_DIA, p_ped)
+        t["devolucoes" + sufixo] = (c, SQL_DEVOLUCOES_DIA_EXPORT if exportar else SQL_DEVOLUCOES_DIA,
+                                    {"marcas": marcas, "inicio": anterior.inicio, "fim": janela.fim})
+        # da foto mais velha que a comparacao pede (a de inicio - dias) ate' hoje
+        t["resposta" + sufixo] = (c, SQL_RESPOSTA_DIA_EXPORT if exportar else SQL_RESPOSTA_DIA,
+                                  {"marcas": marcas, "inicio": janela.inicio - timedelta(days=janela.dias),
+                                   "fim": hoje, "metrica": METRICA_RESPOSTA})
+        if janela.dias <= 30:
+            t["chat" + sufixo] = (c, SQL_CHAT_ANTERIOR_EXPORT if exportar else SQL_CHAT_ANTERIOR,
+                                  {"marcas": marcas, "desde": alvo - TOLERANCIA_FOTO_CHAT, "ate": alvo})
+        if exportar and anterior.inicio >= _desde("cancelamento", marcas[0]):
+            t["pedidos_anterior_export"] = (c, SQL_SHOPEE_EXPORT_MARCAS,
+                                            {"marcas": marcas, "inicio": anterior.inicio, "fim": anterior.fim})
+    return t
+
+
+def _juntar(res: dict, nome: str) -> Optional[list[dict]]:
+    """Linhas das duas fontes; None se alguma das consultadas falhou."""
+    partes = [res[k] for k in (nome, nome + "_export") if k in res]
+    if any(p is None for p in partes):
+        return None
+    return [linha for p in partes for linha in p]
+
+
+def _por_marca_dia(linhas: Optional[list[dict]]) -> Optional[dict[tuple[str, Optional[date]], dict]]:
+    if linhas is None:
+        return None
+    return {(str(r.get("marca")), _dia(r.get("dia"))): r for r in linhas}
+
+
+def _rotulos(marcas) -> str:
+    return ", ".join(_rotulo_marca(m) for m in sorted(set(marcas)))
+
+
+def sem_cobertura(indicador: str, faltam: list[str], precisa_de: date, fator: int, dias: int,
+                  erro: bool = False) -> SemComparacao:
+    """Motivo de faltar comparacao. `precisa_de` = o dia mais velho que ela exige;
+    `fator` = quantas janelas para tras (1 = foto de N dias atras ou a serie; 2 =
+    soma da janela anterior). `a_partir_de` = coleta mais nova entre as lojas + fator x dias."""
+    if erro:
+        return SEM_FONTE_ERRO
+    desde = max(_desde(indicador, m) for m in faltam)
+    if precisa_de < desde:
+        return SemComparacao(
+            motivo=f"{FONTE_CURTA[indicador]} desde {desde.strftime('%d/%m')}",
+            a_partir_de=desde + timedelta(days=fator * dias),
+            detalhe=(f"O dado começa em {desde.strftime('%d/%m')} ({_rotulos(faltam)}): "
+                     f"o período de comparação ainda não está coberto."))
+    return SemComparacao(motivo="sem medida", a_partir_de=None,
+                         detalhe=f"Sem medida no período de comparação: {_rotulos(faltam)}.")
+
+
+def _aplicar_comparacao(res: dict, *, janela: Janela, anterior: Janela, agora: datetime, hoje: date,
+                        chat: ChatShopee, atendimento: CanalAtendimento, devolucoes: DevolucoesShopee,
+                        lojas: list[str]) -> dict:
+    """Preenche os `*_anterior` e devolve os campos da resposta (API-3)."""
+    n = janela.dias
+    sem_anterior: dict[str, SemComparacao] = {}
+    sem_serie: dict[str, SemComparacao] = {}
+
+    # --- Cancelamento: a Kokeshi ganha anterior quando o export cobre a janela
+    ant_exp = res.get("pedidos_anterior_export")
+    linhas_at = []
+    for l in atendimento.marcas:
+        if l.marca in SHOPEE_EXPORT and ant_exp is not None and l.pedidos is not None:
+            r = next((x for x in ant_exp if str(x.get("marca")) == l.marca), {})
+            l = l.model_copy(update={"pedidos_anterior": _int(r.get("pedidos")) or 0,
+                                     "cancelamentos_anterior": _int(r.get("cancelados")) or 0})
+        linhas_at.append(l)
+    atendimento = atendimento.model_copy(update={"marcas": linhas_at})
+    faltam = [l.marca for l in linhas_at if l.pedidos_anterior is None]
+    if faltam:
+        erro = any(l.pedidos is None for l in linhas_at if l.marca in faltam) or (
+            "pedidos_anterior_export" in res and ant_exp is None)
+        sem_anterior["cancelamento"] = sem_cobertura("cancelamento", faltam, anterior.inicio, 2, n, erro)
+
+    # --- Reembolso: devolucoes aceitas e R$ por loja e dia
+    dev_dia = _por_marca_dia(_juntar(res, "devolucoes"))
+    linhas_dev = {l.marca: l for l in devolucoes.marcas} if devolucoes.estado == "dado" else {}
+
+    def soma_dev(m: str, inicio: date, fim: date) -> tuple[Optional[int], Optional[float]]:
+        """None = loja sem carga de devolucoes, consulta falhou ou periodo antes da coleta."""
+        l = linhas_dev.get(m)
+        if dev_dia is None or l is None or l.devolucoes is None or inicio < _desde("reembolso", m):
+            return None, None
+        aceitas, valor, sem_valor = 0, 0.0, False
+        for (marca, dia), r in dev_dia.items():
+            if marca == m and dia is not None and inicio <= dia <= fim:
+                q = _int(r.get("aceitas")) or 0
+                aceitas += q
+                if r.get("reembolsado") is not None:
+                    valor += float(r["reembolsado"])
+                elif q:
+                    sem_valor = True  # aceita sem valor: o total e' desconhecido (nunca zero)
+        return aceitas, (None if sem_valor else round(valor, 2))
+
+    if devolucoes.estado == "dado":
+        novas = []
+        for l in devolucoes.marcas:
+            a, v = soma_dev(l.marca, anterior.inicio, anterior.fim)
+            novas.append(l.model_copy(update={"aceitas_anterior": a, "reembolsado_anterior": v}))
+        devolucoes = devolucoes.model_copy(update={"marcas": novas})
+        faltam = [l.marca for l in novas if l.aceitas_anterior is None]
+        if faltam:
+            erro = dev_dia is None or any(l.devolucoes is None for l in novas if l.marca in faltam)
+            sem_anterior["reembolso"] = sem_cobertura("reembolso", faltam, anterior.inicio, 2, n, erro)
+    elif lojas:
+        sem_anterior["reembolso"] = (SEM_FONTE_ERRO if devolucoes.estado == "erro" else SemComparacao(
+            motivo="sem devoluções", a_partir_de=None, detalhe=devolucoes.motivo_indisponivel))
+
+    # --- Taxa de resposta (shopee_11): foto de N dias antes da foto atual.
+    # NAO e' `metricas[].anterior` (o `last_period` da Shopee = foto do dia anterior).
+    resp_dia = _por_marca_dia(_juntar(res, "resposta"))
+
+    def resposta(m: str, dia: Optional[date]) -> Optional[float]:
+        r = (resp_dia or {}).get((m, dia))
+        return None if r is None or r.get("valor") is None else float(r["valor"])
+
+    contas = [c.model_copy(update={"resposta_anterior_pct": resposta(c.marca, c.dia - timedelta(days=n))})
+              for c in chat.contas]
+    faltam = [c.marca for c in contas if c.resposta_anterior_pct is None] + [s.marca for s in chat.sem_foto]
+    if faltam:
+        sem_anterior["resposta"] = sem_cobertura("resposta", faltam, hoje - timedelta(days=n), 1, n,
+                                                 resp_dia is None)
+
+    # --- Contact rate: conversas na foto do chat de `agora - dias`
+    nao_lidas = chat.nao_lidas
+    if n > 30:
+        sem_anterior["contact_rate"] = SEM_CONTACT_90
+    elif lojas:
+        fotos = _juntar(res, "chat")
+        por_marca = {str(r.get("marca")): r for r in (fotos or [])}
+        campo = "conversas_7d" if n == 7 else "conversas_30d"
+        nao_lidas = [x.model_copy(update={"conversas_anterior": _int(por_marca.get(x.marca, {}).get(campo))})
+                     for x in nao_lidas]
+        com_chat = {x.marca for x in nao_lidas}
+        faltam = [x.marca for x in nao_lidas if x.conversas_anterior is None] + \
+                 [m for m in lojas if m not in com_chat]
+        if faltam:
+            sem_anterior["contact_rate"] = sem_cobertura(
+                "contact_rate", faltam, (agora - timedelta(days=n)).astimezone(TZ_OPERACIONAL).date(), 1, n,
+                fotos is None or chat.nao_lidas_estado == "erro")
+    if lojas:
+        sem_serie["contact_rate"] = SEM_SERIE_CONTACT
+    chat = chat.model_copy(update={"contas": contas, "nao_lidas": nao_lidas})
+
+    # --- Serie diaria: dia x loja; None = nao medido naquele dia
+    ped_dia = _por_marca_dia(_juntar(res, "pedidos"))
+    ped_ok = {l.marca for l in linhas_at if l.pedidos is not None}
+    serie: list[PontoDiaShopee] = []
+    falta = {"cancelamento": set(), "reembolso": set(), "resposta": set()}
+    for i in range(n):
+        dia = janela.inicio + timedelta(days=i)
+        for m in lojas:
+            ponto = {"dia": dia, "marca": m, "resposta_pct": resposta(m, dia)}
+            if ped_dia is not None and m in ped_ok and dia >= _desde("cancelamento", m):
+                r = ped_dia.get((m, dia), {})  # fonte com historico: dia sem linha = zero medido
+                ponto["pedidos"] = _int(r.get("pedidos")) or 0
+                ponto["cancelamentos"] = _int(r.get("cancelados")) or 0
+            ponto["devolucoes_aceitas"], ponto["reembolsado"] = soma_dev(m, dia, dia)
+            if ponto.get("pedidos") is None:
+                falta["cancelamento"].add(m)
+            if ponto["devolucoes_aceitas"] is None or ponto.get("pedidos") is None:
+                falta["reembolso"].add(m)
+            if ponto["resposta_pct"] is None:
+                falta["resposta"].add(m)
+            serie.append(PontoDiaShopee(**ponto))
+    erros = {"cancelamento": ped_dia is None, "reembolso": dev_dia is None or devolucoes.estado != "dado",
+             "resposta": resp_dia is None}
+    for ind, faltam in falta.items():
+        if faltam:
+            sem_serie[ind] = sem_cobertura(ind, list(faltam), janela.inicio, 1, n, erros[ind])
+    return {"chat": chat, "atendimento": atendimento, "devolucoes": devolucoes, "serie_diaria": serie,
+            "sem_anterior": sem_anterior, "sem_serie": sem_serie}
 
 
 consultar_torre_padrao = consultar_torre

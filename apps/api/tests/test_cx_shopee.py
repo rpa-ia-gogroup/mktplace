@@ -155,7 +155,8 @@ def test_rota_shopee_responde_e_repassa_filtros(cliente):
     assert r.status_code == 200
     assert chamadas == [(["apice"], 90)]
     corpo = r.json()
-    assert set(corpo) == {"gerado_em", "janela", "janela_anterior", "chat", "atendimento", "devolucoes"}
+    assert set(corpo) == {"gerado_em", "janela", "janela_anterior", "chat", "atendimento", "devolucoes",
+                          "serie_diaria", "sem_anterior", "sem_serie"}  # API-3, aditivos
 
 
 def test_flag_desligada_e_404(cliente, monkeypatch):

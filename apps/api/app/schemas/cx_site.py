@@ -12,7 +12,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from app.schemas.account_performance import MarcaFora
-from app.schemas.cx_atendimento import EstadoBloco, Janela
+from app.schemas.cx_atendimento import EstadoBloco, Janela, SemComparacao
 
 #: Janelas aceitas (dias fechados ate' D-1).
 JANELAS_SITE: tuple[int, ...] = (30, 90)
@@ -26,6 +26,8 @@ class Bloco(BaseModel):
     aviso_frescor: Optional[str] = None
     motivo_indisponivel: Optional[str] = None
     fora: list[MarcaFora] = []
+    #: API-3: por que o bloco nao tem periodo anterior e quando passa a ter. None = tem.
+    sem_anterior: Optional[SemComparacao] = None
 
 
 class NpsMarca(BaseModel):
@@ -36,6 +38,16 @@ class NpsMarca(BaseModel):
     detratores_pct: float
 
 
+class PontoNps(BaseModel):
+    """Um dia. Contagens para o front somar por semana e recalcular o NPS
+    (media de NPS nao vale). Dia sem medida = tudo None; 0 respostas = nps None."""
+    dia: date
+    respostas: Optional[int] = None
+    promotores: Optional[int] = None
+    detratores: Optional[int] = None
+    nps: Optional[float] = None
+
+
 class BlocoNps(Bloco):
     respostas: Optional[int] = None
     nps: Optional[float] = None
@@ -43,6 +55,12 @@ class BlocoNps(Bloco):
     neutros_pct: Optional[float] = None
     detratores_pct: Optional[float] = None
     marcas: list[NpsMarca] = []
+    #: API-3: o mesmo na `janela_anterior`; None = sem medida (motivo em `sem_anterior`).
+    respostas_anterior: Optional[int] = None
+    nps_anterior: Optional[float] = None
+    promotores_pct_anterior: Optional[float] = None
+    detratores_pct_anterior: Optional[float] = None
+    serie: list[PontoNps] = []
 
 
 class ReenvioMarca(BaseModel):
@@ -55,6 +73,13 @@ class ReenvioMarca(BaseModel):
     sem_valor: int
     #: Receita do e-commerce da marca nas safras. None = sem faturamento.
     faturamento: Optional[float] = None
+    taxa_reenvio_pct: Optional[float] = None
+    taxa_reembolso_pct: Optional[float] = None
+
+
+class PontoSafra(BaseModel):
+    """Uma safra (mes do pedido original). Taxa None = sem faturamento do mes."""
+    safra: date
     taxa_reenvio_pct: Optional[float] = None
     taxa_reembolso_pct: Optional[float] = None
 
@@ -73,6 +98,13 @@ class BlocoReenvio(Bloco):
     #: Preenchido quando a taxa nao sai (ex.: faturamento ausente).
     motivo_sem_taxa: Optional[str] = None
     marcas: list[ReenvioMarca] = []
+    #: API-3: safras anteriores do mesmo tamanho e a taxa nelas (mesma regra).
+    safra_anterior_inicio: Optional[date] = None
+    safra_anterior_fim: Optional[date] = None
+    taxa_reenvio_pct_anterior: Optional[float] = None
+    taxa_reembolso_pct_anterior: Optional[float] = None
+    #: Uma por safra, das anteriores ate' as atuais (2 em 30 dias, 6 em 90).
+    serie: list[PontoSafra] = []
 
 
 class NotaAgregada(BaseModel):
@@ -91,6 +123,14 @@ class ReviewsProduto(NotaAgregada):
     produto: str
 
 
+class PontoReviews(BaseModel):
+    """Um dia. `baixas` (1-3 estrelas) em contagem, para o front somar por semana."""
+    dia: date
+    reviews: Optional[int] = None
+    baixas: Optional[int] = None
+    baixas_pct: Optional[float] = None
+
+
 class BlocoReviews(Bloco):
     #: Ultima review que chegou ao Data Mart (mostra ate' onde a carga foi).
     ultima_review_em: Optional[datetime] = None
@@ -101,11 +141,17 @@ class BlocoReviews(Bloco):
     minimo_reviews: int
     piores: list[ReviewsProduto] = []
     melhores: list[ReviewsProduto] = []
+    #: API-3: o mesmo na `janela_anterior`.
+    reviews_anterior: Optional[int] = None
+    baixas_pct_anterior: Optional[float] = None
+    serie: list[PontoReviews] = []
 
 
 class CxSiteResponse(BaseModel):
     gerado_em: datetime
     janela: Janela
+    #: API-3: os mesmos `dias` antes de `janela` (base de `*_anterior` de NPS e reviews).
+    janela_anterior: Optional[Janela] = None
     nps: BlocoNps
     reenvio_reembolso: BlocoReenvio
     reviews: BlocoReviews

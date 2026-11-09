@@ -171,6 +171,28 @@ Implementada antes das ingestões, para a aba nascer útil sem depender de revis
   0,61% na reputação oficial do mesmo período: o campo inclui o cancelamento pedido pelo comprador e não
   aplica as exclusões do ML. A taxa oficial vem do snapshot de reputação (aba Performance, CX-MKT-2).
 
+### 7.2 API-3 (09/11/2026): período anterior e série dos cards
+
+Campos aditivos em `GET /api/v1/cx/shopee` e `GET /api/v1/cx/site`. Período anterior = os mesmos `dias`
+imediatamente antes (`janela_anterior`), mesmas marcas, mesma regra do card. Sem medida = `null` com
+`sem_anterior` (`SemComparacao`: `motivo` curto, `a_partir_de` = primeiro dia em que o mesmo recorte fica
+coberto, `detalhe`), nunca zero e nunca número parcial.
+
+| Card | Anterior | Série |
+|---|---|---|
+| Taxa de resposta do chat (shopee_11) | `chat.contas[].resposta_anterior_pct`: foto de N dias antes da atual (não o `last_period`, que é a foto do dia anterior) | `serie_diaria[].resposta_pct` (foto do dia) |
+| Contact rate | `chat.nao_lidas[].conversas_anterior`: foto do chat de `agora − N` (7/30 d) | não existe: a coleta é uma foto acumulada |
+| Cancelamento | `atendimento.marcas[].*_anterior` (Kokeshi quando o export cobre) | `serie_diaria[].pedidos/cancelamentos` |
+| Reembolso | `devolucoes.marcas[].aceitas_anterior/reembolsado_anterior` | `serie_diaria[].devolucoes_aceitas/reembolsado` |
+| NPS (site) | `nps.*_anterior` | `nps.serie[]` com contagens (o front soma por semana) |
+| Reviews 1–3★ (site) | `reviews.baixas_pct_anterior` (sem anterior com a carga parada) | `reviews.serie[]` com contagens |
+| Reenvio/reembolso (site) | safras anteriores do mesmo tamanho (`taxa_*_anterior`) | `reenvio_reembolso.serie[]`, uma por safra |
+
+`serie_diaria` vem por dia × loja; o front agrega com a regra do card, e loja `null` no dia anula o ponto.
+Início de cada fonte (medido em 08/11/2026): pedidos Silver 01/2026 e export Kokeshi 04/10; devoluções 05/10
+(Kokeshi 07/10); Saúde da Conta e chat 04/11 (Kokeshi 06/11); NPS `cx_nps` 28/08. As consultas novas rodam em
+paralelo com as da aba.
+
 ## 8. Arquitetura e fases
 
 Mesmo caminho da Expedição: o Airflow (`goca-airflow`) chama as APIs e grava no Data Mart; um pipeline deste
