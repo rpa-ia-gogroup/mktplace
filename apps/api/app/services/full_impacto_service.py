@@ -56,6 +56,12 @@ MOTIVO_SEM_FOTO = "Nenhuma foto de estoque publicada ainda."
 MOTIVO_SEM_ANCORA = (
     "Sem anúncio-âncora por inventário (migration 038) ou sem a tabela de "
     "preços: não há como achar o preço do item.")
+#: API-4 -- por que nao ha' "antes" (o front nao mostra delta).
+MOTIVO_SEM_FOTO_ANTERIOR = "Sem foto anterior publicada."
+MOTIVO_RECORTE_DIFERENTE = (
+    "A foto anterior tem outro recorte (marcas ou contas diferentes): "
+    "comparar daria variação falsa.")
+
 MOTIVO_GMV_INCOMPLETO = (
     f"GMV Full com menos de {JANELA_GMV_DIAS} dias na janela: o % ficaria inflado.")
 
@@ -141,6 +147,24 @@ SQL_ML_GMV = text(f"""
 
 SQL_SHOPEE_ULTIMA_FOTO = text(
     f"SELECT MAX(ref_date) FROM {fbs_stock_svc.FACT_TABLE}")
+
+# API-4 -- foto ANTERIOR (a ultima antes da atual) e o recorte de cada foto.
+# O "antes" so' existe com o MESMO recorte (marcas no ML, contas na Shopee):
+# foto parcial dos dois lados daria variacao falsa.
+SQL_ML_FOTO_ANTERIOR = text(f"""
+    SELECT MAX(ref_date) FROM {ml_stock_svc.INVENTORY_TABLE}
+     WHERE brand = ANY(CAST(:brands AS text[])) AND ref_date < :ref_date
+""")
+SQL_ML_RECORTE = text(f"""
+    SELECT ARRAY_AGG(DISTINCT brand ORDER BY brand) FROM {ml_stock_svc.INVENTORY_TABLE}
+     WHERE brand = ANY(CAST(:brands AS text[])) AND ref_date = :ref_date
+""")
+SQL_SHOPEE_FOTO_ANTERIOR = text(
+    f"SELECT MAX(ref_date) FROM {fbs_stock_svc.FACT_TABLE} WHERE ref_date < :ref_date")
+SQL_SHOPEE_RECORTE = text(f"""
+    SELECT ARRAY_AGG(DISTINCT shop_account ORDER BY shop_account)
+      FROM {fbs_stock_svc.FACT_TABLE} WHERE ref_date = :ref_date
+""")
 
 #: Preco mensal por (marca, SKU): o mes mais recente ate' a foto. AVG porque
 #: a fonte pode ter mais de uma linha por SKU no mes (variacoes).
@@ -278,6 +302,13 @@ def _ml(db: Session) -> dict:
     ref = db.execute(SQL_ML_ULTIMA_FOTO, {"brands": marcas}).scalar()
     if ref is None:
         return _ausente("ml", MOTIVO_SEM_FOTO)
+    atual = _ml_na_foto(db, marcas, ref)
+    ant = db.execute(SQL_ML_FOTO_ANTERIOR, {"brands": marcas, "ref_date": ref}).scalar()
+    return _com_anterior(db, atual, ant, SQL_ML_RECORTE, {"brands": marcas},
+                         lambda d: _ml_na_foto(db, marcas, d))
+
+
+def _ml_na_foto(db: Session, marcas: list[str], ref: date) -> dict:
     p = {"brands": marcas, "ref_date": ref}
     itens, fallback = [], 0
     for r in db.execute(SQL_ML_RUPTURAS, p).mappings().all():
@@ -305,6 +336,13 @@ def _shopee(db: Session) -> dict:
     ref = db.execute(SQL_SHOPEE_ULTIMA_FOTO).scalar()
     if ref is None:
         return _ausente("shopee", MOTIVO_SEM_FOTO)
+    atual = _shopee_na_foto(db, ref)
+    ant = db.execute(SQL_SHOPEE_FOTO_ANTERIOR, {"ref_date": ref}).scalar()
+    return _com_anterior(db, atual, ant, SQL_SHOPEE_RECORTE, {},
+                         lambda d: _shopee_na_foto(db, d))
+
+
+def _shopee_na_foto(db: Session, ref: date) -> dict:
     p = {"ref_date": ref}
     itens = []
     for r in db.execute(SQL_SHOPEE_RUPTURAS, p).mappings().all():
@@ -319,6 +357,24 @@ def _shopee(db: Session) -> dict:
         })
     gmv = db.execute(SQL_SHOPEE_GMV, p).mappings().all()
     return _montar_canal("shopee", ref, itens, gmv, 0)
+
+
+#: O que a foto anterior devolve: so' os totais do canal (o "antes" dos cartoes).
+CAMPOS_ANTERIOR = ("ref_date", "rupturas", "sem_estoque_vendedor", "perda_dia",
+                   "perda_dia_sem_vendedor", "dias_gmv", "pct_gmv_full",
+                   "pct_gmv_full_sem_vendedor", "motivo_pct")
+
+
+def _com_anterior(db: Session, atual: dict, ant: Optional[date], sql_recorte,
+                  params: dict, calcular) -> dict:
+    """Anexa a foto anterior ao canal, so' com o MESMO recorte; senao `None` + motivo."""
+    if ant is None:
+        return {**atual, "anterior": None, "motivo_anterior": MOTIVO_SEM_FOTO_ANTERIOR}
+    recorte = lambda d: db.execute(sql_recorte, {**params, "ref_date": d}).scalar() or []
+    if list(recorte(atual["ref_date"])) != list(recorte(ant)):
+        return {**atual, "anterior": None, "motivo_anterior": MOTIVO_RECORTE_DIFERENTE}
+    antes = calcular(ant)
+    return {**atual, "anterior": {k: antes[k] for k in CAMPOS_ANTERIOR}, "motivo_anterior": None}
 
 
 def get_impacto_ruptura(db: Session, *, ml_ligado: bool, shopee_ligado: bool) -> dict:

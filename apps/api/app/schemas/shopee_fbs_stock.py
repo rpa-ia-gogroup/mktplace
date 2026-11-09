@@ -132,7 +132,9 @@ class EstoqueFullUnavailableResponse(BaseModel):
     #: Por que nao ha' dado. Distingue flag desligada de fato ausente.
     unavailable_reason: str
     motivo_tecnico: Literal[
-        "feature_flag_desligada", "fato_inexistente", "sem_fotografia_publicada"
+        "feature_flag_desligada", "fato_inexistente", "sem_fotografia_publicada",
+        # API-4: `ref_date` pedido sem fotografia no dia.
+        "sem_fotografia_na_data"
     ]
     scope_label: str
     limitacoes: list[str] = Field(default_factory=list)

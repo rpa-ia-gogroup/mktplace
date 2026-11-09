@@ -67,10 +67,13 @@ SH_GMV = [{"brand": "apice", "gmv": Decimal("2800"), "dias": 28, "fim": date(202
 
 class Sessao:
     def __init__(self, tabelas=True, ancora=True, ml_gmv=ML_GMV, sh_gmv=SH_GMV,
-                 ref_ml=REF_ML):
+                 ref_ml=REF_ML, ant_ml=None, ant_sh=None, recortes=None):
         self.tabelas, self.ancora = tabelas, ancora
         self.ml_gmv, self.sh_gmv, self.ref_ml = ml_gmv, sh_gmv, ref_ml
+        # API-4: foto anterior (None = nao ha') e recorte por dia (padrao: igual).
+        self.ant_ml, self.ant_sh, self.recortes = ant_ml, ant_sh, recortes or {}
         self.comandos: list[str] = []
+        self.params: list[tuple[str, dict]] = []
 
     def _nome(self, stmt):
         for mod in (svc, ml_stock_svc):
@@ -82,6 +85,8 @@ class Sessao:
     def execute(self, stmt, params=None):
         n = self._nome(stmt)
         self.comandos.append(n)
+        self.params.append((n, dict(params or {})))
+        dia = (params or {}).get("ref_date")
         return {
             "SQL_SOMENTE_LEITURA": lambda: _R(),
             "SQL_TABELAS_EXISTEM": lambda: _R(escalar=self.tabelas),
@@ -92,6 +97,10 @@ class Sessao:
             "SQL_SHOPEE_ULTIMA_FOTO": lambda: _R(escalar=REF_SH),
             "SQL_SHOPEE_RUPTURAS": lambda: _R(SH_RUPTURAS),
             "SQL_SHOPEE_GMV": lambda: _R(self.sh_gmv),
+            "SQL_ML_FOTO_ANTERIOR": lambda: _R(escalar=self.ant_ml),
+            "SQL_SHOPEE_FOTO_ANTERIOR": lambda: _R(escalar=self.ant_sh),
+            "SQL_ML_RECORTE": lambda: _R(escalar=self.recortes.get(("ml", dia), ["barbours", "kokeshi"])),
+            "SQL_SHOPEE_RECORTE": lambda: _R(escalar=self.recortes.get(("shopee", dia), ["apice", "barbours"])),
         }[n]()
 
 
@@ -146,6 +155,33 @@ def test_gmv_incompleto_nao_vira_percentual():
     assert sh["pct_gmv_full"] is None and sh["gmv_full_dia"] is None
     assert sh["motivo_pct"] == svc.MOTIVO_GMV_INCOMPLETO
     assert sh["perda_dia"] == 65.0, "a perda continua medida"
+
+
+# ---------------------------------------------------------------------------
+# API-4 -- foto anterior (o "antes" dos cartoes)
+# ---------------------------------------------------------------------------
+
+def test_foto_anterior_com_o_mesmo_recorte_vem_com_a_data():
+    ant_ml, ant_sh = date(2026, 11, 3), date(2026, 11, 7)
+    s = Sessao(ant_ml=ant_ml, ant_sh=ant_sh)
+    b = _bloco(s)
+    assert b["ml"]["anterior"]["ref_date"] == ant_ml and b["ml"]["motivo_anterior"] is None
+    assert b["shopee"]["anterior"]["ref_date"] == ant_sh
+    assert set(b["shopee"]["anterior"]) == set(svc.CAMPOS_ANTERIOR), "so' os totais, sem itens"
+    # o calculo da foto anterior roda NA data dela (rupturas e janela do %)
+    dias = {p.get("ref_date") for n, p in s.params if n in ("SQL_ML_RUPTURAS", "SQL_ML_GMV")}
+    assert dias == {REF_ML, ant_ml}
+
+
+def test_sem_foto_anterior_ou_recorte_diferente_nao_tem_antes():
+    b = _bloco()
+    assert b["ml"]["anterior"] is None and b["ml"]["motivo_anterior"] == svc.MOTIVO_SEM_FOTO_ANTERIOR
+    # foto do ML de hoje sem uma marca que a anterior tinha: nada de variacao falsa
+    ant = date(2026, 11, 3)
+    s = Sessao(ant_ml=ant, recortes={("ml", REF_ML): ["barbours"], ("ml", ant): ["barbours", "kokeshi"]})
+    ml = _bloco(s)["ml"]
+    assert ml["anterior"] is None and ml["motivo_anterior"] == svc.MOTIVO_RECORTE_DIFERENTE
+    assert not [p for n, p in s.params if n == "SQL_ML_RUPTURAS" and p["ref_date"] == ant], "nao calcula o que nao vai usar"
 
 
 def test_r_nunca_e_somado_entre_canais():

@@ -992,9 +992,12 @@ def shopee_fbs_estoque(
         False, description="So' ruptura e baixo: o que exige acao hoje."),
     limite: int = Query(
         LIMITE_PADRAO_ESTOQUE_FULL, ge=1, le=fbs_stock_svc.MAX_PRODUTOS),
+    ref_date: Optional[date] = Query(
+        None, description="Dia da fotografia. Padrao: a ultima publicada."),
     db: Session = Depends(get_db),
 ):
-    """Estoque fisico no CD da Shopee (FBS), por produto, na ultima fotografia.
+    """Estoque fisico no CD da Shopee (FBS), por produto, na ultima fotografia
+    (ou na do dia `ref_date`, como o `/ml-full-estoque`).
 
     Mede o ESTOQUE, nao o desempenho: `/shopee-fbs` classifica o PEDIDO pela
     modalidade e nao e' tocado aqui. O estoque Full e' a soma de
@@ -1021,10 +1024,15 @@ def shopee_fbs_estoque(
             motivo_tecnico="feature_flag_desligada",
         )
 
+    hoje = today_brt()
+    if ref_date is not None and ref_date > hoje:
+        raise HTTPException(422, ERRO_ML_FULL_ESTOQUE_DATA_FUTURA)
+
     try:
         return fbs_stock_svc.get_estoque_full_block(
             _require_db(db),
-            hoje=today_brt(),
+            hoje=hoje,
+            ref_date=ref_date,
             brands=brands,
             accounts=accounts,
             classificacoes=classificacoes,

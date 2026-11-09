@@ -115,6 +115,11 @@ MOTIVO_FATO_INEXISTENTE = (
     "migrations 020 e 021 não foram aplicadas. Não há estoque medido — isto "
     "não significa estoque zero."
 )
+#: API-4: o dia pedido em `ref_date` nao tem fotografia (a carga nao rodou nele).
+MOTIVO_SEM_FOTOGRAFIA_NA_DATA = (
+    "Não há fotografia do Estoque Full da Shopee neste dia. Isto não "
+    "significa estoque zero.")
+
 MOTIVO_SEM_FOTOGRAFIA = (
     "A tabela de Estoque Full existe, mas nenhuma fotografia foi publicada "
     "ainda: a carga `sync_shopee_fbs_stock_daily` nunca rodou neste ambiente. "
@@ -174,6 +179,11 @@ class SemFotografiaPublicada(EstoqueFullIndisponivel):
     mensagem = MOTIVO_SEM_FOTOGRAFIA
 
 
+class SemFotografiaNaData(EstoqueFullIndisponivel):
+    motivo_tecnico = "sem_fotografia_na_data"
+    mensagem = MOTIVO_SEM_FOTOGRAFIA_NA_DATA
+
+
 class EstoqueFullContractError(Exception):
     """A fonte devolveu algo fora do dominio declarado."""
 
@@ -213,6 +223,11 @@ SQL_FATO_EXISTE = text("""
 
 SQL_ULTIMA_FOTOGRAFIA = text(f"""
     SELECT MAX(ref_date) AS ref_date FROM {FACT_TABLE}
+""")
+
+#: API-4 (`ref_date` pedido): o dia tem fotografia? So' existencia, sem contar.
+SQL_FOTOGRAFIA_NO_DIA = text(f"""
+    SELECT EXISTS (SELECT 1 FROM {FACT_TABLE} WHERE ref_date = :ref_date)
 """)
 
 #: Filtro de escopo compartilhado entre indicadores e listagem. Marca e conta
@@ -447,8 +462,9 @@ def get_estoque_full_block(
     busca: Optional[str] = None,
     somente_acao: bool = False,
     limite: int = MAX_PRODUTOS,
+    ref_date: Optional[date] = None,
 ):
-    """Fotografia mais recente do Estoque Full, com indicadores e limitacoes.
+    """Fotografia do Estoque Full (a mais recente, ou a do dia `ref_date`).
 
     Levanta `FatoInexistente` ou `SemFotografiaPublicada` -- o router as
     traduz para uma resposta `unavailable`, NUNCA para zeros.
@@ -477,9 +493,15 @@ def get_estoque_full_block(
     if not fato_disponivel(db):
         raise FatoInexistente()
 
-    ref_date = db.execute(SQL_ULTIMA_FOTOGRAFIA).scalar()
-    if ref_date is None:
+    ultima = db.execute(SQL_ULTIMA_FOTOGRAFIA).scalar()
+    if ultima is None:
         raise SemFotografiaPublicada()
+    # API-4: dia pedido (ex.: a foto anterior, para o "antes"). Sem foto no dia
+    # e' ausencia declarada, nunca a ultima foto no lugar dela.
+    if ref_date is not None and ref_date != ultima:
+        if not db.execute(SQL_FOTOGRAFIA_NO_DIA, {"ref_date": ref_date}).scalar():
+            raise SemFotografiaNaData()
+    ref_date = ref_date or ultima
 
     acao = list(CLASSIFICACOES_EXIGEM_ACAO)
     escopo = {"ref_date": ref_date, "brands": marcas,
