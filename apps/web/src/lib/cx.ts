@@ -905,7 +905,7 @@ export function simbolosMeta(texto: string): string {
 /** "Meta >= 60" (Shopee) -> "meta ≥ 60%"; outro formato fica como veio. */
 export function metaCurta(rotulo: string): string {
   const m = /^meta\s*(>=|<=|>|<)\s*([\d.,]+)\s*%?$/i.exec(rotulo.trim());
-  if (!m) return simbolosMeta(rotulo);
+  if (!m) return simbolosMeta(rotulo).replace(/^Meta /, "meta "); // minusculo como o formato curto
   const sinal = { ">=": "≥", "<=": "≤", ">": ">", "<": "<" }[m[1]] ?? m[1];
   return `meta ${sinal} ${m[2]}%`;
 }

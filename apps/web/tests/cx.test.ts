@@ -791,7 +791,7 @@ test("meta: sinais matematicos em todo texto de meta da CX e da Gerencial", () =
   assert.equal(simbolosMeta("meta > 4,5"), "meta > 4,5", "sinal estrito fica como esta'");
   // Gerencial (card CX) usa metaCurta: o formato conhecido e o que cai no texto cru
   assert.equal(metaCurta("Meta >= 60"), "meta ≥ 60%");
-  assert.equal(metaCurta("Meta <= 2 dias"), "Meta ≤ 2 dias");
+  assert.equal(metaCurta("Meta <= 2 dias"), "meta ≤ 2 dias", "minusculo como o formato curto");
   // detalhe da marca, celula da tabela e fila: nenhum ">=" sobra
   const p = comConversas(30);
   const textos = [
