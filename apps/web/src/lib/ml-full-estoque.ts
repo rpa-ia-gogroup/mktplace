@@ -33,6 +33,7 @@ import {
   fmtOpcional,
 } from "./estoque-full.ts";
 import { brandLabel } from "./filters/brands.ts";
+import type { Curva, CurvaMeta, CurvaMotivo } from "./estoque-curva.ts";
 
 export { SEM_DADO, fmtCobertura, fmtData, fmtDecimal, fmtInt, fmtOpcional };
 
@@ -110,6 +111,9 @@ export interface InventarioML {
   anuncios_extras?: number | null;
   /** TRUE = ancora e' variacao e o SKU/titulo e' do ITEM (ambiguo). */
   ancora_e_variacao?: boolean | null;
+  /** PR3 (#302): curva ABC do inventario; `null` = sem curva (nunca C). */
+  curva?: Curva | null;
+  curva_motivo?: CurvaMotivo | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -267,6 +271,8 @@ export interface MLFullEstoqueOk {
     observacao: string;
   };
   limitacoes: string[];
+  /** PR3 (#302): estado da curva nesta lista. */
+  curva_meta?: CurvaMeta | null;
 }
 
 export type MotivoIndisponivelML =

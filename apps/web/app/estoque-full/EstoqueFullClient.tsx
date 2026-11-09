@@ -39,8 +39,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import KpiCard from "@/components/KpiCard";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
+import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import { EstoqueFullError, fetchEstoqueFull } from "@/lib/api-client";
+import {
+  avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao, type OpcaoCurva,
+} from "@/lib/estoque-curva";
 import {
   AVISO_CONTEXTO,
   AVISO_COBERTURA_TORRE,
@@ -49,6 +53,7 @@ import {
   CLASS_LABEL,
   CLASS_TOM,
   CONTAS_ESPERADAS_API,
+  EXIGEM_ACAO,
   FILTROS_VAZIOS,
   PROXIMO_PASSO,
   SEM_DADO,
@@ -170,17 +175,20 @@ function PorCD({ produto }: { produto: ProdutoEstoque }) {
   );
 }
 
-function Tabela({ produtos }: { produtos: ProdutoEstoque[] }) {
+function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: boolean }) {
   return (
     <div className="bg-surface rounded-2xl border border-line overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">
-          Estoque Full por produto, ordenado por urgência de reposição
+          {comCurva
+            ? "Estoque Full por produto: produtos AA, depois A, depois os demais; dentro de cada grupo, menos dias de cobertura primeiro"
+            : "Estoque Full por produto, ordenado por urgência de reposição"}
         </caption>
         <thead>
           <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
             <th scope="col" className="px-4 py-3">Conta / marca</th>
             <th scope="col" className="px-4 py-3">SKU e produto</th>
+            {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
             <th scope="col" className="px-4 py-3 text-right">Estoque Full vendável</th>
             <th scope="col" className="px-4 py-3 text-right">Demanda 28d</th>
             <th scope="col" className="px-4 py-3 text-right">
@@ -217,6 +225,11 @@ function Tabela({ produtos }: { produtos: ProdutoEstoque[] }) {
                   {nomeExibido(p)}
                 </span>
               </td>
+              {comCurva && (
+                <td className="px-4 py-3">
+                  <CelulaCurva item={p} />
+                </td>
+              )}
               <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
                 {fmtInt(p.full_stock_saleable)}
                 {p.full_stock_total !== p.full_stock_saleable && (
@@ -267,6 +280,8 @@ export default function EstoqueFullClient() {
   const [payload, setPayload] = useState<EstoqueFullResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  // CURVA-ABC: filtro so' na tela (a API ja' manda a curva de cada item).
+  const [curvas, setCurvas] = useState<OpcaoCurva[]>([]);
 
   // Debounce da busca: digitar "capa" nao pode disparar quatro requisicoes.
   const [buscaDigitada, setBuscaDigitada] = useState("");
@@ -342,7 +357,19 @@ export default function EstoqueFullClient() {
   const limpar = () => {
     setBuscaDigitada("");
     setFiltros(FILTROS_VAZIOS);
+    setCurvas([]);
   };
+
+  // CURVA-ABC: coluna, filtro e ordem por grupos so' com a curva lida.
+  const metaCurva = payload && !isIndisponivel(payload) ? payload.curva_meta : null;
+  const comCurva = curvaNaTela(metaCurva);
+  const filtroCurva = comCurva ? curvas : [];
+  const lista = payload && !isIndisponivel(payload)
+    ? comCurva
+      ? ordenarPorCurva(payload.produtos.filter((p) => passaCurva(p.curva, filtroCurva)), (p) => p.cobertura_torre_dias)
+      : payload.produtos
+    : [];
+  const algumFiltro = temFiltroAtivo(filtros) || filtroCurva.length > 0;
 
   // Ausencia de conta NUNCA vira zero: so' contas presentes viram filtro, e
   // conta selecionada que nao veio na resposta esconde os numeros.
@@ -406,6 +433,8 @@ export default function EstoqueFullClient() {
         ))}
       </div>
 
+      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} />}
+
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           <span className="sr-only">Buscar por SKU ou produto</span>
@@ -428,7 +457,7 @@ export default function EstoqueFullClient() {
           />
           Somente itens que exigem ação
         </label>
-        {temFiltroAtivo(filtros) && (
+        {algumFiltro && (
           <button
             type="button"
             onClick={limpar}
@@ -589,7 +618,11 @@ export default function EstoqueFullClient() {
                 </Aviso>
               )}
 
-              {payload.total_no_filtro === 0 ? (
+              {avisoCurvaIndisponivel(metaCurva) && (
+                <Aviso tom="info" role="status">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
+              )}
+
+              {payload.total_no_filtro === 0 || lista.length === 0 ? (
                 /* Vazio POR FILTRO: os cartoes acima continuam de pe', porque o
                    dado existe. E' diferente de indisponivel. */
                 <section
@@ -599,7 +632,7 @@ export default function EstoqueFullClient() {
                   <h3 className="text-base font-semibold text-ink">
                     Nenhum produto neste filtro
                   </h3>
-                  {temFiltroAtivo(filtros) && (
+                  {algumFiltro && (
                     <button
                       type="button"
                       onClick={limpar}
@@ -611,12 +644,18 @@ export default function EstoqueFullClient() {
                 </section>
               ) : (
                 <>
+                  {comCurva && (
+                    <p className="text-sm font-medium text-ink px-1">
+                      {resumoAcao(lista, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
+                    </p>
+                  )}
                   <p className="text-xs text-ink-faint px-1">
+                    {filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
                     {fmtInt(payload.produtos.length)} de{" "}
                     {fmtInt(payload.total_no_filtro)} produtos
                     {payload.truncado && " · lista truncada, refine o filtro"}
                   </p>
-                  <Tabela produtos={payload.produtos} />
+                  <Tabela produtos={lista} comCurva={comCurva} />
                 </>
               )}
             </>
