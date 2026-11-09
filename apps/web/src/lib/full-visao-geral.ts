@@ -28,6 +28,7 @@ import {
   tituloMarca,
   type MLFullEstoqueResponse,
 } from "./ml-full-estoque.ts";
+import { doCanal } from "./canal-preposicao.ts";
 
 export type Canal = "ml" | "shopee";
 
@@ -410,6 +411,23 @@ export interface CanalImpactoOk {
   motivo_pct: string | null;
   marcas: MarcaImpacto[];
   itens: ItemImpacto[];
+  /** API-4 (so' com `?anterior=true`): os totais na foto anterior, mesmo recorte. */
+  anterior?: ImpactoAnterior | null;
+  motivo_anterior?: string | null;
+  /** So' com recorte diferente: marcas (ML) ou contas (Shopee) que so' existem numa das fotos. */
+  diferenca_recorte?: { ref_date_anterior: string; so_na_atual: string[]; so_na_anterior: string[] } | null;
+}
+
+export interface ImpactoAnterior {
+  ref_date: string;
+  rupturas: number;
+  sem_estoque_vendedor: number | null;
+  perda_dia: number | null;
+  perda_dia_sem_vendedor: number | null;
+  dias_gmv: number;
+  pct_gmv_full: number | null;
+  pct_gmv_full_sem_vendedor: number | null;
+  motivo_pct: string | null;
 }
 
 export type CanalImpacto = CanalImpactoOk | { canal: Canal; status: "unavailable"; motivo: string };
@@ -563,3 +581,73 @@ export function dicaImpacto(canal: Canal, impacto: ImpactoRuptura | null): strin
   const bruto = c && c.perda_dia !== null ? ` Contando também os que têm estoque do vendedor: ${fmtReais(c.perda_dia)}/dia.` : "";
   return `Impacto POTENCIAL: venda média diária de 28 dias × preço médio do mês por SKU, só dos itens sem estoque do vendedor.${bruto} ${fim}${semPreco}`;
 }
+
+// ---------------------------------------------------------------------------
+// API-4 -- o "antes" dos cartoes (foto anterior). Nada inventado: sem os dois
+// lados medidos, sem pilula; variacao de taxa em p.p.; lower_is_better.
+// ---------------------------------------------------------------------------
+
+export interface Antes {
+  /** Variacao em pontos percentuais (fracao 0..1 -> pontos). */
+  pp: number;
+  /** "antes 14,6% · foto de 07/11". */
+  texto: string;
+}
+
+function antesDe(atual: number | null, antes: number | null, ref: string): Antes | null {
+  if (atual === null || antes === null) return null;
+  return { pp: (atual - antes) * 100, texto: `antes ${fmtPct(antes)} · foto de ${diaMes(ref)}` };
+}
+
+/**
+ * Cartao de impacto: % de destaque (ML: perda; Shopee: so' quem para a venda)
+ * agora contra a foto anterior. `comAnterior` e' a 2a chamada (`?anterior=true`):
+ * so' vale se a foto atual dela for a MESMA ja' desenhada.
+ */
+export function antesImpacto(canal: Canal, atual: ImpactoRuptura | null, comAnterior: ImpactoRuptura | null): Antes | null {
+  const c = impactosOk(atual).find((x) => x.canal === canal);
+  const d = impactosOk(comAnterior).find((x) => x.canal === canal);
+  if (!c || !d?.anterior || d.ref_date !== c.ref_date) return null;
+  return antesDe(pctDestaque(canal, c), pctDestaque(canal, d.anterior), d.anterior.ref_date);
+}
+
+/** "Param a venda": % das rupturas sem estoque do vendedor, agora e na foto anterior da Shopee. */
+export function antesParamVenda(atual: ResumoCanal | undefined, antes: ResumoCanal | null): Antes | null {
+  if (atual?.status !== "ok" || antes?.status !== "ok") return null;
+  return antesDe(pct(atual.semVendedor, atual.ruptura), pct(antes.semVendedor, antes.ruptura), antes.refDate);
+}
+
+/**
+ * Heroi: so' com os DOIS canais medidos agora e na foto anterior (o total de
+ * um canal so' nao e' o mesmo recorte). As fotos anteriores tem datas
+ * diferentes por canal: o texto diz as duas.
+ */
+export function antesHeroi(canais: ResumoCanal[], antes: { ml: ResumoCanal | null; shopee: ResumoCanal | null } | null): Antes | null {
+  const agora = oks(canais);
+  const ml = antes?.ml, sh = antes?.shopee;
+  if (agora.length !== 2 || ml?.status !== "ok" || sh?.status !== "ok") return null;
+  const taxa = (cs: ResumoOk[]) => pct(cs.reduce((s, c) => s + c.ruptura, 0), cs.reduce((s, c) => s + c.base, 0));
+  const a = taxa(agora), b = taxa([ml, sh]);
+  if (a === null || b === null) return null;
+  return { pp: (a - b) * 100, texto: `antes ${fmtPct(b)} · fotos de ${diaMes(ml.refDate)} (ML) e ${diaMes(sh.refDate)} (Shopee)` };
+}
+
+/**
+ * Por que o cartao ficou sem pilula, para title + sr-only (sem texto novo na
+ * tela). So' depois da 2a chamada; `null` quando ha' comparacao.
+ * Ex.: "sem comparação: a foto anterior do ML (04/11) tem RITUÁRIA e a atual não".
+ */
+export function semComparacao(canal: Canal, comAnterior: ImpactoRuptura | null): string | null {
+  const c = impactosOk(comAnterior).find((x) => x.canal === canal);
+  if (!c || c.anterior) return null;
+  const d = c.diferenca_recorte;
+  if (!d) return `sem comparação: não há foto anterior ${doCanal(canal, NOME_CANAL[canal])}`;
+  const lista = (xs: string[]) => xs.map(tituloMarca).join(", ");
+  const quando = diaMes(d.ref_date_anterior);
+  const partes = [
+    d.so_na_anterior.length ? `a foto anterior ${doCanal(canal, NOME_CANAL[canal])} (${quando}) tem ${lista(d.so_na_anterior)} e a atual não` : null,
+    d.so_na_atual.length ? `a foto atual ${doCanal(canal, NOME_CANAL[canal])} tem ${lista(d.so_na_atual)} e a anterior (${quando}) não` : null,
+  ].filter(Boolean);
+  return `sem comparação: ${partes.join("; ")}`;
+}
+

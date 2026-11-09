@@ -2584,8 +2584,9 @@ export async function fetchMLFullEstoque(
  * canal vem `ok` ou `unavailable` com motivo; falha da rota inteira vira erro
  * e a Visao geral segue sem o R$, nunca com R$ 0.
  */
-export async function fetchImpactoRuptura(signal?: AbortSignal): Promise<ImpactoRuptura> {
-  const res = await torreFetch(`${API_URL}/api/v1/performance/full-impacto-ruptura`, { signal });
+/** `anterior`: soma a foto anterior de cada canal (API-4) -- mais lenta; a tela pede depois de desenhar. */
+export async function fetchImpactoRuptura(signal?: AbortSignal, anterior = false): Promise<ImpactoRuptura> {
+  const res = await torreFetch(`${API_URL}/api/v1/performance/full-impacto-ruptura${anterior ? "?anterior=true" : ""}`, { signal });
   if (!res.ok) throw new Error("O impacto no faturamento está indisponível no momento.");
   return (await res.json()) as ImpactoRuptura;
 }

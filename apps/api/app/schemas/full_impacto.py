@@ -36,6 +36,26 @@ class MarcaImpacto(BaseModel):
     pct_gmv_full_sem_vendedor: Optional[float] = None
 
 
+class ImpactoAnterior(BaseModel):
+    """API-4: os totais do canal na foto ANTERIOR (mesmo recorte), para o "antes"."""
+    ref_date: date
+    rupturas: int
+    sem_estoque_vendedor: Optional[int] = None
+    perda_dia: Optional[float] = None
+    perda_dia_sem_vendedor: Optional[float] = None
+    dias_gmv: int
+    pct_gmv_full: Optional[float] = None
+    pct_gmv_full_sem_vendedor: Optional[float] = None
+    motivo_pct: Optional[str] = None
+
+
+class DiferencaRecorte(BaseModel):
+    """API-4: por que a foto anterior nao compara (marcas no ML, contas na Shopee)."""
+    ref_date_anterior: date
+    so_na_atual: list[str]
+    so_na_anterior: list[str]
+
+
 class CanalImpactoOk(BaseModel):
     canal: Literal["ml", "shopee"]
     status: Literal["ok"] = "ok"
@@ -57,6 +77,13 @@ class CanalImpactoOk(BaseModel):
     motivo_pct: Optional[str] = None
     marcas: list[MarcaImpacto]
     itens: list[ItemImpacto]
+    #: API-4 (so' com `?anterior=true`): a foto anterior com o mesmo recorte.
+    #: `None` sem o parametro, ou sem "antes" (sem foto anterior ou recorte
+    #: diferente; nesses dois casos o motivo vem em `motivo_anterior`).
+    anterior: Optional[ImpactoAnterior] = None
+    motivo_anterior: Optional[str] = None
+    #: So' com recorte diferente: o que so' existe numa das fotos.
+    diferenca_recorte: Optional[DiferencaRecorte] = None
 
 
 class CanalImpactoIndisponivel(BaseModel):

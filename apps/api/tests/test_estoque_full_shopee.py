@@ -322,6 +322,31 @@ def test_endpoint_de_desempenho_nao_foi_alterado(cliente, monkeypatch):
     assert r.json()["status"] == "unavailable"
 
 
+def test_ref_date_futura_e_422_sem_tocar_o_banco(cliente, monkeypatch):
+    """API-4: `ref_date` como no ML. Data futura e' erro do pedido, antes do banco."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "shopee_fbs_stock_enabled", True)
+    r = cliente.get("/api/v1/performance/shopee-fbs-estoque", params={"ref_date": "2999-01-01"})
+    assert r.status_code == 422
+
+
+def test_dia_sem_foto_cabe_no_contrato_de_indisponivel():
+    """API-4: o motivo novo e' aceito pela resposta `unavailable` (sem ele, 500)."""
+    from app.schemas.shopee_fbs_stock import EstoqueFullUnavailableResponse
+    r = EstoqueFullUnavailableResponse(
+        scope_label=svc.SCOPE_LABEL, unavailable_reason=svc.SemFotografiaNaData.mensagem,
+        motivo_tecnico=svc.SemFotografiaNaData.motivo_tecnico)
+    assert r.motivo_tecnico == "sem_fotografia_na_data"
+
+
+def test_ref_date_pedida_so_consulta_o_dia_depois_do_snapshot():
+    """Sem `ref_date` nada muda; com ela, so' um EXISTS do dia, ja' no snapshot."""
+    corpo = SERVICE_SRC.split("def get_estoque_full_block")[1]
+    assert corpo.index("SQL_SNAPSHOT_COERENTE") < corpo.index("SQL_FOTOGRAFIA_NO_DIA")
+    assert "if ref_date is not None and ref_date != ultima:" in corpo
+    assert "raise SemFotografiaNaData()" in corpo
+
+
 def test_rota_nova_nao_exigiu_editar_main():
     """O PR #45 esta corrigindo `main.py`: nao podemos tocar nele."""
     main_src = io.open(RAIZ / "app" / "main.py", encoding="utf-8").read()
@@ -454,6 +479,17 @@ def test_falta_so_o_grao_fino_tambem_e_indisponivel(engine, sessao):
     """)
     with pytest.raises(svc.FatoInexistente):
         _bloco(sessao)
+
+
+@pg
+def test_ref_date_com_foto_le_o_dia_e_sem_foto_e_ausencia(engine, sessao):
+    """API-4: o dia pedido e' lido; dia sem foto nunca vira a ultima foto nem zero."""
+    _estado(engine, DDL + SEED)
+    assert _bloco(sessao, ref_date=REF).frescor.ref_date == REF
+    with pytest.raises(svc.SemFotografiaNaData) as exc:
+        _bloco(sessao, ref_date=date(2026, 9, 1))
+    assert exc.value.motivo_tecnico == "sem_fotografia_na_data"
+    assert "não significa estoque zero" in exc.value.mensagem
 
 
 @pg
