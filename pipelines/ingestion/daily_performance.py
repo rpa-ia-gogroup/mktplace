@@ -366,6 +366,61 @@ _DATE_WINDOW_ALLOWED_SOURCES = ("tiktok", "shopee-stats", "ml")
 #: com o dia fechado.
 FONTES_HOJE_POR_PADRAO = ("shopee", "shopee-stats", "shopee-ads")
 
+#: Largura do backfill por `--days` quando o argumento nao vem (o default
+#: historico do argparse era 3, e o backfill sempre o recebeu).
+BACKFILL_DAYS_PADRAO = 3
+
+#: T-0077: fontes em que `--days` vale TAMBEM no modo incremental. Antes o
+#: incremental ignorava `--days` para todas as fontes (o `dia_ml --days 2` do
+#: Airflow cobria a janela padrao do conector, nao D-2..D0). No ML o argumento
+#: passa a valer; nas demais o comportamento nao muda e o descarte vira aviso.
+FONTES_DAYS_NO_INCREMENTAL = ("ml",)
+
+
+class WindowViolation(ValueError):
+    """Linha canonica fora da janela `--date-from/--date-to` pedida (T-0077).
+
+    O reparo do ML promete escrever SO' dentro da janela. A consulta do conector
+    ja filtra pela janela; esta barreira faz disso uma propriedade do caminho de
+    escrita, e nao so' do SQL. Bloqueia, nao filtra.
+    """
+
+
+def _assert_canonical_rows_in_window(rows: list[dict], window: tuple[date, date],
+                                     source: str) -> None:
+    fora = sorted({r["date"] for r in rows
+                   if r.get("date") is not None
+                   and not (window[0] <= r["date"] <= window[1])})
+    if not fora:
+        return
+    raise WindowViolation(
+        f"source={source!r}: {len(fora)} data(s) fora da janela pedida "
+        f"{window[0].isoformat()}..{window[1].isoformat()} — primeiras: "
+        f"{', '.join(d.isoformat() for d in fora[:5])}. Carregamento bloqueado "
+        "ANTES do upsert."
+    )
+
+
+def _fetch_kwargs(source: str, mode: str, days_back: int | None) -> dict:
+    """kwargs do `fetch_incremental`/`fetch_backfill` (caminho sem janela exata).
+
+    - backfill: `days_back`, ou `BACKFILL_DAYS_PADRAO` sem `--days`;
+    - incremental em `FONTES_DAYS_NO_INCREMENTAL`: `days_back` quando veio;
+    - incremental nas demais: nada (janela do conector), com aviso se veio.
+    """
+    if mode == "backfill":
+        return {"days_back": BACKFILL_DAYS_PADRAO if days_back is None else days_back}
+    if days_back is None:
+        return {}
+    if source in FONTES_DAYS_NO_INCREMENTAL:
+        return {"days_back": days_back}
+    logger.warning(
+        "--days %s ignorado no modo incremental para source=%s: vale a janela "
+        "propria do conector. Use --mode backfill para uma janela por --days.",
+        days_back, source,
+    )
+    return {}
+
 
 class ClosedDayViolation(ValueError):
     """Linha canonica com data posterior ao ultimo dia fechado.
@@ -438,12 +493,15 @@ def _resolve_date_window(
 def run(
     source: str,
     mode: str,
-    days_back: int = 3,
+    days_back: int | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
     incluir_hoje: bool = False,
     ate_ontem: bool = False,
-) -> None:
+) -> dict:
+    """Roda a ingestao. Devolve `{"status", "rows_loaded", "source_min_date",
+    "source_max_date"}` (T-0077: o reparo do ML confere o desfecho de cada
+    janela; o CLI ignora o retorno, como antes)."""
     # `--incluir-hoje`: publica tambem o dia corrente, PARCIAL. Toda a execucao
     # (janela, conectores e segunda defesa) roda com o teto em D0. O incremental
     # seguinte sem a flag termina em D-1 e regrava esta data com o dia fechado.
@@ -529,8 +587,7 @@ def run(
             if window is not None:
                 raw_rows = connector_fetch(window[0], window[1])
             else:
-                kwargs = {"days_back": days_back} if mode == "backfill" else {}
-                raw_rows = fetch_fn(**kwargs)
+                raw_rows = fetch_fn(**_fetch_kwargs(source, mode, days_back))
             rows_extracted = len(raw_rows)
 
             canonical_rows = transform_fn(raw_rows)
@@ -547,6 +604,8 @@ def run(
             # BLOQUEIA, nao filtra: descartar em silencio esconderia um conector
             # quebrado e faria a contagem carregada divergir da extraida sem aviso.
             _assert_canonical_rows_closed(canonical_rows, source)
+            if window is not None:
+                _assert_canonical_rows_in_window(canonical_rows, window, source)
 
             # MARGEM-REAL-2B — guardrail fail-closed da comissao do ML.
             #
@@ -583,7 +642,9 @@ def run(
                         session, sync_run_id, "failed",
                         rows_extracted, 0, None, None, msg,
                     )
-                return
+                return {"status": "failed", "rows_loaded": 0,
+                        "source_min_date": None, "source_max_date": None,
+                        "error": msg}
 
             rows_loaded = 0
             source_dates = [r["date"] for r in canonical_rows if r.get("date")]
@@ -614,6 +675,9 @@ def run(
                 )
 
             logger.info("Sync concluído: %d linhas carregadas", rows_loaded)
+            return {"status": "success", "rows_loaded": rows_loaded,
+                    "source_min_date": min(source_dates) if source_dates else None,
+                    "source_max_date": max(source_dates) if source_dates else None}
 
         except Exception as exc:
             logger.exception("Erro inesperado durante sync: %s", exc)
@@ -625,12 +689,16 @@ def run(
             raise
 
 
-if __name__ == "__main__":
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Pipeline de ingestão diária de marketplaces")
     parser.add_argument("--source", required=True, choices=["tiktok", "ml", "shopee", "shopee-stats", "shopee-ads"])
     parser.add_argument("--mode", required=True, choices=["incremental", "backfill"])
-    parser.add_argument("--days", type=int, default=3,
-                        help="Quantos dias para trás (modo incremental=3, backfill=90)")
+    # T-0077: default None para distinguir "nao veio" de "veio 3". Backfill sem
+    # --days continua em 3; incremental sem --days usa a janela do conector.
+    parser.add_argument("--days", type=int, default=None,
+                        help="Quantos dias para trás além de D-1. backfill: default 3. "
+                             "incremental: vale só para --source ml; nas demais "
+                             "fontes é ignorado (com aviso) e vale a janela do conector.")
     parser.add_argument("--date-from", default=None, metavar="YYYY-MM-DD",
                         help="Data inicial exata (só --mode backfill; source em tiktok/shopee-stats/ml)")
     parser.add_argument("--date-to", default=None, metavar="YYYY-MM-DD",
@@ -641,7 +709,11 @@ if __name__ == "__main__":
                            "Padrão: Shopee até hoje; TikTok e ML até ontem.")
     teto.add_argument("--ate-ontem", action="store_true",
                       help="Publica só até ontem, também na Shopee.")
-    args = parser.parse_args()
+    return parser
+
+
+if __name__ == "__main__":
+    args = build_parser().parse_args()
     # Lock ocupado NAO e' erro generico: sai com EXIT_CODE_LOCK_UNAVAILABLE (75,
     # `EX_TEMPFAIL`) para que o log do orquestrador distinga "outra esteira
     # estava publicando" de "o step quebrou". O orquestrador nao reexecuta step
