@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Archive, EyeOff, PackageCheck, PackageX, Share2, TrendingDown } from "lucide-react";
 
 import {
-  ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
+  AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
 import TableScrollHint from "@/components/TableScrollHint";
 import PageContainer from "@/components/layout/PageContainer";
@@ -64,7 +64,8 @@ import {
   SEM_DADO,
   TITULO_INDISPONIVEL_ML,
   buildQueryML,
-  coberturaMarcasLabel,
+  avisoTopoML,
+  diagnosticoML,
   dataParaFiltroML,
   eDataHistorica,
   eErroDataFuturaML,
@@ -80,7 +81,6 @@ import {
   hojeSaoPauloML,
   identificacaoML,
   isIndisponivelML,
-  leituraLabel,
   mostrarAvisoVelhaML,
   motivoParcialLegivel,
   subtextoSaldoZeroML,
@@ -594,7 +594,14 @@ export default function MLFullEstoqueClient() {
     <PageContainer>
       <PageHeader
         title="Estoque Full Mercado Livre"
-        scopeLine={escopo}
+        scopeLine={
+          payload && !isIndisponivelML(payload) ? (
+            <span className="inline-flex items-center gap-1">
+              {escopo}
+              <InfoDica texto={diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))} />
+            </span>
+          ) : escopo
+        }
         filters={filtrosUI}
       />
 
@@ -654,42 +661,18 @@ export default function MLFullEstoqueClient() {
             </Aviso>
           )}
 
-          {/* Cobertura e parcialidade SEMPRE visiveis, antes dos numeros (o
-              frescor esta no escopo do cabecalho). */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-ink-muted">
-              {coberturaMarcasLabel(payload.cobertura)}
-            </span>
-            <span className="rounded-full border border-line bg-surface px-2.5 py-1 text-ink-muted">
-              {leituraLabel(payload.cobertura.leitura)}
-            </span>
-            {payload.cobertura.marcas_sem_fotografia.length > 0 && (
-              <span className="rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 text-warn-ink">
-                Sem fotografia:{" "}
-                {payload.cobertura.marcas_sem_fotografia.map(tituloMarca).join(", ")}{" "}
-                — ausência, não zero
-              </span>
-            )}
-            {/* Zero MEDIDO: tom neutro, nunca o ambar da ausencia. */}
-            {marcasSemEstoqueFullML(payload.marcas).length > 0 && (
-              <span className="rounded-full border border-line bg-raised px-2.5 py-1 text-ink-muted">
-                {ROTULO_SEM_ESTOQUE_FULL_ML}:{" "}
-                {marcasSemEstoqueFullML(payload.marcas).map(tituloMarca).join(", ")}
-              </span>
-            )}
-            {payload.indicadores.total_parcial && (
-              <span className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-soft px-2.5 py-1 font-semibold text-warn-ink">
-                Total parcial
-                <InfoDica
-                  texto={payload.indicadores.motivos_total_parcial
-                    .map(motivoParcialLegivel)
-                    .join(" ")}
-                />
-              </span>
-            )}
-          </div>
+          {/* AVISOS-TOPO: UM aviso, so' com problema real (o diagnostico esta' no ⓘ do cabecalho). */}
+          {avisoTopoML(payload.cobertura, payload.indicadores.total_parcial) && (
+            <AvisoTopo
+              texto={avisoTopoML(payload.cobertura, payload.indicadores.total_parcial)!}
+              ajuda={[
+                "Ausência de dado, não zero.",
+                ...payload.indicadores.motivos_total_parcial.map(motivoParcialLegivel),
+              ].join(" ")}
+            />
+          )}
 
-          {/* O "Total parcial" acima e' o UNICO aviso; nos cards so' title + leitor de tela. */}
+          {/* O aviso acima e' o UNICO; nos cards so' title + leitor de tela. */}
           <FaixaCategorias
             cards={cardsML(payload)}
             ativa={chaveCategoria}

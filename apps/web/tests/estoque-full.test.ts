@@ -29,6 +29,7 @@ import {
   SEM_DADO,
   TITULO_INDISPONIVEL,
   avisoContasAusentes,
+  avisoTopoShopee,
   buildQuery,
   contasAusentes,
   contasPresentes,
@@ -454,7 +455,8 @@ test("a cobertura e' rotulada como calculo nosso", () => {
 
 test("a marca nao coberta aparece como ausencia, nunca como zero", () => {
   assert.ok(CLIENT_SRC.includes("marcas_nao_cobertas"));
-  assert.match(CLIENT_SRC, /como ausência, nunca como zero/);
+  // AVISOS-TOPO: o aviso unico diz no ⓘ que e' ausencia, nao zero.
+  assert.match(CLIENT_SRC, /Ausência de dado, não estoque zero/);
 });
 
 test("o truncamento e' dito ao usuario", () => {
@@ -641,11 +643,15 @@ test("a cobertura dos botoes so' vem de resposta sem filtro de conta", () => {
   assert.match(trecho, /if \(escopoCompleto\) \{\s*setCobertasFotografia/);
 });
 
-test("a tela exibe o aviso de conta ausente como status acessivel", () => {
-  assert.match(
-    CLIENT_SRC,
-    /<Aviso tom="alerta" role="status">\s*\{avisoContasAusentes\(/,
-  );
+test("AVISOS-TOPO: conta ausente e marca fora da cobertura viram UM aviso acessivel", () => {
+  assert.match(CLIENT_SRC, /avisoTopoShopee\(\[\.\.\.contasSemFotografia, \.\.\.payload\.marcas_nao_cobertas\]/);
+  assert.equal((CLIENT_SRC.match(/<AvisoTopo/g) ?? []).length, 1);
+  assert.ok(!CLIENT_SRC.includes("Cobertura parcial: sem"));
+  assert.equal(avisoTopoShopee(["KOKESHI"]), "Sem KOKESHI nesta foto · total parcial");
+  assert.equal(avisoTopoShopee(["LESCENT", "KOKESHI", "LESCENT"]), "Sem LESCENT, KOKESHI nesta foto · total parcial");
+  assert.equal(avisoTopoShopee([]), null);
+  const comp = readFileSync(new URL("../src/components/full/CategoriasEstoque.tsx", import.meta.url), "utf-8");
+  assert.match(comp, /<p role="status" className="flex flex-wrap items-center gap-1 px-1 text-xs text-warn-ink">/);
 });
 
 test("conta selecionada sem fotografia esconde os cartoes", () => {

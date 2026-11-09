@@ -434,6 +434,27 @@ export function coberturaMarcasLabel(c: CoberturaML): string {
   );
 }
 
+/**
+ * AVISOS-TOPO: UM aviso no topo da aba, so' com problema real, no estilo do
+ * heroi do Full: "Sem RITUÁRIA nesta foto · total parcial". `null` = nada a avisar.
+ */
+export function avisoTopoML(c: CoberturaML, totalParcial: boolean): string | null {
+  const sem = c.marcas_sem_fotografia.map(tituloMarca);
+  if (sem.length) return `Sem ${sem.join(", ")} nesta foto${totalParcial ? " · total parcial" : ""}`;
+  return totalParcial ? "Total parcial" : null;
+}
+
+/** AVISOS-TOPO: o diagnostico (marcas com foto, leitura, zero medido) vai para o ⓘ do cabecalho. */
+export function diagnosticoML(c: CoberturaML, semEstoqueFull: readonly string[]): string {
+  return [
+    `${coberturaMarcasLabel(c)}.`,
+    `${leituraLabel(c.leitura)}.`,
+    semEstoqueFull.length
+      ? `${ROTULO_SEM_ESTOQUE_FULL_ML} (zero medido, não ausência): ${semEstoqueFull.map(tituloMarca).join(", ")}.`
+      : "",
+  ].filter(Boolean).join(" ");
+}
+
 export function leituraLabel(l: Leitura): string {
   return (
     `${fmtInt(l.inventarios_lidos)} de ${fmtInt(l.inventarios)} inventários ` +

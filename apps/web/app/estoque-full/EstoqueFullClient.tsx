@@ -39,7 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Archive, Boxes, CheckCircle2, Layers, PackageX, Snowflake, TrendingDown } from "lucide-react";
 
 import {
-  ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
+  AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -62,7 +62,7 @@ import {
   PROXIMO_PASSO,
   SEM_DADO,
   TITULO_INDISPONIVEL,
-  avisoContasAusentes,
+  avisoTopoShopee,
   buildQuery,
   contasAusentes,
   contasPresentes,
@@ -579,10 +579,12 @@ export default function EstoqueFullClient() {
             </Aviso>
           )}
 
-          {contasSemFotografia.length > 0 && (
-            <Aviso tom="alerta" role="status">
-              {avisoContasAusentes(contasSemFotografia.map(tituloMarca))}
-            </Aviso>
+          {/* AVISOS-TOPO: UM aviso (conta sem fotografia + marca fora da cobertura). */}
+          {avisoTopoShopee([...contasSemFotografia, ...payload.marcas_nao_cobertas].map(tituloMarca)) && (
+            <AvisoTopo
+              texto={avisoTopoShopee([...contasSemFotografia, ...payload.marcas_nao_cobertas].map(tituloMarca))!}
+              ajuda="Ausência de dado, não estoque zero: os totais e os cards não contam essas contas."
+            />
           )}
 
           {selecionadasSemFotografia.length > 0 ? (
@@ -610,20 +612,12 @@ export default function EstoqueFullClient() {
             </section>
           ) : (
             <>
-              {/* Parcial: UM aviso no topo; nos cards so' title + leitor de tela. */}
-              {payload.marcas_nao_cobertas.length > 0 && (
-                <Aviso tom="info">
-                  Cobertura parcial: sem{" "}
-                  {payload.marcas_nao_cobertas.map(tituloMarca).join(", ")} —
-                  como ausência, nunca como zero.
-                </Aviso>
-              )}
-
+              {/* Parcial: o aviso do topo; nos cards so' title + leitor de tela. */}
               <FaixaCategorias
                 cards={cardsShopee(payload)}
                 ativa={chaveCategoria}
                 aoEscolher={escolherCategoria}
-                parcial={payload.marcas_nao_cobertas.length > 0}
+                parcial={payload.marcas_nao_cobertas.length > 0 || contasSemFotografia.length > 0}
               />
 
               {avisoCurvaIndisponivel(metaCurva) && (

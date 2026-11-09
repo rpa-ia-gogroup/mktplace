@@ -7,10 +7,11 @@
  * limpa. Voltar do navegador desfaz.
  */
 import type { LucideIcon } from "lucide-react";
-import { X } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useRef, type ReactNode, type RefObject } from "react";
 
+import InfoDica from "@/components/ui/InfoDica";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import type { Tom } from "@/components/ui/tone";
 import { categoriaDaUrl, urlComCategoria } from "@/lib/estoque-categorias";
@@ -54,6 +55,17 @@ export function FaixaCategorias({
         />
       ))}
     </div>
+  );
+}
+
+/** AVISOS-TOPO: o UNICO aviso da aba, pequeno, no estilo do heroi do Full ("⚠ Sem X nesta foto · total parcial"). */
+export function AvisoTopo({ texto, ajuda }: { texto: string; ajuda?: string }) {
+  return (
+    <p role="status" className="flex flex-wrap items-center gap-1 px-1 text-xs text-warn-ink">
+      <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-warn" />
+      {texto}
+      {ajuda && <InfoDica texto={ajuda} />}
+    </p>
   );
 }
 
