@@ -278,7 +278,7 @@ def test_pipelines_disponiveis_sao_exatamente_os_quatro_conhecidos():
     Shopee, de serving ou de PMA agendada por engano."""
     assert set(orch.PIPELINES) == {
         "full_daily", "shopee_manual_refresh", "serving_refresh", "pma_refresh",
-        "daily_chain", "tiktok_weekly_reprocess",
+        "daily_chain", "tiktok_weekly_reprocess", "ml_weekly_reprocess",
     }
 
 

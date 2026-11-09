@@ -91,6 +91,7 @@ Uso:
     python -m pipelines.ops.orchestrate --pipeline full_daily
     python -m pipelines.ops.orchestrate --pipeline shopee_manual_refresh
     python -m pipelines.ops.orchestrate --pipeline tiktok_weekly_reprocess   # T-0074, semanal
+    python -m pipelines.ops.orchestrate --pipeline ml_weekly_reprocess       # T-0077, semanal
 """
 from __future__ import annotations
 
@@ -647,6 +648,54 @@ PIPELINES["tiktok_weekly_reprocess"] = TIKTOK_WEEKLY_REPROCESS_STEPS
 
 TIKTOK_WEEKLY_REPROCESS_STEP_TIMEOUT_BUDGET_SECONDS = sum(
     step.timeout_seconds for step in PIPELINES["tiktok_weekly_reprocess"])
+
+
+# ---------------------------------------------------------------------------
+# T-0077 — `ml_weekly_reprocess`: GMV Mercado Livre regravado uma vez por semana
+#
+# O defeito medido (T-0075, 09/11/2026): o `daily_ml` regrava so' D-4..D-1
+# (`fetch_incremental(days_back=3)`). Um pedido `paid` cancelado (ou com
+# reembolso parcial) depois de D+4 continua contado na fato para sempre:
+# +0,63% (ago), +2,77% (set) e +1,28% (out/26) no GMV ML da Torre. Uma janela de
+# 35 dias pega 95-97% das saidas tardias medidas (jun-set).
+#
+# Mesmo desenho do `tiktok_weekly_reprocess` (T-0074), pelas mesmas razoes:
+# - `daily_performance --mode backfill`, nao o reparo `refresh_ml_daily_contract`:
+#   mesmo caminho do diario (`fato_diaria_lock`, `audit.source_sync_run`, checks
+#   de qualidade, segunda defesa de dia fechado e o guardrail de comissao do ML,
+#   MARGEM-REAL-2B, que falha fechado antes de qualquer escrita).
+# - UPSERT sem DELETE basta: `gold.ml_gestao_diaria` e' agregado dia x marca que
+#   conta TODOS os status (expoe `cancelled_orders`/`cancel_rate_pct`); o filtro
+#   `paid` vive no `gmv`, nao na existencia da linha. Um (dia, marca) que perdeu
+#   todos os pedidos pagos continua com linha (gmv=0) e o UPSERT a sobrescreve.
+#   PREMISSA: a definicao da VIEW esta no Data Mart, nao neste repo; o dry-run do
+#   reparo mede chave orfa (`chaves_so_no_destino`) e a prova.
+#
+# JANELA: `--days 35` vira `closed_window(35)` = D-36..D-1. Com cadencia
+# semanal, cada dia e' regravado pela ultima vez com idade entre 30 e 36 dias.
+#
+# 900 s: mesmo envelope do `daily_ml`. PREMISSA NAO MEDIDA: a leitura e' a VIEW
+# `gold.ml_gestao_diaria` + CTE de comissao; o MAX da view ja levou 52-120 s
+# (OPS-RECOVERY-3/5). A primeira janela de 31 dias do reparo
+# (`refresh_ml_daily_contract`) e' a medicao: se ela passar de ~600 s, este
+# passo deve ser dividido (ver docs/ml_gmv_maturacao.md). Um passo so' porque
+# os argumentos do Step sao estaticos: `--days` e' a unica forma relativa a hoje.
+# ---------------------------------------------------------------------------
+
+#: Largura pedida ao `daily_performance --mode backfill` (D-36..D-1).
+ML_WEEKLY_REPROCESS_DAYS = 35
+
+ML_WEEKLY_REPROCESS_STEPS: tuple[Step, ...] = (
+    Step("ml_weekly_reprocess", "pipelines.ingestion.daily_performance",
+         ("--source", "ml", "--mode", "backfill",
+          "--days", str(ML_WEEKLY_REPROCESS_DAYS)),
+         timeout_seconds=900, preflight_source="ml_daily", critical=True),
+)
+
+PIPELINES["ml_weekly_reprocess"] = ML_WEEKLY_REPROCESS_STEPS
+
+ML_WEEKLY_REPROCESS_STEP_TIMEOUT_BUDGET_SECONDS = sum(
+    step.timeout_seconds for step in ML_WEEKLY_REPROCESS_STEPS)
 
 
 class DryRunUnsupportedError(RuntimeError):

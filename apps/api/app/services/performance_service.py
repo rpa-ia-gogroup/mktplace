@@ -147,6 +147,40 @@ def tiktok_maturacao_info(mkt_ids: list[int], today: date | None = None) -> dict
     }
 
 
+# ---------------------------------------------------------------------------
+# Mercado Livre — GMV em maturacao (T-0077; regra em docs/ml_gmv_maturacao.md)
+# ---------------------------------------------------------------------------
+# O GMV ML de um dia ainda pode CAIR enquanto o dia nao completa 35 dias:
+# pedidos pagos sao cancelados (ou reembolsados em parte) ate ~D+35 (T-0075:
+# a janela de 35 dias pega 95-97% das saidas tardias). O reprocesso semanal
+# regrava D-36..D-1. Isto e' SO' ROTULO — nenhum valor muda.
+ML_MATURACAO_JANELA_DIAS = 35
+ML_MATURACAO_MOTIVO = "cancelamentos ate ~D+35; valor pode cair"
+
+
+def ml_maturacao_desde(today: date) -> date:
+    """Primeiro dia (inclusive) ainda em maturacao: `today - 35`. Mesma regra de
+    fronteira do TikTok: o dia de fronteira entra no rotulo."""
+    return today - timedelta(days=ML_MATURACAO_JANELA_DIAS)
+
+
+def ml_maturacao_info(mkt_ids: list[int], today: date | None = None) -> dict | None:
+    """Bloco aditivo `ml_maturacao`. `None` quando o ML esta fora do escopo."""
+    if ML_ID not in mkt_ids:
+        return None
+    today = today or today_brt()
+    return {
+        "em_maturacao_desde": ml_maturacao_desde(today),
+        "janela_dias": ML_MATURACAO_JANELA_DIAS,
+        "motivo": ML_MATURACAO_MOTIVO,
+    }
+
+
+def _em_maturacao(d: date, info: dict | None) -> bool | None:
+    """`d` (dia ou fim do mes) esta em maturacao? `None` = canal fora do escopo."""
+    return d >= info["em_maturacao_desde"] if info is not None else None
+
+
 def _pct_from_source(value) -> float | None:
     """Converte campo conversion_rate do mart (ratio 0-1 ou pct >1) para percentagem."""
     v = _f(value)
@@ -703,6 +737,7 @@ def get_brands(
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
         "tiktok_maturacao": tiktok_maturacao_info(mkt_ids, today),
+        "ml_maturacao": ml_maturacao_info(mkt_ids, today),
     }
 
 
@@ -715,6 +750,7 @@ def get_monthly(
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     maturacao = tiktok_maturacao_info(mkt_ids, today)
+    maturacao_ml = ml_maturacao_info(mkt_ids, today)
     # A janela consultada segue com o relogio de antes: o rotulo nao muda numero.
     hoje = date.today()
     year, month = hoje.year, hoje.month
@@ -752,6 +788,8 @@ def get_monthly(
                     _month_bounds(mes_dt.year, mes_dt.month)[1] >= maturacao["em_maturacao_desde"]
                     if maturacao is not None else None
                 ),
+                "ml_em_maturacao": _em_maturacao(
+                    _month_bounds(mes_dt.year, mes_dt.month)[1], maturacao_ml),
             }
         brand = r["brand_key"]
         if brand in months[key]:
@@ -760,6 +798,7 @@ def get_monthly(
     return {
         "data": sorted(months.values(), key=lambda x: x["mes"]),
         "tiktok_maturacao": maturacao,
+        "ml_maturacao": maturacao_ml,
     }
 
 
@@ -904,6 +943,7 @@ def get_daily(
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     maturacao = tiktok_maturacao_info(mkt_ids, today)
+    maturacao_ml = ml_maturacao_info(mkt_ids, today)
     if period is not None:
         date_from, date_to = period.start, period.end
     else:
@@ -971,11 +1011,13 @@ def get_daily(
             "tiktok_em_maturacao": (
                 d >= maturacao["em_maturacao_desde"] if maturacao is not None else None
             ),
+            "ml_em_maturacao": _em_maturacao(d, maturacao_ml),
         })
 
     return {
         "brand": brand, "marketplace": marketplace, "data": result,
         "tiktok_maturacao": maturacao,
+        "ml_maturacao": maturacao_ml,
     }
 
 
