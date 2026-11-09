@@ -852,9 +852,9 @@ test("aviso do canal so' com foto de mais de 1 dia ou marca faltando; frescor em
   assert.match(fotosHeroi(canais) ?? "", /^Fotos: ML \d\d\/\d\d, Shopee \d\d\/\d\d\.$/);
 });
 
-test("celula de impacto: Shopee com estoque do vendedor = '—' explicado; sem preco nunca vira 0", () => {
+test("celula de impacto: Shopee com estoque do vendedor = 'sem perda' explicado; sem preco nunca vira 0", () => {
   const c = celulaImpacto(rup("shopee", "S1", { estoqueVendedor: 12, perdaDia: 0, perdaBruta: 214.4 }));
-  assert.equal(c.texto, "—", "sem 'R$ 0' em destaque: a venda segue");
+  assert.equal(c.texto, "sem perda", "nem 'R$ 0' em destaque nem '—' (que e' ausencia): perda zero medida");
   assert.equal(c.zeroMedido, true);
   assert.equal(c.apoio, "vendedor tem estoque · a venda segue");
   assert.match(c.titulo ?? "", /\/dia se contar só o Full$/);

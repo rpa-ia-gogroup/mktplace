@@ -993,7 +993,7 @@ export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; 
   if (t.perdaDia === undefined) return { texto: "—", ausente: "impacto do canal indisponível" };
   if (t.perdaDia === null) return { texto: "—", ausente: t.canal === "shopee" && t.estoqueVendedor === null ? "estoque do vendedor não informado" : "sem preço" };
   if (vendedorTemEstoque(t)) {
-    return { texto: "—", apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
+    return { texto: "sem perda", apoio: "vendedor tem estoque · a venda segue", titulo: `${fmtReais(t.perdaBruta)}/dia se contar só o Full`, zeroMedido: true };
   }
   return { texto: fmtReais(t.perdaDia) };
 }
