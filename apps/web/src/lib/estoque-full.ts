@@ -357,6 +357,15 @@ export function contasPresentes(
 }
 
 /** Texto do aviso de conta sem fotografia. Recebe os nomes ja' rotulados. */
+/**
+ * AVISOS-TOPO: UM aviso no topo da aba (estilo do heroi do Full), juntando
+ * conta esperada sem fotografia e marca fora da cobertura. `null` = nada a avisar.
+ */
+export function avisoTopoShopee(nomes: readonly string[]): string | null {
+  const unicos = [...new Set(nomes)];
+  return unicos.length ? `Sem ${unicos.join(", ")} nesta foto · total parcial` : null;
+}
+
 export function avisoContasAusentes(nomes: readonly string[]): string {
   return (
     `Sem fotografia nesta data para: ${nomes.join(", ")}. ` +

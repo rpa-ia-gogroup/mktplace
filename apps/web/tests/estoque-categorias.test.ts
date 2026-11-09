@@ -130,8 +130,8 @@ test("URL: ?categoria= ida e volta, preservando ?aba=; chave desconhecida = nenh
 
 test("parcial: UM aviso no topo das abas; nenhum card repete o prefixo", () => {
   const sh = ler("app/estoque-full/EstoqueFullClient.tsx");
-  assert.equal((sh.match(/Cobertura parcial: sem/g) ?? []).length, 1);
-  assert.ok(sh.indexOf("Cobertura parcial: sem") < sh.indexOf("<FaixaCategorias"), "aviso antes dos cards");
+  assert.equal((sh.match(/<AvisoTopo/g) ?? []).length, 1);
+  assert.ok(sh.indexOf("<AvisoTopo") < sh.indexOf("<FaixaCategorias"), "aviso antes dos cards");
   for (const f of ["app/estoque-full/EstoqueFullClient.tsx", "app/estoque-ml-full/MLFullEstoqueClient.tsx"]) {
     const src = ler(f);
     assert.ok(!src.includes("Parcial: ver aviso acima") && !src.includes("subvalorContagemML("), f);

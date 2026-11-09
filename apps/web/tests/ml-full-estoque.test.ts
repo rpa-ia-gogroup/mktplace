@@ -21,7 +21,9 @@ import {
   buildQueryML,
   ERRO_DATA_FUTURA_ML,
   PREFIXO_PARCIAL_ML,
+  avisoTopoML,
   coberturaMarcasLabel,
+  diagnosticoML,
   dataCompletaML,
   dataParaFiltroML,
   eDataHistorica,
@@ -157,13 +159,29 @@ test("o componente nao coalesce ausencia para zero e declara os quatro estados",
   assert.ok((CLIENT_SRC.split("catch (e)")[1] ?? "").includes("setPayload(null)"));
 });
 
-test("frescor, cobertura e parcialidade ficam visiveis", () => {
+test("AVISOS-TOPO: frescor no cabecalho, diagnostico no ⓘ e UM aviso so' com problema real", () => {
   assert.ok(CLIENT_SRC.includes("frescorLabelML(payload.frescor)"));
-  assert.ok(CLIENT_SRC.includes("coberturaMarcasLabel(payload.cobertura)"));
-  assert.ok(CLIENT_SRC.includes("leituraLabel(payload.cobertura.leitura)"));
-  assert.ok(CLIENT_SRC.includes("marcas_sem_fotografia"));
-  assert.ok(CLIENT_SRC.includes("total_parcial"));
-  assert.ok(CLIENT_SRC.includes("motivos_total_parcial"));
+  assert.ok(CLIENT_SRC.includes("diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))"));
+  assert.ok(CLIENT_SRC.includes("avisoTopoML(payload.cobertura, payload.indicadores.total_parcial)"));
+  assert.ok(CLIENT_SRC.includes("motivos_total_parcial.map(motivoParcialLegivel)"));
+  // a fileira de chips saiu
+  assert.ok(!CLIENT_SRC.includes("Sem fotografia:{"));
+  assert.ok(!CLIENT_SRC.includes("leituraLabel(") && !CLIENT_SRC.includes("coberturaMarcasLabel("));
+
+  const cob = (sem: string[]) => ({
+    marcas_esperadas: ["barbours", "kokeshi", "lescent", "rituaria"],
+    marcas_com_fotografia: ["barbours", "kokeshi", "lescent", "rituaria"].filter((m) => !sem.includes(m)),
+    marcas_sem_fotografia: sem,
+    leitura: { inventarios: 458, inventarios_lidos: 458, inventarios_sem_leitura: 0 },
+  }) as never;
+  assert.equal(avisoTopoML(cob(["rituaria"]), true), "Sem RITUÁRIA nesta foto · total parcial");
+  assert.equal(avisoTopoML(cob([]), true), "Total parcial");
+  assert.equal(avisoTopoML(cob([]), false), null, "sem problema, sem aviso");
+  assert.equal(
+    diagnosticoML(cob(["rituaria"]), ["kokeshi"]),
+    "3 de 4 marcas com fotografia no dia. 458 de 458 inventários lidos · 0 sem leitura. "
+      + "Sem estoque Full (zero medido, não ausência): KOKESHI.",
+  );
 });
 
 test("a tela nao soma estoque por anuncio", () => {
@@ -324,7 +342,7 @@ test("QA7 (CARDS-CLICAVEIS): parcial e' UM aviso no topo; nos cards so' title + 
   assert.equal(subvalorContagemML(true, "x"), `${PREFIXO_PARCIAL_ML} · x`);
   assert.ok(!CLIENT_SRC.includes("subvalorContagemML("), "cards sem 'Parcial: ver aviso acima'");
   assert.match(CLIENT_SRC, /parcial=\{!!parcial\}/);
-  assert.equal((CLIENT_SRC.match(/^\s*Total parcial$/gm) ?? []).length, 1, "um aviso so'");
+  assert.equal((CLIENT_SRC.match(/<AvisoTopo/g) ?? []).length, 1, "um aviso so'");
   const faixa = readFileSync(new URL("../src/components/full/CategoriasEstoque.tsx", import.meta.url), "utf-8");
   assert.match(faixa, /SR_PARCIAL = "parcial: veja o aviso no topo"/);
   assert.match(faixa, /contexto=\{parcial \?/);
@@ -610,12 +628,11 @@ test("T-0051: a tela valida o payload, distingue os estados e nao diz 'nao opera
   for (const src of [CLIENT_SRC, LIB_SRC]) {
     assert.ok(!/n[ãa]o opera (o )?Full/i.test(src), "'nao opera Full' e' outra afirmacao");
   }
-  // A pill de "sem estoque Full" nao usa o ambar da ausencia.
-  const pill =
-    CLIENT_SRC.split("marcasSemEstoqueFullML(payload.marcas).length > 0")[1]?.split("</span>")[0] ?? "";
-  // FULL-TEMA-ESCURO: neutro em token (antes `bg-slate-50`); o ambar virou `warn`.
-  assert.ok(pill.includes("bg-raised"));
-  assert.ok(!pill.includes("amber") && !pill.includes("warn"));
+  // AVISOS-TOPO: "sem estoque Full" e' zero MEDIDO: vai para o ⓘ, nunca para o aviso ambar.
+  assert.ok(!CLIENT_SRC.includes("marcasSemEstoqueFullML(payload.marcas).length > 0"));
+  assert.match(diagnosticoML({ marcas_esperadas: [], marcas_com_fotografia: [], marcas_sem_fotografia: [],
+    leitura: { inventarios: 0, inventarios_lidos: 0, inventarios_sem_leitura: 0 } } as never, ["kokeshi"]),
+  /zero medido, não ausência/);
 });
 
 // ---------------------------------------------------------------------------
