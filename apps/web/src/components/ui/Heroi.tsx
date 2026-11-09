@@ -1,5 +1,8 @@
 import { useId, type ReactNode } from "react";
 
+import { tendencia } from "@/lib/gerencial/kpi-trend";
+
+import { LinhaDeTendencia } from "./Sparkline";
 import { TOM_TINTA, type Tom } from "./tone";
 
 /**
@@ -35,6 +38,8 @@ export default function Heroi({
   tom = "neutro",
   carregando = false,
   erro,
+  serie,
+  granularidade = "day",
 }: {
   rotulo: ReactNode;
   valor: ReactNode;
@@ -57,8 +62,16 @@ export default function Heroi({
   carregando?: boolean;
   /** Mensagem de erro do bloco: o heroi falha sozinho, sem derrubar a pagina. */
   erro?: ReactNode;
+  /**
+   * CARDS-KPIBAND (aditivo): a serie do periodo, na ordem. Mini grafico so'
+   * com >= 4 pontos reais, como nos cards; sem ela o heroi e' o de antes.
+   */
+  serie?: number[];
+  /** Unidade de cada ponto da `serie`, para o texto da tendencia. */
+  granularidade?: "hour" | "day" | "week" | "month";
 }) {
   const id = useId();
+  const t = serie ? tendencia(serie, granularidade) : null;
   return (
     <section aria-labelledby={id} className="rounded-xl border border-accent/30 bg-surface">
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr_auto] lg:items-center lg:gap-6">
@@ -82,6 +95,13 @@ export default function Heroi({
                   {delta}
                   {contexto}
                 </p>
+              )}
+              {t && t.pontos.length >= 4 && (
+                // Violeta da borda do heroi: ele nao tem cor de identidade, e o
+                // tom de estado fica no numero e na pilula.
+                <div className="mt-2">
+                  <LinhaDeTendencia t={t} tinta="text-accent" />
+                </div>
               )}
               {acao && <div className="mt-1">{acao}</div>}
             </>

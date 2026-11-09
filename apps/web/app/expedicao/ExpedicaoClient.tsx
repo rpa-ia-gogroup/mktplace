@@ -1142,6 +1142,8 @@ export default function ExpedicaoClient({
       tom={valorHeroi === null || valorHeroi === 0 ? "neutro" : temPrazo ? "critico" : "atencao"}
       aviso={avisoHeroi}
       delta={deltaDoCard(serieHeroi)}
+      serie={serieHeroi.serie}
+      granularidade="hour"
       contexto={
         avisoRecorte ??
         (valorHeroi !== null && backlogRisco !== null

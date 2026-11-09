@@ -759,3 +759,17 @@ test("card LDR do TikTok: sparkline so' com vencimentos fechados com taxa; delta
   assert.equal(deltaDaLdr({ rate: 0.1, previous: undefined }), null); // API antiga
   assert.equal(deltaDaLdr({ rate: null, previous: null }), null);
 });
+
+test("heroi: sparkline so' com serie de >= 4 pontos; sem serie, o render de antes", async () => {
+  const { default: Heroi } = await import("../src/components/ui/Heroi.tsx");
+  const base = { rotulo: "Vencidos", valor: "3,0%" };
+  const sem = renderToStaticMarkup(h(Heroi, base));
+  assert.equal(renderToStaticMarkup(h(Heroi, { ...base, serie: [27.2, 29.3, 35.7] })), sem, "3 pontos: sem mini grafico");
+  assert.doesNotMatch(sem, /<svg/);
+  const com = renderToStaticMarkup(h(Heroi, { ...base, serie: [27.2, 29.3, 35.7, 3.0], granularidade: "hour" }));
+  assert.match(com, /<svg/);
+  assert.match(com, /text-accent/);
+  // O herói da fila recebe a MESMA serie dos cards (so' horas com todas as contas).
+  const cliente = readFileSync(join(import.meta.dirname, "..", "app", "expedicao", "ExpedicaoClient.tsx"), "utf8");
+  assert.match(cliente, /delta=\{deltaDoCard\(serieHeroi\)\}\s*serie=\{serieHeroi\.serie\}\s*granularidade="hour"/);
+});
