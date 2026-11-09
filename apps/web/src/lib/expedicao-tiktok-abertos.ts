@@ -6,6 +6,7 @@
  * TikTok Shop. O prazo e' RECONSTRUIDO da politica (despacho 1 dia util,
  * coleta 2 dias uteis), como na LDR do TikTok: todo texto diz isso.
  */
+import { fatias, type FatiaEtapa } from "./expedicao-travados.ts";
 
 export type ListaAbertos =
   | "overdue"
@@ -28,6 +29,13 @@ export type ContagemAbertos = {
   due_next_day: number;
   on_time: number;
   over_48h: number;
+  /** EXPEDICAO-POPUP-ETAPAS (aditivo; ausentes na API antiga). */
+  due_today_shipment?: number;
+  due_today_collection?: number;
+  due_next_day_shipment?: number;
+  due_next_day_collection?: number;
+  over_48h_shipment?: number;
+  over_48h_collection?: number;
 };
 
 export type MarcaAbertos = ContagemAbertos & { brand: string; oldest_paid_at: string | null };
@@ -165,18 +173,27 @@ export const CAMPO_DA_LISTA: Record<ListaAbertos, keyof ContagemAbertos> = {
  * Quebra por etapa EXATA (do resumo), so' onde o resumo a tem. Nas demais
  * listas a etapa aparece na tabela, linha a linha.
  */
-export function etapasDaLista(lista: ListaAbertos, t: ContagemAbertos): { rotulo: string; n: number }[] {
-  const par =
+export function etapasDaLista(lista: ListaAbertos, t: ContagemAbertos, total: number): FatiaEtapa[] {
+  // [coleta, despacho] de cada lista, do resumo (lista INTEIRA).
+  const par: [number | undefined, number | undefined] | null =
     lista === "overdue"
       ? [t.overdue_collection, t.overdue_shipment]
       : lista === "all"
         ? [t.awaiting_collection, t.awaiting_shipment]
-        : null;
-  if (!par) return [];
-  return [
-    { rotulo: ROTULO_ETAPA.coleta, n: par[0] },
-    { rotulo: ROTULO_ETAPA.despacho, n: par[1] },
-  ].filter((e) => e.n > 0);
+        : lista === "due_today"
+          ? [t.due_today_collection, t.due_today_shipment]
+          : lista === "due_next_day"
+            ? [t.due_next_day_collection, t.due_next_day_shipment]
+            : lista === "over_48h"
+              ? [t.over_48h_collection, t.over_48h_shipment]
+              : lista === "awaiting_collection"
+                ? [total, 0]
+                : lista === "awaiting_shipment"
+                  ? [0, total]
+                  : null;
+  // API antiga (sem a etapa da lista): sem consolidado, nunca um chute.
+  if (!par || par[0] === undefined || par[1] === undefined) return [];
+  return fatias(new Map([[ROTULO_ETAPA.coleta, par[0]], [ROTULO_ETAPA.despacho, par[1]]]), total);
 }
 
 /** "201–400 de 3.776" */

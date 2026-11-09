@@ -308,7 +308,7 @@ def test_perto_de_vencer_contagem_e_lista_classificam_as_mesmas_linhas(sessao):
         for i, (conta, prazo, status) in enumerate(linhas):
             _inserir_na_fila(sessao, lote, i, conta, prazo, status)
         perto = svc._perto_de_vencer(sessao, canal, lote, AGORA)
-        lista, total = svc._pagina_da_fila(
+        lista, total, _etapas = svc._pagina_da_fila(
             sessao, canal, lote, brands=None, accounts=None, situacoes=["due_soon"],
             order_by="deadline", limit=100, offset=0, perto=perto)
     finally:

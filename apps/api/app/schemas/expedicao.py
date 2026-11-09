@@ -260,12 +260,22 @@ class OrderRow(BaseModel):
     etapa: Optional[str] = None
 
 
+class ContagemEtapa(BaseModel):
+    """Pedidos da lista INTEIRA numa etapa. `stage` nulo = sem etapa publicada."""
+
+    stage: Optional[str] = None
+    count: int
+
+
 class Paginacao(BaseModel):
     limit: int
     offset: int
     returned: int
     total: int
     has_more: bool
+    #: EXPEDICAO-POPUP-ETAPAS (aditivo): quebra por etapa sobre `total`, da
+    #: maior para a menor. `None` sem a coluna de etapa na fonte.
+    stage_counts: Optional[list[ContagemEtapa]] = None
 
 
 class Snapshot(BaseModel):

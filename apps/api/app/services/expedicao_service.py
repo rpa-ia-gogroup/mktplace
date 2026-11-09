@@ -1176,7 +1176,7 @@ def get_expedicao(
     }
 
     if include_queue:
-        fila, total = _pagina_da_fila(
+        fila, total, etapas = _pagina_da_fila(
             db, canal, snap["batch"], brands=brands, accounts=accounts,
             situacoes=situacoes, order_by=order_by, limit=limit, offset=offset,
             perto=perto, lotes_export=lotes_export)
@@ -1184,6 +1184,7 @@ def get_expedicao(
         resposta["pagination"] = {
             "limit": limit, "offset": offset, "returned": len(fila),
             "total": total, "has_more": offset + len(fila) < total,
+            "stage_counts": etapas,
         }
     return resposta
 
@@ -1191,8 +1192,14 @@ def get_expedicao(
 def _pagina_da_fila(db, canal: Canal, batch: str, *, brands, accounts, situacoes,
                     order_by: str, limit: int, offset: int,
                     perto: Optional[PertoDeVencer] = None,
-                    lotes_export: tuple[str, ...] = ()) -> tuple[list[dict], int]:
+                    lotes_export: tuple[str, ...] = ()) -> tuple[list[dict], int, Optional[list[dict]]]:
     """Filtros e ordenacao por ALLOWLIST; valores sempre parametrizados.
+
+    EXPEDICAO-POPUP-ETAPAS: com a coluna `etapa`, a contagem e' por etapa
+    (mesmo filtro, mesma consulta): o total e' a soma e a quebra vale para a
+    lista INTEIRA, nao para a pagina. Etapa nula vira item proprio (`None`,
+    "Sem etapa" na tela), nunca some. Sem a coluna ou sem `situacoes` (a fila
+    da pagina, nao um popup), a quebra e' `None`.
 
     `channel` e `refresh_batch_id` entram JUNTOS no filtro: o batch ja' seria
     suficiente hoje, mas um lote com o mesmo id em dois canais serviria a fila
@@ -1225,16 +1232,29 @@ def _pagina_da_fila(db, canal: Canal, batch: str, *, brands, accounts, situacoes
         onde.append(SITUACAO_SQL[s])
 
     filtro = " AND ".join(onde)
-    total = _linhas(db, f"SELECT count(*) AS n FROM {origem} WHERE {filtro}",
-                    params)[0]["n"]
-
-    ordem = ", ".join(ORDENACOES.get(order_by, ORDEM_PADRAO))
-    colunas = ", ".join(FILA_COLUNAS)
     # EXPEDICAO-ETAPA-POPUP: a etapa de cada pedido (T-0015) so' com a 033 no
     # destino. Sem ela a coluna nao existe e a linha sai com `etapa` nula —
     # exatamente a resposta de antes, mais um campo opcional.
     sonda = _linhas(db, _COLUNA_ETAPA_SQL, {})
     tem_etapa = bool(sonda) and sonda[0].get("ok") is True
+    # So' as LISTAS dos popups (com situacao) pagam o GROUP BY; o carregamento
+    # da pagina (sem situacao) segue com o count simples de antes.
+    if tem_etapa and situacoes:
+        grupos = _linhas(db, f"SELECT etapa, count(*) AS n FROM {origem} WHERE {filtro} GROUP BY etapa",
+                         params)
+        total = sum(int(g["n"]) for g in grupos)
+        etapas: Optional[list[dict]] = sorted(
+            ({"stage": None if g.get("etapa") is None else str(g["etapa"]), "count": int(g["n"])}
+             for g in grupos if int(g["n"]) > 0),
+            key=lambda e: (-e["count"], e["stage"] or "~"),
+        )
+    else:
+        total = _linhas(db, f"SELECT count(*) AS n FROM {origem} WHERE {filtro}",
+                        params)[0]["n"]
+        etapas = None
+
+    ordem = ", ".join(ORDENACOES.get(order_by, ORDEM_PADRAO))
+    colunas = ", ".join(FILA_COLUNAS)
     extra = ", etapa" if tem_etapa else ""
     brutas = _linhas(db, f"""
         SELECT marketplace_order_id, {colunas}{extra}
@@ -1252,7 +1272,7 @@ def _pagina_da_fila(db, canal: Canal, batch: str, *, brands, accounts, situacoes
         linha["order_number"] = str(r["marketplace_order_id"]) if _numero_publico() else None
         linha["etapa"] = str(r["etapa"]) if tem_etapa and r["etapa"] is not None else None
         linhas.append(linha)
-    return linhas, total
+    return linhas, total, etapas
 
 
 # ---------------------------------------------------------------------------

@@ -1227,3 +1227,45 @@ def test_payload_com_perto_de_vencer_valida_no_schema(ligada):
     assert (m.totals.due_today_count, m.totals.due_soon_count) == (5, 12)
     apice = {c.shop_account: c for c in m.accounts}["apice"]
     assert (apice.due_today_count, apice.due_next_day_count, apice.due_soon_count) == (5, 7, 12)
+
+
+class _SessaoEtapas(SessaoFake):
+    """Fonte com a coluna `etapa` (033): a contagem da lista vem por etapa."""
+
+    def __init__(self, grupos, **kw):
+        super().__init__(**kw)
+        self.grupos = grupos
+
+    def execute(self, clause, params=None):
+        sql = str(clause)
+        if "information_schema.columns" in sql:
+            self.consultas.append((sql, dict(params or {})))
+            return _Result([{"ok": True}])
+        if "GROUP BY etapa" in sql:
+            self.consultas.append((sql, dict(params or {})))
+            return _Result(self.grupos)
+        return super().execute(clause, params)
+
+
+def test_popup_etapas_sobre_a_lista_inteira_com_sem_etapa(ligada):
+    """EXPEDICAO-POPUP-ETAPAS: a quebra e' da lista INTEIRA (mesmo filtro da
+    contagem), da maior para a menor; etapa nula vira item proprio."""
+    s = _SessaoEtapas([{"etapa": "a_preparar", "n": 40}, {"etapa": None, "n": 5},
+                       {"etapa": "aguardando_coleta", "n": 1420}],
+                      fila=[{**linha_fila(), "etapa": "aguardando_coleta"}])
+    r = svc.get_expedicao(s, situacoes=["overdue"], limit=200)
+    pag = r["pagination"]
+    assert pag["total"] == 1465
+    assert pag["stage_counts"] == [
+        {"stage": "aguardando_coleta", "count": 1420},
+        {"stage": "a_preparar", "count": 40},
+        {"stage": None, "count": 5},
+    ]
+    sql, _ = next((q, p) for q, p in s.consultas if "GROUP BY etapa" in q)
+    assert svc.SITUACAO_SQL["overdue"] in sql  # mesmo filtro da lista
+
+
+def test_popup_etapas_sem_a_coluna_e_nulo_e_o_total_segue(ligada):
+    r = svc.get_expedicao(SessaoFake(total=7), situacoes=["overdue"])
+    assert r["pagination"]["total"] == 7
+    assert r["pagination"]["stage_counts"] is None

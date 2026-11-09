@@ -175,9 +175,15 @@ SELECT brand,
        COUNT(*) FILTER (WHERE situacao = 'overdue' AND etapa = 'despacho') AS vencidos_despacho,
        COUNT(*) FILTER (WHERE situacao = 'overdue' AND etapa = 'coleta')   AS vencidos_coleta,
        COUNT(*) FILTER (WHERE situacao = 'due_today')                   AS vence_hoje,
+       COUNT(*) FILTER (WHERE situacao = 'due_today' AND etapa = 'despacho') AS vence_hoje_despacho,
+       COUNT(*) FILTER (WHERE situacao = 'due_today' AND etapa = 'coleta')   AS vence_hoje_coleta,
        COUNT(*) FILTER (WHERE situacao = 'due_next_day')                AS vence_proximo,
+       COUNT(*) FILTER (WHERE situacao = 'due_next_day' AND etapa = 'despacho') AS vence_proximo_despacho,
+       COUNT(*) FILTER (WHERE situacao = 'due_next_day' AND etapa = 'coleta')   AS vence_proximo_coleta,
        COUNT(*) FILTER (WHERE situacao = 'on_time')                     AS no_prazo,
        COUNT(*) FILTER (WHERE acima_48h AND etapa <> 'retido')          AS acima_48h,
+       COUNT(*) FILTER (WHERE acima_48h AND etapa = 'despacho')         AS acima_48h_despacho,
+       COUNT(*) FILTER (WHERE acima_48h AND etapa = 'coleta')           AS acima_48h_coleta,
        MIN(paid_at) FILTER (WHERE etapa <> 'retido')                    AS mais_antigo_em
   FROM c
  GROUP BY brand
@@ -288,6 +294,9 @@ CAMPOS_MARCA = (
     "open", "awaiting_shipment", "awaiting_collection", "on_hold", "overdue",
     "overdue_shipment", "overdue_collection", "due_today", "due_next_day",
     "on_time", "over_48h",
+    # EXPEDICAO-POPUP-ETAPAS (aditivo): a etapa de cada lista, para o popup.
+    "due_today_shipment", "due_today_collection", "due_next_day_shipment",
+    "due_next_day_collection", "over_48h_shipment", "over_48h_collection",
 )
 
 _DA_LINHA = {
@@ -296,6 +305,10 @@ _DA_LINHA = {
     "overdue": "vencidos", "overdue_shipment": "vencidos_despacho",
     "overdue_collection": "vencidos_coleta", "due_today": "vence_hoje",
     "due_next_day": "vence_proximo", "on_time": "no_prazo", "over_48h": "acima_48h",
+    "due_today_shipment": "vence_hoje_despacho", "due_today_collection": "vence_hoje_coleta",
+    "due_next_day_shipment": "vence_proximo_despacho",
+    "due_next_day_collection": "vence_proximo_coleta",
+    "over_48h_shipment": "acima_48h_despacho", "over_48h_collection": "acima_48h_coleta",
 }
 
 

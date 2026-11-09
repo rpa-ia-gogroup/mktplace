@@ -202,3 +202,21 @@ def test_escopo_todos_inclui_sem_etiqueta_no_prazo():
     assert [p["order_id"] for p in so_despacho["orders"]] == ["2", "3"]
     assert so_despacho["status_counts"] == {"IN_TRANSIT": 1, "AWAITING_SHIPMENT": 1}
     assert so_despacho["status_on_day_counts"] == {"AWAITING_COLLECTION": 1, "AWAITING_SHIPMENT": 2}
+
+
+def test_resumo_traz_a_etapa_de_cada_lista_para_o_popup():
+    """EXPEDICAO-POPUP-ETAPAS: vence hoje, proximo dia e +48 h com a etapa,
+    sobre a lista INTEIRA (resumo), nunca so' a pagina. Somam entre marcas."""
+    def consultar(sql, params):
+        assert "vence_hoje_coleta" in sql and "acima_48h_despacho" in sql
+        linha = {"brand": "kokeshi", "abertos": 10, "vence_hoje": 6, "vence_hoje_coleta": 6,
+                 "vence_hoje_despacho": 0, "vence_proximo": 3, "vence_proximo_coleta": 1,
+                 "vence_proximo_despacho": 2, "acima_48h": 4, "acima_48h_coleta": 3,
+                 "acima_48h_despacho": 1}
+        return [linha, {**linha, "brand": "apice"}]
+
+    t = svc.obter_abertos(consultar=consultar, agora=AGORA)["totals"]
+    assert (t["due_today_collection"], t["due_today_shipment"]) == (12, 0)
+    assert (t["due_next_day_collection"], t["due_next_day_shipment"]) == (2, 4)
+    assert (t["over_48h_collection"], t["over_48h_shipment"]) == (6, 2)
+    assert t["due_today"] == t["due_today_collection"] + t["due_today_shipment"]

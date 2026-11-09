@@ -411,7 +411,7 @@ def test_paginacao_nao_duplica_nem_omite(ml_ligado):
     """
     linhas = [linha_ml(ordem=f"SHIP-{i:03d}") for i in range(6)]
     s = sessao_ml(fila=linhas, total=6)
-    p1, total = svc._pagina_da_fila(
+    p1, total, _etapas = svc._pagina_da_fila(
         s, svc.CANAIS["mercadolivre"], BATCH, brands=None, accounts=None,
         situacoes=None, order_by="criticidade", limit=3, offset=0)
     assert total == 6
