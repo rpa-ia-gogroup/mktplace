@@ -474,7 +474,8 @@ test("controle colorido nao sobrepoe cor a constante neutra", () => {
 
   const base = PAGE.split("const CONTROLE_BASE =")[1].split(";")[0];
   assert.ok(!/\bbg-/.test(base), "CONTROLE_BASE nao pode fixar cor de fundo");
-  assert.ok(!/\btext-(white|slate-\d)/.test(base), "CONTROLE_BASE nao pode fixar cor de texto");
+  // FULL-TEMA-ESCURO: as cores viraram tokens (`text-ink`, `text-accent-on`...).
+  assert.ok(!/\btext-(white|slate-\d|ink|accent-on)/.test(base), "CONTROLE_BASE nao pode fixar cor de texto");
 
   // Extrai cada `className={...}` com chaves balanceadas. Regex nao serve:
   // arrow functions e template literals aninhados quebram `[^}]*`.
@@ -499,14 +500,14 @@ test("controle colorido nao sobrepoe cor a constante neutra", () => {
     const semHover = expr.replace(/hover:bg-[\w-]+/g, "");
     assert.ok(!/\bbg-/.test(semHover),
       `cor de fundo sobreposta a CONTROLE: ${expr.slice(0, 120)}`);
-    assert.ok(!/\btext-white\b/.test(semHover),
-      `text-white sobreposto a CONTROLE: ${expr.slice(0, 120)}`);
+    assert.ok(!/\btext-(white|accent-on)\b/.test(semHover),
+      `tinta clara sobreposta a CONTROLE: ${expr.slice(0, 120)}`);
   }
 
   // O ramo selecionado precisa declarar a paleta inteira, e nao herda-la.
-  const ativo = PAGE.match(/\?\s*"([^"]*violet-600[^"]*)"/);
+  const ativo = PAGE.match(/\?\s*"([^"]*\bbg-accent\b[^"]*)"/);
   assert.ok(ativo, "o estado selecionado precisa de um ramo explicito");
-  for (const exigida of ["bg-violet-600", "text-white", "border-violet-600"]) {
+  for (const exigida of ["bg-accent", "text-accent-on", "border-accent"]) {
     assert.ok(ativo![1].includes(exigida),
       `o ramo selecionado precisa declarar ${exigida}`);
   }

@@ -621,8 +621,9 @@ test("T-0051: a tela valida o payload, distingue os estados e nao diz 'nao opera
   // A pill de "sem estoque Full" nao usa o ambar da ausencia.
   const pill =
     CLIENT_SRC.split("marcasSemEstoqueFullML(payload.marcas).length > 0")[1]?.split("</span>")[0] ?? "";
-  assert.ok(pill.includes("bg-slate-50"));
-  assert.ok(!pill.includes("amber"));
+  // FULL-TEMA-ESCURO: neutro em token (antes `bg-slate-50`); o ambar virou `warn`.
+  assert.ok(pill.includes("bg-raised"));
+  assert.ok(!pill.includes("amber") && !pill.includes("warn"));
 });
 
 // ---------------------------------------------------------------------------

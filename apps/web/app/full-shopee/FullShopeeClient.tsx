@@ -20,6 +20,8 @@
  * DIARIO da serie, com a mesma regra do backend.
  */
 
+import { temaDoGrafico } from "@/lib/chart-theme";
+import { useTema } from "@/components/theme/ThemeProvider";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import KpiCard from "@/components/KpiCard";
@@ -72,12 +74,12 @@ const METRICAS: { key: MetricaSerie; label: string }[] = [
 const CONTROLE_BASE =
   "min-h-11 px-3 rounded-lg border text-sm " +
   "focus-visible:outline focus-visible:outline-2 " +
-  "focus-visible:outline-offset-2 focus-visible:outline-violet-600";
-const CONTROLE = `${CONTROLE_BASE} border-slate-300 bg-white text-slate-800`;
+  "focus-visible:outline-offset-2 focus-visible:outline-accent";
+const CONTROLE = `${CONTROLE_BASE} border-line-strong bg-surface text-ink`;
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs leading-relaxed border rounded-lg px-3 py-2 bg-amber-50 border-amber-300 text-amber-900">
+    <p className="text-xs leading-relaxed border rounded-lg px-3 py-2 bg-warn-soft border-warn/40 text-warn-ink">
       {children}
     </p>
   );
@@ -175,17 +177,17 @@ function FullShopeeInner() {
   const filtros = (
     <div className="flex flex-wrap items-end gap-2">
       <div className="flex flex-col gap-1">
-        <label htmlFor="sh-de" className="text-xs font-medium text-slate-600">De</label>
+        <label htmlFor="sh-de" className="text-xs font-medium text-ink-muted">De</label>
         <input id="sh-de" type="date" value={from} max={to}
           onChange={(e) => setFrom(e.target.value)} className={CONTROLE} />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="sh-ate" className="text-xs font-medium text-slate-600">Até</label>
+        <label htmlFor="sh-ate" className="text-xs font-medium text-ink-muted">Até</label>
         <input id="sh-ate" type="date" value={to} min={from}
           onChange={(e) => setTo(e.target.value)} className={CONTROLE} />
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="sh-marca" className="text-xs font-medium text-slate-600">Marca</label>
+        <label htmlFor="sh-marca" className="text-xs font-medium text-ink-muted">Marca</label>
         <select id="sh-marca" value={marca} onChange={(e) => setMarca(e.target.value)}
           className={CONTROLE}>
           <option value="">Todas as marcas cobertas</option>
@@ -195,7 +197,7 @@ function FullShopeeInner() {
         </select>
       </div>
       <div className="flex flex-col gap-1">
-        <label htmlFor="sh-conta" className="text-xs font-medium text-slate-600">Conta</label>
+        <label htmlFor="sh-conta" className="text-xs font-medium text-ink-muted">Conta</label>
         <select id="sh-conta" value={conta} onChange={(e) => setConta(e.target.value)}
           className={CONTROLE}>
           <option value="">Todas as contas cobertas</option>
@@ -207,13 +209,13 @@ function FullShopeeInner() {
       <div className="flex gap-1" role="group" aria-label="Períodos predefinidos">
         {PERIOD_PRESETS.map((d) => (
           <button key={d} type="button" onClick={() => aplicarPreset(d)}
-            className={`${CONTROLE} font-medium hover:bg-slate-50`}>
+            className={`${CONTROLE} font-medium hover:bg-raised`}>
             {d} dias
           </button>
         ))}
       </div>
       <button type="button" onClick={limpar}
-        className={`${CONTROLE} font-medium hover:bg-slate-50`}>
+        className={`${CONTROLE} font-medium hover:bg-raised`}>
         Limpar filtros
       </button>
     </div>
@@ -229,15 +231,15 @@ function FullShopeeInner() {
       {/* ---- Frescor e escopo: sempre visiveis, nunca "tempo real" ---- */}
       <section aria-labelledby="sh-frescor" className="flex flex-col gap-2">
         <h2 id="sh-frescor" className="sr-only">Cobertura e frescor</h2>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-          <span className="font-medium text-slate-800">{from} a {to}</span>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+          <span className="font-medium text-ink">{from} a {to}</span>
           {frescor && (
             <>
               <span className={
                 "inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium border " +
                 (frescor.freshness_status === "fresh"
-                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                  : "bg-amber-50 text-amber-900 border-amber-300")
+                  ? "bg-ok-soft text-ok-ink border-ok/30"
+                  : "bg-warn-soft text-warn-ink border-warn/40")
               }>
                 {FRESHNESS_LABEL[frescor.freshness_status]} · atualização diária
                 <InfoDica texto={AVISO_REGIME_CARGA} />
@@ -248,7 +250,7 @@ function FullShopeeInner() {
           {dados && (
             <>
               <span>Contas: {dados.meta.observed_accounts.join(", ") || SEM_DADO}</span>
-              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium border bg-amber-50 text-amber-900 border-amber-300">
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full font-medium border bg-warn-soft text-warn-ink border-warn/40">
                 Cobertura parcial · fora da API: {dados.meta.brands_not_covered.join(", ")}
                 <InfoDica texto={AVISO_COBERTURA} />
               </span>
@@ -263,19 +265,19 @@ function FullShopeeInner() {
 
       {/* ---- Estados ---- */}
       {erroJanela && (
-        <p role="alert" className="text-sm border border-amber-300 bg-amber-50 text-amber-900 rounded-lg px-3 py-2">
+        <p role="alert" className="text-sm border border-warn/40 bg-warn-soft text-warn-ink rounded-lg px-3 py-2">
           {erroJanela}
         </p>
       )}
 
       {!erroJanela && desligadoBackend && (
-        <p role="status" className="text-sm border border-slate-300 bg-slate-50 text-slate-700 rounded-lg px-3 py-2">
+        <p role="status" className="text-sm border border-line-strong bg-raised text-ink-muted rounded-lg px-3 py-2">
           {desligadoBackend}
         </p>
       )}
 
       {!erroJanela && erro && (
-        <p role="alert" className="text-sm border border-rose-300 bg-rose-50 text-rose-900 rounded-lg px-3 py-2">
+        <p role="alert" className="text-sm border border-crit/40 bg-crit-soft text-crit-ink rounded-lg px-3 py-2">
           {erro}
         </p>
       )}
@@ -285,14 +287,14 @@ function FullShopeeInner() {
           <span className="sr-only">Carregando desempenho FBS da Shopee…</span>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-slate-100 animate-pulse" />
+              <div key={i} className="h-24 rounded-xl bg-raised animate-pulse" />
             ))}
           </div>
         </div>
       )}
 
       {!erroJanela && !carregando && !erro && !desligadoBackend && vazio && (
-        <p role="status" className="text-sm border border-slate-300 bg-slate-50 text-slate-700 rounded-lg px-3 py-2">
+        <p role="status" className="text-sm border border-line-strong bg-raised text-ink-muted rounded-lg px-3 py-2">
           Nenhum pedido nesta janela: ausência de dado publicado, não queda de
           vendas.
         </p>
@@ -303,7 +305,7 @@ function FullShopeeInner() {
         <>
           {/* KPIs */}
           <section aria-labelledby="sh-kpis" className="flex flex-col gap-2">
-            <h2 id="sh-kpis" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800">
+            <h2 id="sh-kpis" className="inline-flex items-center gap-1 text-sm font-semibold text-ink">
               Participação do FBS no período
               <InfoDica texto={`${AVISO_GMV_BRUTO} ${AVISO_DIVERGENCIA}`} />
             </h2>
@@ -314,13 +316,13 @@ function FullShopeeInner() {
                 subvalue={`Vendedor: ${fmtGmv(seller?.gross_gmv ?? null)}`} />
               <KpiCard label="Share FBS — GMV" value={fmtShare(dados.shares.share_fbs_gmv)}
                 subvalue="FBS ÷ (FBS + vendedor)"
-                accent="bg-violet-600" />
+                accent="bg-accent" />
               <KpiCard label="Share FBS — pedidos" value={fmtShare(dados.shares.share_fbs_orders)}
                 subvalue={`${fmtCount(dados.totals.eligible_orders)} pedidos elegíveis`}
-                accent="bg-sky-600" />
+                accent="bg-kpi-prazo" />
               <KpiCard label="Share FBS — unidades" value={fmtShare(dados.shares.share_fbs_units)}
                 subvalue={`${fmtCount(dados.totals.gross_units)} unidades`}
-                accent="bg-sky-600" />
+                accent="bg-kpi-prazo" />
               <KpiCard label="Taxa de cancelamento" value={fmtShare(dados.rates.cancellation_rate)}
                 subvalue={`${fmtCount(dados.totals.cancelled_orders)} de ${fmtCount(dados.totals.created_orders)} pedidos criados`} />
               <KpiCard label="Handling médio" value={fmtHandling(dados.totals.handling)}
@@ -333,15 +335,15 @@ function FullShopeeInner() {
 
           {/* Composicao logistica */}
           <section aria-labelledby="sh-composicao" className="flex flex-col gap-2">
-            <h2 id="sh-composicao" className="text-sm font-semibold text-slate-800">
+            <h2 id="sh-composicao" className="text-sm font-semibold text-ink">
               Composição: FBS × envio pelo vendedor
             </h2>
-            <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+            <div className="overflow-x-auto border border-line rounded-xl bg-surface">
               <table className="min-w-full text-sm">
                 <caption className="sr-only">
                   GMV bruto, pedidos e unidades por modalidade de envio.
                 </caption>
-                <thead className="bg-slate-50 text-slate-700">
+                <thead className="bg-raised text-ink-muted">
                   <tr>
                     <th scope="col" className="text-left px-3 py-2 font-medium">Modalidade</th>
                     <th scope="col" className="text-right px-3 py-2 font-medium">GMV bruto</th>
@@ -355,8 +357,8 @@ function FullShopeeInner() {
                   {(["fbs", "seller"] as FbsClass[]).map((c) => {
                     const l = c === "fbs" ? fbs : seller;
                     return (
-                      <tr key={c} className="border-t border-slate-100">
-                        <th scope="row" className="text-left px-3 py-2 font-medium text-slate-800">
+                      <tr key={c} className="border-t border-line">
+                        <th scope="row" className="text-left px-3 py-2 font-medium text-ink">
                           {CLASS_LABEL[c]}
                         </th>
                         <td className="text-right px-3 py-2 tabular-nums">{fmtGmv(l?.gross_gmv ?? null)}</td>
@@ -367,7 +369,7 @@ function FullShopeeInner() {
                       </tr>
                     );
                   })}
-                  <tr className="border-t-2 border-slate-300 bg-slate-50 font-medium">
+                  <tr className="border-t-2 border-line-strong bg-raised font-medium">
                     <th scope="row" className="text-left px-3 py-2">Total (cobertura API)</th>
                     <td className="text-right px-3 py-2 tabular-nums">{fmtGmv(dados.totals.gross_gmv)}</td>
                     <td className="text-right px-3 py-2 tabular-nums">{fmtCount(dados.totals.eligible_orders)}</td>
@@ -378,7 +380,7 @@ function FullShopeeInner() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-faint">
               Devolução: {fmtGmv(dados.totals.to_return_gmv)} em{" "}
               {fmtCount(dados.totals.to_return_orders)} pedidos · não pagos:{" "}
               {fmtGmv(dados.totals.unpaid_gmv)} em{" "}
@@ -390,7 +392,7 @@ function FullShopeeInner() {
           {/* Tendencia */}
           <section aria-labelledby="sh-tendencia" className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 id="sh-tendencia" className="inline-flex items-center gap-1 text-sm font-semibold text-slate-800">
+              <h2 id="sh-tendencia" className="inline-flex items-center gap-1 text-sm font-semibold text-ink">
                 Tendência diária do share de FBS
                 <InfoDica texto="Share de cada dia: FBS ÷ (FBS + vendedor) do dia. O share do período, nos cartões, vem dos totais — não é a média destes pontos." />
               </h2>
@@ -401,8 +403,8 @@ function FullShopeeInner() {
                     className={
                       `${CONTROLE_BASE} font-medium ` +
                       (metrica === m.key
-                        ? "border-violet-600 bg-violet-600 text-white"
-                        : "border-slate-300 bg-white text-slate-800 hover:bg-slate-50")
+                        ? "border-accent bg-accent text-accent-on"
+                        : "border-line-strong bg-surface text-ink hover:bg-raised")
                     }>
                     {m.label}
                   </button>
@@ -490,14 +492,14 @@ function Comparativo({
 
   return (
     <section aria-labelledby={id} className="flex flex-col gap-2">
-      <h2 id={id} className="text-sm font-semibold text-slate-800">{titulo}</h2>
-      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white">
+      <h2 id={id} className="text-sm font-semibold text-ink">{titulo}</h2>
+      <div className="overflow-x-auto border border-line rounded-xl bg-surface">
         <table className="min-w-full text-sm">
           <caption className="sr-only">
             {titulo}: GMV bruto, share de FBS e volumes, ordenados por GMV
             decrescente.
           </caption>
-          <thead className="bg-slate-50 text-slate-700">
+          <thead className="bg-raised text-ink-muted">
             <tr>
               <th scope="col" className="text-left px-3 py-2 font-medium">
                 {chave === "brand" ? "Marca" : "Conta"}
@@ -515,11 +517,11 @@ function Comparativo({
           </thead>
           <tbody>
             {ordenadas.map((l) => (
-              <tr key={l.nome} className="border-t border-slate-100">
-                <th scope="row" className="text-left px-3 py-2 font-medium text-slate-800 whitespace-nowrap">
+              <tr key={l.nome} className="border-t border-line">
+                <th scope="row" className="text-left px-3 py-2 font-medium text-ink whitespace-nowrap">
                   {l.nome[0].toUpperCase() + l.nome.slice(1)}
                   {l.share === 0 && (
-                    <span className="ml-2 text-xs font-normal text-slate-500">
+                    <span className="ml-2 text-xs font-normal text-ink-faint">
                       (coberta, sem FBS)
                     </span>
                   )}
@@ -536,22 +538,22 @@ function Comparativo({
               </tr>
             ))}
             {(naoCobertas ?? []).map((n) => (
-              <tr key={`nc-${n}`} className="border-t border-slate-100 bg-amber-50/40">
-                <th scope="row" className="text-left px-3 py-2 font-medium text-amber-900 whitespace-nowrap">
+              <tr key={`nc-${n}`} className="border-t border-line bg-warn-soft/40">
+                <th scope="row" className="text-left px-3 py-2 font-medium text-warn-ink whitespace-nowrap">
                   {n[0].toUpperCase() + n.slice(1)}
                 </th>
                 <td colSpan={chave === "brand" ? 5 : 3}
-                  className="px-3 py-2 text-xs text-amber-900">
+                  className="px-3 py-2 text-xs text-warn-ink">
                   Fora da cobertura da API — sem medição. Não é zero.
                 </td>
               </tr>
             ))}
             {(ausentes ?? []).map((n) => (
-              <tr key={`au-${n}`} className="border-t border-slate-100 bg-amber-50/40">
-                <th scope="row" className="text-left px-3 py-2 font-medium text-amber-900 whitespace-nowrap">
+              <tr key={`au-${n}`} className="border-t border-line bg-warn-soft/40">
+                <th scope="row" className="text-left px-3 py-2 font-medium text-warn-ink whitespace-nowrap">
                   {n[0].toUpperCase() + n.slice(1)}
                 </th>
-                <td colSpan={3} className="px-3 py-2 text-xs text-amber-900">
+                <td colSpan={3} className="px-3 py-2 text-xs text-warn-ink">
                   Sem movimento na janela — fora da cobertura medida, não é 0%.
                 </td>
               </tr>
@@ -571,9 +573,11 @@ function Comparativo({
  * zero -- "nao houve venda classificada" nao e' "o FBS caiu a zero".
  */
 function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDiaria>; metrica: MetricaSerie }) {
+  // TEMA-ESCURO: cores do SVG resolvidas pelo tema, como nos outros graficos.
+  const tema = temaDoGrafico(useTema().resolvido);
   if (!pontos.length) {
     return (
-      <p className="text-xs text-slate-500 border border-slate-200 rounded-lg px-3 py-6 text-center bg-white">
+      <p className="text-xs text-ink-faint border border-line rounded-lg px-3 py-6 text-center bg-surface">
         Sem série diária publicada para esta janela.
       </p>
     );
@@ -603,7 +607,7 @@ function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDi
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white p-2">
+      <div className="overflow-x-auto border border-line rounded-xl bg-surface p-2">
         <svg viewBox={`0 0 ${W} ${H}`} role="img" className="w-full h-auto min-w-[320px]"
           aria-label={
             `Share diário de FBS por ${rotulo}, de ${pontos[0].data} a ` +
@@ -613,27 +617,27 @@ function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDi
           }>
           {[0, 0.25, 0.5, 0.75, 1].map((g) => (
             <g key={g}>
-              <line x1={P} x2={W - P} y1={y(g)} y2={y(g)} stroke="#e2e8f0" strokeWidth="1" />
+              <line x1={P} x2={W - P} y1={y(g)} y2={y(g)} stroke={tema.grade} strokeWidth="1" />
               {/* 12px e o piso de legibilidade da Torre. O SVG escala com o
                   viewBox, mas o rotulo precisa nascer >= 12 para nao ficar
                   abaixo do piso quando o grafico encolhe. */}
-              <text x={4} y={y(g) + 4} fontSize="12" fill="#64748b">{g * 100}%</text>
+              <text x={4} y={y(g) + 4} fontSize="12" fill={tema.eixo}>{g * 100}%</text>
             </g>
           ))}
           {segmentos.map((seg, i) => (
             <polyline key={i} points={seg.join(" ")} fill="none"
-              stroke="#7c3aed" strokeWidth="2" strokeLinejoin="round" />
+              stroke={tema.series[0]} strokeWidth="2" strokeLinejoin="round" />
           ))}
         </svg>
       </div>
-      <details className="text-xs text-slate-600">
+      <details className="text-xs text-ink-muted">
         <summary className="cursor-pointer min-h-11 flex items-center">
           Ver a série como tabela
         </summary>
         <div className="overflow-x-auto mt-2 max-h-72">
           <table className="min-w-full text-xs">
             <caption className="sr-only">Share diário de FBS por {rotulo}.</caption>
-            <thead className="bg-slate-50">
+            <thead className="bg-raised">
               <tr>
                 <th scope="col" className="text-left px-2 py-1 font-medium">Dia</th>
                 <th scope="col" className="text-right px-2 py-1 font-medium">FBS</th>
@@ -643,7 +647,7 @@ function ShopeeFbsTrend({ pontos, metrica }: { pontos: ReturnType<typeof serieDi
             </thead>
             <tbody>
               {pontos.map((p) => (
-                <tr key={p.data} className="border-t border-slate-100">
+                <tr key={p.data} className="border-t border-line">
                   <th scope="row" className="text-left px-2 py-1 font-normal">{p.data}</th>
                   <td className="text-right px-2 py-1 tabular-nums">
                     {metrica === "gmv" ? fmtGmv(String(p.fbs)) : fmtCount(p.fbs)}
