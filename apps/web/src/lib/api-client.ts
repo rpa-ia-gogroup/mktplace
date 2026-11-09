@@ -17,7 +17,7 @@ import type { MLFulfillmentResponse } from "./ml-fulfillment";
 import type { ShopeeFbsPayload } from "./shopee-fbs";
 import type { EstoqueFullResponse } from "./estoque-full";
 import type { MLFullEstoqueResponse } from "./ml-full-estoque";
-import type { ImpactoRuptura } from "./full-visao-geral";
+import type { CurvaAbc, ImpactoRuptura } from "./full-visao-geral";
 
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -2584,6 +2584,17 @@ export async function fetchMLFullEstoque(
  * canal vem `ok` ou `unavailable` com motivo; falha da rota inteira vira erro
  * e a Visao geral segue sem o R$, nunca com R$ 0.
  */
+/**
+ * CURVA-ABC: curva ABC por "marca|SKU do canal" (planilha "Sortimento
+ * Gobeaute", lida pela API com cache de 1 h). Falha = `null` na tela: a
+ * Visao geral segue sem curva, nunca com "C".
+ */
+export async function fetchCurvaAbc(signal?: AbortSignal): Promise<CurvaAbc> {
+  const res = await torreFetch(`${API_URL}/api/v1/performance/full-curva-abc`, { signal });
+  if (!res.ok) throw new Error("A curva ABC está indisponível no momento.");
+  return (await res.json()) as CurvaAbc;
+}
+
 /** `anterior`: soma a foto anterior de cada canal (API-4) -- mais lenta; a tela pede depois de desenhar. */
 export async function fetchImpactoRuptura(signal?: AbortSignal, anterior = false): Promise<ImpactoRuptura> {
   const res = await torreFetch(`${API_URL}/api/v1/performance/full-impacto-ruptura${anterior ? "?anterior=true" : ""}`, { signal });

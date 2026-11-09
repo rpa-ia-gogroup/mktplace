@@ -597,9 +597,11 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
   //   o numero muda de hora em hora.
   // 30 -> 31 pelo FULL-IMPACTO-1, que acrescentou `fetchImpactoRuptura`
   //   (impacto potencial da ruptura no Full; erro proprio, nunca R$ 0).
+  // 31 -> 32 pelo CURVA-ABC-1, que acrescentou `fetchCurvaAbc` (curva ABC da
+  //   planilha de sortimento; falha = sem curva, nunca "C").
   // O pino literal e' proposital: forca revisao consciente a cada funcao nova,
   // em vez de aceitar qualquer superficie publica em silencio.
-  assert.equal(assinaturas.length, 31, "nenhuma funcao publica foi adicionada ou removida");
+  assert.equal(assinaturas.length, 32, "nenhuma funcao publica foi adicionada ou removida");
   assert.ok(assinaturas.includes("fetchMonitoramentoPreco"));
   assert.ok(assinaturas.includes("fetchAvoeSnapshot"));
   assert.ok(assinaturas.includes("fetchMLFulfillment"));
@@ -617,6 +619,7 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
     "fetchBrandDetail",
     "fetchBrands",
     "fetchCanais",
+    "fetchCurvaAbc",
     "fetchEstoqueFull",
     "fetchExecutiveSummary",
     "fetchFinanceiro",

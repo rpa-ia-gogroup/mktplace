@@ -15,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { PackageX, TrendingDown, Warehouse } from "lucide-react";
+import { PackageX, TrendingDown, Trophy, Warehouse } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
@@ -28,8 +28,9 @@ import DeltaBadge from "@/components/ui/DeltaBadge";
 import KpiTile from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
+import Segmented from "@/components/ui/Segmented";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import { fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
+import { fetchCurvaAbc, fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
 import { noCanal } from "@/lib/canal-preposicao";
 import { hrefAba } from "@/lib/full-abas";
@@ -50,6 +51,14 @@ import {
   antesImpacto,
   antesParamVenda,
   semComparacao,
+  contarFiltros,
+  curvaDe,
+  dicaCurva,
+  impactoPorCurva,
+  linhaCurvaCanal,
+  rankingRupturas,
+  type CurvaAbc,
+  type FiltroCurva,
   heroiRuptura,
   impactoPorMarca,
   kpiImpacto,
@@ -153,6 +162,39 @@ function ChipFoto({ c }: { c: ResumoOk }) {
 }
 
 /** Drilldown do cartao de impacto: marca | % do Full da marca | R$/dia potencial + o ⓘ do canal no rodape. */
+const NOME_CURVA: Record<string, string> = { AA: "AA", A: "A", B: "B", C: "C", sem: "Sem curva" };
+
+/** CURVA-ABC: R$/dia potencial por curva no canal (AA, A, B, C, sem curva) + total. % antes do R$. */
+function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoRuptura | null; abc: CurvaAbc | null }) {
+  const t = impactoPorCurva(canal, impacto, abc);
+  if (!t) return <p className="text-sm text-ink-muted">Curva ABC {abc?.status === "ok" ? "sem impacto potencial do canal agora" : "sem leitura agora"}.</p>;
+  const linha = (l: (typeof t.linhas)[number], total = false) => (
+    <tr key={total ? "total" : l.curva} className={total ? "font-semibold" : undefined}>
+      <th scope="row" className="py-2 pr-2 text-left font-medium text-ink">{total ? "Total" : NOME_CURVA[l.curva]}</th>
+      <td className="px-2 py-2 text-right tabular-nums">{l.pct === null ? <Ausente motivo="sem impacto potencial medido" /> : fmtPct(l.pct)}</td>
+      <td className="px-2 py-2 text-right tabular-nums">{`${fmtReais(l.perda)}/dia`}</td>
+      <td className="py-2 pl-2 text-right tabular-nums">{fmtInt(l.rupturas)}</td>
+    </tr>
+  );
+  return (
+    <table className="w-full text-sm">
+      <caption className="sr-only">Impacto potencial por curva ABC {noCanal(canal, NOME_CANAL[canal])}</caption>
+      <thead className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <tr>
+          <th scope="col" className="py-2 pr-2 text-left">Curva</th>
+          <th scope="col" className="px-2 py-2 text-right">% do impacto</th>
+          <th scope="col" className="px-2 py-2 text-right">R$/dia potencial</th>
+          <th scope="col" className="py-2 pl-2 text-right">Rupturas</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-line">
+        {t.linhas.map((l) => linha(l))}
+        {linha(t.total, true)}
+      </tbody>
+    </table>
+  );
+}
+
 function DetalheImpacto({ canal, impacto }: { canal: Canal; impacto: ImpactoRuptura | null }) {
   const linhas = impactoPorMarca(canal, impacto);
   return (
@@ -198,6 +240,8 @@ export default function VisaoGeralFull() {
   // API-4: o "antes" chega DEPOIS do primeiro desenho (2a chamada, mais lenta).
   // `null` enquanto carrega ou se falhar: o card fica sem pilula, nunca "0".
   const [antes, setAntes] = useState<FotoAnterior | null>(null);
+  // CURVA-ABC: `null` enquanto carrega; falha vira "unavailable" com motivo (sem curva, nunca "C").
+  const [abc, setAbc] = useState<CurvaAbc | null>(null);
   const recarregar = useCallback(() => setTentativa((n) => n + 1), []);
 
   useEffect(() => {
@@ -205,6 +249,10 @@ export default function VisaoGeralFull() {
     setCanais(null);
     setImpacto(null);
     setAntes(null);
+    setAbc(null);
+    fetchCurvaAbc(ctrl.signal)
+      .then((r) => { if (!ctrl.signal.aborted) setAbc(r); })
+      .catch(() => { if (!ctrl.signal.aborted) setAbc({ status: "unavailable", motivo: "a curva ABC não respondeu", fonte: "", duplicadas: [], curva_por_sku: {} }); });
     Promise.allSettled([
       fetchMLFullEstoque(QUERY_ML, ctrl.signal).then((r) => resumoML(validarPayloadML(r))),
       fetchEstoqueFull(QUERY_SHOPEE, ctrl.signal).then(resumoShopee),
@@ -225,7 +273,7 @@ export default function VisaoGeralFull() {
       {canais === null ? (
         <StateBlock tipo="carregando" titulo="Carregando o estoque Full do ML e da Shopee" />
       ) : (
-        <Conteudo canais={canais} impacto={impacto} antes={antes} recarregar={recarregar} />
+        <Conteudo canais={canais} impacto={impacto} antes={antes} abc={abc} recarregar={recarregar} />
       )}
     </PageContainer>
   );
@@ -261,9 +309,39 @@ function Pilula({ a }: { a: Antes | null }) {
   return a ? <DeltaBadge pct={a.pp} tone="lower_is_better" unidade="pp" /> : null;
 }
 
-function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; recarregar: () => void }) {
+/** Uma linha do cartao "Rupturas da curva AA/A" (molde do ACoS da Gerencial). */
+function LinhaCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoRuptura | null; abc: CurvaAbc | null }) {
+  const l = abc === null ? { estado: "carregando" as const } : linhaCurvaCanal(canal, impacto, abc);
+  const titulo = l.estado === "ok" ? l.detalhe : l.estado === "ausente" ? l.motivo : undefined;
+  return (
+    <span className="flex items-baseline justify-between gap-2" title={titulo}>
+      <span className="text-xs font-normal text-ink-faint">{NOME_CANAL[canal]}</span>
+      {l.estado === "ok" ? (
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-xl font-semibold text-ink">{fmtPct(l.pct)}</span>
+          <span className="text-xs font-normal text-ink-muted">do impacto · {fmtInt(l.itens)} {l.itens === 1 ? "item" : "itens"}</span>
+          <span className="sr-only"> ({l.detalhe})</span>
+        </span>
+      ) : (
+        <span className="flex items-baseline gap-1.5">
+          <span className="text-xl font-semibold text-ink-faint">—</span>
+          <span className="text-xs font-normal text-ink-muted">{l.estado === "carregando" ? "carregando a curva" : l.texto}</span>
+          {l.estado === "ausente" && <span className="sr-only"> ({l.motivo})</span>}
+        </span>
+      )}
+    </span>
+  );
+}
+
+const OPCOES_FILTRO: { valor: FiltroCurva; texto: string }[] = [
+  { valor: "todas", texto: "Todas" }, { valor: "aa_a", texto: "AA/A" }, { valor: "b", texto: "B" },
+  { valor: "c", texto: "C" }, { valor: "sem", texto: "Sem curva" },
+];
+
+function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; abc: CurvaAbc | null; recarregar: () => void }) {
   // Um so' dialogo na pagina para os drilldowns (identidade Gerencial).
-  const [drill, setDrill] = useState<Canal | null>(null);
+  const [drill, setDrill] = useState<Canal | "curva" | null>(null);
+  const [filtro, setFiltro] = useState<FiltroCurva>("todas");
   const ok = oks(canais);
   const heroi = heroiRuptura(canais);
   const aHeroi = antesHeroi(canais, antes);
@@ -276,7 +354,11 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
   const tot = total(canais);
   const marcas = rupturaPorMarca(canais, impacto);
   const pior = marcas[0]?.maiorPerda || marcas[0]?.taxa ? marcas[0] : null;
-  const top = topRupturas(canais, 10, impacto);
+  const comCurva = abc?.status === "ok";
+  // Com a leitura em falha o filtro some e a lista fica como antes.
+  const filtroAtivo = comCurva ? filtro : "todas";
+  const top = topRupturas(canais, 10, impacto, abc, filtroAtivo);
+  const contagem = contarFiltros(rankingRupturas(canais, impacto, abc), abc);
   const comImpacto = impactosOk(impacto).length > 0;
   const mistos = canaisMisturados(top);
   const colunas = colunasMarca(canais, marcas);
@@ -324,7 +406,7 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
       />
 
       {/* 2. Faixa de KPIs: quanto custa (por canal, R$ nunca somado) e quem para a venda */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {CANAIS.map((canal) => {
           const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
           const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
@@ -365,13 +447,37 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
             />
           );
         })()}
+        <KpiTile
+          variante="gerencial"
+          identidade="ticket"
+          icone={Trophy}
+          rotulo="Rupturas da curva AA/A"
+          ajuda={<InfoDica emControle texto={dicaCurva(abc, impacto)} />}
+          valor={<span className="mt-1 flex flex-col gap-1 tracking-normal">{CANAIS.map((c) => <LinhaCurva key={c} canal={c} impacto={impacto} abc={abc} />)}</span>}
+          onAbrir={() => setDrill("curva")}
+        />
       </div>
       <KpiDrilldownDialog
         open={drill !== null}
         onClose={() => setDrill(null)}
-        title={`Impacto potencial por marca · ${drill ? NOME_CANAL[drill] : ""}`}
+        title={drill === "curva" ? "Impacto potencial por curva ABC" : `Impacto potencial · ${drill ? NOME_CANAL[drill] : ""}`}
       >
-        {drill && <DetalheImpacto canal={drill} impacto={impacto} />}
+        {drill === "curva" ? (
+          <div className="flex flex-col gap-4">
+            {CANAIS.map((c) => (
+              <section key={c} className="flex flex-col gap-1">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{NOME_CANAL[c]}</h3>
+                <DetalheCurva canal={c} impacto={impacto} abc={abc} />
+              </section>
+            ))}
+            <p className="border-t border-line pt-3 text-xs leading-snug text-ink-muted">{dicaCurva(abc, impacto)}</p>
+          </div>
+        ) : drill && (
+          <div className="flex flex-col gap-4">
+            {comCurva && <DetalheCurva canal={drill} impacto={impacto} abc={abc} />}
+            <DetalheImpacto canal={drill} impacto={impacto} />
+          </div>
+        )}
       </KpiDrilldownDialog>
 
       {/* 3. O que exige atencao agora: 2 colunas (marca, canal e venda na linha 2 do produto) */}
@@ -389,8 +495,20 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
         }
         semPadding
       >
+        {comCurva && (
+          <div className="flex items-center gap-2 overflow-x-auto px-3 pb-2 sm:px-4">
+            <Segmented
+              rotulo="Filtrar por curva ABC"
+              opcoes={OPCOES_FILTRO.map((o) => ({ valor: o.valor, texto: `${o.texto} · ${contagem[o.valor]}` }))}
+              valor={filtro}
+              aoEscolher={setFiltro}
+              className="shrink-0 whitespace-nowrap"
+            />
+            <InfoDica texto={dicaCurva(abc, impacto)} className="shrink-0" />
+          </div>
+        )}
         {top.length === 0 ? (
-          <StateBlock tipo="vazio" titulo="Nenhuma ruptura no Full" compacto />
+          <StateBlock tipo="vazio" titulo={filtroAtivo === "todas" ? "Nenhuma ruptura no Full" : "Nenhuma ruptura nesta curva"} compacto />
         ) : (
           <table className="w-full text-sm">
             <caption className="sr-only">Rupturas no Full ordenadas por {comImpacto ? "impacto potencial em R$ por dia" : "venda média diária"}</caption>
@@ -407,7 +525,17 @@ function Conteudo({ canais, impacto, antes, recarregar }: { canais: ResumoCanal[
                     <span className="line-clamp-2 font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
                       {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
                     </span>
-                    <span className="block text-xs text-ink-muted">{subtituloRuptura(t, { mostrarCanal: mistos, comImpacto })}</span>
+                    <span className="block text-xs text-ink-muted">
+                      {(() => {
+                        const cv = curvaDe(t, abc);
+                        return cv && (
+                          <span className={`mr-1.5 rounded border border-line px-1 ${cv === "AA" || cv === "A" ? "font-bold text-ink" : "text-ink-muted"}`}>
+                            {cv}<span className="sr-only"> (curva ABC)</span>
+                          </span>
+                        );
+                      })()}
+                      {subtituloRuptura(t, { mostrarCanal: mistos, comImpacto })}
+                    </span>
                   </th>
                   <td className="whitespace-nowrap px-3 py-2 sm:px-4 text-right align-top font-semibold tabular-nums text-ink">
                     {!comImpacto ? `${fmtDecimal(t.mediaDiaria)} un.`
