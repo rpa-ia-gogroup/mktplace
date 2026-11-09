@@ -26,8 +26,10 @@ import {
   contarGrupos,
   grupoDe,
   rotuloGrupo,
+  filaPorGrupo,
   fmtFatia,
   type CurvaAbc,
+  type Curva,
   type ItemImpacto,
   kpiParamVenda,
   impactoPorMarca,
@@ -782,5 +784,26 @@ test("chip da foto: aviso de cobertura escrito no chip ('sem RITUÁRIA'), o avis
   const limpo = resumoShopee(SHOPEE);
   if (limpo.status !== "ok") throw new Error("esperava ok");
   assert.equal(chipFoto(limpo).texto, "foto de 08/11, hoje");
+});
+
+test("fila 'Todas': ate' 5 por grupo e os 3 grupos sempre visiveis; 'ver todos' abre o grupo", () => {
+  const canais: ResumoCanal[] = [resumoML(ML)];
+  // 8 AA, 7 A e um kit sem curva de impacto alto: no top 10 o 'Demais' sumiria
+  const curvas: Record<string, Curva> = {};
+  const its: ItemImpacto[] = [];
+  for (let i = 0; i < 8; i++) { curvas[`kokeshi|AA${i}`] = "AA"; its.push(itemImp("kokeshi", `AA${i}`, 100 + i)); }
+  for (let i = 0; i < 7; i++) { curvas[`kokeshi|A${i}`] = "A"; its.push(itemImp("kokeshi", `A${i}`, 200 + i)); }
+  its.push(itemImp("kokeshi", "Kit1", 4200));
+  const abc: CurvaAbc = { ...ABC, curva_por_sku: curvas };
+  const ranking = rankingRupturas(canais, impactoCom(its), abc);
+  assert.ok(!topRupturas(canais, 10, impactoCom(its), abc).some((t) => t.codigo === "Kit1"), "o problema: top 10 sem o kit de R$ 4,2 mil");
+  const fila = filaPorGrupo(ranking, abc);
+  assert.deepEqual(fila.map((g) => [g.grupo, g.total, g.itens.length]), [["AA", 8, 5], ["A", 7, 5], ["demais", 1, 1]]);
+  assert.equal(fila[2].itens[0].codigo, "Kit1", "o maior impacto sem curva aparece na visao padrao");
+  assert.equal(filaPorGrupo(ranking, abc, new Set(["AA"]))[0].itens.length, 8, "ver todos abre a lista do grupo");
+  // grupo vazio nao aparece
+  assert.deepEqual(filaPorGrupo(rankingRupturas(canais, impactoCom([itemImp("kokeshi", "Kit1", 1)]), abc), abc).map((g) => g.grupo), ["demais"]);
+  const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
+  assert.ok(src.includes("filaPorGrupo(ranking, abc, abertos)") && src.includes("ver todos (${grupos[g]})"));
 });
 

@@ -883,3 +883,20 @@ export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null
 
 export const DICA_HEROI_PARCIAL = "AA/A conhecidos: a curva cobre só parte do ML (kits e códigos sem ligação com a planilha ficam sem curva).";
 
+
+/** Quantos itens cada grupo mostra na visao "Todas" antes do "ver todos (N)". */
+export const POR_GRUPO = 5;
+
+/**
+ * Fila "Todas" em grupos: ate' 5 por grupo (AA, A, Demais), os 3 sempre
+ * visiveis quando tem item -- senao 17 AA/A enchem o top 10 e o maior
+ * impacto sem curva some. Grupo em `abertos` mostra a lista inteira.
+ */
+export function filaPorGrupo(ranking: ItemRuptura[], abc: CurvaAbc | null, abertos: ReadonlySet<GrupoCurva> = new Set(), n = POR_GRUPO): { grupo: GrupoCurva; total: number; itens: ItemRuptura[] }[] {
+  return (["AA", "A", "demais"] as const)
+    .map((grupo) => {
+      const todos = ranking.filter((t) => grupoDe(curvaDe(t, abc)) === grupo);
+      return { grupo, total: todos.length, itens: abertos.has(grupo) ? todos : todos.slice(0, n) };
+    })
+    .filter((g) => g.total > 0);
+}
