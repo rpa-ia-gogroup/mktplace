@@ -818,9 +818,9 @@ def test_de_para_versionado_tem_as_positivas_classe_a_e_as_negativas():
     assert all(r["ativo"] is True for r in linhas)
     positivas = [r for r in linhas if not r["bloquear"]]
     negativas = [r for r in linhas if r["bloquear"]]
-    assert all(r["classe"] == "A" for r in positivas)
+    assert {r["classe"] for r in positivas} == {"A", "B-GTIN"}
     assert {(r["marca"], r["codigo_avoe"], r["sku_destino"])
-            for r in positivas} == {
+            for r in positivas if r["classe"] == "A"} == {
         ("barbours", "10041", "BB02027"), ("barbours", "10042", "BB02019"),
         ("lescent", "10009", "LC01003"), ("lescent", "10015", "LC01009"),
         ("lescent", "10016", "LC01010"), ("lescent", "10017", "LC01011"),
@@ -833,11 +833,36 @@ def test_de_para_versionado_tem_as_positivas_classe_a_e_as_negativas():
         ("apice", "20674"), ("apice", "20675"), ("apice", "20016"),
         ("barbours", "10009"), ("barbours", "10134"),
     }
-    assert len(positivas) == 9 and len(negativas) == 5
+    assert len(positivas) == 15 and len(negativas) == 5
     assert all(r["aprovado_por"] and r["evidencia"] for r in linhas)
     # Cada linha leu exatamente as colunas do cabecalho: nenhuma virgula solta
     # fora das aspas deslocou a evidencia.
     assert all(None not in r for r in linhas)
+
+
+def test_de_para_versionado_classe_b_gtin_traduz_codigo_com_zero_a_esquerda():
+    # T-0065: as 6 positivas B-GTIN (Apice) do CSV real, chave -> destino.
+    linhas = A.carregar_de_para()
+    assert {(r["marca"], r["codigo_avoe"]): r["sku_destino"]
+            for r in linhas if r["classe"] == "B-GTIN"} == {
+        ("apice", "20081"): "AP01049", ("apice", "20910"): "AP01136",
+        ("apice", "01512"): "AP01150", ("apice", "01513"): "AP01152",
+        ("apice", "01514"): "AP01153", ("apice", "1496"): "AP01127",
+    }
+    assert all(r["ativo"] and not r["bloquear"]
+               for r in linhas if r["classe"] == "B-GTIN")
+    # O zero a' esquerda do codigo da Avoe sobrevive ate' o casamento: o map
+    # (PONTE_APICE) nao conhece 01512, entao so' o de-para traduz.
+    catalogo = CATALOGO + [{"component_sku": "AP01150", "brand": "apice",
+                            "ean": None,
+                            "name": "COND MSC RECONSTRUTORA AP 3000 300G"}]
+    bom = _bom([_kit_nomeado("Apice", "KIT045",
+                             ("01512", "Mascara Reconstrutora AP3000 300g"))],
+               ponte=PONTE_APICE, catalogo=catalogo,
+               de_para=A.carregar_de_para())
+    assert _linhas_por_kit(bom)["AVOE:APICE:KIT045"] == {"AP01150": 1}
+    assert bom.summary["traduzidos_por_origem"] == {A.ORIGEM_DE_PARA: 1}
+    assert bom.summary["volume"] == {A.VOLUME_CONCORDA: 1}
 
 
 _CABECALHO = ",".join(A.DE_PARA_COLUNAS)
@@ -911,7 +936,7 @@ def test_de_para_versionado_bloqueia_barbours_10009_e_traduz_lescent_10009():
     assert kits["AVOE:BARBOURS:KIT044"] == {"AVOE:BARBOURS:10009": 1}
     assert kits["AVOE:LESCENT:KIT044"] == {"LC01003": 1}
     assert bom.summary["de_para_bloqueios_ativos"] == 5
-    assert bom.summary["de_para_linhas_ativas"] == 9
+    assert bom.summary["de_para_linhas_ativas"] == 15
 
 
 def test_de_para_ausente_e_recusado(tmp_path):
@@ -943,7 +968,7 @@ def test_ambas_sem_de_para_e_igual_com_o_csv_versionado_nos_kits_sinteticos():
     com = P.montar_fontes(_dados_protheus(), source="ambas", avoe_kits=AVOE,
                           today=HOJE)
     assert _por_oferta(_plano(sem)) == _por_oferta(_plano(com))
-    assert com["avoe_summary"]["de_para_linhas_ativas"] == 9
+    assert com["avoe_summary"]["de_para_linhas_ativas"] == 15
     assert sem["avoe_summary"]["de_para_linhas_ativas"] == 0
 
 
