@@ -158,6 +158,12 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
         meio={porMarca.length ? <TaxaPorMarca linhas={porMarca} /> : undefined}
       />
 
+      {dados.cobertura.fora.length > 0 && (
+        <p className="text-xs font-medium text-warn-ink" data-testid="cx-ml-fora">
+          Sem {dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ")} (sem conta no Mercado Livre): os números não incluem {dados.cobertura.fora.length === 1 ? "essa marca" : "essas marcas"}.
+        </p>
+      )}
+
       <Faixa r={r} dias={dias} esconderSem={!comp?.delta && r.taxa.reclamacao != null && !!sem ? sem.texto : null} />
 
       <FilaAtencao
@@ -187,7 +193,6 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
         <Notas
           notas={[
             ...(dados.pendencias ?? []).map((p) => `${p.titulo}: ${p.motivo}`),
-            ...dados.cobertura.fora.map((f) => `${brandLabel(f.marca)} fica fora: ${f.motivo}`),
             `A coleta de reclamações cobre a partir de ${dados.coleta_desde.slice(8, 10)}/${dados.coleta_desde.slice(5, 7)}.`,
           ]}
         />
@@ -300,7 +305,7 @@ function Pareto({ v }: { v: ReturnType<typeof montarParetoMl> }) {
                 <div className="flex w-full items-baseline justify-between gap-3 text-sm">
                   <span className="min-w-0 break-words text-ink">
                     {i.rotulo}
-                    {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">(sem tradução)</span>}
+                    {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">(motivo sem nome)</span>}
                     <span className="ml-1.5 text-xs text-ink-faint">{i.tipo} · {i.natureza}</span>
                   </span>
                   <span className="shrink-0 tabular-nums text-ink-muted">
@@ -390,8 +395,8 @@ function AtendimentoPorLoja({ v }: { v: ReturnType<typeof montarAtendimentoMl> }
               <ThAjuda ajuda={AJUDA_ML.prazo}>Prazo</ThAjuda>
               <ThAjuda ajuda={AJUDA_ML.perguntas}>Perguntas s/ resp.</ThAjuda>
               <ThAjuda ajuda={AJUDA_ML.tempoResposta}>Tempo resp.</ThAjuda>
-              <ThAjuda ajuda={AJUDA_ML.mensagens}>Msgs não lidas</ThAjuda>
-              <ThAjuda ajuda={AJUDA_ML.primeiraResposta}>1ª ação nossa</ThAjuda>
+              <ThAjuda ajuda={AJUDA_ML.mensagens}>Mensagens não lidas</ThAjuda>
+              <ThAjuda ajuda={AJUDA_ML.primeiraResposta}>1ª resposta nossa</ThAjuda>
             </tr>
           </thead>
           <tbody>
@@ -411,11 +416,11 @@ function AtendimentoPorLoja({ v }: { v: ReturnType<typeof montarAtendimentoMl> }
             <tr className={TR_TOTAL}>
               <th scope="row" className="px-2 py-2 text-left text-ink">Total</th>
               <td className={TD}>{v.total.aguardando}</td>
-              <td className={TD} />
+              <td className={TD}>—</td>
               <td className={TD}>{v.total.perguntasSemResposta}</td>
-              <td className={TD} />
+              <td className={TD}>—</td>
               <td className={TD}>{v.total.mensagens}</td>
-              <td className={TD} />
+              <td className={TD}>—</td>
             </tr>
           </tbody>
         </table>

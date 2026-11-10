@@ -251,5 +251,6 @@ test("telas: a pagina escolhe o corpo pelo canal; o filtro tem os dois canais; s
   }
   assert.doesNotMatch(tela, /<StatCard|<SummaryPanel/);
   assert.match(tela, /torreFetch/);
+  assert.match(tela, /data-testid="cx-ml-fora"/, "marca fora (Ápice) avisada à vista, não só em Mais detalhes");
   assert.doesNotMatch(tela, /\.devolucoes/, "devolucao nao e' desenhada: e' pendencia, nunca zero");
 });
