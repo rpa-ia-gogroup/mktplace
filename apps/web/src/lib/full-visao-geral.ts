@@ -359,9 +359,10 @@ export function rankingRupturas(canais: ResumoCanal[], impacto: ImpactoRuptura |
       if (!imp) return c.rupturas;
       // A rota de impacto nao traz o estoque fora do Full: junta pelo SKU+marca da lista de estoque ja' carregada.
       // shortcut: ML com 2 inventarios no mesmo SKU usa o 1o; sem match, a celula diz "nao informado".
-      const estoque = new Map(c.rupturas.map((r) => [`${r.marca}|${r.codigo}`, r]));
+      const estoque = new Map(c.rupturas.filter((r) => r.codigo).map((r) => [`${r.marca}|${r.codigo}`, r]));
       return imp.itens.map((i) => {
-        const e = estoque.get(`${i.brand}|${i.sku?.trim() || null}`);
+        const sku = i.sku?.trim();
+        const e = sku ? estoque.get(`${i.brand}|${sku}`) : undefined; // sem SKU nao junta: evita colisao 'marca|null'
         return { ...itemDoImpacto(c.canal, i), naoDisponivel: e?.naoDisponivel, transferencia: e?.transferencia };
       });
     })
