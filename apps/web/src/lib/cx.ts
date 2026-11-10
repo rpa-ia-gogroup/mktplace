@@ -498,9 +498,6 @@ export function montarAtendimentoCx(
       notas.push(`Tempo de resposta medido desde ${dia} (início da coleta): o período ainda não está completo.`);
     }
   }
-  if (brutas.some((b) => b.n?.conversas_truncado)) {
-    notas.push("“≥” = a loja tem mais conversas do que a coleta leu: o número é um piso.");
-  }
   notas.push(...chat.sem_foto.map((s) => `${rotuloMarca(s.marca)}: ${s.motivo}`));
 
   return {
@@ -777,7 +774,6 @@ export function montarPareto(
   for (const b of [blocoDev, blocoCan]) {
     if (b?.excluidos && b.rotulo_excluidos) notas.push(`${inteiro(b.excluidos)} ${b.rotulo_excluidos}.`);
   }
-  notas.push(`Reenvios: ${MOTIVO_REENVIO}; sem fonte ainda.`);
 
   const erro = dev?.estado === "erro" || can.motivos?.estado === "erro";
   // Total: so' as lojas com os dois lados de cada conta (sem historico fica fora da seta).
@@ -1251,23 +1247,28 @@ const FMT_DIA_HORA = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
 });
 
+/** Captura da Saude da Conta mais velha que isto = dado velho: aparece escrita no chip. */
+export const SAUDE_VELHA_MS = 24 * 3_600_000;
+
 export interface ChipsCx {
   /** "30 dias fechados · 05/10 a 03/11" */
   janela: string;
-  /** Hora da resposta da API (title do chip; nao e' frescor). */
-  geradoEm: string;
-  /** Captura MAIS ANTIGA da Saude da Conta entre as lojas; null sem nenhuma. */
-  saudeDaConta: string | null;
+  /** Title do chip unico: hora da resposta da API e, se houver, a captura da Saude da Conta. */
+  detalhe: string;
+  /** "Saúde da Conta: 03/11 06:05" SO' quando a captura mais antiga passou de 24 h; senao null (vai no title). */
+  saudeDesatualizada: string | null;
 }
 
-export function chipsCx(dados: Pick<CxShopeeResponse, "janela" | "gerado_em" | "chat">): ChipsCx {
+export function chipsCx(dados: Pick<CxShopeeResponse, "janela" | "gerado_em" | "chat">, agora: number = Date.now()): ChipsCx {
   const capturas = dados.chat.contas
     .map((c) => (c.capturado_em ? new Date(c.capturado_em).getTime() : NaN))
     .filter(Number.isFinite);
+  const maisAntiga = capturas.length ? Math.min(...capturas) : null;
+  const saude = maisAntiga == null ? null : `Saúde da Conta: ${FMT_DIA_HORA.format(maisAntiga).replace(",", "")}`;
   return {
     janela: textoJanela(dados.janela),
-    geradoEm: `gerado em ${formatarInstante(dados.gerado_em) ?? dados.gerado_em}`,
-    saudeDaConta: capturas.length ? `Saúde da Conta: ${FMT_DIA_HORA.format(Math.min(...capturas)).replace(",", "")}` : null,
+    detalhe: [`gerado em ${formatarInstante(dados.gerado_em) ?? dados.gerado_em}`, saude].filter(Boolean).join(" · "),
+    saudeDesatualizada: maisAntiga != null && agora - maisAntiga > SAUDE_VELHA_MS ? saude : null,
   };
 }
 

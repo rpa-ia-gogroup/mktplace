@@ -111,13 +111,14 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
         meta={
           <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
             {/* o canal (Shopee) mora na barra de filtros, como nas outras abas */}
+            {/* um chip so': a captura da Saude da Conta vai no title; so' aparece escrita quando esta velha */}
             {chips && (
-              <Chip title={chips.geradoEm}>
+              <Chip title={chips.detalhe} tom={chips.saudeDesatualizada ? "atencao" : "neutro"}>
                 {chips.janela}
-                <span className="sr-only"> · {chips.geradoEm}</span>
+                {chips.saudeDesatualizada && <span> · {chips.saudeDesatualizada}</span>}
+                <span className="sr-only"> · {chips.detalhe}</span>
               </Chip>
             )}
-            {chips?.saudeDaConta && <Chip>{chips.saudeDaConta}</Chip>}
           </span>
         }
       />
@@ -257,7 +258,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
           />
         )}
         {dialogo && "marca" in dialogo && (
-          <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} janela={janela} />
+          <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} />
         )}
       </KpiDrilldownDialog>
     </>
@@ -377,7 +378,7 @@ function SaudePorMarca({ itens, abrir }: { itens: StatusMarca[]; abrir: (marca: 
 }
 
 /** Detalhe da marca: o cartao do antigo "Status por marca", inteiro. */
-function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaFilaCx | null; janela: string }) {
+function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFilaCx | null }) {
   if (!s) return <p className="text-sm text-ink-faint">Sem dados desta loja no recorte.</p>;
   const numeros: [string, string][] = [
     ["Aguardando", s.aguardando],
@@ -389,7 +390,6 @@ function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaF
     <div className="flex flex-col gap-4 text-sm" data-testid="cx-detalhe-marca">
       <div className="flex flex-wrap items-center gap-2">
         {s.tom === "ausente" ? <Chip tom="ausente">{s.rotulo}</Chip> : <Chip tom={s.tom} ponto>{s.rotulo}</Chip>}
-        <span className="text-xs text-ink-faint">Shopee · {janela}</span>
       </div>
       {s.tom === "ausente" ? (
         <p className="text-sm text-ink-muted">{s.alertas[0] ?? "Sem fotografia da Saúde da Conta."}</p>
@@ -410,7 +410,6 @@ function DetalheMarca({ s, fila, janela }: { s: StatusMarca | null; fila: LinhaF
           </div>
         ))}
       </dl>
-      <p className="text-xs text-ink-faint">{AJUDA_CX.status}</p>
     </div>
   );
 }
@@ -468,11 +467,6 @@ const COR_TIPO: Record<string, string> = {
   Cancelamento: "bg-accent",
 };
 
-/** "10 devoluções" ou, sem medida, "devoluções: —" (ausencia nunca vira zero). */
-function parte(valor: string, rotulo: string): string {
-  return valor === "—" ? `${rotulo}: —` : `${valor} ${rotulo}`;
-}
-
 function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
   const [aberto, setAberto] = useState<ItemPareto | null>(null);
   // trocar de filtro fecha a lista (ela seria de outro recorte)
@@ -482,11 +476,6 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
   return (
     <Panel
       titulo="Pareto dos problemas"
-      descricao={
-        <span className="tabular-nums" data-testid="cx-pareto-totais">
-          {[parte(v.totais.devolucoes, "devoluções"), parte(v.totais.cancelamentos, "cancelamentos"), parte(v.totais.reembolsado, "reembolsado")].join(" · ")}
-        </span>
-      }
       aria-label="Pareto dos problemas"
       className="h-full"
     >
@@ -620,7 +609,7 @@ function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimento
             <thead className={THEAD}>
               <tr>
                 <th scope="col" className={TH_MARCA}>Marca</th>
-                <ThAjuda ajuda={AJUDA_CX.conversas} dica={v.rotuloConversas}>Conversas</ThAjuda>
+                <ThAjuda ajuda={AJUDA_CX.conversas} dica={dica(v.rotuloConversas, v.linhas.some((l) => l.conversas.startsWith("≥")) && "“≥” = a coleta leu menos conversas do que a loja tem: o número é um piso")}>Conversas</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.aguardandoPct}>Aguardando</ThAjuda>
                 <ThAjuda ajuda={AJUDA_CX.naoLidas}>Não lidas</ThAjuda>
                 <ThAjuda dica={metaResposta}>{ROTULO_INDICADOR.resposta}</ThAjuda>
