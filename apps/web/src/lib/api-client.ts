@@ -1,4 +1,5 @@
-﻿import {
+﻿import type { MarcasMenores } from "./marcas-menores";
+import {
   totalGmv, totalGmvPrev, totalOrders,
   BRANDS, GMV_MONTHLY,
 } from "./mock-data";
@@ -1666,6 +1667,12 @@ export async function fetchHojePorHora(channels: string[], brands?: string[]): P
   qs.set("channels", channels.length > 0 ? channels.join(",") : "all");
   if (brands && brands.length > 0) qs.set("brands", [...brands].sort().join(","));
   return apiFetch<HojePorHora>(`/api/v1/performance/hoje-por-hora?${qs.toString()}`);
+}
+
+/** Marcas menores (Avoe, ate' D-1). Sem cache de front: a API ja' guarda 1 h. */
+export async function fetchMarcasMenores(dateFrom: string, dateTo: string): Promise<MarcasMenores | null> {
+  const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+  return apiFetch<MarcasMenores>(`/api/v1/performance/marcas-menores?${qs.toString()}`);
 }
 
 // ---------- Brand Detail ----------

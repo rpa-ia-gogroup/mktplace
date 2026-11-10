@@ -88,7 +88,7 @@ export function resolverTema(
  * estoque que ela carrega (ML e Shopee) e o grafico de share sairam dos
  * literais para os tokens.
  */
-export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full"] as const;
+export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores"] as const;
 
 export function rotaTematizada(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

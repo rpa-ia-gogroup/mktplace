@@ -30,6 +30,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // casa por prefixo, e um filho deixaria os dois itens ativos ao mesmo tempo.
       { href: "/dre", label: "DRE" },
       { href: "/regioes", label: "Regiões" },
+      // Marcas menores: dado do Avoe, fora do GMV total e da meta da Gerencial.
+      { href: "/marcas-menores", label: "Marcas menores" },
     ],
   },
   {

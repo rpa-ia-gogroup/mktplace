@@ -42,6 +42,7 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
     // (`isNavItemActive` casa por prefixo).
     "/dre",
     "/regioes",
+    "/marcas-menores",
     "/pedidos",
     // Gate EXP-UX-2C — `/pedidos/tiktok` e `/pedidos/ml` sairam. Eram itens
     // `disabled` com selo "Em breve" desde o Gate U1: promessa parada ocupa a
