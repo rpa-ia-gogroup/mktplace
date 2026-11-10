@@ -55,6 +55,8 @@ export default function GerencialMarcasMenores({
   const kpis = useMemo(() => buildKpiBand(f ? overviewDeMenores(f, filters.channels) : null, filters.channels, comparar), [f, filters.channels, comparar]);
   const periodLabel = dados?.periodo ? fmtPeriodo(dados.periodo.inicio, dados.periodo.fim) : fmtPeriodo(filters.dateFrom, filters.dateTo);
   const carregando = dados === undefined;
+  // Filtro so com canal onde elas nao vendem (ML): nao e "zero pedido", e sem dado.
+  const semCanalDelas = !filters.channels.some((c) => c === "shopee" || c === "tiktok");
   const comDado = !!f && f.marcas.some((m) => m.total != null);
   // Sem pedido nas marcas e canais escolhidos, os produtos nem sao pedidos (cada pedido custa uma chamada ao Bling).
   const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, comDado);
@@ -80,7 +82,15 @@ export default function GerencialMarcasMenores({
           }
         />
       ) : !f || !comDado ? (
-        <StateBlock tipo="vazio" titulo="Sem pedidos no período" descricao="Nenhum pedido das marcas e canais selecionados." />
+        semCanalDelas ? (
+          <StateBlock
+            tipo="vazio"
+            titulo="Sem dado das marcas menores no canal selecionado"
+            descricao="As marcas menores vendem só na Shopee e no TikTok."
+          />
+        ) : (
+          <StateBlock tipo="vazio" titulo="Sem dado no período" descricao="Nenhum pedido das marcas escolhidas chegou do Bling neste recorte." />
+        )
       ) : (
         <>
           {f.consolidado && <Topo c={f.consolidado} marcas={f.marcas} emAndamento={emAndamento} titulo="GMV do período" semMeta />}
