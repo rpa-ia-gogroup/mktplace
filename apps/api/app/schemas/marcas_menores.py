@@ -1,4 +1,4 @@
-"""Contrato de `GET /api/v1/performance/marcas-menores` (fonte: API do Avoe)."""
+"""Contrato de `GET /api/v1/performance/marcas-menores` (fonte: API do Bling v3)."""
 from __future__ import annotations
 
 from datetime import date
@@ -21,16 +21,18 @@ class DiaMarca(BaseModel):
 class MarcaMenor(BaseModel):
     id: str
     label: str
-    #: `None` = nenhuma linha no periodo (sem dado), nunca 0.
+    #: "aguardando_autorizacao" = conta do Bling ainda nao autorizada (nao e' zero).
+    status: str = "ok"
+    #: `None` = nenhum pedido no periodo (sem dado), nunca 0.
     total: Optional[float] = None
     #: Mesma duracao, colado antes do inicio; `None` = sem base (nunca 0).
     total_anterior: Optional[float] = None
     por_plataforma: list[PlataformaValor] = []
-    #: So' os dias com linha; dia ausente e' sem dado.
+    #: So' os dias com pedido; dia ausente e' sem dado.
     serie: list[DiaMarca] = []
 
 
-class PeriodoAvoe(BaseModel):
+class PeriodoBling(BaseModel):
     inicio: date
     fim: date
 
@@ -43,13 +45,9 @@ class Consolidado(BaseModel):
 
 class MarcasMenoresResponse(BaseModel):
     disponivel: bool
-    consolidado: Optional[Consolidado] = None
     motivo: Optional[str] = None
-    periodo: Optional[PeriodoAvoe] = None
-    #: Ultimo dia que a fonte entrega (D-1).
-    dado_ate: Optional[date] = None
-    #: O periodo pedido passava de `dado_ate` e foi recortado (ex.: filtro Hoje).
-    ajustado: bool = False
+    consolidado: Optional[Consolidado] = None
+    periodo: Optional[PeriodoBling] = None
     marcas: list[MarcaMenor] = []
 
 
@@ -60,8 +58,18 @@ class ProdutoLinha(BaseModel):
     receita: Optional[float] = None
 
 
-class ProdutosDenavitaTiktok(BaseModel):
+class ProdutosDaMarca(BaseModel):
+    id: str
+    label: str
+    status: str = "ok"
+    produtos: list[ProdutoLinha] = []
+
+
+class ProdutosResponse(BaseModel):
     disponivel: bool
     motivo: Optional[str] = None
-    periodo: Optional[PeriodoAvoe] = None
-    produtos: list[ProdutoLinha] = []
+    #: False enquanto faltam itens de pedido (1 chamada cada, ~3/s): o front consulta de novo.
+    completo: bool = True
+    pedidos_total: int = 0
+    pedidos_lidos: int = 0
+    marcas: list[ProdutosDaMarca] = []

@@ -1,190 +1,237 @@
-"""Marcas menores (Denavita, Yenzah, Aua, By Samia) pela API do Avoe.
+"""Marcas menores (Yenzah, Aua, By Samia) pela API do Bling v3 (conta da Rituaria).
 
-A fonte NAO e' o Data Mart. O Avoe so' tem ate' ontem (D-1). Sem chave ou com
-erro da fonte: `disponivel=False` com motivo curto (o texto da fonte e a chave
-nunca saem). Ausencia nunca vira 0: marca sem linha tem `total=None` e dia sem
-linha nao entra na serie.
+A marca sai do CANAL do pedido (`loja.id`). So' Shopee e TikTok; nenhuma das tres
+tem ML. A Denavita esta' em outra conta Bling, ainda nao autorizada: aparece como
+"aguardando autorizacao", nunca como 0. Ausencia nunca vira 0: marca sem pedido
+tem `total=None` e dia sem pedido nao entra na serie.
+
+Receita do pedido = campo `total` do Bling (produtos - descontos + frete).
+Pedidos na situacao "Cancelado" ficam de fora. Quantidade e receita por produto
+vem dos itens (valor x quantidade - desconto do item).
 """
 from __future__ import annotations
 
 import logging
 import time
-import unicodedata
 from datetime import date, timedelta
 from typing import Callable, Optional
 
-import httpx
-
 from app.config import settings
+from app.services.bling_client import BlingCliente
+from app.services.bling_token import BlingIndisponivel
 
 logger = logging.getLogger(__name__)
 
-CACHE_TTL_S = 3600.0
-TIMEOUT_S = 30.0
-MARCAS = {"denavita": ("denavita", "Denavita"), "yenzah": ("yenzah", "Yenzah"), "aua": ("aua", "Auá"), "bysamia": ("by-samia", "By Samia")}
-#: So' estes tres canais (pedido do usuario); qualquer outra plataforma do Avoe fica fora.
+LISTA_TTL_S = 900.0  # lista de pedidos: 15 min
+LIMITE = 100
+MAX_PAGINAS = 50
+#: Itens lidos por chamada de /produtos (~3 req/s): o resto fica para a proxima, o cache aquece.
+DETALHES_POR_CHAMADA = 36
 ORDEM_PLATAFORMAS = ["MELI", "SHOPEE", "TIKTOK"]
 
-_cache: dict[tuple[date, date], tuple[float, list[dict]]] = {}
+#: id da loja (canal) no Bling -> (marca, plataforma)
+LOJAS: dict[int, tuple[str, str]] = {
+    206340048: ("yenzah", "SHOPEE"),
+    206282652: ("yenzah", "TIKTOK"),
+    206338388: ("aua", "SHOPEE"),
+    206293073: ("aua", "TIKTOK"),
+    206339958: ("by-samia", "SHOPEE"),
+    206285652: ("by-samia", "TIKTOK"),
+}
+#: Em ordem de exibicao; `None` = conta Bling ainda nao autorizada.
+MARCAS: list[tuple[str, str, bool]] = [
+    ("denavita", "Denavita", False),
+    ("yenzah", "Yenzah", True),
+    ("aua", "Auá", True),
+    ("by-samia", "By Samia", True),
+]
+AGUARDANDO = "Aguardando autorização da conta do Bling."
 
-
-class AvoeIndisponivel(Exception):
-    """Motivo ja' sanitizado em `args[0]`."""
+_lista_cache: dict[tuple, tuple[float, list[dict]]] = {}
+_detalhe_cache: dict[int, list[dict]] = {}
+_cancelado: list[Optional[int]] = [None]
 
 
 def limpar_cache() -> None:
-    _cache.clear()
+    _lista_cache.clear()
+    _detalhe_cache.clear()
+    _cancelado[0] = None
 
 
-def _chave_marca(nome: str) -> str:
-    sem_acento = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode()
-    return "".join(sem_acento.split()).casefold()
+def id_cancelado(cli: BlingCliente) -> int:
+    """Id da situacao 'Cancelado' (modulo de vendas). Sem achar, falha: nunca chuta."""
+    if settings.bling_situacao_cancelado_id:
+        return settings.bling_situacao_cancelado_id
+    if _cancelado[0] is not None:
+        return _cancelado[0]
+    modulos = cli.get("/situacoes/modulos").get("data") or []
+    mod = next((m for m in modulos if "venda" in str(m.get("nome", "")).casefold()), None)
+    if mod:
+        situacoes = cli.get(f"/situacoes/modulos/{mod['id']}").get("data") or []
+        sit = next((s for s in situacoes if str(s.get("nome", "")).strip().casefold() == "cancelado"), None)
+        if sit:
+            _cancelado[0] = int(sit["id"])
+            return _cancelado[0]
+    raise BlingIndisponivel("Situação 'Cancelado' não encontrada no Bling.")
 
 
-def consultar_avoe(inicio: date, fim: date) -> list[dict]:
-    """Linhas {data, marca, plataforma, faturamento} do periodo, todas as marcas."""
-    chave = settings.avoe_api_key.get_secret_value()
-    if not chave:
-        raise AvoeIndisponivel("Fonte do Avoe não configurada.")
-    body = {"tool": "consultar_faturamento", "args": {"data_inicio": inicio.isoformat(), "data_fim": fim.isoformat()}}
-    try:
-        with httpx.Client(timeout=TIMEOUT_S) as c:
-            r = c.post(settings.avoe_api_url, headers={"x-api-key": chave}, json=body)
-        r.raise_for_status()
-        linhas = r.json()["result"]["linhas"]
-        if not isinstance(linhas, list):
-            raise ValueError("linhas")
-    except Exception as exc:  # noqa: BLE001 — texto da fonte e chave nunca saem
-        logger.warning("avoe indisponivel: %s", type(exc).__name__)
-        raise AvoeIndisponivel("Fonte do Avoe indisponível agora.") from exc
-    return linhas
-
-
-def _linhas_com_cache(
-    inicio: date, fim: date, fonte: Callable[[date, date], list[dict]], agora: Callable[[], float]
-) -> list[dict]:
-    hit = _cache.get((inicio, fim))
-    if hit and agora() - hit[0] < CACHE_TTL_S:
+def _pedidos_da_loja(cli: BlingCliente, loja: int, inicio: date, fim: date, cancelado: int, agora: Callable[[], float]) -> list[dict]:
+    chave = (loja, inicio, fim)
+    hit = _lista_cache.get(chave)
+    if hit and agora() - hit[0] < LISTA_TTL_S:
         return hit[1]
-    linhas = fonte(inicio, fim)
-    _cache[(inicio, fim)] = (agora(), linhas)
-    return linhas
+    saida: list[dict] = []
+    for pagina in range(1, MAX_PAGINAS + 1):
+        data = cli.get(
+            "/pedidos/vendas",
+            {"dataInicial": inicio.isoformat(), "dataFinal": fim.isoformat(), "idLoja": loja, "limite": LIMITE, "pagina": pagina},
+        ).get("data") or []
+        for p in data:
+            if int((p.get("situacao") or {}).get("id", -1)) == cancelado:
+                continue
+            try:
+                saida.append({"id": int(p["id"]), "data": date.fromisoformat(str(p["data"])[:10]), "total": float(p["total"])})
+            except (KeyError, TypeError, ValueError):
+                continue  # pedido sem data ou sem total = sem dado
+        if len(data) < LIMITE:
+            break
+    _lista_cache[chave] = (agora(), saida)
+    return saida
 
 
-def get_marcas_menores(
-    date_from: date,
-    date_to: date,
-    hoje: date,
-    fonte: Optional[Callable[[date, date], list[dict]]] = None,
-    agora: Callable[[], float] = time.monotonic,
-) -> dict:
-    fonte = fonte or consultar_avoe  # resolvido na chamada (testes trocam o modulo)
-    dado_ate = hoje - timedelta(days=1)
-    fim = min(date_to, dado_ate)
-    inicio = min(date_from, fim)
-    ajustado = date_to > dado_ate
-    try:
-        linhas = _linhas_com_cache(inicio, fim, fonte, agora)
-    except AvoeIndisponivel as exc:
-        return {"disponivel": False, "motivo": str(exc), "marcas": []}
+def pedidos(cli: BlingCliente, inicio: date, fim: date, agora: Callable[[], float] = time.monotonic) -> list[dict]:
+    """Pedidos nao cancelados das 6 lojas: {id, data, marca, plataforma, total}."""
+    cancelado = id_cancelado(cli)
+    saida = []
+    for loja, (marca, plat) in LOJAS.items():
+        for p in _pedidos_da_loja(cli, loja, inicio, fim, cancelado, agora):
+            saida.append({**p, "marca": marca, "plataforma": plat})
+    return saida
 
-    acum: dict[str, dict] = {id_: {"plat": {}, "dias": {}} for id_, _ in MARCAS.values()}
+
+def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dict:
+    por_marca: dict[str, dict] = {id_: {"plat": {}, "dias": {}} for id_, _, _ in MARCAS}
     for l in linhas:
-        m = MARCAS.get(_chave_marca(str(l.get("marca", ""))))
-        try:
-            dia, valor = date.fromisoformat(str(l["data"])[:10]), float(l["faturamento"])
-        except (KeyError, TypeError, ValueError):
-            continue  # linha sem data ou sem valor = sem dado
-        if not m or not (inicio <= dia <= fim):
-            continue
-        plat = str(l.get("plataforma", "")).upper()
-        if plat not in ORDEM_PLATAFORMAS:
-            continue
-        a = acum[m[0]]
-        a["plat"][plat] = a["plat"].get(plat, 0.0) + valor
-        d = a["dias"].setdefault(dia, {})
-        d[plat] = d.get(plat, 0.0) + valor
+        a = por_marca[l["marca"]]
+        a["plat"][l["plataforma"]] = a["plat"].get(l["plataforma"], 0.0) + l["total"]
+        d = a["dias"].setdefault(l["data"], {})
+        d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
+    ant_marca: dict[str, float] = {}
+    for l in ant:
+        ant_marca[l["marca"]] = ant_marca.get(l["marca"], 0.0) + l["total"]
 
-    def ordem(p: str) -> int:
-        return ORDEM_PLATAFORMAS.index(p)
-
-    # Periodo anterior (mesma duracao, colado no inicio). Falhou ou sem linha: sem base, nunca 0.
-    dias = (fim - inicio).days + 1
-    ant_fim = inicio - timedelta(days=1)
-    ant_ini = ant_fim - timedelta(days=dias - 1)
-    try:
-        linhas_ant = _linhas_com_cache(ant_ini, ant_fim, fonte, agora)
-    except AvoeIndisponivel:
-        linhas_ant = []
-    ant: dict[str, float] = {}
-    for l in linhas_ant:
-        m = MARCAS.get(_chave_marca(str(l.get("marca", ""))))
-        try:
-            dia, valor = date.fromisoformat(str(l["data"])[:10]), float(l["faturamento"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if m and ant_ini <= dia <= ant_fim and str(l.get("plataforma", "")).upper() in ORDEM_PLATAFORMAS:
-            ant[m[0]] = ant.get(m[0], 0.0) + valor
-
-    marcas = []
-    for id_, label in MARCAS.values():
-        a = acum[id_]
+    ordem = ORDEM_PLATAFORMAS.index
+    marcas, por_plat = [], {}
+    for id_, label, conectada in MARCAS:
+        a = por_marca[id_]
+        for p, v in a["plat"].items():
+            por_plat[p] = por_plat.get(p, 0.0) + v
         marcas.append({
             "id": id_,
             "label": label,
+            "status": "ok" if conectada else "aguardando_autorizacao",
             "total": sum(a["plat"].values()) if a["plat"] else None,
-            "total_anterior": ant.get(id_),
+            "total_anterior": ant_marca.get(id_),
             "por_plataforma": [{"plataforma": p, "faturamento": a["plat"][p]} for p in sorted(a["plat"], key=ordem)],
-            "serie": [
-                {"data": dia, "faturamento": sum(v.values()), "por_plataforma": v}
-                for dia, v in sorted(a["dias"].items())
-            ],
+            "serie": [{"data": d, "faturamento": sum(v.values()), "por_plataforma": v} for d, v in sorted(a["dias"].items())],
         })
-    por_plat: dict[str, float] = {}
-    for a in acum.values():
-        for p, v in a["plat"].items():
-            por_plat[p] = por_plat.get(p, 0.0) + v
-    consolidado = {
-        "total": sum(por_plat.values()) if por_plat else None,
-        "total_anterior": sum(ant.values()) if ant else None,
-        "por_plataforma": [{"plataforma": p, "faturamento": por_plat[p]} for p in sorted(por_plat, key=ordem)],
-    }
     return {
         "disponivel": True,
-        "consolidado": consolidado,
+        "consolidado": {
+            "total": sum(por_plat.values()) if por_plat else None,
+            "total_anterior": sum(ant_marca.values()) if ant_marca else None,
+            "por_plataforma": [{"plataforma": p, "faturamento": por_plat[p]} for p in sorted(por_plat, key=ordem)],
+        },
         "periodo": {"inicio": inicio, "fim": fim},
-        "dado_ate": dado_ate,
-        "ajustado": ajustado,
         "marcas": marcas,
     }
 
 
-# ---------------------------------------------------------------------------
-# Produtos: so' Denavita no TikTok tem item (Data Mart). O Avoe nao tem produto nem quantidade.
-
-SQL_PRODUTOS = """
-    SELECT product_id AS sku, MAX(product_name) AS produto, SUM(items_sold) AS quantidade, SUM(gmv) AS receita
-      FROM gold.fct_tiktok_product_daily
-     WHERE brand = 'denavita' AND date BETWEEN :de AND :ate
-     GROUP BY product_id
-     ORDER BY SUM(gmv) DESC NULLS LAST
-     LIMIT 30"""
-
-
-def get_produtos_denavita_tiktok(consultar, inicio: date, fim: date) -> dict:
-    """Produto, quantidade e receita da Denavita no TikTok. Falha da base: indisponivel.
-    Quantidade ausente fica `None`; nunca se deriva de receita."""
+def get_marcas_menores(cli: BlingCliente, date_from: date, date_to: date, hoje: date, agora: Callable[[], float] = time.monotonic) -> dict:
+    fim = min(date_to, hoje)  # o Bling e' quase em tempo real: hoje conta
+    inicio = min(date_from, fim)
     try:
-        linhas = consultar(SQL_PRODUTOS, {"de": inicio, "ate": fim})
-    except Exception:  # noqa: BLE001 — texto do banco nunca sai
-        logger.exception("marcas-menores/produtos falhou")
-        return {"disponivel": False, "motivo": "Base de produtos indisponível agora.", "produtos": []}
-    num = lambda v: None if v is None else float(v)  # noqa: E731
+        linhas = pedidos(cli, inicio, fim, agora)
+    except BlingIndisponivel as exc:
+        return {"disponivel": False, "motivo": str(exc), "marcas": []}
+    dias = (fim - inicio).days + 1
+    ant_fim = inicio - timedelta(days=1)
+    try:
+        ant = pedidos(cli, ant_fim - timedelta(days=dias - 1), ant_fim, agora)
+    except BlingIndisponivel:
+        ant = []  # sem base: a variacao some, nunca vira 0
+    return _montar(linhas, ant, inicio, fim)
+
+
+# ---------------------------------------------------------------------------
+# Produtos: itens de cada pedido (valor x quantidade - desconto), com cache por id.
+
+def receita_do_item(item: dict) -> Optional[float]:
+    """valor x quantidade - desconto do item. Sem valor ou quantidade: sem dado."""
+    try:
+        return float(item["valor"]) * float(item["quantidade"]) - float(item.get("desconto") or 0)
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _itens(cli: BlingCliente, pedido_id: int) -> list[dict]:
+    if pedido_id not in _detalhe_cache:
+        _detalhe_cache[pedido_id] = (cli.get(f"/pedidos/vendas/{pedido_id}").get("data") or {}).get("itens") or []
+    return _detalhe_cache[pedido_id]
+
+
+def get_produtos(
+    cli: BlingCliente,
+    date_from: date,
+    date_to: date,
+    hoje: date,
+    limite_detalhes: int = DETALHES_POR_CHAMADA,
+    agora: Callable[[], float] = time.monotonic,
+) -> dict:
+    """Produto x quantidade x receita por marca. O detalhe de cada pedido custa 1 chamada (~3/s):
+    le ate' `limite_detalhes` por vez e devolve `completo=False` com o progresso; o cache aquece."""
+    fim = min(date_to, hoje)
+    inicio = min(date_from, fim)
+    try:
+        lista = pedidos(cli, inicio, fim, agora)
+        novos = 0
+        for p in lista:
+            if p["id"] in _detalhe_cache:
+                continue
+            if novos >= limite_detalhes:
+                break
+            _itens(cli, p["id"])
+            novos += 1
+    except BlingIndisponivel as exc:
+        return {"disponivel": False, "motivo": str(exc), "marcas": []}
+    lidos = [p for p in lista if p["id"] in _detalhe_cache]
+    acum: dict[str, dict[str, dict]] = {id_: {} for id_, _, _ in MARCAS}
+    for p in lidos:
+        for it in _detalhe_cache[p["id"]]:
+            chave = str(it.get("codigo") or it.get("descricao") or "").strip()
+            if not chave:
+                continue
+            linha = acum[p["marca"]].setdefault(chave, {"sku": chave, "produto": str(it.get("descricao") or chave), "quantidade": None, "receita": None})
+            try:
+                q = float(it["quantidade"])
+                linha["quantidade"] = (linha["quantidade"] or 0.0) + q
+            except (KeyError, TypeError, ValueError):
+                pass  # sem quantidade: continua sem dado, nunca 0
+            r = receita_do_item(it)
+            if r is not None:
+                linha["receita"] = (linha["receita"] or 0.0) + r
     return {
         "disponivel": True,
-        "periodo": {"inicio": inicio, "fim": fim},
-        "produtos": [
-            {"sku": str(l["sku"]), "produto": l.get("produto") or str(l["sku"]), "quantidade": num(l.get("quantidade")), "receita": num(l.get("receita"))}
-            for l in linhas
+        "completo": len(lidos) == len(lista),
+        "pedidos_total": len(lista),
+        "pedidos_lidos": len(lidos),
+        "marcas": [
+            {
+                "id": id_,
+                "label": label,
+                "status": "ok" if conectada else "aguardando_autorizacao",
+                "produtos": sorted(acum[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:30],
+            }
+            for id_, label, conectada in MARCAS
         ],
     }

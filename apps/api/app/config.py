@@ -266,10 +266,16 @@ class Settings(BaseSettings):
     # `expedicao_alerta_destinatarios`: e-mails do Slack, separados por virgula.
     alerta_webhook_secret: SecretStr = SecretStr("")
     slack_bot_token: SecretStr = SecretStr("")
-    # Marcas menores (Denavita, Yenzah, Aua, By Samia): fonte e' a API do Avoe
-    # (Supabase edge function), nao o Data Mart. Chave cadastrada no Render.
-    avoe_api_key: SecretStr = SecretStr("")
-    avoe_api_url: str = "https://hywuageaxxrgxhhbfolb.supabase.co/functions/v1/cliente-api"
+    # Marcas menores (Yenzah, Aua, By Samia): API do Bling v3, conta da Rituaria.
+    # O refresh_token ROTACIONA a cada uso: o vivo fica na tabela
+    # audit.bling_oauth_token; o inicial so' semeia a tabela vazia.
+    bling_client_id: str = ""
+    bling_client_secret: SecretStr = SecretStr("")
+    bling_refresh_token_inicial: SecretStr = SecretStr("")
+    bling_api_url: str = "https://api.bling.com.br/Api/v3"
+    bling_token_url: str = "https://www.bling.com.br/Api/v3/oauth/token"
+    #: 0 = descobrir o id da situacao "Cancelado" pela API; informado, vale este.
+    bling_situacao_cancelado_id: int = 0
     expedicao_alerta_destinatarios: str = ""
 
     # ------------------------------------------------------------------
