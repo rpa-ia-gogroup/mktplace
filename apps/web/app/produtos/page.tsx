@@ -86,6 +86,8 @@ function precoMedio(avg: number | null | undefined): string | null {
 }
 // Ressalvas de metodologia vao para o ⓘ ao lado da linha.
 const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio ponderado por unidade.";
+const DICA_BLING_TODAS =
+  "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as marcas menores, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 const DICA_BLING =
   "Marca menor: dado do Bling (conta da Rituária), pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). O A/B/C/D é feito só entre os produtos desta marca neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 
@@ -248,10 +250,14 @@ function ProdutosPageInner() {
   // identidade antiga.
   const mlDisplayData = mlTableAvail === "available" ? mlState.data : null;
   const refMes = period;
-  const progressoBling =
-    ehMenor && blingMarca.produtos?.disponivel && !blingMarca.produtos.completo
-      ? `${blingMarca.desistiu ? "leitura parcial" : "lendo os itens"}: ${blingMarca.produtos.pedidos_lidos} de ${blingMarca.produtos.pedidos_total} pedidos`
+  const textoProgresso = (b: typeof blingMarca) =>
+    b.produtos?.disponivel && !b.produtos.completo
+      ? `${b.desistiu ? "Leitura parcial" : "Lendo os itens"}: ${b.produtos.pedidos_lidos} de ${b.produtos.pedidos_total} pedidos. O A/B/C/D e os totais ainda podem mudar${b.desistiu ? "." : " até terminar."}`
       : null;
+  const progressoBling = ehMenor ? textoProgresso(blingMarca) : null;
+  const progressoTodas = brand === "" && canalBling != null ? textoProgresso(blingTodas) : null;
+  // Ordenacao propria do bloco "Todas as marcas" (as setas dos cabecalhos funcionam, como na marca unica).
+  const menoresSort = useSortableTable([] as never[], () => null, { product_name: "text" });
   const linhasBling = useMemo(
     () => (canalBling && ehMenor ? linhasDoCanal(blingMarca.produtos, canalBling, [brand]) : []),
     [blingMarca.produtos, canalBling, ehMenor, brand],
@@ -619,13 +625,13 @@ function ProdutosPageInner() {
               })}
             </p>
 
+            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-amber-800" role="status">{progressoBling}</p>}
             <ProductParetoSummary
               buckets={tkDisplaySummary?.buckets ?? null}
               loading={tkSummaryAvail === "loading"}
               activeBucket={tkBucket}
               onSelectBucket={setTkBucket}
               scopeNote={paretoLinha([
-                progressoBling,
                 semGmv(tkDisplaySummary?.excluded_zero_gmv_count),
                 precoMedio(tkDisplaySummary?.avg_price_weighted),
               ])}
@@ -681,6 +687,7 @@ function ProdutosPageInner() {
               loading={shSummaryAvail === "loading"}
             />
 
+            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-amber-800" role="status">{progressoBling}</p>}
             <ProductParetoSummary
               buckets={shDisplaySummary?.buckets ?? null}
               loading={shSummaryAvail === "loading"}
@@ -688,7 +695,6 @@ function ProdutosPageInner() {
               onSelectBucket={setShBucket}
               unavailableReason={shUnavailable}
               scopeNote={paretoLinha([
-                progressoBling,
                 shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
                 precoMedio(shDisplaySummary?.avg_price_weighted),
               ])}
@@ -717,26 +723,30 @@ function ProdutosPageInner() {
 
       {/* "Todas as marcas": as menores (Bling) entram aqui, no MESMO layout, abaixo do ranking do Data Mart.
           Nao entram no ranking nem no A/B/C/D de cima: aquele e' calculado e paginado no servidor. */}
+      {brand === "" && canalBling != null && blingTodas.produtos !== undefined && (blingTodas.produtos === null || !blingTodas.produtos.disponivel) && (
+        <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">Marcas menores indisponíveis agora (Bling).</p>
+      )}
       {brand === "" && canalBling != null && linhasTodasMenores.length > 0 && (
         <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-6 pt-4 pb-2">
             <h2 className="text-sm font-semibold text-slate-800">Marcas menores · {activeChannelLabel}</h2>
-            <InfoDica texto={`Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia. Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. ${DICA_BLING}`} />
+            <InfoDica texto={DICA_BLING_TODAS} />
           </div>
+          {progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-amber-800" role="status">{progressoTodas}</p>}
           {canalBling === "tiktok" ? (
             <TikTokProductTable
-              items={listaTikTok(linhasTodasMenores, { refMonth: refMes, offset: menoresOffset, limit: PAGE_SIZE })}
+              items={listaTikTok(linhasTodasMenores, { refMonth: refMes, sortColumn: menoresSort.sort.column, sortDirection: menoresSort.sort.direction, offset: menoresOffset, limit: PAGE_SIZE })}
               loading={false}
-              sort={{ column: null, direction: null }}
-              onSort={() => {}}
+              sort={menoresSort.sort}
+              onSort={menoresSort.toggleSort}
               pagination={{ limit: PAGE_SIZE, offset: menoresOffset, onChange: setMenoresOffset }}
             />
           ) : (
             <ShopeeProductTable
-              items={listaShopee(linhasTodasMenores, { refMonth: refMes, offset: menoresOffset, limit: PAGE_SIZE })}
+              items={listaShopee(linhasTodasMenores, { refMonth: refMes, sortColumn: menoresSort.sort.column, sortDirection: menoresSort.sort.direction, offset: menoresOffset, limit: PAGE_SIZE })}
               loading={false}
-              sort={{ column: null, direction: null }}
-              onSort={() => {}}
+              sort={menoresSort.sort}
+              onSort={menoresSort.toggleSort}
               pagination={{ limit: PAGE_SIZE, offset: menoresOffset, onChange: setMenoresOffset }}
             />
           )}

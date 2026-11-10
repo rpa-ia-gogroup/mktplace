@@ -136,3 +136,13 @@ test("pagina /produtos: marca menor nao chama o Data Mart e a rota nao cai na gu
   const guarda = readFileSync(new URL("../src/components/shell/GuardaMarcasMenores.tsx", import.meta.url), "utf8");
   assert.match(guarda, /ROTAS_COM_DADO_DAS_MENORES = \["\/", "\/marcas-menores", "\/produtos"\]/);
 });
+
+test("pagina /produtos: leitura parcial em cor de aviso (marca e 'Todas'), ordenacao e falha no bloco das menores", () => {
+  const pagina = readFileSync(new URL("../app/produtos/page.tsx", import.meta.url), "utf8");
+  assert.ok((pagina.match(/text-amber-800" role="status">\{progressoBling\}/g) ?? []).length === 2, "aviso nas duas abas");
+  assert.match(pagina, /\{progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-amber-800"/);
+  assert.match(pagina, /sort=\{menoresSort\.sort\}/);
+  assert.doesNotMatch(pagina, /onSort=\{\(\) => \{\}\}/, "seta de ordenacao inerte");
+  assert.match(pagina, /Marcas menores indisponíveis agora \(Bling\)/);
+  assert.match(pagina, /O A\/B\/C\/D deste bloco é feito só entre as marcas menores/);
+});
