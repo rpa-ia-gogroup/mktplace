@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.routers import cx_atendimento as rota
 from app.services import cx_ml_service as ml
+from app.services import performance_oficial_service as po
 
 URL = "/api/v1/cx/mercadolivre"
 SEGREDO = "postgresql://usuario:senha-NAO-PODE-VAZAR@host/db"
@@ -25,14 +26,21 @@ def _dias(n: int, fim: date = FIM):
     return [fim - timedelta(days=i) for i in range(n)]
 
 
+def reputacao(marca="kokeshi", claims=0.0115, cor="green"):
+    return {"brand": marca, "captured_date": date(2026, 11, 10), "captured_at": AGORA, "level_id": f"5_{cor}",
+            "power_seller_status": "platinum", "real_level": None, "protection_end_date": None,
+            "sales_period": "60 days", "sales_completed": 5000,
+            "seller_reputation": {"metrics": {"claims": {"rate": claims, "value": 30}}}}
+
+
 def diario(marca="kokeshi", dias=60, **extra):
     """Uma linha por dia, de FIM para tras: 100 pedidos, 2 reclamacoes, 1 cancelamento, 1 mediacao."""
     linhas = [{"marca": marca, "dia": d.isoformat() + "T00:00:00-03:00", "pedidos": 100, "reclamacoes": 2,
-               "cancelamentos": 1, "mediacoes": 1, "perguntas": 3, "perguntas_sem_resposta": 1,
+               "cancelamentos": 1, "mediacoes": 1, "perguntas": 3, "perguntas_respondidas": 2,
                "tempo_resposta_min": None, "mensagens_pendentes": None} for d in _dias(dias)]
     # a foto da conta e' do dia de hoje
     linhas.append({"marca": marca, "dia": "2026-11-10T00:00:00-03:00", "pedidos": 10, "reclamacoes": 1,
-                   "cancelamentos": None, "mediacoes": None, "perguntas": None, "perguntas_sem_resposta": None,
+                   "cancelamentos": None, "mediacoes": None, "perguntas": None, "perguntas_respondidas": None,
                    "tempo_resposta_min": 2737.0, "mensagens_pendentes": 20})
     for linha in linhas:
         linha.update(extra)
@@ -47,23 +55,25 @@ def reclamacoes(marca="kokeshi"):
         {"bloco": "motivo", "marca": marca, "k1": "cancelamento", "k2": "out_of_stock", "n1": 5},
         {"bloco": "fila", "marca": marca, "n1": 7, "n2": 2, "n3": 1, "instante_em": AGORA - timedelta(days=3)},
         {"bloco": "resposta", "marca": marca, "n1": 40, "n2": 30, "n3": 60, "x": 5.26},
+        {"bloco": "perguntas", "marca": marca, "n1": 4, "n2": 1, "instante_em": AGORA - timedelta(days=2)},
         {"bloco": "fonte", "marca": marca, "instante_em": AGORA - timedelta(hours=1)},
     ]
 
 
 class Fonte:
-    def __init__(self, marcas=("kokeshi",), falhas=(), dias=60, recl=None, diar=None):
+    def __init__(self, marcas=("kokeshi",), falhas=(), dias=60, recl=None, diar=None, rep=None):
         self.falhas = set(falhas)
         self.chamadas = []
         self.diar = diar if diar is not None else [r for m in marcas for r in diario(m, dias)]
         self.recl = recl if recl is not None else [r for m in marcas for r in reclamacoes(m)]
+        self.rep = rep if rep is not None else [reputacao(m) for m in marcas]
 
     def __call__(self, sql, params):
-        nome = "diario" if sql == ml.SQL_DIARIO else "reclamacoes"
+        nome = {ml.SQL_DIARIO: "diario", po.SQL_ML: "reputacao"}.get(sql, "reclamacoes")
         self.chamadas.append((nome, params))
         if nome in self.falhas:
             raise RuntimeError(f"falhou em {SEGREDO}")
-        return self.diar if nome == "diario" else self.recl
+        return {"diario": self.diar, "reputacao": self.rep}.get(nome, self.recl)
 
 
 def montar(fonte=None, dias=30, brands=None):
@@ -71,11 +81,11 @@ def montar(fonte=None, dias=30, brands=None):
     return ml.montar_cx_ml(brands=brands, dias=dias, consultar=fonte, agora=AGORA), fonte
 
 
-def test_janela_e_duas_consultas_so():
+def test_janela_e_tres_consultas_so():
     r, f = montar()
     assert (r.janela.inicio, r.janela.fim) == (date(2026, 10, 11), FIM)
     assert (r.janela_anterior.inicio, r.janela_anterior.fim) == (date(2026, 9, 11), date(2026, 10, 10))
-    assert sorted(n for n, _ in f.chamadas) == ["diario", "reclamacoes"]
+    assert sorted(n for n, _ in f.chamadas) == ["diario", "reclamacoes", "reputacao"]
     assert r.cobertura.marcas == ["barbours", "kokeshi", "lescent", "rituaria"]
 
 
@@ -94,9 +104,34 @@ def test_fila_vem_da_ultima_leitura_e_nao_da_janela():
     assert k.prazo_mais_antigo == AGORA - timedelta(days=3)
 
 
-def test_perguntas_sem_resposta_somam_tudo_que_a_coleta_guarda():
+def test_perguntas_sem_resposta_e_as_de_mais_de_24h_vem_do_estado_de_agora():
     r, _ = montar(dias=7)
-    assert next(m for m in r.marcas if m.marca == "kokeshi").perguntas_sem_resposta == 60
+    k = next(m for m in r.marcas if m.marca == "kokeshi")
+    assert (k.perguntas_sem_resposta, k.perguntas_sem_resposta_24h) == (4, 1)
+    assert k.pergunta_mais_antiga == AGORA - timedelta(days=2)
+
+
+def test_taxa_de_resposta_tem_respondidas_perguntas_e_o_anterior():
+    r, _ = montar()
+    k = next(m for m in r.marcas if m.marca == "kokeshi")
+    assert (k.perguntas, k.perguntas_respondidas) == (90, 60)
+    assert (k.perguntas_anterior, k.perguntas_respondidas_anterior) == (90, 60)
+
+
+def test_reputacao_oficial_vem_da_mesma_leitura_da_performance():
+    r, f = montar(Fonte(marcas=("kokeshi", "lescent"), rep=[reputacao("kokeshi", claims=0.02, cor="yellow")]))
+    rep = r.reputacao
+    assert rep.estado == "dado" and rep.fonte == po.FONTE_ML
+    k = rep.contas[0]
+    assert (k.marca, k.nivel, k.tom) == ("kokeshi", "MercadoLíder Platinum", "atencao")
+    assert [(m.codigo, m.situacao) for m in k.metricas] == [("ml_claims", "fora")]
+    assert [(s.marca) for s in rep.sem_foto] == ["barbours", "lescent", "rituaria"]
+
+
+def test_reputacao_caida_nao_derruba_o_resto():
+    r, _ = montar(Fonte(falhas=("reputacao",)))
+    assert r.reputacao.estado == "erro" and r.reputacao.contas == [] and SEGREDO not in r.model_dump_json()
+    assert r.diario_estado == "dado" and next(m for m in r.marcas if m.marca == "kokeshi").pedidos == 3000
 
 
 def test_foto_da_conta_e_a_mais_recente_e_oficial():
@@ -132,7 +167,7 @@ def test_apice_fica_fora_e_so_apice_nao_consulta_nada():
 
 def test_90_dias_nao_tem_anterior_porque_a_view_so_guarda_90():
     r, _ = montar(dias=90)
-    assert set(r.sem_anterior) == {"reclamacao", "cancelamento", "mediacao"}
+    assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao"}
     assert r.sem_anterior["reclamacao"].a_partir_de is None
     k = next(m for m in r.marcas if m.marca == "kokeshi")
     assert k.pedidos_anterior is None and k.reclamacoes_anterior is None
@@ -197,7 +232,7 @@ def test_coleta_velha_ganha_aviso():
 
 def test_devolucao_e_pendencia_nunca_zero():
     r, _ = montar()
-    assert [p.codigo for p in r.pendencias] == ["ml_devolucoes"]
+    assert [p.codigo for p in r.pendencias] == ["ml_reembolso", "ml_devolucoes"]
     assert "devolucoes" not in r.marcas[0].model_dump()
 
 

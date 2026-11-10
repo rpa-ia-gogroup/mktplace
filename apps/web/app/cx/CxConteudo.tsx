@@ -340,13 +340,13 @@ export function dica(...partes: (string | null | false)[]): string | null {
 // ---------------------------------------------------------------------------
 // 1. Heroi: Saude da Conta por marca (o "meio")
 // ---------------------------------------------------------------------------
-function SaudePorMarca({ itens, abrir }: { itens: StatusMarca[]; abrir: (marca: string) => void }) {
+export function SaudePorMarca({ itens, abrir, ajuda = AJUDA_CX.status }: { itens: StatusMarca[]; abrir: (marca: string) => void; ajuda?: string }) {
   return (
     <div data-testid="cx-status-marcas">
       <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
         Saúde da Conta por marca
         <span className="inline-flex normal-case tracking-normal">
-          <InfoDica texto={AJUDA_CX.status} titulo="Saúde da Conta" />
+          <InfoDica texto={ajuda} titulo="Saúde da Conta" />
         </span>
       </p>
       <ul className="flex flex-wrap gap-x-1.5" aria-label="Saúde da Conta por marca, da pior para a melhor">
@@ -378,7 +378,7 @@ function SaudePorMarca({ itens, abrir }: { itens: StatusMarca[]; abrir: (marca: 
 }
 
 /** Detalhe da marca: o cartao do antigo "Status por marca", inteiro. */
-function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFilaCx | null }) {
+export function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFilaCx | null }) {
   if (!s) return <p className="text-sm text-ink-faint">Sem dados desta loja no recorte.</p>;
   const numeros: [string, string][] = [
     ["Aguardando", s.aguardando],

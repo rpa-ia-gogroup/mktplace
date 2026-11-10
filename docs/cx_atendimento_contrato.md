@@ -198,13 +198,16 @@ uma chamada ao Metabase, atendida em fila (4 consultas separadas custaram ~+1 s 
 
 `GET /api/v1/cx/mercadolivre?brands=&dias=7|30|90`, na aba CX com `?canal=ml`. Ápice fora (sem conta ML).
 Fontes: `raw.vw_ml_cx_diario` e `raw.ml_cx_reclamacoes` (+ `ml_cx_motivos`, `ml_cx_reclamacao_acoes`), no
-máximo DUAS consultas por requisição, em paralelo (cada uma vira uma chamada ao Metabase, em fila).
+máximo TRÊS consultas por requisição (view, reclamações+perguntas, reputação), em paralelo (cada uma vira uma chamada ao Metabase, em fila).
 
 | Tela | Regra |
 |---|---|
-| Taxa de reclamação (herói) | reclamações (tudo que não é `cancel_*`, por data de abertura) ÷ pedidos do período. Cálculo Torre, não é a reputação oficial |
-| Cancelamentos / Mediações | `cancel_purchase`+`cancel_sale` / etapa `dispute`, ÷ pedidos |
-| Perguntas sem resposta | agora, não segue o período |
+| Taxa de resposta (herói) | `perguntas_respondidas` ÷ `perguntas` do período; "N aguardando · N há mais de 24 h" são as perguntas sem resposta AGORA (`raw.ml_cx_perguntas`); tempo de resposta = `tempo_resposta_min` oficial, média das marcas ponderada pelas perguntas |
+| Saúde da Conta por marca + selo | reputação OFICIAL do ML (`raw.ml_seller_reputation_snapshot`, a mesma leitura da Performance das contas: termômetro, MercadoLíder e métricas com limite). "N loja abaixo da meta" = contas com métrica fora do limite |
+| Contact rate (cartão 1) | reclamações (tudo que não é `cancel_*`, por data de abertura) ÷ pedidos do período. Cálculo Torre, não é a reputação oficial |
+| Reembolso (cartão 3) | **sem fonte**: a coleta não lê devoluções; "—" e "Sem fonte", nunca 0 |
+| Cancelamento / Mediações | `cancel_purchase`+`cancel_sale` / etapa `dispute`, ÷ pedidos (mediações ficam só na tabela por marca) |
+| Perguntas sem resposta | agora, não segue o período; vão para a fila "O que exige atenção" e a tabela por loja |
 | Aguardam nós, prazo | claims `opened` com `acao_pendente_vendedor`; vencidas = `prazo_vendedor` passou |
 | Tempo de resposta, mensagens | valor OFICIAL do ML, 1 foto/dia (janela de 14 dias do ML) |
 | 1ª ação nossa | mediana de (1ª ação `respondent` − abertura). **Parcial**: o histórico de ações só cobre as ~300 reclamações mais recentes por conta; o ⓘ diz isso |

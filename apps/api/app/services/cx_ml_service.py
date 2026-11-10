@@ -32,8 +32,10 @@ from typing import Any, Optional
 
 from app.schemas.account_performance import Cobertura, MarcaFora
 from app.schemas.cx_atendimento import BlocoMotivos, Janela, Pendencia, SemComparacao
-from app.schemas.cx_ml import CxMercadoLivreResponse, LinhaMl, PontoDiaMl
+from app.schemas.performance_oficial import ContaSemFoto
+from app.schemas.cx_ml import CxMercadoLivreResponse, LinhaMl, PontoDiaMl, ReputacaoMl
 from app.services import cx_atendimento_service as base
+from app.services import performance_oficial_service as po
 from app.services.gold_service import ML_BRANDS, TZ_OPERACIONAL
 
 #: Primeiro dia coberto pela coleta de reclamacoes: a carga inicial pegou o que
@@ -45,19 +47,17 @@ DIAS_PEDIDOS_NA_VIEW = 90
 #: A coleta roda a cada ~2 h; passou disso por 3, o dado e' velho.
 # A DAG mercadolivre_cx_coleta roda 1x por dia (06:20 BRT): 30 h toleram um atraso sem alarme falso.
 LIMITE_FRESCOR_HORAS = 30.0
-#: Perguntas nao respondidas somem do ML apos 7 meses: a "foto de agora" le' ate' la'.
-DIAS_PERGUNTAS = 210
 
 SQL_DIARIO = """
 SELECT brand AS marca, dia, pedidos, reclamacoes, cancelamentos, mediacoes,
-       perguntas, perguntas_sem_resposta, tempo_resposta_min, mensagens_pendentes
+       perguntas, perguntas_respondidas, tempo_resposta_min, mensagens_pendentes
   FROM raw.vw_ml_cx_diario
  WHERE brand = ANY(:marcas)
    AND dia >= :desde
 """
 
-#: UMA varredura de `raw.ml_cx_reclamacoes` para quatro blocos (`bloco`):
-#: motivo (janela), fila (agora), resposta (janela, parcial) e fonte (frescor).
+#: UMA consulta para cinco blocos (`bloco`): motivo (janela), fila (agora), resposta
+#: (janela, parcial), perguntas (agora, de `raw.ml_cx_perguntas`) e fonte (frescor).
 #: Colunas comuns: k1/k2 = chaves, n1..n3 = contagens, x = numero, instante_em = data.
 SQL_RECLAMACOES = """
 WITH r AS (
@@ -97,6 +97,12 @@ SELECT 'resposta', r.brand, NULL, NULL,
        NULL
   FROM r LEFT JOIN prim p ON p.claim_id = r.claim_id
  WHERE NOT r.cancelamento AND r.dia BETWEEN :inicio AND :fim GROUP BY 1, 2
+UNION ALL
+SELECT 'perguntas', brand, NULL, NULL,
+       COUNT(*) FILTER (WHERE status = 'UNANSWERED'),
+       COUNT(*) FILTER (WHERE status = 'UNANSWERED' AND criada_em < now() - interval '24 hours'),
+       NULL, NULL, MIN(criada_em) FILTER (WHERE status = 'UNANSWERED')
+  FROM raw.ml_cx_perguntas WHERE brand = ANY(:marcas) GROUP BY 1, 2
 UNION ALL
 SELECT 'fonte', brand, NULL, NULL, NULL, NULL, NULL, NULL, MAX(captured_at) FROM r GROUP BY 1, 2
 """
@@ -169,6 +175,8 @@ def rotular_ml_cx(motivo: Any) -> tuple[str, str, str, bool]:
 
 
 PENDENCIAS = [
+    Pendencia(codigo="ml_reembolso", titulo="Reembolso",
+              motivo="O Mercado Livre ainda não tem reembolso coletado (a coleta não lê devoluções): sem fonte, não é zero."),
     Pendencia(codigo="ml_devolucoes", titulo="Devoluções",
               motivo="A coleta do Mercado Livre ainda não lê o endpoint de devoluções: não é zero, é falta de leitura."),
 ]
@@ -219,12 +227,13 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
         return CxMercadoLivreResponse(**resp)
 
     res = base._rodar_juntas({
-        "ml_cx_diario": (consultar, SQL_DIARIO, {"marcas": cobertura.marcas,
-                                                  "desde": hoje - timedelta(days=DIAS_PERGUNTAS)}),
+        "ml_cx_diario": (consultar, SQL_DIARIO, {"marcas": cobertura.marcas, "desde": anterior.inicio}),
         "ml_cx_reclamacoes": (consultar, SQL_RECLAMACOES, {"marcas": cobertura.marcas,
                                                             "inicio": janela.inicio, "fim": janela.fim}),
+        "ml_reputacao": (consultar, po.SQL_ML, {"marcas": cobertura.marcas}),
     })
     diario, recl = res["ml_cx_diario"], res["ml_cx_reclamacoes"]
+    resp["reputacao"] = _reputacao(res["ml_reputacao"], cobertura.marcas, hoje)
     resp["diario_estado"] = "dado" if diario is not None else "erro"
     resp["reclamacoes_estado"] = "dado" if recl is not None else "erro"
     if diario is None or recl is None:
@@ -246,10 +255,11 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
     sem = sem_anterior_ml(janela, anterior, hoje)
     com_anterior = sem is None and diario is not None and recl is not None
     if sem:
-        resp["sem_anterior"] = {i: sem for i in ("reclamacao", "cancelamento", "mediacao")}
+        resp["sem_anterior"] = {i: sem for i in ("resposta", "reclamacao", "cancelamento", "mediacao")}
 
     fila = {r["marca"]: r for r in por_bloco.get("fila", [])}
     resposta = {r["marca"]: r for r in por_bloco.get("resposta", [])}
+    perguntas = {r["marca"]: r for r in por_bloco.get("perguntas", [])}
     # marca com reclamacao guardada = a coleta chegou nela: ausencia na janela e' zero de verdade
     lidas = {r["marca"] for r in por_bloco.get("fonte", [])}
     linhas: list[LinhaMl] = []
@@ -266,16 +276,22 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
                 c.update(tempo_resposta_min=None if tr is None else float(tr),
                          mensagens_pendentes=base._int(u.get("mensagens_pendentes")), conta_dia=base._dia(u.get("dia")))
             c["perguntas"] = _soma(rows, "perguntas", janela.inicio, janela.fim)
-            c["perguntas_sem_resposta"] = _soma(rows, "perguntas_sem_resposta", date.min, hoje)
+            c["perguntas_respondidas"] = _soma(rows, "perguntas_respondidas", janela.inicio, janela.fim)
             if claims_ok and tem:
                 for campo in ("reclamacoes", "cancelamentos", "mediacoes"):
                     c[campo] = _soma(rows, campo, janela.inicio, janela.fim) or 0
             if com_anterior:
                 c["pedidos_anterior"] = _soma(rows, "pedidos", anterior.inicio, anterior.fim)
+                c["perguntas_anterior"] = _soma(rows, "perguntas", anterior.inicio, anterior.fim)
+                c["perguntas_respondidas_anterior"] = _soma(rows, "perguntas_respondidas", anterior.inicio, anterior.fim)
                 if tem:
                     for campo in ("reclamacoes", "cancelamentos", "mediacoes"):
                         c[campo + "_anterior"] = _soma(rows, campo, anterior.inicio, anterior.fim) or 0
         if recl is not None and tem:
+            q = perguntas.get(m)
+            c.update(perguntas_sem_resposta=base._int(q["n1"]) if q else 0,
+                     perguntas_sem_resposta_24h=base._int(q["n2"]) if q else 0,
+                     pergunta_mais_antiga=q.get("instante_em") if q else None)
             f = fila.get(m)
             c.update(aguardando_nos=base._int(f["n1"]) if f else 0,
                      vencidas=base._int(f["n2"]) if f else 0, vencem_24h=base._int(f["n3"]) if f else 0,
@@ -295,6 +311,18 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
         resp["serie_diaria"] = _serie(diario, cobertura.marcas, janela, claims_ok)
     resp["pendencias"] = PENDENCIAS
     return CxMercadoLivreResponse(**resp)
+
+
+def _reputacao(linhas: Optional[list[dict]], marcas: list[str], hoje: date) -> ReputacaoMl:
+    """Reputacao oficial do ML por conta (a mesma leitura e regra da Performance das contas)."""
+    if linhas is None:
+        return ReputacaoMl(estado="erro", fonte=po.FONTE_ML, motivo=base.MOTIVO_ERRO)
+    contas = [po.conta_ml(r, hoje) for r in linhas if r.get("brand") in marcas]
+    contas.sort(key=lambda c: marcas.index(c.marca))
+    com = {c.marca for c in contas}
+    return ReputacaoMl(
+        estado="dado", fonte=po.FONTE_ML, contas=contas,
+        sem_foto=[ContaSemFoto(marca=m, motivo="Sem fotografia capturada ainda.") for m in marcas if m not in com])
 
 
 def _motivos(linhas: Optional[list[dict]], tipo: str, titulo: str, vazio: str,

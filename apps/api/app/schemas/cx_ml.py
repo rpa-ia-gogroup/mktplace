@@ -14,10 +14,11 @@ from pydantic import BaseModel
 
 from app.schemas.account_performance import Cobertura
 from app.schemas.cx_atendimento import BlocoMotivos, Janela, Pendencia, SemComparacao
+from app.schemas.performance_oficial import ContaOficial, ContaSemFoto, EstadoCanal
 
 #: Fonte: `dado` ou `erro` (a fonte falhou nesta carga; os campos dela ficam None).
 EstadoFonte = Literal["dado", "erro"]
-IndicadorMl = Literal["reclamacao", "cancelamento", "mediacao"]
+IndicadorMl = Literal["resposta", "reclamacao", "cancelamento", "mediacao"]
 
 
 class LinhaMl(BaseModel):
@@ -31,6 +32,10 @@ class LinhaMl(BaseModel):
     #: Reclamacoes que chegaram a mediacao (etapa `dispute`).
     mediacoes: Optional[int] = None
     perguntas: Optional[int] = None
+    #: Perguntas da janela que ja' tem resposta (taxa de resposta = respondidas / perguntas).
+    perguntas_respondidas: Optional[int] = None
+    perguntas_anterior: Optional[int] = None
+    perguntas_respondidas_anterior: Optional[int] = None
     #: A mesma conta na `janela_anterior`. None = sem base comparavel (ver `sem_anterior`).
     pedidos_anterior: Optional[int] = None
     reclamacoes_anterior: Optional[int] = None
@@ -43,8 +48,10 @@ class LinhaMl(BaseModel):
     vencem_24h: Optional[int] = None
     #: Prazo mais antigo entre as que aguardam (vencido = ha' quanto tempo).
     prazo_mais_antigo: Optional[datetime] = None
-    #: AGORA: perguntas ainda sem resposta (todas as que a coleta guarda).
+    #: AGORA: perguntas sem resposta (todas as que a coleta guarda), as com mais de 24 h e a criacao da mais antiga.
     perguntas_sem_resposta: Optional[int] = None
+    perguntas_sem_resposta_24h: Optional[int] = None
+    pergunta_mais_antiga: Optional[datetime] = None
     #: Tempo de resposta a perguntas, valor OFICIAL do ML (media de 14 dias, 1 foto/dia).
     tempo_resposta_min: Optional[float] = None
     #: Mensagens pos-venda nao lidas (so' contagem), mesma foto.
@@ -68,6 +75,15 @@ class PontoDiaMl(BaseModel):
     mediacoes: Optional[int] = None
 
 
+class ReputacaoMl(BaseModel):
+    """Saude da conta no ML: reputacao OFICIAL (termometro, MercadoLider, metricas com limite)."""
+    estado: EstadoCanal
+    motivo: Optional[str] = None
+    fonte: str
+    contas: list[ContaOficial] = []
+    sem_foto: list[ContaSemFoto] = []
+
+
 class CxMercadoLivreResponse(BaseModel):
     gerado_em: datetime
     janela: Janela
@@ -78,6 +94,7 @@ class CxMercadoLivreResponse(BaseModel):
     #: `raw.ml_cx_reclamacoes` (fila, motivos, 1a resposta).
     reclamacoes_estado: EstadoFonte = "dado"
     motivo_indisponivel: Optional[str] = None
+    reputacao: Optional[ReputacaoMl] = None
     marcas: list[LinhaMl] = []
     reclamacoes_motivos: Optional[BlocoMotivos] = None
     cancelamentos_motivos: Optional[BlocoMotivos] = None
