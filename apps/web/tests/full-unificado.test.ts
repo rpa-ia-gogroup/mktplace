@@ -29,6 +29,8 @@ import {
   filaPorGrupo,
   fmtFatia,
   avisoCanal,
+  AVISO_LISTA_INCOMPLETA,
+  RESUMO_BLOCO_FORA,
   blocosForaDaFila,
   celulaEstoque,
   celulaImpacto,
@@ -930,7 +932,39 @@ test("brinde e descontinuado no ML: mesma regra; blocos recolhidos so' com item"
   const blocos = blocosForaDaFila([mlr]);
   assert.deepEqual(blocos.map((b) => b.titulo), ["Brindes sem estoque no Full (1)", "Descontinuados sem estoque no Full (1)"]);
   assert.deepEqual(blocosForaDaFila([resumoML(ML)]), [], "sem brinde/descontinuado: nenhum bloco");
-  assert.match(DICA_IMPACTO_FILA, /Brindes e descontinuados não entram no impacto/);
+  assert.match(DICA_IMPACTO_FILA, /Brindes e descontinuados não entram nas contagens nem no impacto/);
+});
+
+test("API que ja' descontou (situacao_aplicada): o front separa a lista e NAO desconta de novo", () => {
+  const sh = shopee([
+    { ...produto("apice", "RUPTURA_CANDIDATA", 9), situacao: "brinde" },
+    produto("apice", "RUPTURA_CANDIDATA", 7),
+    produto("apice", "SUFICIENTE", 1, 20),
+  ]);
+  // numeros ja' SEM o brinde (o que a API manda com situacao_aplicada)
+  sh.indicadores = { ...sh.indicadores, produtos_ruptura: 1, produtos_total: 2, situacao_aplicada: true, brindes_fora: 1 };
+  const r = resumoShopee(sh);
+  if (r.status !== "ok") throw new Error("esperava ok");
+  assert.equal(r.ruptura, 1);
+  assert.equal(r.base, 2, "nao subtrai o brinde duas vezes");
+  assert.equal(r.rupturas.length, 1);
+  assert.equal(r.foraDaFila.length, 1);
+  assert.equal(r.rupturasCompletas, true);
+});
+
+test("lista truncada: N dos blocos vira '—' com o aviso; precedencia brinde > descontinuado vem resolvida da API", () => {
+  const sh = { ...shopee([produto("apice", "RUPTURA_CANDIDATA", 9)]), truncado: true };
+  const r = resumoShopee(sh);
+  if (r.status !== "ok") throw new Error("esperava ok");
+  assert.equal(r.listaTruncada, true);
+  const blocos = blocosForaDaFila([r]);
+  assert.deepEqual(blocos.map((b) => b.titulo), ["Brindes sem estoque no Full (—)", "Descontinuados sem estoque no Full (—)"]);
+  assert.ok(blocos.every((b) => b.aviso === AVISO_LISTA_INCOMPLETA));
+  assert.equal(AVISO_LISTA_INCOMPLETA, "lista incompleta: brindes ainda contados");
+  assert.equal(RESUMO_BLOCO_FORA, "não entram nas contagens nem no impacto");
+  // um SKU so' chega com UMA situacao (API: brinde > descontinuado): o item nunca aparece nos dois blocos
+  const um = resumoShopee(shopee([{ ...produto("apice", "RUPTURA_CANDIDATA", 9), situacao: "brinde" }]));
+  assert.deepEqual(blocosForaDaFila([um]).map((b) => b.situacao), ["brinde"]);
 });
 
 test("filtro canal x curva combinados: cada contagem reflete o outro filtro", () => {

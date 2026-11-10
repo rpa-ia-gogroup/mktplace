@@ -237,6 +237,10 @@ export interface IndicadoresML {
   inventarios_suficientes: number;
   inventarios_sem_demanda_medida: number;
   inventarios_exigem_acao: number;
+  /** API: brindes/descontinuados JA' descontados dos numeros. Ausente/false = nada descontado. */
+  situacao_aplicada?: boolean;
+  brindes_fora?: number;
+  descontinuados_fora?: number;
 }
 
 export interface FrescorML {

@@ -121,6 +121,10 @@ export interface Indicadores {
   produtos_kit_nao_conciliado: number;
   produtos_total: number;
   produtos_exigem_acao: number;
+  /** API: brindes/descontinuados JA' descontados dos numeros. Ausente/false = nada descontado. */
+  situacao_aplicada?: boolean;
+  brindes_fora?: number;
+  descontinuados_fora?: number;
 }
 
 export interface Frescor {

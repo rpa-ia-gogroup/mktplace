@@ -60,6 +60,8 @@ import {
   fmtFatia,
   rankingRupturas,
   avisoCanal,
+  AVISO_LISTA_INCOMPLETA,
+  RESUMO_BLOCO_FORA,
   blocosForaDaFila,
   celulaEstoque,
   celulaImpacto,
@@ -264,7 +266,8 @@ function BlocosForaDaFila({ canais }: { canais: ResumoCanal[] }) {
   return (
     <>
       {blocosForaDaFila(canais).map((b) => (
-        <MaisDetalhes key={b.situacao} titulo={b.titulo}>
+        <MaisDetalhes key={b.situacao} titulo={b.titulo} resumo={RESUMO_BLOCO_FORA}>
+          {b.aviso && <p className="-mt-1 text-xs text-ink-muted">{b.aviso}</p>}
           <ul className="-m-4 divide-y divide-line">
             {b.itens.map((t, i) => {
               const apoio = celulaEstoque(t);
