@@ -574,8 +574,9 @@ export function kpiImpacto(
     const m = motivoSemPct(c, impacto!.janela_gmv_dias);
     return { valor: `${fmtReais(v)}/dia`, comparacao: m.texto, detalhe: m.detalhe };
   }
-  const base = canal === "ml" ? `${fmtReais(v)}/dia do faturamento Full` : `${fmtReais(v)}/dia · só quem para a venda`;
-  return { valor: fmtPct(p), comparacao: base + janelaDeslocada(c) };
+  // Na tela so' o R$/dia; base do % e janela deslocada vao no title.
+  const base = canal === "ml" ? "do faturamento Full" : "só quem para a venda";
+  return { valor: fmtPct(p), comparacao: `${fmtReais(v)}/dia`, detalhe: base + janelaDeslocada(c) };
 }
 
 /**
