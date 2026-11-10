@@ -20,8 +20,9 @@ import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import TikTokColetaPerdida, { BotaoCsvCompleto, baixarCsv } from "@/components/expedicao/TikTokColetaPerdida";
-import { CLASSE_CABECALHO, CLASSE_TABELA, EstadoSecao } from "@/components/expedicao/LayoutExpedicao";
+import { EstadoSecao } from "@/components/expedicao/LayoutExpedicao";
 import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
+import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
 import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
 import ConsolidadoEtapas from "./ConsolidadoEtapas";
@@ -44,8 +45,10 @@ import {
   ondeAgirNosAbertos,
   queryAbertos,
   type ListaAbertos,
+  type MarcaAbertos,
   type RespostaAbertos,
 } from "@/lib/expedicao-tiktok-abertos";
+import { percentualDaFila } from "@/lib/expedicao-travados";
 import { brandLabel } from "@/lib/filters/brands";
 
 type Carga = { tipo: "carregando" } | { tipo: "erro" } | { tipo: "ok"; dados: RespostaAbertos };
@@ -427,6 +430,49 @@ export function ondeAgirTikTok(abertos: AbertosTikTok): ItemFila | null {
   return o ? { chave: `onde-agir-${o.chave}`, severidade: o.tom, titulo: o.texto } : null;
 }
 
+const SEGMENTOS_PRAZO = [
+  { chave: "overdue", rotulo: "Vencidos", cor: "bg-crit" },
+  { chave: "perto", rotulo: "Perto de vencer", cor: "bg-warn" },
+  { chave: "on_time", rotulo: "No prazo", cor: "bg-ok" },
+] as const;
+
+/** Vencidos / perto de vencer / no prazo da marca; os pedidos retidos nao entram em nenhuma faixa. */
+function BarraDePrazoTikTok({ b }: { b: MarcaAbertos }) {
+  const valores = { overdue: b.overdue, perto: b.due_today + b.due_next_day, on_time: b.on_time };
+  return (
+    <div
+      className="flex h-4 w-full min-w-[120px] overflow-hidden rounded bg-raised"
+      role="img"
+      aria-label={SEGMENTOS_PRAZO.map((x) => `${x.rotulo}: ${formatarInteiro(valores[x.chave])}`).join(", ")}
+    >
+      {SEGMENTOS_PRAZO.map((x) => (
+        <div
+          key={x.chave}
+          className={x.cor}
+          style={{ width: b.open > 0 ? `${(valores[x.chave] / b.open) * 100}%` : "0%" }}
+          title={`${x.rotulo}: ${formatarInteiro(valores[x.chave])}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function LegendaDaBarra() {
+  return (
+    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
+      {SEGMENTOS_PRAZO.map((x) => (
+        <li key={x.chave} className="flex items-center gap-1.5">
+          <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-sm ${x.cor}`} />
+          {x.rotulo}
+        </li>
+      ))}
+      <li>
+        <InfoDica texto="A barra mostra a fatia do backlog de cada marca por situação do prazo reconstruído: vencidos, perto de vencer (vencem hoje ou no próximo dia útil) e no prazo." />
+      </li>
+    </ul>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Backlog por marca — o MESMO titulo e o mesmo painel da Shopee e do ML
 // ---------------------------------------------------------------------------
@@ -453,7 +499,7 @@ export function BacklogPorMarcaTikTok({
     <Panel
       semPadding
       titulo="Backlog por marca"
-      acao={<InfoDica texto={DICA_ABERTOS} />}
+      acao={<InfoDica texto={`${DICA_ABERTOS} Sem tendência nem travados: o TikTok não informa o histórico da fila.`} />}
       descricao={
         <>
           {formatarInteiro(t.open)} em aberto · {formatarInteiro(t.awaiting_shipment)} aguardando envio ·{" "}
@@ -462,54 +508,39 @@ export function BacklogPorMarcaTikTok({
         </>
       }
       // EXPEDICAO-TIKTOK-COLETA-PERDIDA: por dia de prazo, inclusive os ja' coletados depois.
-      rodape={<TikTokColetaPerdida api={api} marca={marca} embutida />}
+      rodape={
+        <div className="flex flex-col gap-2">
+          {d.brands.length ? <LegendaDaBarra /> : null}
+          <TikTokColetaPerdida api={api} marca={marca} embutida />
+        </div>
+      }
     >
       {d.brands.length ? (
-        <div className="overflow-x-auto">
-          <table className={CLASSE_TABELA}>
-            <caption className="sr-only">Pedidos do TikTok em aberto por marca</caption>
-            <thead className={CLASSE_CABECALHO}>
-              <tr>
-                <th scope="col">Marca</th>
-                <th scope="col" className="text-right">Em aberto</th>
-                <th scope="col" className="text-right">Ag. envio</th>
-                <th scope="col" className="text-right">Ag. coleta</th>
-                <th scope="col" className="text-right">Vencidos</th>
-                <th scope="col" className="text-right">Vence hoje</th>
-                <th scope="col" className="text-right">Vence {proximo}</th>
-                <th scope="col" className="text-right">Acima de 48 h</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.brands.map((b) => {
-                const celula = (lista: ListaAbertos, n: number, cor = "text-ink") =>
-                  n > 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => abertos.abrir(lista, n, b.brand)}
-                      className={`tabular-nums underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${cor}`}
-                      aria-label={`Ver ${formatarInteiro(n)} pedidos (${CONFIG_LISTA[lista].titulo}) de ${brandLabel(b.brand)}`}
-                    >
-                      {formatarInteiro(n)}
-                    </button>
-                  ) : (
-                    <span className="tabular-nums text-ink-faint">0</span>
-                  );
-                return (
-                  <tr key={b.brand} className="border-t border-line hover:bg-raised/60">
-                    <th scope="row" className="text-left font-semibold text-ink">{brandLabel(b.brand)}</th>
-                    <td className="text-right">{celula("all", b.open)}</td>
-                    <td className="text-right">{celula("awaiting_shipment", b.awaiting_shipment)}</td>
-                    <td className="text-right">{celula("awaiting_collection", b.awaiting_collection)}</td>
-                    <td className="text-right font-semibold">{celula("overdue", b.overdue, "text-crit-ink")}</td>
-                    <td className="text-right">{celula("due_today", b.due_today, "text-warn-ink")}</td>
-                    <td className="text-right">{celula("due_next_day", b.due_next_day)}</td>
-                    <td className="text-right">{celula("over_48h", b.over_48h)}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        // EXPEDICAO-TIKTOK-PADRAO: a MESMA tabela da Shopee e do ML. Travados e
+        // Tendencia ficam fora: o TikTok nao fotografa a fila por etapa nem
+        // tem serie por hora (ver o ⓘ do titulo).
+        <div className="px-4 py-3">
+          <EvolucaoPorMarca
+            resposta={null}
+            semTendencia
+            fila={d.brands.map((b) => {
+              const perto = b.due_today + b.due_next_day;
+              return {
+                conta: b.brand,
+                titulo: brandLabel(b.brand),
+                apelido: null,
+                backlog: b.open,
+                vencidos: b.overdue,
+                pctVencidos: percentualDaFila(b.overdue, b.open),
+                aoVerVencidos: b.overdue > 0 ? () => abertos.abrir("overdue", b.overdue, b.brand) : undefined,
+                pertoDeVencer: perto,
+                pctPertoDeVencer: percentualDaFila(perto, b.open),
+                acima48h: b.over_48h,
+                travados: null,
+                barra: <BarraDePrazoTikTok b={b} />,
+              };
+            })}
+          />
         </div>
       ) : (
         <p role="status" className="px-4 py-3 text-sm text-ink-muted">

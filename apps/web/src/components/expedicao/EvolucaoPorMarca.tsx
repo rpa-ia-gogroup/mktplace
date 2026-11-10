@@ -51,7 +51,8 @@ export interface LinhaDaFila {
   /** `null` no canal sem prazo publicado: a coluna nem existe. */
   vencidos: number | null;
   acima48h: number;
-  travados: number;
+  /** `null` no canal que nao fotografa a fila por etapa (TikTok): a coluna nem existe. */
+  travados: number | null;
   /** "5,3%" dos travados sobre o backlog da conta. */
   pctTravados?: string | null;
   /** Abre a lista dos pedidos travados da conta. */
@@ -204,11 +205,14 @@ export default function EvolucaoPorMarca({
   fila,
   rotuloBarra = "Prazo",
   ajudas = {},
+  semTendencia = false,
 }: {
   resposta: RespostaTendencia | null;
   fila?: LinhaDaFila[];
   rotuloBarra?: string;
   ajudas?: AjudasDaTabela;
+  /** Canal sem serie real (TikTok): a coluna Tendencia nem existe. */
+  semTendencia?: boolean;
 }) {
   if (fila) {
     return (
@@ -217,6 +221,7 @@ export default function EvolucaoPorMarca({
         fila={fila}
         rotuloBarra={rotuloBarra}
         ajudas={ajudas}
+        semTendencia={semTendencia}
       />
     );
   }
@@ -313,12 +318,15 @@ function TabelaUnica({
   fila,
   rotuloBarra,
   ajudas,
+  semTendencia,
 }: {
   resposta: RespostaTendencia | null;
   fila: LinhaDaFila[];
   rotuloBarra: string;
   ajudas: AjudasDaTabela;
+  semTendencia: boolean;
 }) {
+  const comTravados = fila.some((l) => l.travados !== null);
   const series = resposta ? montarEvolucaoPorMarca(resposta.points) : [];
   const dominioX = dominioHorizontal(series);
   const cob = resposta ? coberturaDaEvolucao(resposta) : null;
@@ -367,18 +375,22 @@ function TabelaUnica({
               <th scope="col" className="text-right">
                 Acima de 48 h<ComAjuda ajuda={ajudas.acima48h} />
               </th>
-              <th scope="col" className="text-right">
-                Travados<ComAjuda ajuda={ajudas.travados} />
-              </th>
+              {comTravados ? (
+                <th scope="col" className="text-right">
+                  Travados<ComAjuda ajuda={ajudas.travados} />
+                </th>
+              ) : null}
               <th scope="col" className="w-[22%]">{rotuloBarra}</th>
               {/* EXPEDICAO-TRAVADOS-1: variacao e linha falam do MESMO periodo,
                   por isso moram na mesma coluna, com o periodo no cabecalho. */}
-              <th scope="col">
-                Tendência
-                {periodo ? (
-                  <span className="block font-normal normal-case tracking-normal">{periodo}</span>
-                ) : null}
-              </th>
+              {semTendencia ? null : (
+                <th scope="col">
+                  Tendência
+                  {periodo ? (
+                    <span className="block font-normal normal-case tracking-normal">{periodo}</span>
+                  ) : null}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -489,7 +501,8 @@ function TabelaUnica({
                   <td className="text-right tabular-nums text-ink">
                     {inteiro(f ? f.acima48h : (ultimo?.over48h ?? 0))}
                   </td>
-                  <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctTravados && f.travados > 0 ? `${f.pctTravados} da fila` : undefined}>
+                  {comTravados ? (
+                  <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctTravados && (f.travados ?? 0) > 0 ? `${f.pctTravados} da fila` : undefined}>
                     {/* T-0021: "12" e "5,3%" eram lidos colados ("125,3%"); o
                         " · " so' para o leitor de tela, preso ao invólucro
                         `relative` (QA F1). */}
@@ -498,22 +511,24 @@ function TabelaUnica({
                         <button
                           type="button"
                           onClick={f.aoVerTravados}
-                          aria-label={`Ver os ${inteiro(f.travados)} pedidos travados de ${titulo}`}
+                          aria-label={`Ver os ${inteiro(f.travados ?? 0)} pedidos travados de ${titulo}`}
                           className="-my-3 inline-flex min-h-[44px] items-center font-semibold underline decoration-dotted underline-offset-4 hover:text-accent"
                         >
-                          {inteiro(f.travados)}
+                          {inteiro(f.travados ?? 0)}
                         </button>
                       ) : (
-                        inteiro(f ? f.travados : (ultimo?.stalled ?? 0))
+                        inteiro(f ? (f.travados ?? 0) : (ultimo?.stalled ?? 0))
                       )}
-                      {f?.pctTravados && f.travados > 0 ? (
+                      {f?.pctTravados && (f.travados ?? 0) > 0 ? (
                         <>
                           <span className="sr-only"> · {f.pctTravados} da fila</span>
                         </>
                       ) : null}
                     </span>
                   </td>
+                  ) : null}
                   <td>{f?.barra ?? null}</td>
+                  {semTendencia ? null : (
                   <td>
                     {s && dominioX ? (
                       <span className="inline-flex items-center gap-2">
@@ -540,6 +555,7 @@ function TabelaUnica({
                       <span className="text-xs text-ink-faint">sem ponto no período</span>
                     )}
                   </td>
+                  )}
                 </tr>
               );
             })}
