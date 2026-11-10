@@ -47,7 +47,7 @@ import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import { EstoqueFullError, fetchEstoqueFull } from "@/lib/api-client";
 import {
-  avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao, type OpcaoCurva,
+  avisoCoberturaCurva, avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao, type OpcaoCurva,
 } from "@/lib/estoque-curva";
 import {
   AVISO_CONTEXTO,
@@ -488,7 +488,7 @@ export default function EstoqueFullClient() {
         ))}
       </div>
 
-      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} />}
+      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
 
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -666,14 +666,16 @@ export default function EstoqueFullClient() {
                       <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
                     )}
                   </div>
-                  <p className="text-xs text-ink-faint px-1">
-                    {categoria && !classeDoCard
-                  ? `${fmtInt(lista.length)} na categoria · `
-                  : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
-                    {fmtInt(payload.produtos.length)} de{" "}
-                    {fmtInt(payload.total_no_filtro)} produtos
-                    {payload.truncado && " · lista truncada, refine o filtro"}
-                  </p>
+                  {/* "N de M produtos" so' com a lista truncada (senao e' a lista toda); recortes ativos seguem. */}
+                  {((categoria && !classeDoCard) || filtroCurva.length > 0 || payload.truncado) && (
+                    <p className="text-xs text-ink-faint px-1">
+                      {categoria && !classeDoCard
+                        ? `${fmtInt(lista.length)} na categoria`
+                        : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida`}
+                      {((categoria && !classeDoCard) || filtroCurva.length > 0) && payload.truncado && " · "}
+                      {payload.truncado && `${fmtInt(payload.produtos.length)} de ${fmtInt(payload.total_no_filtro)} produtos · lista truncada, refine o filtro`}
+                    </p>
+                  )}
                   <Tabela produtos={lista} comCurva={comCurva} />
                 </>
               )}
