@@ -1,6 +1,6 @@
 /**
  * Marcas menores (Denavita, Yenzah, Auá, By Samia) — contrato de
- * `GET /api/v1/performance/marcas-menores` (fonte: API do Avoe, só até D-1) e a
+ * `GET /api/v1/performance/marcas-menores` (fonte: API do Bling v3) e a
  * leitura pura dele. Ausência nunca vira 0: `total` null = sem dado.
  */
 export interface PlataformaValor {
@@ -17,6 +17,8 @@ export interface DiaMarca {
 export interface MarcaMenor {
   id: string;
   label: string;
+  /** "aguardando_autorizacao" = conta do Bling ainda não autorizada (não é zero). */
+  status?: string;
   total: number | null;
   /** Período anterior de mesma duração; null = sem base (nunca 0). */
   total_anterior?: number | null;
@@ -35,9 +37,6 @@ export interface MarcasMenores {
   consolidado?: Consolidado | null;
   motivo?: string | null;
   periodo?: { inicio: string; fim: string } | null;
-  dado_ate?: string | null;
-  /** O período pedido passava de ontem e foi recortado (ex.: filtro Hoje). */
-  ajustado: boolean;
   marcas: MarcaMenor[];
 }
 
@@ -76,7 +75,7 @@ export function variacaoPct(total: number | null | undefined, anterior: number |
   return ((total - anterior) / anterior) * 100;
 }
 
-/** Produto x quantidade x receita; só Denavita no TikTok tem item (Data Mart). */
+/** Produto x quantidade x receita por marca (itens dos pedidos do Bling). */
 export interface ProdutoLinha {
   sku: string;
   produto: string;
@@ -84,8 +83,19 @@ export interface ProdutoLinha {
   receita: number | null;
 }
 
-export interface ProdutosDenavitaTiktok {
+export interface ProdutosDaMarca {
+  id: string;
+  label: string;
+  status?: string;
+  produtos: ProdutoLinha[];
+}
+
+export interface ProdutosMarcas {
   disponivel: boolean;
   motivo?: string | null;
-  produtos: ProdutoLinha[];
+  /** false enquanto faltam itens de pedido (1 chamada cada): consulta de novo. */
+  completo: boolean;
+  pedidos_total: number;
+  pedidos_lidos: number;
+  marcas: ProdutosDaMarca[];
 }

@@ -1,4 +1,4 @@
-﻿import type { MarcasMenores, ProdutosDenavitaTiktok } from "./marcas-menores";
+﻿import type { MarcasMenores, ProdutosMarcas } from "./marcas-menores";
 import {
   totalGmv, totalGmvPrev, totalOrders,
   BRANDS, GMV_MONTHLY,
@@ -1669,16 +1669,16 @@ export async function fetchHojePorHora(channels: string[], brands?: string[]): P
   return apiFetch<HojePorHora>(`/api/v1/performance/hoje-por-hora?${qs.toString()}`);
 }
 
-/** Marcas menores (Avoe, ate' D-1). Sem cache de front: a API ja' guarda 1 h. */
+/** Marcas menores (Bling). Sem cache de front: a API ja' guarda a lista por 15 min. */
 export async function fetchMarcasMenores(dateFrom: string, dateTo: string): Promise<MarcasMenores | null> {
   const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
   return apiFetch<MarcasMenores>(`/api/v1/performance/marcas-menores?${qs.toString()}`);
 }
 
-/** Produtos da Denavita no TikTok (Data Mart): bloco proprio, falha sozinho. */
-export async function fetchProdutosMarcasMenores(dateFrom: string, dateTo: string): Promise<ProdutosDenavitaTiktok | null> {
+/** Produtos por marca (itens dos pedidos do Bling): bloco proprio, falha sozinho, pode vir parcial. */
+export async function fetchProdutosMarcasMenores(dateFrom: string, dateTo: string): Promise<ProdutosMarcas | null> {
   const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
-  return apiFetch<ProdutosDenavitaTiktok>(`/api/v1/performance/marcas-menores/produtos?${qs.toString()}`);
+  return apiFetch<ProdutosMarcas>(`/api/v1/performance/marcas-menores/produtos?${qs.toString()}`);
 }
 
 // ---------- Brand Detail ----------
