@@ -32,7 +32,8 @@ BD = [
 def test_status_sem_acento_sem_maiuscula_marca_pela_coluna_a_e_precedencia_brinde():
     sit, marcas, conflitos = svc.interpretar_bd(BD)
     assert sit == {("apice", "BR001"): "brinde", ("barbours", "BB02027"): "brinde",
-                   ("rituaria", "RT01002"): "descontinuado"}
+                   ("rituaria", "RT01002"): "descontinuado",
+                   ("apice", "BD01"): "brinde"}
     assert ("apice", "20690") not in sit and ("lescent", "LC01") not in sit, "Ativo/Lançamento ficam na fila"
     assert conflitos == (("kokeshi", "KK1"),), "status conflitante nao tira da fila"
     assert "apice" in marcas
