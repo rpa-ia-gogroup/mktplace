@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 
 import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "../src/lib/gerencial/marcas-menores-gerencial.ts";
@@ -87,4 +88,9 @@ test("nota do (i): inclui valor e variacao; indisponivel diz que o GMV nao as in
   assert.match(notaMenores(m, false, true, fmt)!, /hoje não as inclui/);
   assert.match(notaMenores({ estado: "indisponivel" }, false, false, fmt)!, /indisponíveis.*não as inclui/);
   assert.equal(notaMenores({ estado: "fora" }, false, false, fmt), null);
+});
+
+test("pagina: variacaoDoCanal e' declarada antes de quem a usa (const arrow: acesso antes disso quebra a tela inteira)", () => {
+  const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.ok(pagina.indexOf("const variacaoDoCanal") < pagina.indexOf("const canalMenores"));
 });

@@ -384,6 +384,8 @@ function GerencialInner() {
     () => (hojePorHora?.disponivel ? Object.fromEntries((hojePorHora.por_marca ?? []).map((m) => [m.brand, m])) : null),
     [hojePorHora],
   );
+  const variacaoDoCanal = (atual: number | null | undefined, antes: number | null | undefined) =>
+    atual != null && antes != null && antes > 0 ? ((atual - antes) / antes) * 100 : null;
   // Marcas menores (Bling): somam no GMV do topo, na rosca e nas marcas, sem meta. Carregam EM PARALELO e
   // sozinhas: Bling lento ou fora nao atrasa nem apaga o resto (so o aviso no (i)). So a lista de pedidos.
   const todasAsMarcas = filters.brands.length === 0 || ALL_BRAND_KEYS.every((b) => filters.brands.includes(b));
@@ -446,8 +448,6 @@ function GerencialInner() {
       k.key === "orders" ? { ...k, ...ref(compHoje.pedidosPct) } : k.key === "avg_ticket" ? { ...k, ...ref(compHoje.ticketPct) } : k,
     );
   }, [kpis, compHoje]);
-  const variacaoDoCanal = (atual: number | null | undefined, antes: number | null | undefined) =>
-    atual != null && antes != null && antes > 0 ? ((atual - antes) / antes) * 100 : null;
   const diaMeta = diaDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const mesMeta = diaMeta ? null : mesDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const metas = useMetasDoMes(mesMeta ?? diaMeta?.slice(0, 7) ?? null);
