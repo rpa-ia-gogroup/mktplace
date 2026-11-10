@@ -131,8 +131,13 @@ function headline(q: ScopeQuality): string {
   if (q.eligibility_status === "no_eligible_rows") return "Nenhum produto concluído nesta competência";
   if (q.brand_coverage?.total_is_partial && !q.brand) {
     const faltam = q.brand_coverage.missing.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(", ");
-    const andamento = q.maturity_status === "materially_immature" ? " · mês em andamento" : "";
-    return `Parcial: sem ${faltam} na Shopee${andamento}`;
+    // Outros avisos de dado nao podem ficar so' no ⓘ: o parcial nao os esconde.
+    const outros = [
+      q.maturity_status === "materially_immature" ? "mês em andamento" : null,
+      q.source_status === "source_never_loaded" ? "competência nunca carregada" : null,
+      q.load_status === "load_behind_daily" ? "mart atrás da diária" : null,
+    ].filter(Boolean).map((o) => ` · ${o}`).join("");
+    return `Parcial: sem ${faltam} na Shopee${outros}`;
   }
   if (q.maturity_status === "materially_immature") return "Competência ainda em maturação — números vão subir";
   if (q.source_status === "source_never_loaded") return "Esta competência nunca foi carregada da fonte";
