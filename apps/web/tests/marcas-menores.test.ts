@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { corDaPlataforma, fatias, nomeDaPlataforma } from "../src/lib/marcas-menores.ts";
+import { corDaPlataforma, fatias, nomeDaPlataforma, variacaoPct } from "../src/lib/marcas-menores.ts";
 
 const m = (por: [string, number][]) => ({
   id: "x", label: "X", total: por.length ? por.reduce((a, [, v]) => a + v, 0) : null,
@@ -17,13 +17,18 @@ test("sem dado nao ha fatia (nunca 0%)", () => {
   assert.deepEqual(fatias(m([])), []);
 });
 
-test("nome e cor por plataforma; desconhecida cai no neutro", () => {
+test("so' tres canais: nome e cor de canal; desconhecida capitalizada na cor neutra", () => {
   assert.equal(nomeDaPlataforma("MELI"), "Mercado Livre");
   assert.equal(corDaPlataforma("TIKTOK"), "rgb(var(--tc-canal-tiktok))");
-  assert.equal(corDaPlataforma("SHEIN"), "rgb(var(--tc-canal-shein))");
-  assert.equal(nomeDaPlataforma("MAGALU"), "Magalu");
-  assert.equal(nomeDaPlataforma("NETSHOES"), "Netshoes");
+  assert.equal(corDaPlataforma("MELI"), "rgb(var(--tc-canal-ml))");
   assert.equal(nomeDaPlataforma("DAFITI"), "Dafiti");
-  assert.equal(corDaPlataforma("MAGALU"), "rgb(var(--tc-faint))");
   assert.equal(corDaPlataforma("XYZ"), "rgb(var(--tc-faint))");
+});
+
+test("variacao contra o periodo anterior; sem base nao inventa", () => {
+  assert.equal(variacaoPct(110, 100), 10);
+  assert.equal(variacaoPct(50, 100), -50);
+  assert.equal(variacaoPct(10, null), null);
+  assert.equal(variacaoPct(10, 0), null);
+  assert.equal(variacaoPct(null, 100), null);
 });

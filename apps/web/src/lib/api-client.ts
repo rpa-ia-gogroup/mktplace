@@ -1,4 +1,4 @@
-﻿import type { MarcasMenores } from "./marcas-menores";
+﻿import type { MarcasMenores, ProdutosDenavitaTiktok } from "./marcas-menores";
 import {
   totalGmv, totalGmvPrev, totalOrders,
   BRANDS, GMV_MONTHLY,
@@ -1673,6 +1673,12 @@ export async function fetchHojePorHora(channels: string[], brands?: string[]): P
 export async function fetchMarcasMenores(dateFrom: string, dateTo: string): Promise<MarcasMenores | null> {
   const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
   return apiFetch<MarcasMenores>(`/api/v1/performance/marcas-menores?${qs.toString()}`);
+}
+
+/** Produtos da Denavita no TikTok (Data Mart): bloco proprio, falha sozinho. */
+export async function fetchProdutosMarcasMenores(dateFrom: string, dateTo: string): Promise<ProdutosDenavitaTiktok | null> {
+  const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+  return apiFetch<ProdutosDenavitaTiktok>(`/api/v1/performance/marcas-menores/produtos?${qs.toString()}`);
 }
 
 // ---------- Brand Detail ----------
