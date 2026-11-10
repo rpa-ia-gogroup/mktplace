@@ -55,9 +55,8 @@ test("total parcial: UMA linha curta na tela, todo o detalhe no ⓘ", () => {
   const src = readSource("src", "components", "ScopeQualityBanner.tsx");
   assert.match(src, /Parcial: sem \$\{faltam\} na Shopee/);
   assert.match(src, /"mês em andamento"/);
-  // parcial nao esconde outro aviso de dado: carga atrasada e nunca carregada entram na linha
+  // parcial nao esconde outro aviso de dado: a carga atrasada entra na linha
   assert.match(src, /"mart atrás da diária"/);
-  assert.match(src, /"competência nunca carregada"/);
   assert.ok(!/Total PARCIAL/.test(src), "o painel longo voltou");
   // detalhe (bullets, indice, fontes, publicacao) vai no ⓘ
   assert.match(src, /<InfoDica texto=\{detalheTexto\(quality\)\} nota=\{detalheNota\(quality, publicacao\)\}/);

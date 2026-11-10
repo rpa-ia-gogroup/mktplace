@@ -132,9 +132,9 @@ function headline(q: ScopeQuality): string {
   if (q.brand_coverage?.total_is_partial && !q.brand) {
     const faltam = q.brand_coverage.missing.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(", ");
     // Outros avisos de dado nao podem ficar so' no ⓘ: o parcial nao os esconde.
+    // ("nunca carregada" fica de fora: e' a causa da marca ausente, ja' dita na linha.)
     const outros = [
       q.maturity_status === "materially_immature" ? "mês em andamento" : null,
-      q.source_status === "source_never_loaded" ? "competência nunca carregada" : null,
       q.load_status === "load_behind_daily" ? "mart atrás da diária" : null,
     ].filter(Boolean).map((o) => ` · ${o}`).join("");
     return `Parcial: sem ${faltam} na Shopee${outros}`;
