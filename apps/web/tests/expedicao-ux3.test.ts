@@ -248,7 +248,6 @@ test("Mercado Livre: prazo indisponivel pelo canal e envelhecimento da fila", ()
 
 test("TikTok: a secao de prazo e' a LDR, com o evento (coleta/despacho) nomeado", () => {
   assert.match(TIKTOK, /const secaoPrazo = \(comLdr: boolean\) =>\s*ldr \? \(\s*<SecaoGerencial\s+titulo="Prazo"/);
-  assert.match(TIKTOK, /evento: \$\{ROTULO_EVENTO\[evento\]\}/);
   assert.match(TIKTOK, /rotulo="Evento"/);
 });
 

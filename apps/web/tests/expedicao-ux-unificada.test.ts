@@ -318,22 +318,15 @@ test("a barra do TikTok substitui a pilha: vencida primeiro, prazo nunca some", 
   assert.equal(barra.principal?.chave, "serie_desatualizada");
   assert.match(barra.principal?.texto ?? "", /Última atualização há 192 h\./);
   const chaves = barra.detalhes.map((d) => d.chave);
-  assert.deepEqual(chaves, [
-    "serie_desatualizada",
-    "prazo_reconstruido",
-    "vencimentos_parciais",
-  ]);
-  assert.equal(
-    barra.detalhes.find((d) => d.chave === "prazo_reconstruido")?.texto,
-    AVISO_PRAZO_RECONSTRUIDO,
-  );
+  assert.deepEqual(chaves, ["serie_desatualizada"]);
 });
 
-test("sem serie vencida, o aviso de prazo e' o que aparece fechado", () => {
+test("sem serie vencida, a barra do TikTok fica vazia: o prazo reconstruido mora no ⓘ", () => {
   const barra = montarBarraDeQualidadeTikTok(
     payload({ alerts: payload().alerts.filter((a) => a.code !== CODIGO_FOTOGRAFIA_VELHA) }),
   );
-  assert.equal(barra.principal?.chave, "prazo_reconstruido");
+  assert.equal(barra.principal, null);
+  assert.deepEqual(barra.detalhes, []);
 });
 
 test("nenhuma barra afirma publicacao manual, agendada ou ausente", () => {
@@ -543,7 +536,13 @@ test("fotografia desatualizada e' ESCRITA, nao so' pintada", () => {
 
 test("a barra mostra o principal e anuncia quantas limitacoes ha", () => {
   const html = renderToStaticMarkup(
-    h(BarraDeQualidade, { barra: montarBarraDeQualidadeTikTok(payload()) }),
+    h(BarraDeQualidade, {
+      barra: consolidarQualidade([
+        { chave: "serie_desatualizada", severidade: "atencao", texto: "Série desatualizada. Última atualização há 192 h." },
+        { chave: "marca_faltando", severidade: "atencao", texto: "1 marca sem dado." },
+        { chave: "outra", severidade: "info", texto: "Outra limitação do dado." },
+      ]),
+    }),
   );
   assert.match(html, /<section aria-label="Qualidade do dado">/);
   // IDENTIDADE-GERENCIAL: a idade da serie ja' esta' ESCRITA no chip

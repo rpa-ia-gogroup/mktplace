@@ -102,19 +102,13 @@ import {
   EVENTO_PADRAO,
   EXPLICACAO_META,
   META_TIKTOK_LDR,
-  ROTULO_EVENTO,
   ROTULO_EVENTO_CURTO,
-  ROTULO_LIMIAR_INTERNO,
   ROTULO_META,
   ROTULO_SEVERIDADE,
   TITULO_FLUXO,
-  TITULO_LDR,
   VALOR_SEM_TAXA,
   alturaDaBarra,
   alturaDaMeta,
-  contarCriticos,
-  contarForaDaMeta,
-  descreverIncidente,
   explicarIndisponivelComMarca,
   deltaDaLdr,
   formatarDiaCurto,
@@ -238,7 +232,7 @@ function Grafico({
           role={aoClicar ? "group" : "img"}
           aria-label={`Taxa por dia de vencimento.${aoClicar ? " Clique num dia para ver os pedidos vencidos." : ""} Máximo da série: ${formatarTaxa(
             maximo,
-          )}. Referência do TikTok: ${formatarTaxa(META_TIKTOK_LDR, 0)} (medição interna).`}
+          )}. Referência do TikTok: ${formatarTaxa(META_TIKTOK_LDR, 0)}.`}
         >
           {dias.map((d) => {
             const sev = severidadeDoDia(d);
@@ -287,7 +281,6 @@ function Grafico({
             {ROTULO_SEVERIDADE[s]}
           </span>
         ))}
-        <span className="text-ink-faint">Valores em %.{aoClicar ? " Clique num dia para ver os pedidos." : ""}</span>
       </div>
     </div>
   );
@@ -399,11 +392,7 @@ export default function TikTokDispatchPanel({
 
   const ldr = dados?.ldr ?? null;
   const fluxo = dados?.payment_flow ?? [];
-  const foraDaMeta = ldr ? contarForaDaMeta(ldr.daily) : 0;
-  const criticos = ldr ? contarCriticos(ldr.daily) : 0;
-  const incidente = descreverIncidente(ldr);
   const piores = marcasForaDaMeta(dados?.brands ?? []);
-  const sla = dados?.sla_business_days?.[evento];
   const fotografia = fotografiaDoTikTok(dados);
   const barra = montarBarraDeQualidadeTikTok(dados);
   const atencao = montarAtencaoDoTikTok(dados);
@@ -529,7 +518,6 @@ export default function TikTokDispatchPanel({
     ldr ? (
       <SecaoGerencial
         titulo="Prazo"
-        descricao={`${TITULO_LDR} · evento: ${ROTULO_EVENTO[evento]}${sla ? ` (${sla} dia(s) útil(eis))` : ""}.`}
         // A meta e' de referencia e o prazo e' reconstruido: sem isso o numero
         // vira "o TikTok nos penalizou".
         dica={EXPLICACAO_META}
@@ -541,7 +529,6 @@ export default function TikTokDispatchPanel({
             Vencimentos de {formatarDiaLongo(ldr.from)} a {formatarDiaLongo(ldr.to)}
           </span>{" "}
           ({ldr.days} {ldr.days === 1 ? "dia" : "dias"} + hoje)
-          {dados?.deadline_is_reconstructed ? " · prazo reconstruído" : ""}
         </p>
         <FaixaKpis rotulo="Indicadores da janela" colunas={comLdr ? 3 : 4}>
           {comLdr ? cartaoLdr : null}
@@ -553,7 +540,6 @@ export default function TikTokDispatchPanel({
             variante="gerencial"
             rotulo="Venciam no período"
             valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.base)}
-            comparacao={`${ldr.mature_due_days} dia(s) fechado(s), ${ldr.partial_due_days} ainda no prazo.`}
             tom={semVencimentoFechado ? "ausente" : "neutro"}
           />
           <KpiComAjuda
@@ -586,15 +572,6 @@ export default function TikTokDispatchPanel({
   const painelEvolucao = ldr ? (
     <Panel
       titulo="Evolução por dia de vencimento"
-      descricao={
-        temDiaMedido
-          ? foraDaMeta > 0
-            ? `${foraDaMeta} dia(s) acima da meta, ${criticos} acima do ${ROTULO_LIMIAR_INTERNO.toLowerCase()}.${
-                incidente ? ` ${incidente}` : ""
-              }`
-            : "Nenhum dia acima da meta na janela."
-          : undefined
-      }
     >
       {temDiaMedido ? (
         <Grafico

@@ -342,7 +342,7 @@ function BarraDasEtapas({ coleta, envio }: { coleta: number; envio: number }) {
 }
 
 const ACAO =
-  "inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /** Heroi: vencidos sobre os abertos de AGORA (o cabecalho ja' diz o frescor). */
 export function HeroiTikTok({ abertos }: { abertos: AbertosTikTok }) {
@@ -500,13 +500,7 @@ export function BacklogPorMarcaTikTok({
       semPadding
       titulo="Backlog por marca"
       acao={<InfoDica texto={`${DICA_ABERTOS} Sem tendência nem travados: o TikTok não informa o histórico da fila.`} />}
-      descricao={
-        <>
-          {formatarInteiro(t.open)} em aberto · {formatarInteiro(t.awaiting_shipment)} aguardando envio ·{" "}
-          {formatarInteiro(t.awaiting_collection)} aguardando coleta
-          {t.on_hold > 0 ? ` · ${formatarInteiro(t.on_hold)} retidos pelo TikTok` : ""}
-        </>
-      }
+      descricao={`${formatarInteiro(t.open)} em aberto`}
       // EXPEDICAO-TIKTOK-COLETA-PERDIDA: por dia de prazo, inclusive os ja' coletados depois.
       rodape={
         <div className="flex flex-col gap-2">
