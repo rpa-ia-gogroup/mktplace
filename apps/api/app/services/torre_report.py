@@ -33,10 +33,11 @@ URL_DA_TORRE = "https://mktplace-ten.vercel.app"
 
 MARCAS: tuple[str, ...] = metas_service.MARCAS
 #: marketplace_id da fact -> canal das metas.
-CANAL_DO_MKT = {1: "tiktok", 2: "ml", 3: "shopee"}
-ROTULO_CANAL_META = {"tiktok": "TikTok Shop", "ml": "Mercado Livre", "shopee": "Shopee"}
-#: Como o GMV aparece dividido: Shopee e Meli sempre; TikTok so' quando vendeu.
-ROTULO_CURTO = {"shopee": "Shopee", "ml": "Meli", "tiktok": "TikTok"}
+#: GMV e meta so' contam Shopee e Mercado Livre (TikTok fica fora, so' risco/operacao).
+CANAL_DO_MKT = {2: "ml", 3: "shopee"}
+ROTULO_CANAL_META = {"ml": "Mercado Livre", "shopee": "Shopee"}
+#: Como o GMV aparece dividido.
+ROTULO_CURTO = {"shopee": "Shopee", "ml": "Meli"}
 
 # Limiares do report (ver o doc). Fracoes.
 META_DIA_CRITICO = 0.70
@@ -56,7 +57,7 @@ SQL_GMV = text("""
            COALESCE(SUM(f.gmv), 0) AS gmv
       FROM marts.fact_marketplace_daily_performance f
       JOIN marts.dim_loja l ON l.loja_id = f.loja_id
-     WHERE f.date BETWEEN :inicio AND :fim
+     WHERE f.date BETWEEN :inicio AND :fim AND f.marketplace_id IN (2, 3)
      GROUP BY l.brand_key, f.marketplace_id, f.date
 """)
 
@@ -139,8 +140,6 @@ class Report:
     total: LinhaMarca
     #: (realizado do mes com meta, meta acumulada ate' ontem, meta do mes)
     mes: Optional[tuple[float, float, float]]
-    #: Canais que tem meta no mes (rotulos), na ordem de `CANAL_DO_MKT`.
-    canais_com_meta: list[str] = field(default_factory=list)
     avancos: list[str] = field(default_factory=list)
     problemas: list[str] = field(default_factory=list)
     notas: list[str] = field(default_factory=list)
@@ -153,9 +152,11 @@ ATEN = ":warning:"
 def compor_report(d: Dados) -> Report:
     ontem, semana = d.ontem, d.ontem - timedelta(days=7)
     canais = tuple(CANAL_DO_MKT.values())
+    metas = {k: v for k, v in d.metas.items() if k[1] in canais}
+    gmv_dia = {k: v for k, v in d.gmv.items() if k[1] in canais}
 
     def soma(marca: Optional[str], canal: Optional[str], dias: list[date]) -> float:
-        return sum(v for (m, c, dia), v in d.gmv.items()
+        return sum(v for (m, c, dia), v in gmv_dia.items()
                    if (marca is None or m == marca) and (canal is None or c == canal) and dia in dias)
 
     dias_mes = [ontem.replace(day=i) for i in range(1, ontem.day + 1)]
@@ -164,7 +165,7 @@ def compor_report(d: Dados) -> Report:
     for marca in MARCAS:
         meta_dia = real = 0.0
         for canal in canais:
-            meta = d.metas.get((marca, canal), 0.0)
+            meta = metas.get((marca, canal), 0.0)
             if meta > 0:
                 meta_dia += meta * metas_curva.fracao_do_dia(ontem, canal)
                 real += soma(marca, canal, [ontem])
@@ -180,9 +181,9 @@ def compor_report(d: Dados) -> Report:
                        {c: sum(x.por_canal[c] for x in linhas) for c in canais})
 
     mes = None
-    if any(v > 0 for v in d.metas.values()):
+    if any(v > 0 for v in metas.values()):
         real_mes = esperado = meta_mes = 0.0
-        for (marca, canal), meta in d.metas.items():
+        for (marca, canal), meta in metas.items():
             if meta <= 0:
                 continue
             meta_mes += meta
@@ -190,9 +191,7 @@ def compor_report(d: Dados) -> Report:
             real_mes += soma(marca, canal, dias_mes)
         mes = (real_mes, esperado, meta_mes)
 
-    com_meta = [ROTULO_CANAL_META[c] for c in canais
-                 if any(v > 0 for (_, cc), v in d.metas.items() if cc == c)]
-    rep = Report(ontem, linhas, total, mes, com_meta)
+    rep = Report(ontem, linhas, total, mes)
     nome = ta.rotulo_marca
 
     # --- GMV e metas
@@ -256,9 +255,8 @@ def compor_report(d: Dados) -> Report:
 
 
 def divisao(x: LinhaMarca) -> str:
-    """'Shopee R$ 200,0 mil + Meli R$ 100,0 mil' (TikTok so' quando vendeu)."""
-    return " + ".join(f"{ROTULO_CURTO[c]} {brl(x.por_canal.get(c, 0.0))}" for c in ROTULO_CURTO
-                      if c != "tiktok" or x.por_canal.get(c, 0.0) > 0)
+    """'Shopee R$ 200,0 mil + Meli R$ 100,0 mil'."""
+    return " + ".join(f"{ROTULO_CURTO[c]} {brl(x.por_canal.get(c, 0.0))}" for c in ROTULO_CURTO)
 
 
 def montar_mensagem(rep: Report) -> str:
@@ -293,8 +291,7 @@ def montar_mensagem(rep: Report) -> str:
             partes.append(f"{pct0(real / esperado)} do ritmo da meta")
         partes.append(f"{pct0(real / meta)} da meta do mês ({brl(meta)})")
         linhas.append(f"*{MESES[o.month - 1].capitalize()} até ontem:* " + " · ".join(partes))
-    if rep.canais_com_meta:
-        linhas.append(f"_Meta e mês contam só os canais com meta ({' e '.join(rep.canais_com_meta)})._")
+    linhas.append("_GMV e meta contam Shopee e Mercado Livre._")
 
     linhas.append("")
     linhas.append(f"*:white_check_mark: Avanços ({len(rep.avancos)})*")
@@ -350,10 +347,8 @@ def montar_blocos(rep: Report) -> sb.Mensagem:
     rodape = []
     if evento:
         rodape.append(f":tada: Dia de evento: *{evento}*")
-    if rep.canais_com_meta:
-        rodape.append(f"Meta e mês contam só {' e '.join(rep.canais_com_meta)}")
-    if rodape:
-        blocos.append(sb.nota("  ·  ".join(rodape)))
+    rodape.append("GMV e meta contam Shopee e Mercado Livre")
+    blocos.append(sb.nota("  ·  ".join(rodape)))
 
     blocos.append(sb.divisor())
     linhas = ["*GMV por marca*"]

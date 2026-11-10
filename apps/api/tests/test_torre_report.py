@@ -20,11 +20,11 @@ def _dados(gmv=None, metas=None, ldr=None, saude=None):
 def test_meta_do_dia_usa_a_curva_do_canal():
     meta = 3_000_000.0
     alvo = meta * metas_curva.fracao_do_dia(ONTEM, "ml")
-    gmv = {("kokeshi", "ml", ONTEM): alvo * 1.1, ("kokeshi", "tiktok", ONTEM): 50_000.0}
+    gmv = {("kokeshi", "ml", ONTEM): alvo * 1.1, ("kokeshi", "shopee", ONTEM): 50_000.0}
     rep = tr.compor_report(_dados(gmv, {("kokeshi", "ml"): meta}))
     k = next(x for x in rep.linhas if x.marca == "kokeshi")
     assert abs(k.pct_meta_dia - 1.1) < 1e-9          # so' canal com meta
-    assert k.gmv == alvo * 1.1 + 50_000.0            # GMV mostra todos os canais
+    assert k.gmv == alvo * 1.1 + 50_000.0            # GMV soma ML + Shopee
     assert "KOKESHI bateu a meta do dia (110%)." in rep.avancos
 
 
@@ -96,7 +96,7 @@ def test_mensagem_abre_com_o_resumo_e_tem_chave_do_dia():
     assert texto.splitlines()[0].startswith(
         ":sunrise: *Bom dia! Ontem (qua, 04/11): R$ 1,23 mi de GMV nas marcas "
         "(Shopee R$ 0 + Meli R$ 1,23 mi),")
-    assert "Novembro até ontem:" in texto and "(Mercado Livre)" in texto
+    assert "Novembro até ontem:" in texto and "_GMV e meta contam Shopee e Mercado Livre._" in texto
     assert tr.chave_do_report(rep) == "report:2026-11-04"
 
 
@@ -155,6 +155,17 @@ def test_gmv_dividido_entre_shopee_e_meli():
     m = tr.montar_blocos(rep)
     assert "(Shopee R$ 250,0 mil + Meli R$ 100,0 mil)" in m.texto
     assert tr.divisao(k) in str(m.blocos)
-    # TikTok so' aparece quando vendeu
-    rep = tr.compor_report(_dados({**gmv, ("kokeshi", "tiktok", ONTEM): 10_000.0}))
-    assert tr.divisao(rep.total).endswith(" + TikTok R$ 10,0 mil")
+
+
+def test_tiktok_nao_entra_em_gmv_nem_meta():
+    gmv = {("kokeshi", "ml", ONTEM): 100_000.0, ("kokeshi", "tiktok", ONTEM): 900_000.0}
+    metas = {("kokeshi", "ml"): 3_000_000.0, ("kokeshi", "tiktok"): 9_000_000.0}
+    base = tr.compor_report(_dados({k: v for k, v in gmv.items() if k[1] != "tiktok"},
+                                   {("kokeshi", "ml"): 3_000_000.0}))
+    rep = tr.compor_report(_dados(gmv, metas))
+    assert rep.total.gmv == 100_000.0 and rep.mes == base.mes
+    assert rep.total.pct_meta_dia == base.total.pct_meta_dia
+    m = tr.montar_blocos(rep)
+    for txt in (tr.montar_mensagem(rep), str(m.blocos), m.texto):
+        assert "TikTok" not in txt and "900" not in txt
+    assert "GMV e meta contam Shopee e Mercado Livre" in str(m.blocos)
