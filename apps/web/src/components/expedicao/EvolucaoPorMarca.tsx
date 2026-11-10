@@ -69,6 +69,9 @@ export interface LinhaDaFila {
   pertoDeVencer?: number | null;
   pctPertoDeVencer?: string | null;
   aoVerPertoDeVencer?: () => void;
+  /** Abre a lista do backlog / dos acima de 48 h da conta (TikTok). */
+  aoVerBacklog?: () => void;
+  aoVerAcima48h?: () => void;
   /**
    * EXPEDICAO-KOKESHI-EXPORT: "03/11 11:20" quando a conta foi atualizada em
    * outra hora que a do topo (carga do export do Seller Centre).
@@ -368,7 +371,7 @@ function TabelaUnica({
                 </th>
               ) : null}
               {comPerto ? (
-                <th scope="col" className="text-right">
+                <th scope="col" className="whitespace-nowrap text-right">
                   Perto de vencer<ComAjuda ajuda={ajudas.pertoDeVencer} />
                 </th>
               ) : null}
@@ -427,7 +430,18 @@ function TabelaUnica({
                     ) : null}
                   </th>
                   <td className="text-right tabular-nums font-semibold text-ink">
-                    {inteiro(f ? f.backlog : (s?.atual ?? 0))}
+                    {f?.aoVerBacklog && f.backlog > 0 ? (
+                      <button
+                        type="button"
+                        onClick={f.aoVerBacklog}
+                        aria-label={`Ver os ${inteiro(f.backlog)} pedidos em aberto de ${titulo}`}
+                        className="-my-3 inline-flex min-h-[44px] items-center underline decoration-dotted underline-offset-4 hover:text-accent"
+                      >
+                        {inteiro(f.backlog)}
+                      </button>
+                    ) : (
+                      inteiro(f ? f.backlog : (s?.atual ?? 0))
+                    )}
                   </td>
                   {comVencidos ? (
                     <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctVencidos ? `${f.pctVencidos} da fila` : undefined}>
@@ -499,7 +513,18 @@ function TabelaUnica({
                     </td>
                   ) : null}
                   <td className="text-right tabular-nums text-ink">
-                    {inteiro(f ? f.acima48h : (ultimo?.over48h ?? 0))}
+                    {f?.aoVerAcima48h && f.acima48h > 0 ? (
+                      <button
+                        type="button"
+                        onClick={f.aoVerAcima48h}
+                        aria-label={`Ver os ${inteiro(f.acima48h)} pedidos acima de 48 h de ${titulo}`}
+                        className="-my-3 inline-flex min-h-[44px] items-center underline decoration-dotted underline-offset-4 hover:text-accent"
+                      >
+                        {inteiro(f.acima48h)}
+                      </button>
+                    ) : (
+                      inteiro(f ? f.acima48h : (ultimo?.over48h ?? 0))
+                    )}
                   </td>
                   {comTravados ? (
                   <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctTravados && (f.travados ?? 0) > 0 ? `${f.pctTravados} da fila` : undefined}>

@@ -467,7 +467,7 @@ function LegendaDaBarra() {
         </li>
       ))}
       <li>
-        <InfoDica texto="A barra mostra a fatia do backlog de cada marca por situação do prazo reconstruído: vencidos, perto de vencer (vencem hoje ou no próximo dia útil) e no prazo." />
+        <InfoDica texto="A barra mostra a fatia do backlog de cada marca por situação do prazo reconstruído: vencidos, perto de vencer (vencem hoje ou no próximo dia útil) e no prazo. Pedidos retidos pelo TikTok não entram na barra." />
       </li>
     </ul>
   );
@@ -535,7 +535,9 @@ export function BacklogPorMarcaTikTok({
                 aoVerVencidos: b.overdue > 0 ? () => abertos.abrir("overdue", b.overdue, b.brand) : undefined,
                 pertoDeVencer: perto,
                 pctPertoDeVencer: percentualDaFila(perto, b.open),
+                aoVerBacklog: b.open > 0 ? () => abertos.abrir("all", b.open, b.brand) : undefined,
                 acima48h: b.over_48h,
+                aoVerAcima48h: b.over_48h > 0 ? () => abertos.abrir("over_48h", b.over_48h, b.brand) : undefined,
                 travados: null,
                 barra: <BarraDePrazoTikTok b={b} />,
               };
