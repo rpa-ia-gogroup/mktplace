@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import InfoDica from "@/components/ui/InfoDica";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -245,7 +246,7 @@ export function PopupColetaPerdida({
   const titulo =
     escopo === "todos"
       ? `Vencidos sem coleta — prazo de coleta ${diaCurto(vencimento)} (TikTok)`
-      : `Não coletados no prazo — coleta vencida ${diaCurto(vencimento)} (TikTok)`;
+      : `Coleta perdida (TikTok) — prazo ${diaCurto(vencimento).slice(4)}`;
 
   return (
     <KpiDrilldownDialog open={aberto} onClose={aoFechar} title={titulo} largura="larga" focusResetKey={vencimento}>
@@ -273,7 +274,7 @@ export function PopupColetaPerdida({
                 {formatarInteiro(total)}
               </span>
               <span className="pb-0.5 text-xs text-ink-faint">
-                {formatarInteiro(total - dados.still_waiting)} coletados depois · {formatarInteiro(dados.still_waiting)} ainda
+                {formatarInteiro(total - dados.still_waiting)} coletados com atraso · {formatarInteiro(dados.still_waiting)} ainda
                 sem coleta · {marcaSel ? brandLabel(marcaSel) : "todas as marcas"}
                 {statusDiaSel ? ` · em ${dia}: ${rotuloStatusTikTok(statusDiaSel)}` : ""}
                 {statusSel ? ` · hoje: ${rotuloStatusTikTok(statusSel)}` : ""}
@@ -389,6 +390,18 @@ export function PopupColetaPerdida({
   );
 }
 
+/** Número primeiro; partes zeradas somem. */
+function fraseColeta(total: number, aindaSem: number) {
+  const atrasados = total - aindaSem;
+  return (
+    <>
+      <strong className="text-base font-bold text-crit-ink">{formatarInteiro(total)} pedidos não coletados no prazo</strong>
+      {atrasados > 0 ? ` · ${formatarInteiro(atrasados)} coletados com atraso` : ""}
+      {aindaSem > 0 ? ` · ${formatarInteiro(aindaSem)} ainda sem coleta` : ""}
+    </>
+  );
+}
+
 /** Faixa com o seletor do dia de prazo e o atalho para a lista. */
 export default function TikTokColetaPerdida({
   api,
@@ -431,9 +444,15 @@ export default function TikTokColetaPerdida({
       }`}
       data-testid="exp-tiktok-coleta-perdida"
     >
-      <p className="text-sm font-semibold text-ink">Não coletados no prazo</p>
+      <p className="text-sm font-semibold text-ink">
+        Coleta perdida (TikTok)
+        <InfoDica
+          texto="Pedidos com etiqueta pronta até o fim do dia do prazo que a transportadora não coletou nesse dia. Use a lista (CSV) para contestar a punição no TikTok."
+          className="ml-1 align-middle"
+        />
+      </p>
       <label className="flex items-center gap-2 text-xs text-ink-muted">
-        Prazo de coleta
+        Prazo
         <select
           value={vencimento ?? ""}
           onChange={(e) => setVencimento(e.target.value)}
@@ -447,14 +466,14 @@ export default function TikTokColetaPerdida({
           ))}
         </select>
       </label>
-      <span className="min-w-0 flex-1 text-sm text-ink-muted" aria-live="polite">
+      <span className="min-w-0 flex-1 basis-full text-sm text-ink-muted sm:basis-0" aria-live="polite">
         {carga.tipo === "carregando"
           ? "Contando…"
           : carga.tipo === "erro"
             ? "Não foi possível contar agora."
             : dados
               ? dados.list_total > 0
-                ? `${formatarInteiro(dados.list_total)} pedidos já aguardando coleta e não coletados até o fim do dia · ${formatarInteiro(dados.still_waiting)} ainda sem coleta`
+                ? fraseColeta(dados.list_total, dados.still_waiting)
                 : "Nenhum pedido ficou sem coleta nesse prazo."
               : null}
       </span>
@@ -462,7 +481,7 @@ export default function TikTokColetaPerdida({
         type="button"
         onClick={() => setAberto(true)}
         disabled={!dados || dados.list_total === 0}
-        className="inline-flex min-h-11 items-center rounded-md border border-line bg-raised px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-line bg-raised px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40 sm:w-auto"
       >
         Ver pedidos
       </button>
