@@ -37,7 +37,7 @@ const SerieDiaria = dynamic(() => import("./SerieDiaria"), { ssr: false, loading
 const FONTE =
   "Fonte: API do Avoe, não o Data Mart. O Avoe entrega até ontem (D-1), então o dia de hoje não aparece. Só Mercado Livre, Shopee e TikTok. Estas marcas ficam fora do GMV total, da meta e da rosca da Gerencial e não têm meta.";
 const FONTE_PRODUTOS =
-  "Origem: Data Mart (gold.fct_tiktok_product_daily), só Denavita no TikTok. O Avoe traz apenas faturamento por dia, marca e canal, sem produto nem quantidade. Yenzah, Auá, By Samia e os demais canais da Denavita não têm produto em nenhuma fonte.";
+  "Origem: Data Mart (gold.fct_tiktok_product_daily), só Denavita no TikTok. O Avoe traz apenas faturamento por dia, marca e canal, sem produto nem quantidade. Nenhuma outra marca ou canal tem produto em fonte alguma. A receita daqui (Data Mart) pode diferir do faturamento do Avoe.";
 
 export default function MarcasMenoresPage() {
   const [filters, setFilters] = useGlobalFilters({ defaultPreset: "7d", defaultCompare: false });
@@ -94,7 +94,7 @@ export default function MarcasMenoresPage() {
         <StateBlock tipo="indisponivel" titulo="Marcas menores indisponíveis" descricao={dados.motivo ?? undefined} />
       ) : (
         <>
-          {dados.consolidado && <Topo c={dados.consolidado} />}
+          {dados.consolidado && <Topo c={dados.consolidado} marcas={dados.marcas} />}
           <Marcas marcas={dados.marcas} />
           <Produtos r={produtos} />
         </>
@@ -114,11 +114,19 @@ function Variacao({ pct }: { pct: number | null }) {
 }
 
 /** Receita consolidada das 4 marcas + rosca por canal (o mesmo desenho da Gerencial, sem meta). */
-function Topo({ c }: { c: Consolidado }) {
+function Topo({ c, marcas }: { c: Consolidado; marcas: MarcaMenor[] }) {
   const total = c.total;
   const partes = c.por_plataforma.filter((p) => p.faturamento > 0);
   const pct = (x: number) => Math.round(x * 100);
-  const v = variacaoPct(total, c.total_anterior);
+  // Parcial: marca sem dado fica de fora da soma e o topo diz isso (nunca soma ausencia como 0).
+  const comDado = marcas.filter((m) => m.total != null).length;
+  const parcial = comDado < marcas.length;
+  // Variacao so' sobre as marcas que tem base nos dois periodos: o mesmo conjunto nos dois lados.
+  const comBase = marcas.filter((m) => m.total != null && m.total_anterior != null && m.total_anterior > 0);
+  const v = variacaoPct(
+    comBase.reduce((a, m) => a + (m.total ?? 0), 0),
+    comBase.reduce((a, m) => a + (m.total_anterior ?? 0), 0) || null,
+  );
   let inicio = 0;
   const folga = partes.length > 1 ? 1 : 0;
   const arcos = partes.map((p) => {
@@ -131,11 +139,16 @@ function Topo({ c }: { c: Consolidado }) {
     <section aria-label="Receita consolidada" className="rounded-xl border border-kpi-gmv/30 bg-surface">
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr] lg:items-center lg:gap-6">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Receita das 4 marcas</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Receita das marcas</p>
           <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-ink">{total == null ? "—" : fmtCompacto(total)}</p>
-          {v != null && (
-            <p className="mt-1 text-xs text-ink-muted tabular-nums">
-              <Variacao pct={v} /> vs período anterior
+          {(v != null || parcial) && (
+            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
+              {v != null && (
+                <span>
+                  <Variacao pct={v} /> vs período anterior
+                </span>
+              )}
+              {parcial && <span className="font-semibold text-warn-ink">parcial ({comDado} de {marcas.length} marcas)</span>}
             </p>
           )}
         </div>
@@ -273,7 +286,7 @@ function Produtos({ r }: { r: ProdutosDenavitaTiktok | null | undefined }) {
               <tbody className="tabular-nums">
                 {visiveis.map((p) => (
                   <tr key={p.sku} className="border-t border-line">
-                    <td className="max-w-[8rem] truncate py-2 pr-3 text-ink sm:max-w-md" title={p.produto}>{p.produto}</td>
+                    <td className="max-w-[9rem] py-2 pr-3 text-ink sm:max-w-md" title={p.produto}><span className="line-clamp-2">{p.produto}</span></td>
                     <td className="px-3 py-2 text-right text-ink-muted">{p.quantidade == null ? "—" : fmtNumber(p.quantidade)}</td>
                     <td className="py-2 pl-3 text-right font-semibold text-ink">{p.receita == null ? "—" : fmtCompacto(p.receita)}</td>
                   </tr>
