@@ -19,6 +19,8 @@ LINHAS = [
     {"data": "2026-11-09", "marca": "AUÁ", "plataforma": "TIKTOK", "faturamento": 7},
     {"data": "2026-11-09", "marca": "By Samia", "plataforma": "SHEIN", "faturamento": None},  # sem valor
     {"data": "2026-11-09", "marca": "Kokeshi", "plataforma": "MELI", "faturamento": 999},  # fora do escopo
+    {"data": "2026-11-09", "marca": "Denavita", "plataforma": "AMAZON", "faturamento": 5000},  # canal fora
+    {"data": "2026-11-09", "marca": "Denavita", "plataforma": "MAGALU", "faturamento": 5000},  # canal fora
 ]
 
 
@@ -53,7 +55,7 @@ def test_ausencia_nao_vira_zero():
 def test_hoje_recorta_em_ontem_e_avisa():
     pedidos = []
     r = svc.get_marcas_menores(HOJE, HOJE, HOJE, fonte=lambda a, b: pedidos.append((a, b)) or LINHAS)
-    assert pedidos == [(date(2026, 11, 9), date(2026, 11, 9))]
+    assert pedidos == [(date(2026, 11, 9), date(2026, 11, 9)), (date(2026, 11, 8), date(2026, 11, 8))]  # dia + o anterior
     assert r["ajustado"] is True and r["dado_ate"] == date(2026, 11, 9)
     assert _marcas(r)["denavita"]["total"] == 10  # so' o dia 9
 
@@ -71,10 +73,10 @@ def test_cache_de_1h():
     svc.get_marcas_menores(*args, fonte=f, agora=lambda: t[0])
     t[0] = 3599
     svc.get_marcas_menores(*args, fonte=f, agora=lambda: t[0])
-    assert len(n) == 1
+    assert len(n) == 2  # periodo + anterior, uma vez so' dentro da hora
     t[0] = 3601
     svc.get_marcas_menores(*args, fonte=f, agora=lambda: t[0])
-    assert len(n) == 2
+    assert len(n) == 4
 
 
 def test_erro_da_fonte_e_indisponivel_sem_vazar_texto():
@@ -104,7 +106,8 @@ def test_http_com_chave_manda_header_e_corpo(monkeypatch):
         def __enter__(self): return self
         def __exit__(self, *a): ...
         def post(self, url, headers, json):
-            visto.update(url=url, headers=headers, json=json)
+            visto.setdefault("json", json)  # a 1a chamada e' o periodo pedido
+            visto.update(url=url, headers=headers)
             return R()
 
     monkeypatch.setattr(settings, "avoe_api_key", SecretStr("chave-de-teste"))
@@ -134,3 +137,56 @@ def test_rota(monkeypatch):
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["disponivel"] is True and len(body["marcas"]) == 4
+
+
+def test_so_tres_canais_na_quebra_e_no_total():
+    r = svc.get_marcas_menores(date(2026, 11, 1), date(2026, 11, 9), HOJE, fonte=lambda a, b: LINHAS)
+    m = _marcas(r)
+    assert m["denavita"]["total"] == 160.5  # AMAZON e MAGALU nao entram
+    assert {p["plataforma"] for mm in r["marcas"] for p in mm["por_plataforma"]} <= {"MELI", "SHOPEE", "TIKTOK"}
+    assert r["consolidado"]["total"] == 167.5  # 160.5 + 7 (Aua TikTok)
+    assert [p["plataforma"] for p in r["consolidado"]["por_plataforma"]] == ["MELI", "SHOPEE", "TIKTOK"]
+
+
+def test_periodo_anterior_para_a_variacao_e_sem_base_nao_e_zero():
+    ant = [{"data": "2026-10-25", "marca": "Denavita", "plataforma": "MELI", "faturamento": 80}]
+
+    def fonte(a, b):
+        return LINHAS if b == date(2026, 11, 9) else ant  # anterior de 11/01..11/09 (9 dias) = 10/23..10/31
+
+    r = svc.get_marcas_menores(date(2026, 11, 1), date(2026, 11, 9), HOJE, fonte=fonte)
+    assert r["consolidado"]["total_anterior"] == 80
+    m = _marcas(r)
+    assert m["denavita"]["total_anterior"] == 80 and m["aua"]["total_anterior"] is None
+    svc.limpar_cache()
+    sem = svc.get_marcas_menores(date(2026, 11, 1), date(2026, 11, 9), HOJE, fonte=lambda a, b: LINHAS if b == date(2026, 11, 9) else [])
+    assert sem["consolidado"]["total_anterior"] is None
+
+
+def test_produtos_denavita_tiktok_do_data_mart():
+    pedidos = []
+
+    def consultar(sql, params):
+        pedidos.append((sql, params))
+        return [{"sku": "1", "produto": "Sérum", "quantidade": 10, "receita": 500.0}, {"sku": "2", "produto": None, "quantidade": None, "receita": 20}]
+
+    r = svc.get_produtos_denavita_tiktok(consultar, date(2026, 11, 1), date(2026, 11, 9))
+    assert "brand = 'denavita'" in pedidos[0][0] and "fct_tiktok_product_daily" in pedidos[0][0]
+    assert r["produtos"][0] == {"sku": "1", "produto": "Sérum", "quantidade": 10.0, "receita": 500.0}
+    assert r["produtos"][1]["quantidade"] is None and r["produtos"][1]["produto"] == "2"  # sem quantidade: None, nunca 0
+
+
+def test_produtos_base_fora_do_ar_e_indisponivel():
+    def quebra(sql, params):
+        raise RuntimeError("senha-no-texto")
+
+    r = svc.get_produtos_denavita_tiktok(quebra, date(2026, 11, 1), date(2026, 11, 9))
+    assert r["disponivel"] is False and "senha" not in r["motivo"] and r["produtos"] == []
+
+
+def test_rota_produtos(monkeypatch):
+    from app.services import datamart_leitura
+
+    monkeypatch.setattr(datamart_leitura, "consultar", lambda sql, params: [{"sku": "1", "produto": "X", "quantidade": 3, "receita": 9}])
+    resp = TestClient(app).get("/api/v1/performance/marcas-menores/produtos?date_from=2026-11-01&date_to=2026-11-09")
+    assert resp.status_code == 200 and resp.json()["produtos"][0]["quantidade"] == 3
