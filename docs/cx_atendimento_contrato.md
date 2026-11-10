@@ -194,6 +194,29 @@ Início de cada fonte (medido em 08/11/2026): pedidos Silver 01/2026 e export Ko
 inteira é UMA consulta por fonte (`sql_comparacao`), em paralelo com as da aba: em produção cada consulta vira
 uma chamada ao Metabase, atendida em fila (4 consultas separadas custaram ~+1 s a frio, 09/11/2026).
 
+### 7.3 CX do Mercado Livre na aba CX (10/11/2026)
+
+`GET /api/v1/cx/mercadolivre?brands=&dias=7|30|90`, na aba CX com `?canal=ml`. Ápice fora (sem conta ML).
+Fontes: `raw.vw_ml_cx_diario` e `raw.ml_cx_reclamacoes` (+ `ml_cx_motivos`, `ml_cx_reclamacao_acoes`), no
+máximo DUAS consultas por requisição, em paralelo (cada uma vira uma chamada ao Metabase, em fila).
+
+| Tela | Regra |
+|---|---|
+| Taxa de reclamação (herói) | reclamações (tudo que não é `cancel_*`, por data de abertura) ÷ pedidos do período. Cálculo Torre, não é a reputação oficial |
+| Cancelamentos / Mediações | `cancel_purchase`+`cancel_sale` / etapa `dispute`, ÷ pedidos |
+| Perguntas sem resposta | agora, não segue o período |
+| Aguardam nós, prazo | claims `opened` com `acao_pendente_vendedor`; vencidas = `prazo_vendedor` passou |
+| Tempo de resposta, mensagens | valor OFICIAL do ML, 1 foto/dia (janela de 14 dias do ML) |
+| 1ª ação nossa | mediana de (1ª ação `respondent` − abertura). **Parcial**: o histórico de ações só cobre as ~300 reclamações mais recentes por conta; o ⓘ diz isso |
+| Pareto | motivo (`ml_cx_motivos.nome`) → rótulo em português mantido no código; fora do mapa sai com o nome do ML e "(sem tradução)" |
+
+- Cobertura: a carga inicial pegou 90 dias (a partir de 12/08/2026). Janela que começa antes disso não mostra
+  número de reclamação; o período anterior só existe quando cabe na coleta E na base de pedidos (a view guarda
+  90 dias de pedidos: o anterior de 90 dias nunca existe, o de 30 existe desde 11/10). `sem_anterior` diz quando.
+- **Devoluções**: a view marca 0 em todos os dias porque a coleta ainda não lê o endpoint de devoluções. É falta
+  de leitura, não zero: o campo não sai e aparece como pendência.
+- Dado velho: coleta sem atualização há mais de 6 h ganha o chip "Coleta desatualizada".
+
 ## 8. Arquitetura e fases
 
 Mesmo caminho da Expedição: o Airflow (`goca-airflow`) chama as APIs e grava no Data Mart; um pipeline deste

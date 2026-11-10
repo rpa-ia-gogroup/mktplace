@@ -1,6 +1,6 @@
 /**
  * Aba CX (menu principal, 04/11/2026) — atendimento ao cliente nos
- * marketplaces. Primeira versao: so' Shopee.
+ * marketplaces: Shopee e, com `?canal=ml`, Mercado Livre (10/11/2026).
  *
  * CX-IDENTIDADE (08/11/2026): mesma identidade da Gerencial. Cabecalho com
  * chips → heroi (taxa de resposta) → faixa de KPIs → "O que exige atencao
@@ -12,10 +12,11 @@
  * vive atras do login, via `/torre-api`). Nenhum dado demonstrativo.
  */
 import PageContainer from "@/components/layout/PageContainer";
-import { lerFiltrosCx } from "@/lib/cx";
+import { lerCanalCx, lerFiltrosCx } from "@/lib/cx";
 import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
 
 import CxConteudo from "./CxConteudo";
+import CxMercadoLivre from "./CxMercadoLivre";
 import FiltrosCx from "./FiltrosCx";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +24,13 @@ export const dynamic = "force-dynamic";
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function CxPage({ searchParams }: { searchParams: SearchParams }) {
-  const filtros = lerFiltrosCx(await searchParams, ALL_BRAND_KEYS);
+  const params = await searchParams;
+  const filtros = lerFiltrosCx(params, ALL_BRAND_KEYS);
+  const canal = lerCanalCx(params);
+  const barra = <FiltrosCx f={filtros} canal={canal} />;
   return (
     <PageContainer>
-      <CxConteudo filtros={filtros} barra={<FiltrosCx f={filtros} />} />
+      {canal === "ml" ? <CxMercadoLivre filtros={filtros} barra={barra} /> : <CxConteudo filtros={filtros} barra={barra} />}
     </PageContainer>
   );
 }

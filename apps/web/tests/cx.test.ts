@@ -334,7 +334,7 @@ test("filtros no padrao do app: BrandFilter em menu, Popover de periodo, recolhi
   assert.match(f, /^"use client";/);
   assert.match(f, /<BrandFilter[\s\S]*variante="menu"/);
   assert.match(f, /<Popover[\s\S]*rotulo="Período"/);
-  assert.match(f, /router\.push\(hrefCx\(novo\)/, "a URL segue a fonte de verdade");
+  assert.match(f, /router\.push\(hrefCx\(novo, c\)/, "a URL segue a fonte de verdade");
   assert.match(f, /sm:hidden/, "abaixo de sm, o botao Filtros com o resumo");
   assert.doesNotMatch(f, /<select/, "sem select nativo: o mesmo visual das outras abas");
   const pagina = readFileSync(new URL("../app/cx/page.tsx", import.meta.url), "utf8");

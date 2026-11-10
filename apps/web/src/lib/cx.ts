@@ -5,7 +5,8 @@
  *   - chat: recorte de atendimento da Saude da Conta (fotografia diaria
  *     oficial, com a meta da Shopee);
  *   - atendimento: cancelamentos com motivo e pedidos em devolucao.
- * Mercado Livre e TikTok entram depois (dependem de permissao nos apps).
+ * Mercado Livre: `cx-ml.ts` (`GET /api/v1/cx/mercadolivre`), no mesmo filtro (`canal=ml`).
+ * TikTok entra depois (depende de permissao no app).
  *
  * Funcoes puras testadas em node --test; a pagina so' desenha a visao.
  */
@@ -203,8 +204,20 @@ export function janelaCxDoPeriodo(dateFrom: string, dateTo: string, hoje: Date =
   return null;
 }
 
-export function hrefCx(f: FiltrosCx): string {
+/** Canal da aba CX na URL (`canal=ml`); qualquer outra coisa = Shopee. */
+export type CanalCx = "shopee" | "ml";
+export const CANAIS_CX: readonly { valor: CanalCx; rotulo: string; ponto: string }[] = [
+  { valor: "shopee", rotulo: "Shopee", ponto: "bg-canal-shopee" },
+  { valor: "ml", rotulo: "Mercado Livre", ponto: "bg-canal-ml" },
+];
+
+export function lerCanalCx(params: Readonly<Record<string, ParamBruto>>): CanalCx {
+  return primeiro(params.canal)?.trim().toLowerCase() === "ml" ? "ml" : "shopee";
+}
+
+export function hrefCx(f: FiltrosCx, canal: CanalCx = "shopee"): string {
   const qs = new URLSearchParams();
+  if (canal !== "shopee") qs.set("canal", canal);
   if (f.marca) qs.set("brands", f.marca);
   if (f.dias !== JANELA_PADRAO) qs.set("dias", String(f.dias));
   const s = qs.toString();
@@ -221,8 +234,8 @@ export function marcaUnica(escolha: readonly string[], atual: string | null): st
 }
 
 /** Resumo do botao "Filtros" no celular, no formato do `resumoDosFiltros` do app. */
-export function resumoFiltrosCx(f: FiltrosCx, rotuloMarca: (m: string) => string): string {
-  return ["Shopee", f.marca ? rotuloMarca(f.marca) : "Todas as marcas", `Últimos ${f.dias} dias`].join(" · ");
+export function resumoFiltrosCx(f: FiltrosCx, rotuloMarca: (m: string) => string, canal: CanalCx = "shopee"): string {
+  return [CANAIS_CX.find((c) => c.valor === canal)?.rotulo ?? "Shopee", f.marca ? rotuloMarca(f.marca) : "Todas as marcas", `Últimos ${f.dias} dias`].join(" · ");
 }
 
 // ---------------------------------------------------------------------------
@@ -306,7 +319,7 @@ const FMT_INT = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const FMT_PCT = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const FMT_BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function inteiro(v: number | null | undefined): string {
+export function inteiro(v: number | null | undefined): string {
   return v == null || !Number.isFinite(v) ? "—" : FMT_INT.format(v);
 }
 
@@ -319,7 +332,7 @@ export function reais(v: number | null | undefined): string {
 }
 
 /** Soma ignorando ausentes; tudo ausente = null (nunca zero). */
-function somar(vals: (number | null | undefined)[]): number | null {
+export function somar(vals: (number | null | undefined)[]): number | null {
   const ok = vals.filter((v): v is number => v != null && Number.isFinite(v));
   return ok.length ? ok.reduce((a, b) => a + b, 0) : null;
 }
@@ -840,7 +853,7 @@ export function montarPareto(
 // ---------------------------------------------------------------------------
 type Num = number | null | undefined;
 
-function razaoPct(pares: [Num, Num][]): number | null {
+export function razaoPct(pares: [Num, Num][]): number | null {
   const ok = pares.filter((p): p is [number, number] => p[0] != null && p[1] != null && Number.isFinite(p[0]) && p[1] > 0);
   if (!ok.length) return null;
   return (ok.reduce((a, p) => a + p[0], 0) / ok.reduce((a, p) => a + p[1], 0)) * 100;
