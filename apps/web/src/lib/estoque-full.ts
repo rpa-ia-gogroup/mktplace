@@ -62,6 +62,11 @@ export const CLASS_TOM: Record<Classificacao, string> = {
   KIT_NAO_CONCILIADO: "bg-accent-soft text-accent-ink border-accent/25",
 };
 
+/** Etiqueta discreta (abas de estoque): brinde/descontinuado nao sao perda de venda. `null` = conta normal. */
+export function rotuloSituacao(s: "brinde" | "descontinuado" | null | undefined): string | null {
+  return s === "brinde" ? "Brinde" : s === "descontinuado" ? "Descontinuado" : null;
+}
+
 /** O travessao. Uma constante para que nunca vire "0" por descuido. */
 export const SEM_DADO = "—";
 
@@ -99,6 +104,8 @@ export interface ProdutoEstoque {
   /** PR3 (#302): curva ABC do item; `null` = sem curva (nunca C). Opcional: API anterior nao envia. */
   curva?: Curva | null;
   curva_motivo?: CurvaMotivo | null;
+  /** Aba BD da planilha: brinde/descontinuado saem da fila e dos numeros. `null`/ausente = conta normal. */
+  situacao?: "brinde" | "descontinuado" | null;
 }
 
 export interface Indicadores {
@@ -114,6 +121,10 @@ export interface Indicadores {
   produtos_kit_nao_conciliado: number;
   produtos_total: number;
   produtos_exigem_acao: number;
+  /** API: brindes/descontinuados JA' descontados dos numeros. Ausente/false = nada descontado. */
+  situacao_aplicada?: boolean;
+  brindes_fora?: number;
+  descontinuados_fora?: number;
 }
 
 export interface Frescor {

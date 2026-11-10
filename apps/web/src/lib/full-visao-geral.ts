@@ -47,6 +47,8 @@ export interface MarcaCanal {
   motivo?: string;
 }
 
+export type Situacao = "brinde" | "descontinuado";
+
 export interface ItemRuptura {
   canal: Canal;
   marca: string;
@@ -67,6 +69,8 @@ export interface ItemRuptura {
   /** CURVA-ABC: o SKU do canal cru (chave da curva) e se e' kit (kit nao tem curva). */
   codigo?: string | null;
   kit?: boolean;
+  /** Brinde/descontinuado (aba BD). So' aparece em `foraDaFila`. */
+  situacao?: Situacao | null;
 }
 
 export interface ResumoOk {
@@ -80,6 +84,10 @@ export interface ResumoOk {
   coberturas: number[] | null;
   marcas: MarcaCanal[];
   rupturas: ItemRuptura[];
+  /** A API truncou a lista: brindes/descontinuados nao dao para contar (o N dos blocos vira "—"). */
+  listaTruncada: boolean;
+  /** Brindes e descontinuados em ruptura: fora da fila e dos numeros; so' aparecem nos blocos recolhidos. */
+  foraDaFila: ItemRuptura[];
   /** A lista trouxe todas as rupturas que o indicador conta? */
   rupturasCompletas: boolean;
   /** Shopee: rupturas sem estoque do vendedor (a venda para de fato). `null` = nao se aplica ou lista incompleta. */
@@ -113,7 +121,12 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
   if (r.status === "unavailable") return { canal: "shopee", status: "indisponivel", motivo: r.unavailable_reason };
   const i = r.indicadores;
   const completa = !r.truncado;
-  const itens = r.produtos.filter((p) => p.classificacao_torre !== "KIT_NAO_CONCILIADO");
+  const todos = r.produtos.filter((p) => p.classificacao_torre !== "KIT_NAO_CONCILIADO");
+  // Brinde/descontinuado: fora das contagens. Lista truncada = nao da' para tirar do indicador, entao nada sai dele.
+  const fora = completa ? todos.filter((p) => p.situacao) : [];
+  const itens = completa ? todos.filter((p) => !p.situacao) : todos;
+  // A API (situacao_aplicada) ja' descontou dos indicadores: o front so' separa a lista, sem descontar de novo.
+  const sai = (c: string) => (i.situacao_aplicada ? 0 : fora.filter((p) => p.classificacao_torre === c).length);
 
   const porMarca = new Map<string, { base: number; ruptura: number }>();
   for (const p of itens) {
@@ -131,26 +144,28 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
     marcas.push({ marca, base: null, ruptura: null, motivo: "sem conta Shopee na esteira de estoque" });
   }
 
-  const rupturas = itens
-    .filter((p) => p.classificacao_torre === "RUPTURA_CANDIDATA")
-    .map((p) => ({
+  const itemShopee = (p: (typeof todos)[number]): ItemRuptura => ({
       canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p), sku: p.item_name?.trim() ? p.item_sku?.trim() || null : null,
-      codigo: p.item_sku?.trim() || null, kit: p.is_kit || ehKit(p.item_sku),
+      codigo: p.item_sku?.trim() || null, kit: p.is_kit || ehKit(p.item_sku), situacao: p.situacao,
       mediaDiaria: numero(p.avg_daily_units_28d) ?? 0, estoqueVendedor: p.seller_stock_total,
-    }));
-  const rupturasCompletas = rupturas.length === i.produtos_ruptura;
+  });
+  const rupturas = itens.filter((p) => p.classificacao_torre === "RUPTURA_CANDIDATA").map(itemShopee);
+  const foraDaFila = fora.filter((p) => p.classificacao_torre === "RUPTURA_CANDIDATA").map(itemShopee);
+  const rupturasCompletas = rupturas.length + (i.situacao_aplicada ? 0 : foraDaFila.length) === i.produtos_ruptura;
   const faltam = contasAusentes(CONTAS_ESPERADAS_API, r.contas_cobertas);
 
   return {
     canal: "shopee",
     status: "ok",
-    base: i.produtos_total - i.produtos_kit_nao_conciliado,
-    ruptura: i.produtos_ruptura,
-    baixo: i.produtos_baixo,
-    excesso: i.produtos_excesso,
+    base: i.produtos_total - i.produtos_kit_nao_conciliado - (i.situacao_aplicada ? 0 : fora.length),
+    ruptura: i.produtos_ruptura - sai("RUPTURA_CANDIDATA"),
+    baixo: i.produtos_baixo - sai("BAIXO_CANDIDATO"),
+    excesso: i.produtos_excesso - sai("EXCESSO_CANDIDATO"),
     coberturas: completa ? itens.map((p) => numero(p.cobertura_torre_dias)).filter((n): n is number => n !== null) : null,
     marcas,
     rupturas,
+    foraDaFila,
+    listaTruncada: !completa,
     rupturasCompletas,
     // `null` no estoque do vendedor e' "nao sabemos": so' conta o zero medido.
     semVendedor: rupturasCompletas ? rupturas.filter((p) => p.estoqueVendedor === 0).length : null,
@@ -166,30 +181,43 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
 export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
   if (r.status === "unavailable") return { canal: "ml", status: "indisponivel", motivo: r.unavailable_reason };
   const i = r.indicadores;
-  const itens = r.inventarios.filter((v) => v.classificacao_torre !== "FORA_DO_FULL" && v.classificacao_torre !== "SEM_LEITURA");
+  const todos = r.inventarios.filter((v) => v.classificacao_torre !== "FORA_DO_FULL" && v.classificacao_torre !== "SEM_LEITURA");
+  // Brinde/descontinuado: fora das contagens. Lista truncada = nao da' para tirar do indicador, entao nada sai dele.
+  const fora = r.truncado ? [] : todos.filter((v) => v.situacao);
+  const itens = r.truncado ? todos : todos.filter((v) => !v.situacao);
+  // A API (situacao_aplicada) ja' descontou dos indicadores e das marcas: o front so' separa a lista.
+  const sai = (c: string, marca?: string) =>
+    (i.situacao_aplicada ? 0 : fora.filter((v) => v.classificacao_torre === c && (!marca || v.brand === marca)).length);
+  const foraBase = (marca?: string) => (i.situacao_aplicada ? 0 : fora.filter((v) => !marca || v.brand === marca).length);
 
   const marcas: MarcaCanal[] = r.marcas.map((m) => {
     if (m.estado === null) return { marca: m.brand, base: null, ruptura: null, motivo: "sem fotografia no dia" };
-    return { marca: m.brand, base: m.inventarios_full_lidos, ruptura: m.por_classificacao.RUPTURA_CANDIDATA ?? 0 };
+    return {
+      marca: m.brand,
+      base: m.inventarios_full_lidos === null ? null : m.inventarios_full_lidos - foraBase(m.brand),
+      ruptura: (m.por_classificacao.RUPTURA_CANDIDATA ?? 0) - sai("RUPTURA_CANDIDATA", m.brand),
+    };
   });
 
-  const rupturas = itens
-    .filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA")
-    .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0,
-      codigo: v.sku?.trim() || null, kit: ehKit(v.sku),
-      naoDisponivel: v.nao_disponivel, transferencia: v.transfer }));
+  const itemML = (v: (typeof todos)[number]): ItemRuptura => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0,
+      codigo: v.sku?.trim() || null, kit: ehKit(v.sku), situacao: v.situacao,
+      naoDisponivel: v.nao_disponivel, transferencia: v.transfer });
+  const rupturas = itens.filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA").map(itemML);
+  const foraDaFila = fora.filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA").map(itemML);
 
   return {
     canal: "ml",
     status: "ok",
-    base: i.inventarios_full_lidos,
-    ruptura: i.inventarios_ruptura,
-    baixo: i.inventarios_baixo,
-    excesso: i.inventarios_excesso,
+    base: i.inventarios_full_lidos - foraBase(),
+    ruptura: i.inventarios_ruptura - sai("RUPTURA_CANDIDATA"),
+    baixo: i.inventarios_baixo - sai("BAIXO_CANDIDATO"),
+    excesso: i.inventarios_excesso - sai("EXCESSO_CANDIDATO"),
     coberturas: r.truncado ? null : itens.map((v) => numero(v.cobertura_torre_dias)).filter((n): n is number => n !== null),
     marcas,
     rupturas,
-    rupturasCompletas: rupturas.length === i.inventarios_ruptura,
+    foraDaFila,
+    listaTruncada: r.truncado,
+    rupturasCompletas: rupturas.length + (i.situacao_aplicada ? 0 : foraDaFila.length) === i.inventarios_ruptura,
     semVendedor: null,
     aviso: i.total_parcial ? `Total parcial: ${i.motivos_total_parcial.join("; ")}` : null,
     semFoto: r.marcas.filter((m) => m.estado === null).map((m) => tituloMarca(m.brand)),
@@ -620,7 +648,7 @@ export function impactoPorMarca(canal: Canal, impacto: ImpactoRuptura | null): L
 /** Texto do ⓘ de impacto do canal, com as ressalvas DAQUELE canal (sem preco, preco anunciado). */
 export function dicaImpacto(canal: Canal, impacto: ImpactoRuptura | null): string {
   const c = impactosOk(impacto).find((x) => x.canal === canal);
-  const fim = "% sobre o faturamento Full/dia dos 28 dias que terminam no último dia com faturamento carregado (até a véspera da foto). R$ não é somado entre canais.";
+  const fim = "% sobre o faturamento Full/dia dos 28 dias que terminam no último dia com faturamento carregado (até a véspera da foto). R$ não é somado entre canais. Brindes e descontinuados não entram nas contagens nem no impacto.";
   const semPreco = c && c.sem_preco > 0 ? ` ${c.sem_preco.toLocaleString("pt-BR")} sem preço ficaram fora da soma.` : "";
   if (canal === "ml") {
     const fallback = c && c.preco_fallback > 0 ? ` ${c.preco_fallback.toLocaleString("pt-BR")} usam o preço anunciado (sem venda em 30 dias).` : "";
@@ -1029,7 +1057,37 @@ export function celulaEstoque(t: ItemRuptura): { texto: string; apoio?: string; 
   return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}` };
 }
 
+export const ROTULO_SITUACAO: Record<Situacao, string> = {
+  brinde: "Brindes sem estoque no Full",
+  descontinuado: "Descontinuados sem estoque no Full",
+};
+
+export const RESUMO_BLOCO_FORA = "não entram nas contagens nem no impacto";
+export const AVISO_LISTA_INCOMPLETA = "lista incompleta: brindes ainda contados";
+
+/**
+ * Blocos recolhidos do fim da pagina (ordem estavel: canal, nome). Com a lista truncada o N nao e'
+ * conhecido: os dois blocos aparecem com "(—)" e o aviso, mesmo sem item.
+ * Precedencia brinde > descontinuado ja' vem resolvida da API (um SKU, uma situacao).
+ */
+export function blocosForaDaFila(canais: ResumoCanal[]): { situacao: Situacao; titulo: string; itens: ItemRuptura[]; aviso: string | null }[] {
+  const ok = oks(canais);
+  const todos = ok.flatMap((c) => c.foraDaFila);
+  const truncada = ok.some((c) => c.listaTruncada);
+  return (["brinde", "descontinuado"] as const)
+    .map((situacao) => ({
+      situacao,
+      itens: todos.filter((t) => t.situacao === situacao).sort((x, y) => x.canal.localeCompare(y.canal) || x.nome.localeCompare(y.nome)),
+    }))
+    .filter((b) => b.itens.length > 0 || truncada)
+    .map((b) => ({
+      ...b,
+      titulo: `${ROTULO_SITUACAO[b.situacao]} (${truncada ? "—" : fmtInt(b.itens.length)})`,
+      aviso: truncada ? AVISO_LISTA_INCOMPLETA : null,
+    }));
+}
+
 export const DICA_IMPACTO_FILA =
   "Quanto se deixa de vender por dia enquanto o produto está sem estoque no Full: venda média diária dos últimos 28 dias × preço médio. "
-  + "É potencial: no ML, outros anúncios podem seguir vendendo; na Shopee, só conta quem também está sem estoque do vendedor.";
+  + "É potencial: no ML, outros anúncios podem seguir vendendo; na Shopee, só conta quem também está sem estoque do vendedor. Brindes e descontinuados não entram nas contagens nem no impacto.";
 

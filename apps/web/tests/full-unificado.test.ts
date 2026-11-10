@@ -29,6 +29,9 @@ import {
   filaPorGrupo,
   fmtFatia,
   avisoCanal,
+  AVISO_LISTA_INCOMPLETA,
+  RESUMO_BLOCO_FORA,
+  blocosForaDaFila,
   celulaEstoque,
   celulaImpacto,
   contarCanais,
@@ -838,7 +841,7 @@ test("selo do canal: ponto e pilula da cor do canal (ML ciano, Shopee laranja)",
   const src = readFileSync(new URL("../src/components/full/SeloCanal.tsx", import.meta.url), "utf-8");
   assert.ok(src.includes("SELO_CANAL[canal]") && src.includes("NOME_CANAL_LONGO[canal]"));
   const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  assert.equal((tela.match(/<SeloCanal canal=\{t\.canal\} \/>/g) ?? []).length, 2, "selo em toda linha: tabela e cartao");
+  assert.equal((tela.match(/<SeloCanal canal=\{t\.canal\} \/>/g) ?? []).length, 3, "selo em toda linha: tabela, cartao e blocos recolhidos");
 });
 
 test("aviso do canal so' com foto de mais de 1 dia ou marca faltando; frescor em dia fora da vista", () => {
@@ -887,6 +890,81 @@ test("fila com impacto: o estoque fora do Full do ML vem da lista de estoque (jo
   const fila = rankingRupturas(canais, imp);
   assert.deepEqual(celulaEstoque(fila[0]), { texto: "0", apoio: "150 não disponível · 120 em transferência" });
   assert.equal(celulaEstoque(fila[1]).ausente, "estoque fora do Full não informado", "sem match = ausente, nunca 0");
+});
+
+test("brinde e descontinuado: fora das contagens e da fila; sem situacao (sem linha na BD) conta normal", () => {
+  const sh = shopee([
+    { ...produto("apice", "RUPTURA_CANDIDATA", 9), situacao: "brinde" },
+    { ...produto("apice", "RUPTURA_CANDIDATA", 8), situacao: "descontinuado" },
+    produto("apice", "RUPTURA_CANDIDATA", 7),                                   // sem linha na BD: conta normal
+    { ...produto("apice", "RUPTURA_CANDIDATA", 6), situacao: null },
+    { ...produto("apice", "SUFICIENTE", 1, 20), situacao: "brinde" },
+    produto("apice", "SUFICIENTE", 1, 20),
+  ]);
+  const r = resumoShopee(sh);
+  assert.equal(r.status, "ok");
+  if (r.status !== "ok") return;
+  assert.equal(r.ruptura, 2, "so' as duas sem situacao");
+  assert.equal(r.base, 3, "base sem os 3 de fora");
+  assert.equal(r.rupturas.length, 2);
+  assert.deepEqual(r.foraDaFila.map((t) => t.situacao).sort(), ["brinde", "descontinuado"]);
+  assert.equal(r.rupturasCompletas, true);
+  assert.equal(r.semVendedor, 2);
+  assert.deepEqual(r.marcas.find((m) => m.marca === "apice"), { marca: "apice", base: 3, ruptura: 2 });
+
+  const trunc = resumoShopee({ ...sh, truncado: true });
+  if (trunc.status !== "ok") return;
+  assert.equal(trunc.ruptura, 4, "lista truncada: nada sai do indicador (nao da' para saber)");
+  assert.equal(trunc.foraDaFila.length, 0);
+});
+
+test("brinde e descontinuado no ML: mesma regra; blocos recolhidos so' com item", () => {
+  const brinde = { ...inventario("kokeshi", "RUPTURA_CANDIDATA", 3), sku: "B1", situacao: "brinde" as const };
+  const desc = { ...inventario("kokeshi", "RUPTURA_CANDIDATA", 2), sku: "D1", situacao: "descontinuado" as const };
+  const normal = { ...inventario("kokeshi", "RUPTURA_CANDIDATA", 12), sku: "N1" };
+  const mlr = resumoML(ml([brinde, desc, normal, inventario("kokeshi", "SUFICIENTE")], [marcaML("kokeshi", 4, 3)]));
+  assert.equal(mlr.status, "ok");
+  if (mlr.status !== "ok") return;
+  assert.equal(mlr.ruptura, 1);
+  assert.equal(mlr.base, 2);
+  assert.deepEqual(mlr.rupturas.map((t) => t.codigo), ["N1"]);
+  assert.deepEqual(mlr.marcas.find((m) => m.marca === "kokeshi"), { marca: "kokeshi", base: 2, ruptura: 1 });
+  const blocos = blocosForaDaFila([mlr]);
+  assert.deepEqual(blocos.map((b) => b.titulo), ["Brindes sem estoque no Full (1)", "Descontinuados sem estoque no Full (1)"]);
+  assert.deepEqual(blocosForaDaFila([resumoML(ML)]), [], "sem brinde/descontinuado: nenhum bloco");
+  assert.match(DICA_IMPACTO_FILA, /Brindes e descontinuados não entram nas contagens nem no impacto/);
+});
+
+test("API que ja' descontou (situacao_aplicada): o front separa a lista e NAO desconta de novo", () => {
+  const sh = shopee([
+    { ...produto("apice", "RUPTURA_CANDIDATA", 9), situacao: "brinde" },
+    produto("apice", "RUPTURA_CANDIDATA", 7),
+    produto("apice", "SUFICIENTE", 1, 20),
+  ]);
+  // numeros ja' SEM o brinde (o que a API manda com situacao_aplicada)
+  sh.indicadores = { ...sh.indicadores, produtos_ruptura: 1, produtos_total: 2, situacao_aplicada: true, brindes_fora: 1 };
+  const r = resumoShopee(sh);
+  if (r.status !== "ok") throw new Error("esperava ok");
+  assert.equal(r.ruptura, 1);
+  assert.equal(r.base, 2, "nao subtrai o brinde duas vezes");
+  assert.equal(r.rupturas.length, 1);
+  assert.equal(r.foraDaFila.length, 1);
+  assert.equal(r.rupturasCompletas, true);
+});
+
+test("lista truncada: N dos blocos vira '—' com o aviso; precedencia brinde > descontinuado vem resolvida da API", () => {
+  const sh = { ...shopee([produto("apice", "RUPTURA_CANDIDATA", 9)]), truncado: true };
+  const r = resumoShopee(sh);
+  if (r.status !== "ok") throw new Error("esperava ok");
+  assert.equal(r.listaTruncada, true);
+  const blocos = blocosForaDaFila([r]);
+  assert.deepEqual(blocos.map((b) => b.titulo), ["Brindes sem estoque no Full (—)", "Descontinuados sem estoque no Full (—)"]);
+  assert.ok(blocos.every((b) => b.aviso === AVISO_LISTA_INCOMPLETA));
+  assert.equal(AVISO_LISTA_INCOMPLETA, "lista incompleta: brindes ainda contados");
+  assert.equal(RESUMO_BLOCO_FORA, "não entram nas contagens nem no impacto");
+  // um SKU so' chega com UMA situacao (API: brinde > descontinuado): o item nunca aparece nos dois blocos
+  const um = resumoShopee(shopee([{ ...produto("apice", "RUPTURA_CANDIDATA", 9), situacao: "brinde" }]));
+  assert.deepEqual(blocosForaDaFila([um]).map((b) => b.situacao), ["brinde"]);
 });
 
 test("filtro canal x curva combinados: cada contagem reflete o outro filtro", () => {
