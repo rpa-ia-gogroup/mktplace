@@ -114,3 +114,37 @@ export function comparacaoDeHoje(d: HojePorHora | null): ComparacaoDeHoje | null
     porCanal: Object.fromEntries(d.por_canal.map((c) => [c.channel, variacao(c.hoje.gmv, c.ontem.gmv)])),
   };
 }
+
+export interface TendenciaConsolidada {
+  /** Soma das tendencias das marcas que TEM projecao. */
+  projecao: number;
+  /** Meta (do dia) so' das marcas somadas; `null` sem meta. */
+  meta: number | null;
+  /** Marcas somadas / marcas esperadas; parcial quando `somadas < total`. */
+  somadas: number;
+  total: number;
+}
+
+/**
+ * Tendencia do dia do topo da Gerencial = SOMA das tendencias dos cards, cada
+ * marca nos canais que o card dela mostra. Marca sem projecao nao entra como 0:
+ * fica de fora e o resultado diz que e' parcial. Nenhuma com projecao: `null`.
+ */
+export function tendenciaConsolidada(
+  marcas: Record<string, MarcaTendencia> | null,
+  esperadas: Record<string, { meta: number; canais: readonly Marketplace[] } | null>,
+): TendenciaConsolidada | null {
+  const ids = Object.keys(esperadas).filter((id) => esperadas[id]);
+  let projecao = 0;
+  let meta = 0;
+  let somadas = 0;
+  for (const id of ids) {
+    const e = esperadas[id]!;
+    const t = marcas?.[id] ? tendenciaNosCanais(marcas[id], e.canais) : null;
+    if (!t) continue;
+    projecao += t.projecao;
+    meta += e.meta;
+    somadas++;
+  }
+  return somadas ? { projecao, meta: meta > 0 ? meta : null, somadas, total: ids.length } : null;
+}

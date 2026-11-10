@@ -59,7 +59,7 @@ import { fetchHojePorHora, fetchMLFulfillment, fetchShopeeFbs, type TrendGranula
 import { buildQuery as queryMlFull } from "@/lib/ml-fulfillment";
 import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
-import { comparacaoDeHoje, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
+import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { KPI_META, type KpiKind } from "@/lib/kpi-drilldown";
 
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
@@ -456,6 +456,11 @@ function GerencialInner() {
     }
     return mapa;
   }, [progressoDia, metaAplicavel, mesMeta, metaEscopo.porMarca, realizadoEscopo, celulasEscopo, hoje, ultimoDia]);
+  // Topo: a soma das tendencias dos cards, so' no "Hoje" com a meta do dia.
+  const tendenciaTopo = useMemo(
+    () => (diaEmAndamento && progressoDia ? tendenciaConsolidada(tendenciaDoDia, progressoPorMarca) : null),
+    [diaEmAndamento, progressoDia, tendenciaDoDia, progressoPorMarca],
+  );
   // Mes atual: o fechamento de cada marca pela MESMA projecao do heroi (com
   // meta). Marca sem meta: o GMV dos canais filtrados no ritmo linear, sem %.
   const tendenciaDoMes = useMemo(() => {
@@ -648,6 +653,7 @@ function GerencialInner() {
         metasHref={mesDasMetas ? `/metas?mes=${mesDasMetas}` : "/metas"}
         onOpenGmv={() => setDialog({ kind: "kpi", key: "gmv" })}
         shareFull={shareFull}
+        tendenciaDoDia={tendenciaTopo}
       />
 
       <KpiBand
