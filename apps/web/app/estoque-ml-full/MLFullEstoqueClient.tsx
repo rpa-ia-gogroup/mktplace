@@ -85,6 +85,7 @@ import {
   motivoParcialLegivel,
   subtextoSaldoZeroML,
   seloAnunciosExtrasML,
+  rotuloSituacao,
   subtituloTransferML,
   subvalorDisponivelTotalML,
   temFiltroAtivoML,
@@ -328,6 +329,9 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                     )}
                     {ident.avisoVariacao && (
                       <span className="block text-xs text-ink-muted">{ident.avisoVariacao}</span>
+                    )}
+                    {rotuloSituacao(i.situacao) && (
+                      <span className="mr-1 mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotuloSituacao(i.situacao)}</span>
                     )}
                     {selo && (
                       <span className="mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">

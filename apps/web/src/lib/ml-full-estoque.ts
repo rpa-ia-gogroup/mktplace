@@ -31,11 +31,12 @@ import {
   fmtDecimal,
   fmtInt,
   fmtOpcional,
+  rotuloSituacao,
 } from "./estoque-full.ts";
 import { brandLabel } from "./filters/brands.ts";
 import type { Curva, CurvaMeta, CurvaMotivo } from "./estoque-curva.ts";
 
-export { SEM_DADO, fmtCobertura, fmtData, fmtDecimal, fmtInt, fmtOpcional };
+export { SEM_DADO, fmtCobertura, fmtData, fmtDecimal, fmtInt, fmtOpcional, rotuloSituacao };
 
 /** Allowlist do backend (CHECK da migration 029). */
 export const MARCAS_ML = ["barbours", "kokeshi", "lescent", "rituaria"] as const;
@@ -114,6 +115,8 @@ export interface InventarioML {
   /** PR3 (#302): curva ABC do inventario; `null` = sem curva (nunca C). */
   curva?: Curva | null;
   curva_motivo?: CurvaMotivo | null;
+  /** Aba BD da planilha: brinde/descontinuado saem da fila e dos numeros. `null`/ausente = conta normal. */
+  situacao?: "brinde" | "descontinuado" | null;
 }
 
 // ---------------------------------------------------------------------------

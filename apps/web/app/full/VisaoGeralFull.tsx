@@ -60,6 +60,7 @@ import {
   fmtFatia,
   rankingRupturas,
   avisoCanal,
+  blocosForaDaFila,
   celulaEstoque,
   celulaImpacto,
   contarCanais,
@@ -255,6 +256,35 @@ function CelulaEstoque({ t, alinhar = "start" }: { t: ItemRuptura; alinhar?: "st
       {c.apoio && <span className="text-xs font-normal text-ink-muted">{c.apoio}</span>}
       {c.ausente && <span className="sr-only"> ({c.ausente})</span>}
     </span>
+  );
+}
+
+/** Brindes/descontinuados sem estoque no Full: recolhido, sem R$, sem cor de alerta (nao e' perda de venda). */
+function BlocosForaDaFila({ canais }: { canais: ResumoCanal[] }) {
+  return (
+    <>
+      {blocosForaDaFila(canais).map((b) => (
+        <MaisDetalhes key={b.situacao} titulo={b.titulo}>
+          <ul className="-m-4 divide-y divide-line">
+            {b.itens.map((t, i) => {
+              const apoio = celulaEstoque(t);
+              return (
+                <li key={`${t.canal}-${i}`} className="flex flex-col gap-1 px-4 py-2.5 text-sm text-ink-muted sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <span className="min-w-0 line-clamp-2 text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
+                    {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <SeloCanal canal={t.canal} />
+                    <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
+                    <span className="tabular-nums" title={apoio.ausente}>0 no Full{apoio.apoio && ` · ${apoio.apoio}`}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </MaisDetalhes>
+      ))}
+    </>
   );
 }
 
@@ -795,6 +825,9 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
           </tbody>
         </table>
       </Panel>
+
+      {/* 4b. Brindes e descontinuados: fora da fila e dos numeros, recolhidos */}
+      <BlocosForaDaFila canais={canais} />
 
       {/* 5. Mais detalhes (fechado): o denominador continua visivel em "Itens no Full" */}
       <MaisDetalhes resumo="estoque baixo, excesso, itens no Full e cobertura">

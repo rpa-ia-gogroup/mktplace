@@ -75,6 +75,7 @@ import {
   frescorLabel,
   isIndisponivel,
   nomeExibido,
+  rotuloSituacao,
   rotuloCD,
   skuExibido,
   temFiltroAtivo,
@@ -232,6 +233,9 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
                 <span className="block text-xs text-ink-faint">
                   {nomeExibido(p)}
                 </span>
+                {rotuloSituacao(p.situacao) && (
+                  <span className="mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotuloSituacao(p.situacao)}</span>
+                )}
               </td>
               {comCurva && (
                 <td className="px-4 py-3">
