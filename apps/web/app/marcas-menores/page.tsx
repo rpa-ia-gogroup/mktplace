@@ -273,7 +273,7 @@ function Produtos({ r }: { r: ProdutosDenavitaTiktok | null | undefined }) {
               <tbody className="tabular-nums">
                 {visiveis.map((p) => (
                   <tr key={p.sku} className="border-t border-line">
-                    <td className="max-w-[16rem] truncate py-2 pr-3 text-ink sm:max-w-md" title={p.produto}>{p.produto}</td>
+                    <td className="max-w-[8rem] truncate py-2 pr-3 text-ink sm:max-w-md" title={p.produto}>{p.produto}</td>
                     <td className="px-3 py-2 text-right text-ink-muted">{p.quantidade == null ? "—" : fmtNumber(p.quantidade)}</td>
                     <td className="py-2 pl-3 text-right font-semibold text-ink">{p.receita == null ? "—" : fmtCompacto(p.receita)}</td>
                   </tr>
