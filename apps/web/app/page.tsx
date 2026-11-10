@@ -60,6 +60,11 @@ import { buildQuery as queryMlFull } from "@/lib/ml-fulfillment";
 import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
+import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
+import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
+import { fmtCompacto } from "@/lib/metas";
+import { fetchMarcasMenores, type BrandRow } from "@/lib/api-client";
 import { KPI_META, type KpiKind } from "@/lib/kpi-drilldown";
 
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
@@ -379,6 +384,60 @@ function GerencialInner() {
     () => (hojePorHora?.disponivel ? Object.fromEntries((hojePorHora.por_marca ?? []).map((m) => [m.brand, m])) : null),
     [hojePorHora],
   );
+  // Marcas menores (Bling): somam no GMV do topo, na rosca e nas marcas, sem meta. Carregam EM PARALELO e
+  // sozinhas: Bling lento ou fora nao atrasa nem apaga o resto (so o aviso no (i)). So a lista de pedidos.
+  const todasAsMarcas = filters.brands.length === 0 || ALL_BRAND_KEYS.every((b) => filters.brands.includes(b));
+  const querMenores = todasAsMarcas && !sources.demoMode && filters.channels.some((c) => c === "shopee" || c === "tiktok");
+  const [menoresBruto, setMenoresBruto] = useState<MarcasMenores | null | undefined>(undefined);
+  useEffect(() => {
+    setMenoresBruto(undefined);
+    if (!querMenores) return;
+    let vivo = true;
+    fetchMarcasMenores(filters.dateFrom, filters.dateTo).then((d) => vivo && setMenoresBruto(d));
+    return () => {
+      vivo = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- as datas e o filtro de canal/marca cobrem o recorte
+  }, [filters.dateFrom, filters.dateTo, querMenores, sources.retryKey]);
+  const menores = useMemo(
+    () => menoresNaGerencial(menoresBruto, filters.channels, querMenores),
+    [menoresBruto, filters.channels, querMenores],
+  );
+  const menoresOk = menores.estado === "ok" ? menores : null;
+  const topo = gmvComMenores(
+    {
+      gmv: overview?.gmv ?? null,
+      prevGmv: compHoje ? null : overview?.prev_gmv ?? null,
+      momPct: compHoje ? compHoje.gmvPct : overview?.gmv_mom_pct ?? null,
+    },
+    menoresOk,
+    comparar,
+  );
+  const canalMenores = (c: "tiktok" | "ml" | "shopee") =>
+    canalComMenores(
+      c,
+      overview?.[`${c}_gmv`],
+      overview?.[`prev_${c}_gmv`],
+      compHoje ? compHoje.porCanal[c] ?? null : variacaoDoCanal(overview?.[`${c}_gmv`], overview?.[`prev_${c}_gmv`]),
+      menoresOk,
+      comparar,
+    );
+  const canaisComMenores = { tiktok: canalMenores("tiktok"), ml: canalMenores("ml"), shopee: canalMenores("shopee") };
+  const notaDasMenores = notaMenores(menores, topo.variacaoInclui, diaEmAndamento, fmtCompacto);
+  const brandsComMenores = useMemo<BrandRow[]>(
+    () => [
+      ...brands,
+      ...(menoresOk?.marcas ?? []).map((m) => ({
+        brand: m.brand, label: m.label, tiktok_gmv: m.porCanal.tiktok ?? null, ml_gmv: null, shopee_gmv: m.porCanal.shopee ?? null,
+        total_gmv: m.total, orders: 0, avg_ticket: null, tiktok_avg_ticket: null, ml_avg_ticket: null,
+        tiktok_gmv_prev: null, ml_gmv_prev: null, shopee_gmv_prev: null, total_gmv_prev: m.anterior ?? 0,
+        mom_pct: comparar && m.anterior != null ? variacaoPct(m.total, m.anterior) : null,
+        cos_pct: null, gpm: null, ml_roas: null, ml_cancel_rate_pct: null,
+      })),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- menoresOk muda so com menores
+    [brands, menores, comparar],
+  );
   const kpisDaTela = useMemo(() => {
     if (!compHoje) return kpis;
     const ref = (pct: number | null) =>
@@ -618,26 +677,23 @@ function GerencialInner() {
         periodLabel={periodLabel}
         loading={overviewStatus.loading}
         error={overviewStatus.error}
-        gmv={overview?.gmv ?? null}
-        prevGmv={compHoje ? null : overview?.prev_gmv ?? null}
-        momPct={compHoje ? compHoje.gmvPct : overview?.gmv_mom_pct ?? null}
+        gmv={topo.gmv}
+        prevGmv={topo.prevGmv}
+        momPct={topo.momPct}
+        notaMenores={notaDasMenores}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}
         channels={filters.channels}
         gmvByChannel={{
-          tiktok: overview?.tiktok_gmv ?? null,
-          ml: overview?.ml_gmv ?? null,
-          shopee: overview?.shopee_gmv ?? null,
+          tiktok: canaisComMenores.tiktok.gmv,
+          ml: canaisComMenores.ml.gmv,
+          shopee: canaisComMenores.shopee.gmv,
         }}
-        varGmvByChannel={
-          compHoje
-            ? compHoje.porCanal
-            : {
-                tiktok: variacaoDoCanal(overview?.tiktok_gmv, overview?.prev_tiktok_gmv),
-                ml: variacaoDoCanal(overview?.ml_gmv, overview?.prev_ml_gmv),
-                shopee: variacaoDoCanal(overview?.shopee_gmv, overview?.prev_shopee_gmv),
-              }
-        }
+        varGmvByChannel={{
+          tiktok: canaisComMenores.tiktok.variacao,
+          ml: canaisComMenores.ml.variacao,
+          shopee: canaisComMenores.shopee.variacao,
+        }}
         mesMeta={mesMeta}
         diaMeta={diaMeta}
         hoje={hoje}
@@ -688,7 +744,8 @@ function GerencialInner() {
         </div>
         <div className="lg:col-span-5">
           <MarcasMeta
-            brands={brands}
+            brands={brandsComMenores}
+            semMeta={menoresOk?.marcas.map((m) => m.brand)}
             channels={filters.channels}
             progressoPorMarca={progressoPorMarca}
             rotuloMeta={progressoDia ? "da meta do dia" : "da meta"}

@@ -65,6 +65,8 @@ interface Props {
   loading: boolean;
   error: boolean;
   brandHref: (brand: string) => string;
+  /** Marcas sem meta (menores, Bling): selo "sem meta" no lugar do % da meta; abrem a aba delas. */
+  semMeta?: string[];
   /** Com "Hoje": a tendencia de fechamento de cada marca, aberta por canal. */
   tendenciaDoDia?: Record<string, MarcaTendencia> | null;
   /** Com o mes atual: o fechamento projetado de cada marca (R$), o mesmo metodo do heroi. */
@@ -82,6 +84,7 @@ export default function MarcasMeta({
   loading,
   error,
   brandHref,
+  semMeta = [],
   tendenciaDoDia: tendenciaDaPagina = null,
   tendenciaDoMes: tendenciaDoMesDaPagina = null,
   fullPorMarca = null,
@@ -112,7 +115,7 @@ export default function MarcasMeta({
   const escala = Math.max(1, ...linhas.map((b) => Math.max(valor(b), referencia(b) ?? 0)));
   const canaisDaBarra = (b: BrandRow) => channels.filter((c) => canaisDa(b).includes(c));
   const divisao = (b: BrandRow): FullDaMarca | null =>
-    fullPorMarca
+    fullPorMarca && !semMeta.includes(b.brand)
       ? fullDaMarca(
           Object.fromEntries(canaisDaBarra(b).map((c) => [c, b[GMV_DO_CANAL[c]] ?? 0])),
           fullPorMarca[b.brand] ?? {},
@@ -199,7 +202,7 @@ export default function MarcasMeta({
             return (
               <li key={b.brand} className="border-t border-line first:border-t-0">
                 <Link
-                  href={brandHref(b.brand)}
+                  href={semMeta.includes(b.brand) ? "/marcas-menores" : brandHref(b.brand)}
                   className={`group grid min-h-11 ${d ? "grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1.5" : "grid-cols-[88px_1fr_auto] gap-3"} items-center rounded-lg px-1.5 py-2.5 transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`}
                 >
                   <span className="truncate text-sm font-semibold text-ink transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0">
@@ -244,7 +247,14 @@ export default function MarcasMeta({
                     <span className="text-sm font-semibold text-ink">{fmtCompacto(valor(b))}</span>
                     {pctFull != null && <span className="text-xs text-ink-muted">{Math.round(pctFull * 100)}% Full</span>}
                     {/* Com a tendencia do mes, o realizado sai da vista e vai para o title do chip dela. */}
-                    {p && tende != null ? null : p ? (
+                    {semMeta.includes(b.brand) ? (
+                      <>
+                        <span className="rounded bg-raised px-1.5 text-xs font-semibold text-ink-muted">sem meta</span>
+                        {compareActive && b.mom_pct != null && (
+                          <span className={`text-xs font-semibold ${b.mom_pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>{fmtPctBr(b.mom_pct)}</span>
+                        )}
+                      </>
+                    ) : p && tende != null ? null : p ? (
                       <span className={`rounded px-1.5 text-xs font-semibold ${CHIP[p.status]}`}>
                         {Math.round(p.atingimento * 100)}% {rotuloMeta}
                       </span>

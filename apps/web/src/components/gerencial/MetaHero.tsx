@@ -91,6 +91,8 @@ interface Props {
   onOpenGmv: () => void;
   /** Proporcao Full (0..1) de cada canal; ausente = canal sem a medida. */
   shareFull?: Partial<Record<Marketplace, number | null>> | null;
+  /** (i) do GMV: marcas menores (Bling) somadas sem meta, ou indisponiveis. */
+  notaMenores?: string | null;
   /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
   tendenciaDoDia?: TendenciaConsolidada | null;
 }
@@ -129,13 +131,16 @@ export default function MetaHero(props: Props) {
   );
 }
 
-function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao }: Props) {
+function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, notaMenores }: Props) {
   const ate = ultimoDia ? ` · até ${ultimoDia.slice(8, 10)}/${ultimoDia.slice(5, 7)}` : "";
   return (
     <div className="min-w-0">
-      <h2 id="meta-hero-titulo" className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-        GMV do período{ate}
-      </h2>
+      <div className="flex items-center gap-1.5">
+        <h2 id="meta-hero-titulo" className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          GMV do período{ate}
+        </h2>
+        {notaMenores && <InfoDica texto={notaMenores} />}
+      </div>
       {error ? (
         <>
           <p className="mt-2 text-sm text-crit-ink">Indicadores do período indisponíveis.</p>

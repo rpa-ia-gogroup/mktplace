@@ -22,6 +22,8 @@ export interface MarcaMenor {
   total: number | null;
   /** Período anterior de mesma duração; null = sem base (nunca 0). */
   total_anterior?: number | null;
+  /** O anterior por canal (plataforma): permite respeitar o filtro de canal na comparação. */
+  por_plataforma_anterior?: Record<string, number>;
   por_plataforma: PlataformaValor[];
   serie: DiaMarca[];
 }
@@ -29,6 +31,7 @@ export interface MarcaMenor {
 export interface Consolidado {
   total: number | null;
   total_anterior: number | null;
+  por_plataforma_anterior?: Record<string, number>;
   por_plataforma: PlataformaValor[];
 }
 

@@ -116,9 +116,15 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
         a["plat"][l["plataforma"]] = a["plat"].get(l["plataforma"], 0.0) + l["total"]
         d = a["dias"].setdefault(l["data"], {})
         d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
-    ant_marca: dict[str, float] = {}
+    ant_plat: dict[str, dict[str, float]] = {}  # marca -> plataforma -> total do periodo anterior
     for l in ant:
-        ant_marca[l["marca"]] = ant_marca.get(l["marca"], 0.0) + l["total"]
+        d = ant_plat.setdefault(l["marca"], {})
+        d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
+    ant_marca = {m: sum(d.values()) for m, d in ant_plat.items()}
+    ant_total_plat: dict[str, float] = {}
+    for d in ant_plat.values():
+        for p, v in d.items():
+            ant_total_plat[p] = ant_total_plat.get(p, 0.0) + v
 
     ordem = ORDEM_PLATAFORMAS.index
     marcas, por_plat = [], {}
@@ -132,6 +138,7 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
             "status": "ok" if conectada else "aguardando_autorizacao",
             "total": sum(a["plat"].values()) if a["plat"] else None,
             "total_anterior": ant_marca.get(id_),
+            "por_plataforma_anterior": ant_plat.get(id_, {}),
             "por_plataforma": [{"plataforma": p, "faturamento": a["plat"][p]} for p in sorted(a["plat"], key=ordem)],
             "serie": [{"data": d, "faturamento": sum(v.values()), "por_plataforma": v} for d, v in sorted(a["dias"].items())],
         })
@@ -140,6 +147,7 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
         "consolidado": {
             "total": sum(por_plat.values()) if por_plat else None,
             "total_anterior": sum(ant_marca.values()) if ant_marca else None,
+            "por_plataforma_anterior": ant_total_plat,
             "por_plataforma": [{"plataforma": p, "faturamento": por_plat[p]} for p in sorted(por_plat, key=ordem)],
         },
         "periodo": {"inicio": inicio, "fim": fim},

@@ -94,6 +94,8 @@ def test_periodo_anterior_e_sem_base_nao_e_zero():
     dados = {**DADOS, YENZAH_SHOPEE: DADOS[YENZAH_SHOPEE] + [pedido(9, "2026-10-25", 80.0)]}
     r = svc.get_marcas_menores(FakeBling(dados), date(2026, 11, 1), date(2026, 11, 9), HOJE)  # anterior: 10/23..10/31
     assert r["consolidado"]["total_anterior"] == 80.0
+    assert r["consolidado"]["por_plataforma_anterior"] == {"SHOPEE": 80.0}
+    assert _marcas(r)["yenzah"]["por_plataforma_anterior"] == {"SHOPEE": 80.0}
     m = _marcas(r)
     assert m["yenzah"]["total_anterior"] == 80.0 and m["aua"]["total_anterior"] is None
     svc.limpar_cache()
