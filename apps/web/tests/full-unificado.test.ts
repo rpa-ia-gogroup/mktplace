@@ -554,14 +554,14 @@ test("top 10: canal so' aparece quando a lista mistura canais", () => {
   const soML = topRupturas([resumoML(ML)], 10, IMPACTO);
   assert.equal(canaisMisturados(soML), false);
   assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: true }), "KOKESHI · 3,0 un./dia");
-  assert.equal(descricaoTop(soML, true, false), "Sem estoque no Full, com venda nos últimos 28 dias · todos do ML");
+  assert.equal(descricaoTop(soML, true, false), "Sem estoque no Full, com venda nos últimos 28 dias", "canal unico nao se repete: o filtro ja' diz");
   const misto = topRupturas([resumoML(ML), resumoShopee(SHOPEE)], 10, IMPACTO);
   assert.equal(canaisMisturados(misto), true);
   assert.equal(subtituloRuptura(misto[1], { mostrarCanal: true, comImpacto: true }), "KOKESHI · ML · 3,0 un./dia");
   assert.equal(descricaoTop(misto, true, true), "Sem estoque no Full, com venda nos últimos 28 dias · lista incompleta");
   // sem impacto: a venda e' a coluna, a linha 2 fica so' a marca
   assert.equal(subtituloRuptura(soML[0], { mostrarCanal: false, comImpacto: false }), "KOKESHI");
-  assert.equal(descricaoTop(soML, false, false), "Sem estoque no Full, com venda nos últimos 28 dias · todos do ML");
+  assert.equal(descricaoTop(soML, false, false), "Sem estoque no Full, com venda nos últimos 28 dias", "canal unico nao se repete: o filtro ja' diz");
 });
 
 test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desenhada", () => {
@@ -575,7 +575,7 @@ test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de fres
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
   const bloco = src.slice(src.indexOf("function BlocoCanalHeroi"), src.indexOf("function CelulaImpacto"));
   assert.ok(bloco.includes("const aviso = avisoCanal(c);") && !bloco.includes("c.aviso"), "aviso do canal so' com problema (avisoCanal)");
-  assert.ok(!src.includes("chipFoto(") && bloco.includes("title={c.frescor}"), "frescor em dia sai da vista: title do bloco e ⓘ do heroi");
+  assert.ok(!src.includes("chipFoto(") && bloco.includes("c.frescor"), "frescor em dia sai da vista: title do bloco e ⓘ do heroi");
   assert.ok(src.includes("fotosHeroi(canais)"), "datas das fotos no ⓘ do heroi");
   assert.ok(!src.includes("<footer"), "sem rodape de frescor");
   assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
@@ -768,7 +768,8 @@ test("heroi: contagem AA/A, contexto e uma linha por canal; cobertura baixa sem 
   const imp = impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "K2", 20), itemImp("kokeshi", "X99", 20)]);
   const h = heroiCurva(canais, imp, ABC)!;
   assert.equal(h.valor, "2", "conta so' os AA/A (o Shopee do fixture nao tem curva)");
-  assert.equal(h.contexto, "de 3 rupturas com demanda", "o % do sortimento fica so' no cartao abaixo");
+  assert.equal(h.contexto, "", "'de N rupturas com demanda' saiu da vista");
+  assert.equal(h.titulo, "de 3 rupturas com demanda", "metodologia no title do numero");
   assert.equal(h.porCanal.ml, "2 AA/A · 80,0% do impacto potencial");
   assert.equal(h.critico, true);
   assert.equal(h.porCanal.shopee, "0 AA/A · nenhuma ruptura", "canal sem ruptura: nem %, nem 'curva em 0 de 0'");
@@ -784,8 +785,8 @@ test("heroi: leitura da curva em falha vira '—' com o motivo, nunca 0", () => 
   const falha: CurvaAbc = { status: "unavailable", motivo: "Curva ABC indisponível agora: a planilha não respondeu.", fonte: "", duplicadas: [], curva_por_sku: {} };
   const h = heroiCurva(canais, IMPACTO, falha)!;
   assert.equal(h.valor, "—");
-  assert.equal(h.contexto, "sem curva agora · de 3 rupturas com demanda");
-  assert.equal(h.titulo, falha.motivo);
+  assert.equal(h.contexto, "sem curva agora", "so' o aviso quando a curva falha");
+  assert.equal(h.titulo, `${falha.motivo} · de 3 rupturas com demanda`);
   assert.deepEqual(h.porCanal, {}, "as linhas do meio voltam ao % sem estoque");
   assert.equal(heroiCurva(canais, IMPACTO, null)!.valor, "—", "carregando: tambem '—'");
 });

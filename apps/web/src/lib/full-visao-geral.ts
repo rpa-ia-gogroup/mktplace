@@ -421,10 +421,9 @@ export function subtituloRuptura(t: ItemRuptura, o: { mostrarCanal: boolean; com
 }
 
 /** Descricao do top: o que ordena, "todos do ML" quando a lista e' de um canal so', e se esta' incompleta. */
-export function descricaoTop(top: ItemRuptura[], _comImpacto: boolean, incompleta: boolean, _comCurva = false): string {
-  const unico = top.length && !canaisMisturados(top) ? ` · todos ${top[0].canal === "ml" ? "do ML" : "da Shopee"}` : "";
-  // A ordem (curva, impacto) mora no ⓘ da fila; o subtitulo diz o que a lista E'.
-  return `Sem estoque no Full, com venda nos últimos 28 dias${unico}${incompleta ? " · lista incompleta" : ""}`;
+export function descricaoTop(_top: ItemRuptura[], _comImpacto: boolean, incompleta: boolean, _comCurva = false): string {
+  // A ordem (curva, impacto) mora no ⓘ da fila; o subtitulo diz o que a lista E'. Canal unico nao se repete: o filtro ja' diz.
+  return `Sem estoque no Full, com venda nos últimos 28 dias${incompleta ? " · lista incompleta" : ""}`;
 }
 
 /** Colunas da tabela por marca: canal fora, ou sem nenhuma marca medida nele, nao e' desenhado (seria so' "—"). */
@@ -910,9 +909,11 @@ export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null
   if (!ok.length) return null;
   const n = ok.reduce((s, c) => s + c.ruptura, 0);
   // O % do sortimento fica no cartao "Sem estoque com demanda" logo abaixo (nada repetido).
-  const contexto = `de ${n.toLocaleString("pt-BR")} rupturas com demanda`;
-  if (abc === null) return { valor: "—", contexto: `carregando a curva · ${contexto}`, titulo: null, porCanal: {}, parcial: false, critico: false, blocos: {} };
-  if (abc.status !== "ok") return { valor: "—", contexto: `sem curva agora · ${contexto}`, titulo: abc.motivo ?? "curva ABC sem leitura", porCanal: {}, parcial: false, critico: false, blocos: {} };
+  // "de N rupturas com demanda" e' metodologia: vai para o title do numero. Texto visivel so' se a curva falhar.
+  const contexto = "";
+  const deN = `de ${n.toLocaleString("pt-BR")} rupturas com demanda`;
+  if (abc === null) return { valor: "—", contexto: "carregando a curva", titulo: deN, porCanal: {}, parcial: false, critico: false, blocos: {} };
+  if (abc.status !== "ok") return { valor: "—", contexto: "sem curva agora", titulo: [abc.motivo ?? "curva ABC sem leitura", deN].join(" · "), porCanal: {}, parcial: false, critico: false, blocos: {} };
   const ranking = rankingRupturas(canais, impacto, abc);
   const aaA = (canal: Canal) => ranking.filter((t) => t.canal === canal && grupoDe(curvaDe(t, abc)) !== "demais").length;
   const porCanal: Partial<Record<Canal, string>> = {};
@@ -923,14 +924,14 @@ export function heroiCurva(canais: ResumoCanal[], impacto: ImpactoRuptura | null
     const k = aaA(c.canal);
     total += k;
     const l = linhaCurvaCanal(c.canal, impacto, abc);
-    if (!ranking.some((t) => t.canal === c.canal)) blocos[c.canal] = { n: k, apoio: "nenhuma ruptura", poucaCobertura: false };
-    else if (l.estado === "ok") blocos[c.canal] = { n: k, apoio: `${fmtPct(l.pct)} do impacto potencial`, poucaCobertura: false };
+    if (!ranking.some((t) => t.canal === c.canal)) blocos[c.canal] = { n: k, apoio: null, detalhe: "nenhuma ruptura", poucaCobertura: false };
+    else if (l.estado === "ok") blocos[c.canal] = { n: k, apoio: null, detalhe: `${fmtPct(l.pct)} do impacto potencial`, poucaCobertura: false };
     else if (l.estado === "pouca") { blocos[c.canal] = { n: k, apoio: l.texto, poucaCobertura: true }; parcial = true; }
     else blocos[c.canal] = { n: k, apoio: null, poucaCobertura: false };
     const b = blocos[c.canal]!;
-    porCanal[c.canal] = b.apoio ? `${k} AA/A · ${b.apoio}` : `${k} AA/A`;
+    porCanal[c.canal] = [b.apoio, b.detalhe].filter(Boolean).length ? `${k} AA/A · ${b.apoio ?? b.detalhe}` : `${k} AA/A`;
   }
-  return { valor: total.toLocaleString("pt-BR"), contexto, titulo: null, porCanal, parcial, critico: total > 0, blocos };
+  return { valor: total.toLocaleString("pt-BR"), contexto, titulo: deN, porCanal, parcial, critico: total > 0, blocos };
 }
 
 export const DICA_HEROI_PARCIAL = "AA/A conhecidos: a curva cobre só parte do ML (kits e códigos sem ligação com a planilha ficam sem curva).";
@@ -959,7 +960,7 @@ export function filaPorGrupo(ranking: ItemRuptura[], abc: CurvaAbc | null, abert
 // ---------------------------------------------------------------------------
 
 /** Bloco de canal do heroi: "6 AA/A" e uma linha de apoio (% do impacto ou a cobertura). */
-export interface BlocoCanal { n: number; apoio: string | null; poucaCobertura: boolean }
+export interface BlocoCanal { n: number; apoio: string | null; poucaCobertura: boolean; /** title/aria: % do impacto ou 'nenhuma ruptura' (nao e' texto da vista) */ detalhe?: string }
 
 export type FiltroCanal = "todos" | Canal;
 export const FILTROS_CANAL: FiltroCanal[] = ["todos", "ml", "shopee"];
