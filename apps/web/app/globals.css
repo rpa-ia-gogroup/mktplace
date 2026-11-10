@@ -84,6 +84,9 @@
     --tc-canal-tiktok: 139 92 246;
     --tc-canal-ml: 6 182 212;
     --tc-canal-shopee: 249 115 22;
+    --tc-canal-amazon: 225 29 72;
+    --tc-canal-kwai: 22 163 74;
+    --tc-canal-shein: 71 85 105;
 
     /* UX-TORRE-B2B-1 — o shell operacional. Navy com fundo violeta, e nao
        carvao: e' a moldura do instrumento, escura nos DOIS temas, enquanto o
@@ -164,6 +167,9 @@
     --tc-canal-tiktok: 167 139 250;
     --tc-canal-ml: 34 211 238;
     --tc-canal-shopee: 251 146 60;
+    --tc-canal-amazon: 251 113 133;
+    --tc-canal-kwai: 74 222 128;
+    --tc-canal-shein: 148 163 184;
 
     /* No escuro o shell fica UM degrau abaixo do canvas: a moldura continua
        lida como moldura, sem virar um bloco preto chapado. */

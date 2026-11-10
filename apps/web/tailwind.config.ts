@@ -70,6 +70,9 @@ const config: Config = {
           tiktok: token("canal-tiktok"),
           ml: token("canal-ml"),
           shopee: token("canal-shopee"),
+          amazon: token("canal-amazon"),
+          kwai: token("canal-kwai"),
+          shein: token("canal-shein"),
         },
         // UX-TORRE-B2B-1 — moldura navy do shell, escura nos dois temas.
         shell: {
