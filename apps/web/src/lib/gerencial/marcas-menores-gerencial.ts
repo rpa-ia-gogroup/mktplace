@@ -17,6 +17,8 @@ export interface MarcaMenorGerencial {
   total: number;
   /** null = sem base no período anterior. */
   anterior: number | null;
+  /** O anterior por canal (nos canais do filtro); null junto com `anterior`. */
+  anteriorPorCanal: Partial<Record<Marketplace, number>> | null;
   porCanal: Partial<Record<Marketplace, number>>;
 }
 
@@ -71,7 +73,14 @@ export function menoresNaGerencial(
     if (m.total == null || total <= 0) continue; // sem pedido nos canais do filtro: sem dado, fora
     const ant = somaCanais(m.por_plataforma_anterior, canais);
     anteriores.push(ant);
-    marcas.push({ brand: m.id, label: m.label, total, anterior: m.total_anterior == null ? null : soma(ant), porCanal });
+    marcas.push({
+      brand: m.id,
+      label: m.label,
+      total,
+      anterior: m.total_anterior == null ? null : soma(ant),
+      anteriorPorCanal: m.total_anterior == null ? null : ant,
+      porCanal,
+    });
   }
   const porCanal: PorCanal = {};
   for (const m of marcas) for (const [c, v] of Object.entries(m.porCanal)) porCanal[c as Marketplace] = (porCanal[c as Marketplace] ?? 0) + (v ?? 0);
@@ -168,7 +177,10 @@ export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], c
     const serie: DiaMarca[] = [];
     for (const dia of m.serie) {
       const pp = filtrarDict(dia.por_plataforma, canais);
-      if (Object.keys(pp).length) serie.push({ data: dia.data, faturamento: soma2(Object.values(pp)), por_plataforma: pp });
+      if (Object.keys(pp).length) {
+        // os pedidos do dia acompanham o recorte de canal (a serie de Pedidos da Evolucao depende deles)
+        serie.push({ data: dia.data, faturamento: soma2(Object.values(pp)), por_plataforma: pp, pedidos_por_plataforma: filtrarDict(dia.pedidos_por_plataforma, canais) });
+      }
     }
     marcas.push({
       ...m,

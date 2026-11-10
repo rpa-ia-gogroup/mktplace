@@ -61,8 +61,9 @@ import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { linhasDeMarcasMenores } from "@/lib/gerencial/marcas-menores-adaptador";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
-import { escopoDeMarcas } from "@/lib/filters/brands";
+import { MARCAS_MENORES_KEYS, escopoDeMarcas } from "@/lib/filters/brands";
 import GerencialMarcasMenores from "./GerencialMarcasMenores";
 import { Produtos as ProdutosMenores } from "@/components/marcas-menores/Blocos";
 import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
@@ -281,10 +282,6 @@ function GerencialComGrandes() {
   );
 
   const brands = sources.brands.data ?? [];
-  const matrix = useMemo(
-    () => buildBrandChannelMatrix(brands, filters.channels, comparar),
-    [brands, filters.channels, comparar],
-  );
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
   const concentration = useMemo(() => buildConcentration(brands), [brands]);
 
@@ -448,16 +445,16 @@ function GerencialComGrandes() {
   const brandsComMenores = useMemo<BrandRow[]>(
     () => [
       ...brands,
-      ...(menoresOk?.marcas ?? []).map((m) => ({
-        brand: m.brand, label: m.label, tiktok_gmv: m.porCanal.tiktok ?? null, ml_gmv: null, shopee_gmv: m.porCanal.shopee ?? null,
-        total_gmv: m.total, orders: 0, avg_ticket: null, tiktok_avg_ticket: null, ml_avg_ticket: null,
-        tiktok_gmv_prev: null, ml_gmv_prev: null, shopee_gmv_prev: null, total_gmv_prev: m.anterior ?? 0,
-        mom_pct: comparar && m.anterior != null ? variacaoPct(m.total, m.anterior) : null,
-        cos_pct: null, gpm: null, ml_roas: null, ml_cancel_rate_pct: null,
-      })),
+      ...linhasDeMarcasMenores(menoresOk?.marcas ?? [], comparar),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- menoresOk muda so com menores
     [brands, menores, comparar],
+  );
+  // Marca x Canal: as menores (Bling) entram nas colunas TikTok e Shopee (ML fica sem dado) e no total, na mesma
+  // matriz das grandes. Sem meta, sem sinais; a celula delas nao abre o detalhe do Data Mart.
+  const matrix = useMemo(
+    () => buildBrandChannelMatrix(brandsComMenores, filters.channels, comparar),
+    [brandsComMenores, filters.channels, comparar],
   );
   // Mais vendidos das menores (Bling): so' com marca escolhida no filtro (em "Todas" nao pesa nem lota a tela).
   const produtosMenoresAtivo = filtersRaw.brands.length > 0 && escopo.temMenores && menoresOk != null;
@@ -473,6 +470,9 @@ function GerencialComGrandes() {
       k.key === "orders" ? { ...k, ...ref(compHoje.pedidosPct) } : k.key === "avg_ticket" ? { ...k, ...ref(compHoje.ticketPct) } : k,
     );
   }, [kpis, compHoje]);
+  // Pedidos e Ticket vem so' das marcas grandes (o overview); com as menores no GMV do topo, GMV / Pedidos nao daria o
+  // Ticket. O aviso fica VISIVEL logo sob a faixa, em cor de aviso, nao so' no (i).
+  const avisoKpisSoGrandes = menoresOk != null && menoresOk.total > 0;
   const diaMeta = diaDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const mesMeta = diaMeta ? null : mesDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const metas = useMetasDoMes(mesMeta ?? diaMeta?.slice(0, 7) ?? null);
@@ -747,6 +747,11 @@ function GerencialComGrandes() {
         semGmv
         tendencias={tendencias}
       />
+      {avisoKpisSoGrandes && (
+        <p className="-mt-1 text-xs font-semibold text-warn-ink" role="status">
+          Pedidos e Ticket: só marcas grandes (sem as menores).
+        </p>
+      )}
 
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
@@ -804,9 +809,11 @@ function GerencialComGrandes() {
         error={sources.brands.status.error}
         signalsByCell={signalsByCell}
         signalsState={signalsState}
-        onOpenCell={(brand, channel) => setDialog({ kind: "matrix", brand, channel })}
+        onOpenCell={(brand, channel) => {
+          if (!MARCAS_MENORES_KEYS.includes(brand)) setDialog({ kind: "matrix", brand, channel });
+        }}
         onOpenChannelHeader={(channel) => setDialog({ kind: "matrixChannel", channel })}
-        brandHref={brandHref}
+        brandHref={(b) => (MARCAS_MENORES_KEYS.includes(b) ? "/marcas-menores" : brandHref(b))}
         onRetry={sources.retry}
       />
 

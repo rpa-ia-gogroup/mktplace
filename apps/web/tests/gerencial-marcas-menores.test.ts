@@ -199,7 +199,7 @@ test("produtos das menores pedem com os mesmos canais e marcas do GMV (Gerencial
   const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(pagina, /produtosMenoresAtivo, \{\s*canais: filters\.channels,\s*marcas: escopo\.menores/);
   const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
-  assert.match(so, /canais: filters\.channels,\s*marcas: escopo\.menores/);
+  assert.match(so, /useProdutosMarcasMenores\(filters\.dateFrom, filters\.dateTo, !semCanalDelas, \{ canais, marcas: escopo\.menores \}\)/);
 });
 
 test("carregamento: esqueleto na hora (nada de tela bloqueada) e produtos pedidos junto, sem esperar as marcas", () => {
