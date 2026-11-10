@@ -290,3 +290,18 @@ function TabelaProdutos({ m, lendo }: { m: ProdutosMarcas["marcas"][number]; len
     </>
   );
 }
+
+/**
+ * Esqueleto da visao das marcas menores: o layout aparece na hora e cada bloco se preenche quando
+ * o Bling responde. Nada de tela inteira bloqueada num "Carregando".
+ */
+export function EsqueletoMarcasMenores() {
+  const bloco = "animate-pulse rounded-xl border border-line bg-surface motion-reduce:animate-none";
+  return (
+    <div role="status" aria-busy="true" aria-label="Carregando as marcas menores" className="flex flex-col gap-3">
+      <div className={`${bloco} h-28`} />
+      <div className={`${bloco} h-64`} />
+      <div className={`${bloco} h-40`} />
+    </div>
+  );
+}

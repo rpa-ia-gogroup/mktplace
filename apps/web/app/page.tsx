@@ -461,7 +461,7 @@ function GerencialComGrandes() {
   );
   // Mais vendidos das menores (Bling): so' com marca escolhida no filtro (em "Todas" nao pesa nem lota a tela).
   const produtosMenoresAtivo = filtersRaw.brands.length > 0 && escopo.temMenores && menoresOk != null;
-  const prodMenores = useProdutosMarcasMenores(menoresBruto?.periodo?.inicio, menoresBruto?.periodo?.fim, produtosMenoresAtivo, {
+  const prodMenores = useProdutosMarcasMenores(filters.dateFrom, filters.dateTo, produtosMenoresAtivo, {
     canais: filters.channels,
     marcas: escopo.menores,
   });

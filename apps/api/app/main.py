@@ -65,6 +65,14 @@ app.include_router(top_produtos.router)
 app.include_router(marcas_menores.router)
 
 
+@app.on_event("startup")
+def _aquecer_bling() -> None:
+    """Mantem o cache do Bling (marcas menores) quente em segundo plano; sem credenciais, nao faz nada."""
+    from app.services import bling_warm
+
+    bling_warm.iniciar_rotina()
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     """LIVENESS: o processo esta de pe. NAO diz nada sobre o banco.

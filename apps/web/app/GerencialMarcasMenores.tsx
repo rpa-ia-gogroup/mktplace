@@ -8,7 +8,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 
-import { Marcas, Produtos, Topo } from "@/components/marcas-menores/Blocos";
+import { EsqueletoMarcasMenores, Marcas, Produtos, Topo } from "@/components/marcas-menores/Blocos";
 import GerencialHeader from "@/components/gerencial/GerencialHeader";
 import KpiBand from "@/components/gerencial/KpiBand";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
@@ -58,8 +58,8 @@ export default function GerencialMarcasMenores({
   // Filtro so com canal onde elas nao vendem (ML): nao e "zero pedido", e sem dado.
   const semCanalDelas = !filters.channels.some((c) => c === "shopee" || c === "tiktok");
   const comDado = !!f && f.marcas.some((m) => m.total != null);
-  // Sem pedido nas marcas e canais escolhidos, os produtos nem sao pedidos (cada pedido custa uma chamada ao Bling).
-  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, comDado, {
+  // Produtos pedem JUNTO com as marcas (nada espera nada); so' nao pedem com canal onde elas nao vendem (ML).
+  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(filters.dateFrom, filters.dateTo, !semCanalDelas, {
     canais: filters.channels,
     marcas: escopo.menores,
   });
@@ -70,7 +70,7 @@ export default function GerencialMarcasMenores({
         <GlobalFilterControls filters={filters} onChange={onChange} loading={carregando} />
       </GerencialHeader>
       {carregando ? (
-        <StateBlock tipo="carregando" titulo="Carregando as marcas" />
+        <EsqueletoMarcasMenores />
       ) : dados === null ? (
         <StateBlock tipo="erro" titulo="Não foi possível contatar a API" />
       ) : !dados.disponivel ? (
