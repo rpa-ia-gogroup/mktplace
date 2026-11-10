@@ -192,13 +192,13 @@ function BlocoCanalHeroi({ c, bloco, aoClicar, recarregar }: { c: ResumoCanal; b
   const aviso = avisoCanal(c);
   const f = fracao(c.ruptura, c.base);
   const falado = bloco
-    ? `${bloco.n} AA/A${bloco.apoio ? `, ${bloco.apoio}` : ""}`
+    ? `${bloco.n} AA/A${bloco.apoio || bloco.detalhe ? `, ${bloco.apoio ?? bloco.detalhe}` : ""}`
     : `${f?.texto ?? "—"} sem estoque`;
   return (
     <button
       type="button"
       onClick={aoClicar}
-      title={c.frescor}
+      title={[c.frescor, bloco?.detalhe].filter(Boolean).join(' · ')}
       aria-label={`Ver rupturas ${doCanal(c.canal, nome)}: ${falado}${aviso ? `. ${aviso}` : ""}`}
       className="card-hover group flex min-h-11 w-full flex-col gap-1 rounded-lg border border-line bg-raised/40 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
@@ -297,7 +297,7 @@ function CabecaGrupo({ g, total, aberto, alternar }: { g: GrupoCurva; total: num
     <span className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-2 text-xs font-semibold text-ink-faint">
         {g === "demais" ? <span className="uppercase tracking-wide">Demais (B, C, sem curva)</span> : <ChipCurva curva={g} />}
-        <span className="font-normal">{fmtInt(total)} {total === 1 ? "ruptura" : "rupturas"}</span>
+        {g !== "demais" && <span className="font-normal">{fmtInt(total)} {total === 1 ? "ruptura" : "rupturas"}</span>}
       </span>
       {total > POR_GRUPO && (
         <button type="button" onClick={alternar} aria-expanded={aberto}
@@ -538,7 +538,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         ajuda={<InfoDica texto={DICA_RUPTURA} nota={[curvaH?.parcial ? DICA_HEROI_PARCIAL : null, fotosHeroi(canais), NOTA_VENDEDOR].filter(Boolean).join(" ")} />}
         valor={curvaH ? <Escondido texto={curvaH.valor} detalhe={curvaH.titulo} /> : "—"}
         tom={curvaH?.critico ? "critico" : "neutro"}
-        contexto={curvaH ? <Escondido texto={curvaH.contexto} detalhe={curvaH.titulo} /> : undefined}
+        contexto={curvaH?.contexto ? <Escondido texto={curvaH.contexto} detalhe={curvaH.titulo} /> : undefined}
         acao={comCurva && (
           <button type="button" onClick={() => setDrill("curva")} aria-haspopup="dialog"
             className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -571,9 +571,9 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
           icone={Boxes}
           rotulo="Sem estoque com demanda"
           ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
-          valor={heroi.valor}
+          valor={<Escondido texto={heroi.valor} detalhe={["do sortimento no Full", heroi.detalhe].filter(Boolean).join(" · ")} />}
           tom={heroi.critico ? "critico" : "neutro"}
-          comparacao={<Escondido texto="do sortimento no Full" detalhe={[heroi.detalhe, motivoHeroi].filter(Boolean).join(" · ")} />}
+          comparacao={motivoHeroi ? <Escondido texto={motivoHeroi} detalhe={heroi.detalhe} /> : undefined}
           delta={aHeroi && <Pilula a={aHeroi} />}
           antes={aHeroi?.texto}
         />
@@ -597,11 +597,6 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                 folgaRodape
                 acaoFalada={`ver as rupturas ${doCanal(canal, NOME_CANAL_LONGO[canal])} na fila`}
               />
-              {/* Fora do botao do cartao (nada interativo dentro de botao), no canto do rodape. */}
-              <button type="button" onClick={() => setDrill(canal)} aria-haspopup="dialog"
-                className="absolute bottom-0 left-3.5 inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-                por marca →
-              </button>
             </div>
           );
         })}
@@ -633,13 +628,14 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
       >
         {drill === "curva" ? (
           <div className="flex flex-col gap-4">
+            {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ, nao em rodape de 4 frases. */}
+            {abc?.status === "ok" && <div className="-mb-2 flex justify-end"><InfoDica texto={dicaCurva(abc, impacto)} /></div>}
             {CANAIS.map((c) => (
               <section key={c} className="flex flex-col gap-1">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{NOME_CANAL[c]}</h3>
                 <DetalheCurva canal={c} impacto={impacto} abc={abc} />
               </section>
             ))}
-            <p className="border-t border-line pt-3 text-xs leading-snug text-ink-muted">{dicaCurva(abc, impacto)}</p>
           </div>
         ) : drill && (
           <div className="flex flex-col gap-4">
@@ -740,7 +736,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                           <span className="block text-xs font-semibold uppercase tracking-wide text-ink-muted">{tituloMarca(t.marca)}</span>
                         </th>
                         <td className="px-3 py-3 align-top"><SeloCanal canal={t.canal} /></td>
-                        <td className="px-3 py-3 text-right align-top tabular-nums text-ink-muted">{fmtDecimal(t.mediaDiaria)} un.</td>
+                        <td className="px-3 py-3 text-right align-top tabular-nums text-ink-muted">{fmtDecimal(t.mediaDiaria)}</td>
                         <td className="px-3 py-3 align-top tabular-nums"><CelulaEstoque t={t} /></td>
                         <td className="px-4 py-3 text-right align-top text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></td>
                       </tr>
@@ -775,7 +771,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
                         <SeloCanal canal={t.canal} />
                         <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
-                        <span className="tabular-nums">{fmtDecimal(t.mediaDiaria)} un./dia</span>
+                        <span className="tabular-nums">{fmtDecimal(t.mediaDiaria)}/dia</span>
                       </span>
                       <CelulaEstoque t={t} />
                     </li>
@@ -790,9 +786,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
       {/* 4. Onde: ruptura por marca, so' os canais medidos (sem coluna Total: vai no title da marca) */}
       <Panel
         titulo="Ruptura por marca"
-        descricao={marcas.some((l) => l.maiorPerda !== null)
-          ? "% sem estoque e impacto potencial por dia, do maior impacto para o menor. R$ não é somado entre canais."
-          : "% sem estoque, da maior taxa para a menor."}
+        acao={marcas.some((l) => l.maiorPerda !== null) ? <InfoDica texto="Ordenado do maior impacto potencial por dia para o menor. R$ não é somado entre canais." /> : undefined}
         semPadding
       >
         <table className="w-full text-sm">
@@ -811,7 +805,6 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                 <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined}>
                   <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
                     <Escondido texto={tituloMarca(l.marca)} detalhe={ft ? `Total: ${ft.texto} (${ft.detalhe})` : null} />
-                    {ehPior && <span className="ml-2 text-xs font-semibold text-crit-ink">{l.maiorPerda !== null ? "maior impacto" : "pior"}</span>}
                   </th>
                   {colunas.map((canal) => {
                     const cel: MarcaCanal | undefined = l.celulas[canal];
@@ -833,7 +826,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
       <BlocosForaDaFila canais={canais} />
 
       {/* 5. Mais detalhes (fechado): o denominador continua visivel em "Itens no Full" */}
-      <MaisDetalhes resumo="estoque baixo, excesso, itens no Full e cobertura">
+      <MaisDetalhes>
         <div className="-m-4">
         <table className="w-full text-sm">
           <caption className="sr-only">Outros indicadores do estoque Full por canal</caption>
