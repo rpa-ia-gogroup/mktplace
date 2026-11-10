@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import Chip from "@/components/ui/Chip";
+import InfoDica from "@/components/ui/InfoDica";
 import type { Tom } from "@/components/ui/tone";
 import { brandLabel } from "@/lib/filters/brands";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -95,10 +96,14 @@ export default function LdrTopo({ api, marca }: { api: string; marca: string | n
                     ? ` · ${f.diasMaduros} de ${f.diasPedidos} dias`
                     : "";
                 return (
-                  <th key={c.canal} scope="col" className="px-4 py-2.5 align-bottom" title={`${c.regra} Meta ${pct(mt.meta)} · teto ${pct(mt.teto)}${parcial}`}>
+                  <th key={c.canal} scope="col" className="px-4 py-2.5 align-bottom" title={c.regra}>
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO_CANAL[c.canal]}`} />
                       {c.titulo}
+                      <InfoDica texto={`Teto ${pct(mt.teto)} (${mt.origemTeto}). Meta ${pct(mt.meta)}.${parcial}`} />
+                    </span>
+                    <span className="block text-[11px] font-medium tabular-nums text-ink-faint">
+                      meta {pct(mt.meta)}
                     </span>
                   </th>
                 );

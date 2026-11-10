@@ -73,11 +73,11 @@ export function ConviteAoDetalhe({
     });
   };
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-dashed border-line-strong px-4 py-3">
-      <p className="min-w-0 text-sm text-ink-muted">{conteudo}</p>
+    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 rounded-xl border border-dashed border-line-strong px-4 py-3">
       <button
         type="button"
         onClick={abrir}
+        title={conteudo}
         className="inline-flex min-h-11 items-center rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong"
       >
         Abrir detalhe operacional
