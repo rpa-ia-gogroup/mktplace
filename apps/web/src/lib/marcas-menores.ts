@@ -24,6 +24,10 @@ export interface MarcaMenor {
   total_anterior?: number | null;
   /** O anterior por canal (plataforma): permite respeitar o filtro de canal na comparação. */
   por_plataforma_anterior?: Record<string, number>;
+  /** Pedidos não cancelados do Bling; null = sem pedido (sem dado, nunca 0). */
+  pedidos?: number | null;
+  pedidos_por_plataforma?: Record<string, number>;
+  pedidos_por_plataforma_anterior?: Record<string, number>;
   por_plataforma: PlataformaValor[];
   serie: DiaMarca[];
 }
@@ -32,6 +36,9 @@ export interface Consolidado {
   total: number | null;
   total_anterior: number | null;
   por_plataforma_anterior?: Record<string, number>;
+  pedidos?: number | null;
+  pedidos_por_plataforma?: Record<string, number>;
+  pedidos_por_plataforma_anterior?: Record<string, number>;
   por_plataforma: PlataformaValor[];
 }
 

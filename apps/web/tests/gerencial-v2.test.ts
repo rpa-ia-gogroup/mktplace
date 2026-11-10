@@ -983,7 +983,7 @@ test("G. dialogo fecha por identidade de filtro, nao apenas pelos controles", ()
   assert.match(page, /const filterIdentity = \[/, "identidade estavel dos filtros efetivos");
   for (const part of [
     "filters.channels.join",
-    "filters.brands.join",
+    "brands.join",
     "filters.dateFrom",
     "filters.dateTo",
     "String(filters.compare)",

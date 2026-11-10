@@ -42,8 +42,11 @@ test("resumo: canais parciais na ordem canonica, nunca na ordem do clique", () =
 
 test("resumo: marca vazia e' TODAS (sem filtro), nunca 'nenhuma'", () => {
   assert.equal(resumoMarcas([]), "Todas as marcas");
-  // as cinco marcadas uma a uma tambem e' todas, para quem le
-  assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent"]), "Todas as marcas");
+  // as oito marcadas uma a uma (cinco grandes + tres menores) tambem e' todas, para quem le
+  assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent", "yenzah", "aua", "by-samia"]), "Todas as marcas");
+  // so' as cinco grandes NAO e' todas: as menores ficam de fora
+  assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent"]), "ÁPICE, BARBOURS, KOKESHI, LESCENT, RITUÁRIA");
+  assert.equal(resumoMarcas(["yenzah", "apice"]), "ÁPICE, YENZAH");
   assert.equal(resumoMarcas(["kokeshi", "apice"]), "ÁPICE, KOKESHI");
 });
 
@@ -71,7 +74,7 @@ const PAGINAS = {
 test("as tres telas usam GlobalFilterControls e nenhuma remonta os filtros a mao", () => {
   for (const [nome, arquivo] of Object.entries(PAGINAS)) {
     const codigo = semComentarios(fonte(arquivo));
-    assert.match(codigo, /<GlobalFilterControls filters=\{filters\} onChange=\{setFilters\}/, `${nome} sem o componente comum`);
+    assert.match(codigo, /<GlobalFilterControls filters=\{filters(?:Raw)?\} onChange=\{setFilters\}/, `${nome} sem o componente comum`);
     for (const avulso of ["MarketplaceFilter", "BrandFilter", "DateRangeFilter"]) {
       assert.doesNotMatch(codigo, new RegExp(`<${avulso}\\b`), `${nome} ainda monta ${avulso} a mao`);
     }

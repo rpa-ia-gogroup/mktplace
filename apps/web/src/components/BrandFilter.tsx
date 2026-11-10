@@ -2,7 +2,7 @@
 
 import { Check, Tag } from "lucide-react";
 import Popover from "@/components/ui/Popover";
-import { ALL_BRAND_OPTIONS, brandLabel } from "@/lib/filters/brands";
+import { FILTER_BRAND_OPTIONS, brandLabel } from "@/lib/filters/brands";
 import { toggleMultiSelect } from "@/lib/filters/multi-select";
 
 interface Props {
@@ -33,7 +33,7 @@ const INACTIVE_BTN = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
 /** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada. */
 function resumo(value: string[]): string {
-  if (value.length === 0 || value.length === ALL_BRAND_OPTIONS.length) return "Todas";
+  if (value.length === 0 || value.length === FILTER_BRAND_OPTIONS.length) return "Todas";
   if (value.length === 1) return brandLabel(value[0]);
   return `${value.length} marcas`;
 }
@@ -56,7 +56,7 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
         Todas
         {menu && allActive && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
       </button>
-      {ALL_BRAND_OPTIONS.map((opt) => {
+      {FILTER_BRAND_OPTIONS.map((opt) => {
         const active = value.includes(opt.value);
         return (
           <button

@@ -7,6 +7,7 @@ import BarraDeNavegacao from "./BarraDeNavegacao";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import MobileDrawer from "./MobileDrawer";
+import GuardaMarcasMenores from "./GuardaMarcasMenores";
 
 /**
  * Shell compartilhado por todas as rotas (Gate U1): sidebar desktop + topbar
@@ -79,7 +80,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <main
             className={`flex-1 min-w-0 ${tematizada ? "" : CLASSE_TEMA_CLARO_FIXO}`}
           >
-            {children}
+            <GuardaMarcasMenores>{children}</GuardaMarcasMenores>
           </main>
         </div>
         <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} openerRef={menuButtonRef} />

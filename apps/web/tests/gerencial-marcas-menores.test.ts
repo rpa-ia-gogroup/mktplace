@@ -94,3 +94,100 @@ test("pagina: variacaoDoCanal e' declarada antes de quem a usa (const arrow: ace
   const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.ok(pagina.indexOf("const variacaoDoCanal") < pagina.indexOf("const canalMenores"));
 });
+
+// ---- filtro de marca: so' menores -----------------------------------------
+import { filtrarMarcasMenores, overviewDeMenores } from "../src/lib/gerencial/marcas-menores-gerencial.ts";
+import { buildKpiBand } from "../src/lib/gerencial/kpi-band.ts";
+
+const comPedidos = (id: string, label: string, por: Record<string, number>, ped: Record<string, number>, ant?: Record<string, number>, pedAnt?: Record<string, number>) => ({
+  ...marca(id, label, por, ant),
+  pedidos: Object.keys(ped).length ? Object.values(ped).reduce((a, v) => a + v, 0) : null,
+  pedidos_por_plataforma: ped,
+  pedidos_por_plataforma_anterior: pedAnt ?? {},
+  serie: [
+    { data: "2026-11-08", faturamento: 0, por_plataforma: Object.fromEntries(Object.entries(por).map(([k, v]) => [k, v / 2])) },
+    { data: "2026-11-09", faturamento: 0, por_plataforma: Object.fromEntries(Object.entries(por).map(([k, v]) => [k, v / 2])) },
+  ],
+});
+const R = {
+  disponivel: true,
+  marcas: [
+    comPedidos("yenzah", "Yenzah", { SHOPEE: 100, TIKTOK: 50 }, { SHOPEE: 4, TIKTOK: 2 }, { SHOPEE: 80, TIKTOK: 40 }, { SHOPEE: 3, TIKTOK: 2 }),
+    comPedidos("aua", "Auá", { SHOPEE: 30 }, { SHOPEE: 1 }, { SHOPEE: 30 }, { SHOPEE: 1 }),
+    comPedidos("by-samia", "By Samia", {}, {}),
+    marca("denavita", "Denavita", {}, undefined, "aguardando_autorizacao"),
+  ],
+} as never;
+
+test("so' as marcas escolhidas entram; a que nao foi escolhida e a aguardando ficam fora", () => {
+  const f = filtrarMarcasMenores(R, ["yenzah"], TODOS);
+  assert.deepEqual(f.marcas.map((m) => m.id), ["yenzah"]);
+  assert.equal(f.consolidado?.total, 150);
+  assert.equal(f.consolidado?.pedidos, 6);
+  const dois = filtrarMarcasMenores(R, ["yenzah", "aua"], TODOS);
+  assert.equal(dois.consolidado?.total, 180);
+  assert.deepEqual(dois.consolidado?.por_plataforma.map((p) => [p.plataforma, p.faturamento]), [["SHOPEE", 130], ["TIKTOK", 50]]);
+});
+
+test("filtro de canal recorta total, serie e pedidos", () => {
+  const f = filtrarMarcasMenores(R, ["yenzah"], ["tiktok"]);
+  const y = f.marcas[0];
+  assert.equal(y.total, 50);
+  assert.equal(y.pedidos, 2);
+  assert.deepEqual(y.serie.map((d) => d.faturamento), [25, 25]);
+  const ml = filtrarMarcasMenores(R, ["yenzah"], ["ml"]);
+  assert.equal(ml.marcas[0].total, null); // sem dado no recorte, nunca 0
+  assert.equal(ml.consolidado?.total, null);
+});
+
+test("marca escolhida sem pedido: sem dado (null), nunca 0", () => {
+  const f = filtrarMarcasMenores(R, ["by-samia"], TODOS);
+  assert.equal(f.marcas[0].total, null);
+  assert.equal(f.marcas[0].pedidos, null);
+  assert.equal(f.consolidado?.total, null);
+  assert.equal(overviewDeMenores(f, TODOS), null);
+});
+
+test("anterior so' vale com base em todas as marcas somadas", () => {
+  const f = filtrarMarcasMenores(R, ["yenzah", "aua"], TODOS);
+  assert.equal(f.consolidado?.total_anterior, 150);
+  const semBase = filtrarMarcasMenores(
+    { disponivel: true, marcas: [comPedidos("yenzah", "Yenzah", { SHOPEE: 100 }, { SHOPEE: 1 }, { SHOPEE: 80 }), comPedidos("aua", "Auá", { SHOPEE: 30 }, { SHOPEE: 1 })] } as never,
+    ["yenzah", "aua"],
+    TODOS,
+  );
+  assert.equal(semBase.consolidado?.total_anterior, null);
+});
+
+test("KPIs: pedidos e ticket (GMV / pedidos) do Bling; Ads e ACOS sem dado, nunca 0", () => {
+  const f = filtrarMarcasMenores(R, ["yenzah", "aua"], TODOS);
+  const ov = overviewDeMenores(f, TODOS)!;
+  assert.equal(ov.gmv, 180);
+  assert.equal(ov.orders, 7);
+  assert.ok(Math.abs(ov.avg_ticket - 180 / 7) < 1e-9);
+  assert.equal(ov.ad_spend, null);
+  assert.equal(ov.shopee_roas, null);
+  const [, pedidos, ticket, ads, acos] = buildKpiBand(ov, TODOS, true);
+  assert.ok(pedidos.value && ticket.value);
+  assert.equal(ads.value, null);
+  assert.ok(ads.unavailableReason);
+  assert.equal(acos.value, null);
+  assert.ok(acos.channelValues?.every((c) => c.value == null));
+  assert.equal(ov.prev_orders, 6); // 3+2+1 do periodo anterior
+});
+
+test("menoresNaGerencial com marca escolhida: so' ela entra, as outras ficam fora", () => {
+  const m = menoresNaGerencial(R, TODOS, true, ["aua"]);
+  assert.equal(m.estado, "ok");
+  if (m.estado !== "ok") return;
+  assert.deepEqual(m.marcas.map((x) => x.brand), ["aua"]);
+  assert.equal(m.total, 30);
+});
+
+test("pagina: so' menores no filtro cai na Gerencial do Bling, sem as fontes do Data Mart", () => {
+  const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(pagina, /escopoDeMarcas\(filters\.brands\)\.soMenores\) return <GerencialMarcasMenores/);
+  assert.ok(pagina.indexOf("function GerencialInner") > pagina.indexOf("function GerencialComGrandes"));
+  const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(so, /useGerencialSources/);
+});
