@@ -323,7 +323,7 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
     return (
       <tr key={l.curva} className={sem ? "text-ink-muted" : undefined}>
         <th scope="row" className="py-2.5 pr-1 text-left font-medium">
-          {sem ? <span className="whitespace-nowrap text-xs italic text-ink-faint">Sem curva</span> : <ChipCurva curva={l.curva as Curva} />}
+          {sem ? <span className="whitespace-nowrap text-xs text-ink-muted">Sem curva</span> : <ChipCurva curva={l.curva as Curva} />}
         </th>
         <td className="px-2 py-2.5">
           {l.pct === null ? (
@@ -338,7 +338,7 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
           )}
         </td>
         <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">
-          <Escondido texto={fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />
+          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />}
         </td>
         <td className="py-2.5 pl-2 text-right tabular-nums text-ink-muted">{fmtInt(l.rupturas)}</td>
       </tr>
@@ -360,7 +360,7 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
       <tfoot>
         <tr className="border-t-2 border-line-strong bg-raised font-semibold">
           <th scope="row" className="rounded-l-md py-2.5 pl-2 pr-2 text-left">Total</th>
-          <td className="px-2 py-2.5 tabular-nums">{t.total.pct === null ? <Ausente motivo="sem impacto potencial medido" /> : fmtPct(t.total.pct)}</td>
+          <td className="px-2 py-2.5" />
           <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">{fmtReais(t.total.perda)}</td>
           <td className="rounded-r-md py-2.5 pl-2 pr-2 text-right tabular-nums">{fmtInt(t.total.rupturas)}</td>
         </tr>
