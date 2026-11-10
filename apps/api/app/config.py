@@ -266,6 +266,10 @@ class Settings(BaseSettings):
     # `expedicao_alerta_destinatarios`: e-mails do Slack, separados por virgula.
     alerta_webhook_secret: SecretStr = SecretStr("")
     slack_bot_token: SecretStr = SecretStr("")
+    # Marcas menores (Denavita, Yenzah, Aua, By Samia): fonte e' a API do Avoe
+    # (Supabase edge function), nao o Data Mart. Chave cadastrada no Render.
+    avoe_api_key: SecretStr = SecretStr("")
+    avoe_api_url: str = "https://hywuageaxxrgxhhbfolb.supabase.co/functions/v1/cliente-api"
     expedicao_alerta_destinatarios: str = ""
 
     # ------------------------------------------------------------------

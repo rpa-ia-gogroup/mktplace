@@ -19,6 +19,7 @@ from app.routers import (
     regioes,
     tiktok_abertos,
     top_produtos,
+    marcas_menores,
 )
 
 app = FastAPI(
@@ -61,6 +62,7 @@ app.include_router(metas.router)
 app.include_router(alertas.router)
 # Top 5 produtos por marca na Gerencial (base consolidada por NF).
 app.include_router(top_produtos.router)
+app.include_router(marcas_menores.router)
 
 
 @app.api_route("/health", methods=["GET", "HEAD"])
