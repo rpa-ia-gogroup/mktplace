@@ -97,7 +97,7 @@ function CartaoMarca({ m }: { m: MarcaMenor }) {
       </div>
       {m.total == null ? (
         <p className="rounded-lg border border-dashed border-line-strong px-3 py-6 text-center text-sm text-ink-muted">
-          Sem dado no período.
+          Sem dado do Avoe no período.
         </p>
       ) : (
         <>
@@ -111,12 +111,13 @@ function CartaoMarca({ m }: { m: MarcaMenor }) {
               <li key={p.plataforma} className="flex items-center gap-2 text-xs text-ink-muted tabular-nums">
                 <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: corDaPlataforma(p.plataforma) }} aria-hidden="true" />
                 <span className="truncate">{nomeDaPlataforma(p.plataforma)}</span>
-                <span className="ml-auto font-semibold text-ink">{fmtCompacto(p.faturamento)}</span>
-                <span className="w-9 text-right">{Math.round(partes[i].frac * 100)}%</span>
+                <span className="ml-auto w-9 text-right">{Math.round(partes[i].frac * 100)}%</span>
+                <span className="w-24 text-right font-semibold text-ink">{fmtCompacto(p.faturamento)}</span>
               </li>
             ))}
           </ul>
-          <SerieDiaria marca={m} />
+          {/* Um dia so': a barra repetiria a lista acima. */}
+          {m.serie.length > 1 && <SerieDiaria marca={m} />}
         </>
       )}
     </section>
