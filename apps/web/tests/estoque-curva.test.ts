@@ -39,7 +39,7 @@ test("filtro: vazio = todas; AA/A junto; sem curva nunca cai em C; combina com o
   const daApi = [it("1", "AA", 0, true), it("2", "B", 3, true), it("3", null, 1, true), it("4", "A", 9, false)];
   const recorte = daApi.filter((t) => passaCurva(t.curva, ["aa_a", "sem"]));
   assert.deepEqual(recorte.map((t) => t.id), ["1", "3", "4"]);
-  assert.equal(resumoAcao(recorte, (t) => !!t.acao), "Exigem ação: 1 AA · 0 A · 1 demais");
+  assert.equal(resumoAcao(recorte, (t) => !!t.acao), "Por curva: 1 AA · 0 A · 1 demais");
 });
 
 test("aviso do ML com o % real da curva; nada quando nao ha' itens", () => {

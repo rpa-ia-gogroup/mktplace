@@ -545,7 +545,7 @@ export default function MLFullEstoqueClient() {
           </button>
         ))}
       </div>
-      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} />}
+      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           Data da fotografia
@@ -716,23 +716,22 @@ export default function MLFullEstoqueClient() {
                 {comCurva && (
                   <div className="flex flex-col gap-0.5">
                     <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full), exigeAcaoML)}</p>
-                    {avisoCoberturaCurva(metaCurva) && (
-                      <p className="text-xs text-ink-muted">{avisoCoberturaCurva(metaCurva)}</p>
-                    )}
                   </div>
                 )}
                 {categoria && (
                   <ChipCategoria ref={chipRef} texto={textoChip(categoria, lista)} aoLimpar={() => setCategoria(null)} />
                 )}
               </div>
-              <p className="text-xs text-ink-muted px-1">
-                {categoria
-                  ? `${fmtInt(lista.length)} na categoria · `
-                  : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida · `}
-                {fmtInt(payload.inventarios.length)} de{" "}
-                {fmtInt(payload.total_no_filtro)} inventários
-                {payload.truncado && " · lista truncada; indicadores cobrem tudo"}
-              </p>
+              {/* "N de M inventarios" so' com a lista truncada (senao e' a lista toda); recortes ativos seguem. */}
+              {(categoria || filtroCurva.length > 0 || payload.truncado) && (
+                <p className="text-xs text-ink-muted px-1">
+                  {categoria
+                    ? `${fmtInt(lista.length)} na categoria`
+                    : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida`}
+                  {(categoria || filtroCurva.length > 0) && payload.truncado && " · "}
+                  {payload.truncado && `${fmtInt(payload.inventarios.length)} de ${fmtInt(payload.total_no_filtro)} inventários · lista truncada; indicadores cobrem tudo`}
+                </p>
+              )}
               <TabelaInventarios inventarios={lista} comCurva={comCurva} />
             </>
           )}

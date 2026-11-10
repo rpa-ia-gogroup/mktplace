@@ -5,6 +5,7 @@
  * iguais nas abas Shopee e ML. O chip e' o do /full (#301).
  */
 import ChipCurva from "@/components/full/ChipCurva";
+import InfoDica from "@/components/ui/InfoDica";
 import { motivoSemCurva, OPCOES_CURVA, type ItemComCurva, type OpcaoCurva } from "@/lib/estoque-curva";
 
 /** Nunca vazia: "sem curva" tracejado com o motivo no title e no leitor de tela. */
@@ -25,11 +26,12 @@ const CHIP =
 
 /** "Curva: AA/A | B | C | Sem curva" — liga/desliga como os chips de Classificação. */
 export function FiltroCurvaChips({
-  valor, aoMudar,
-}: { valor: readonly OpcaoCurva[]; aoMudar: (v: OpcaoCurva[]) => void }) {
+  valor, aoMudar, ajuda,
+}: { valor: readonly OpcaoCurva[]; aoMudar: (v: OpcaoCurva[]) => void; /** Cobertura da curva e regra do "sem curva": ⓘ ao lado do rotulo, nao paragrafo. */ ajuda?: string | null }) {
   return (
     <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por curva">
       <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">Curva</span>
+      {ajuda && <InfoDica texto={ajuda} />}
       {OPCOES_CURVA.map((o) => {
         const ligado = valor.includes(o.valor);
         return (
