@@ -268,7 +268,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
 // ---------------------------------------------------------------------------
 // Pecas
 // ---------------------------------------------------------------------------
-function Notas({ notas }: { notas: string[] }) {
+export function Notas({ notas }: { notas: string[] }) {
   if (!notas.length) return null;
   return (
     <ul className="flex flex-col gap-0.5 text-xs text-ink-faint" data-testid="cx-notas">
@@ -280,15 +280,15 @@ function Notas({ notas }: { notas: string[] }) {
 }
 
 /** Classes da tabela (DESIGN.md §5 Tables): cabeca em `raised`, numeros a direita. */
-const THEAD = "bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint";
-const TH = "whitespace-nowrap px-2 py-2 text-right";
-const TH_MARCA = "px-2 py-2 text-left";
-const TD = "whitespace-nowrap px-2 py-2 text-right tabular-nums text-ink-muted";
-const TR = "border-t border-line hover:bg-raised/60";
-const TR_TOTAL = "border-t-2 border-line-strong bg-raised font-semibold";
+export const THEAD = "bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint";
+export const TH = "whitespace-nowrap px-2 py-2 text-right";
+export const TH_MARCA = "px-2 py-2 text-left";
+export const TD = "whitespace-nowrap px-2 py-2 text-right tabular-nums text-ink-muted";
+export const TR = "border-t border-line hover:bg-raised/60";
+export const TR_TOTAL = "border-t-2 border-line-strong bg-raised font-semibold";
 
 /** Cabecalho de coluna com "ⓘ" e/ou dica em title + sr-only. */
-function ThAjuda({ children, ajuda, dica }: { children: string; ajuda?: string; dica?: string | null }) {
+export function ThAjuda({ children, ajuda, dica }: { children: string; ajuda?: string; dica?: string | null }) {
   return (
     <th scope="col" className={TH} title={dica ?? undefined}>
       <span className="inline-flex items-center justify-end gap-1">
@@ -301,7 +301,7 @@ function ThAjuda({ children, ajuda, dica }: { children: string; ajuda?: string; 
 }
 
 /** Um numero por celula; o detalhe fica no title e no texto so' para leitor de tela. */
-function Celula({ valor, dica, children }: { valor: string; dica?: string | null; children?: ReactNode }) {
+export function Celula({ valor, dica, children }: { valor: string; dica?: string | null; children?: ReactNode }) {
   return (
     <td className={TD} title={dica ?? undefined}>
       <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
@@ -325,14 +325,14 @@ function ComMeta({ c }: { c: CelulaMeta | null }) {
   );
 }
 
-const COR_DELTA: Record<DeltaCx["sentido"], string> = {
+export const COR_DELTA: Record<DeltaCx["sentido"], string> = {
   piorou: "font-semibold text-crit-ink",
   melhorou: "font-semibold text-ok-ink",
   estavel: "text-ink-faint",
 };
 
 /** "3 cancelamentos · Antes: 1,0%" — "—" nao entra (ausencia nunca vira texto de zero). */
-function dica(...partes: (string | null | false)[]): string | null {
+export function dica(...partes: (string | null | false)[]): string | null {
   const ok = partes.filter((p): p is string => !!p);
   return ok.length ? ok.join(" · ") : null;
 }

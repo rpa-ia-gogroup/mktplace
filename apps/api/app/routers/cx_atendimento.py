@@ -3,7 +3,8 @@
   * `/shopee`      chat (Saude da Conta) + cancelamentos e devolucoes da Shopee;
   * `/atendimento` cancelamentos e devolucoes dos tres canais (base do CX-MKT-1);
   * `/shopee/pedidos` os pedidos de um motivo do Pareto (CX-PEDIDOS-MOTIVO);
-  * `/shopee/avaliacoes` nota e avaliacoes de produto da Shopee, por marca e produto.
+  * `/shopee/avaliacoes` nota e avaliacoes de produto da Shopee, por marca e produto;
+  * `/mercadolivre` reclamacoes, cancelamentos, perguntas e fila do Mercado Livre.
 
 Flag `settings.cx_api_enabled` (ligada por padrao): desligada, toda requisicao
 responde 404 antes de qualquer consulta.
@@ -24,8 +25,10 @@ from app.schemas.cx_atendimento import (
     PedidosMotivoResponse,
 )
 from app.schemas.cx_avaliacoes import CxAvaliacoesResponse
+from app.schemas.cx_ml import CxMercadoLivreResponse
 from app.services import cx_atendimento_service as svc
 from app.services import cx_avaliacoes_service
+from app.services import cx_ml_service
 from app.services import cx_pedidos_service
 
 
@@ -109,3 +112,12 @@ def cx_shopee_pedidos(
 def cx_shopee_avaliacoes(brands: Optional[list[str]] = Depends(brands_query)):
     """Nota acumulada das avaliacoes de produto da Shopee, por marca e por produto (sem texto)."""
     return cx_avaliacoes_service.montar_avaliacoes(brands=brands)
+
+
+@router.get("/mercadolivre", response_model=CxMercadoLivreResponse)
+def cx_mercadolivre(
+    brands: Optional[list[str]] = Depends(brands_query),
+    dias: int = Depends(dias_query),
+):
+    """Reclamacoes, cancelamentos, perguntas e a fila "aguardando nossa resposta" do ML."""
+    return cx_ml_service.montar_cx_ml(brands=brands, dias=dias)

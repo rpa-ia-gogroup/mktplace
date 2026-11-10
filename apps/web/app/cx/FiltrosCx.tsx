@@ -9,8 +9,8 @@
  *
  * As pecas sao as do app: `BrandFilter` (variante `menu`) e o `Popover` que o
  * `DateRangeFilter` usa. O que so' a CX tem entra dentro do padrao:
- *   - canal: so' Shopee (a CX ainda nao le' ML nem TikTok) — o segmento fica
- *     ativo e nao e' botao, porque nao ha' o que escolher;
+ *   - canal: Shopee ou Mercado Livre (`canal=ml` na URL; o TikTok ainda nao
+ *     tem CX), o mesmo trilho do `MarketplaceFilter`;
  *   - marca: UMA (a URL e a API leem uma), via `marcaUnica`;
  *   - periodo: a janela de dias fechados (7, 30 ou 90), nao datas livres.
  *
@@ -22,7 +22,7 @@ import { CalendarDays, Check } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
 import Popover from "@/components/ui/Popover";
-import { JANELAS_DIAS, hrefCx, marcaUnica, resumoFiltrosCx, type FiltrosCx as Filtros } from "@/lib/cx";
+import { CANAIS_CX, JANELAS_DIAS, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
 
 /** Mesmas classes dos botoes do `BrandFilter`/`DateRangeFilter` no menu. */
@@ -31,13 +31,13 @@ const OPCAO =
 const OPCAO_ATIVA = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const OPCAO_INATIVA = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
-export default function FiltrosCx({ f }: { f: Filtros }) {
+export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) {
   const router = useRouter();
   const [aplicando, iniciar] = useTransition();
   const [aberto, setAberto] = useState(false);
   const id = useId();
 
-  const ir = (novo: Filtros) => iniciar(() => router.push(hrefCx(novo), { scroll: false }));
+  const ir = (novo: Filtros, c: CanalCx = canal) => iniciar(() => router.push(hrefCx(novo, c), { scroll: false }));
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="cx-filtros" aria-busy={aplicando}>
@@ -51,7 +51,7 @@ export default function FiltrosCx({ f }: { f: Filtros }) {
       >
         <span className="min-w-0">
           <span className="block text-xs font-semibold text-ink">Filtros</span>
-          <span className="block truncate text-xs text-ink-muted">{resumoFiltrosCx(f, brandLabel)}</span>
+          <span className="block truncate text-xs text-ink-muted">{resumoFiltrosCx(f, brandLabel, canal)}</span>
         </span>
         <svg
           viewBox="0 0 16 16"
@@ -69,18 +69,25 @@ export default function FiltrosCx({ f }: { f: Filtros }) {
         id={id}
         className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-start gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
       >
-        {/* Canal: o trilho do MarketplaceFilter com o unico canal que a CX le' */}
-        <div
-          role="group"
-          aria-label="Canal"
-          title="A aba CX lê só a Shopee por enquanto"
-          className="flex w-fit min-w-0 max-w-full gap-0.5 rounded-lg border border-line bg-raised p-0.5"
-        >
-          <span className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md bg-surface px-3 text-sm font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong">
-            <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full bg-canal-shopee" />
-            Shopee
-            <span className="sr-only"> (único canal da aba CX por enquanto)</span>
-          </span>
+        {/* Canal: o trilho do MarketplaceFilter, com os canais que a CX le' */}
+        <div role="group" aria-label="Canal" className="flex w-fit min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-raised p-0.5">
+          {CANAIS_CX.map((c) => {
+            const ativo = c.valor === canal;
+            return (
+              <button
+                key={c.valor}
+                type="button"
+                aria-pressed={ativo}
+                onClick={() => !ativo && ir(f, c.valor)}
+                className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+                  ativo ? OPCAO_ATIVA : OPCAO_INATIVA
+                }`}
+              >
+                <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${c.ponto}`} />
+                {c.rotulo}
+              </button>
+            );
+          })}
         </div>
 
         <BrandFilter
