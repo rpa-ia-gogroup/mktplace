@@ -21,5 +21,9 @@ test("nome e cor por plataforma; desconhecida cai no neutro", () => {
   assert.equal(nomeDaPlataforma("MELI"), "Mercado Livre");
   assert.equal(corDaPlataforma("TIKTOK"), "rgb(var(--tc-canal-tiktok))");
   assert.equal(corDaPlataforma("SHEIN"), "rgb(var(--tc-canal-shein))");
+  assert.equal(nomeDaPlataforma("MAGALU"), "Magalu");
+  assert.equal(nomeDaPlataforma("NETSHOES"), "Netshoes");
+  assert.equal(nomeDaPlataforma("DAFITI"), "Dafiti");
+  assert.equal(corDaPlataforma("MAGALU"), "rgb(var(--tc-faint))");
   assert.equal(corDaPlataforma("XYZ"), "rgb(var(--tc-faint))");
 });
