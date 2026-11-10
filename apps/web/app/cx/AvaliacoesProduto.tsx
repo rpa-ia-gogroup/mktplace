@@ -196,7 +196,7 @@ function ListaProdutos({ itens }: { itens: Produto[] }) {
           return (
             <tr key={`${p.marca}-${p.item_id}`} className="border-t border-line hover:bg-raised/60" title={aval}>
               <th scope="row" className="px-2 py-2 text-left font-normal">
-                <span className="block truncate text-ink" title={p.nome ? p.nome : `item_id ${p.item_id}`}>{nomeProduto(p)}</span>
+                <span className="line-clamp-2 text-ink sm:block sm:truncate" title={p.nome ? p.nome : `item_id ${p.item_id}`}>{nomeProduto(p)}</span>
                 <span className="block truncate text-xs text-ink-faint sm:hidden">{brandLabel(p.marca)}</span>
                 <span className="sr-only">{aval}</span>
               </th>

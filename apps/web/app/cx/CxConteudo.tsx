@@ -204,7 +204,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
         meio={status.length ? <SaudePorMarca itens={status} abrir={(m) => setDialogo({ marca: m })} /> : undefined}
       />
 
-      <Faixa r={r} dias={filtros.dias} abrir={(i) => setDialogo({ indicador: i })} />
+      <Faixa r={r} dias={filtros.dias} heroiMostraSemComparacao={!r.comparacao.resposta?.delta && r.totais.resposta != null && !!r.semAnterior.resposta} abrir={(i) => setDialogo({ indicador: i })} />
 
       <FilaAtencao
         titulo={
@@ -237,7 +237,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
 
       {avaliacoes}
 
-      <MaisDetalhes resumo="fila do chat por tempo de espera e notas da coleta">
+      <MaisDetalhes>
         {v.fila.length > 0 ? (
           <FilaChat linhas={v.fila} />
         ) : (
@@ -419,7 +419,9 @@ function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFilaCx | 
 //    Reenvio sem fonte (cartao sem numero nao entra na 1a dobra; a nota esta'
 //    em Mais detalhes)
 // ---------------------------------------------------------------------------
-function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: IndicadorCx) => void }) {
+function Faixa({ r, dias, heroiMostraSemComparacao, abrir }: { r: ResumoCx; dias: number; heroiMostraSemComparacao: boolean; abrir: (i: IndicadorCx) => void }) {
+  // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
+  const visto = new Set<string>(heroiMostraSemComparacao && r.semAnterior.resposta ? [r.semAnterior.resposta.texto] : []);
   const tile = (
     i: IndicadorCx,
     identidade: IdentidadeKpi,
@@ -427,7 +429,16 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
     valor: string,
     comparacao: ReactNode,
     extra: RodapeCard = {},
-  ) => (
+  ) => {
+    const sem = extra.delta ? undefined : r.semAnterior[i];
+    let contexto: string | undefined;
+    if (sem) {
+      if (visto.has(sem.texto)) {
+        extra = { ...extra, antes: undefined };
+        contexto = [sem.texto, sem.detalhe].filter(Boolean).join(" · ");
+      } else visto.add(sem.texto);
+    }
+    return (
     <KpiTile
       variante="gerencial"
       identidade={identidade}
@@ -443,8 +454,10 @@ function Faixa({ r, dias, abrir }: { r: ResumoCx; dias: number; abrir: (i: Indic
       // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
       ajuda={<InfoDica emControle texto={notasDoTile(r, i, dias).join(" ")} />}
       onAbrir={() => abrir(i)}
+      contexto={contexto}
     />
-  );
+    );
+  };
   return (
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
