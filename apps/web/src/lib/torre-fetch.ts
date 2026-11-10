@@ -4,10 +4,13 @@
  * (401 + `X-Torre-Auth: sessao-ausente`), avisa a tela por evento.
  * 401 sem esse header (B2B/Auth0) nao e' sessao expirada.
  */
+import { urlSemMarcasMenores } from "./filters/brands.ts";
+
 export const EVENTO_SESSAO_EXPIRADA = "torre:sessao-expirada";
 
 export async function torreFetch(input: string, init?: RequestInit): Promise<Response> {
-  const res = await globalThis.fetch(input, { credentials: "same-origin", ...init });
+  // As marcas menores (Bling) vivem no filtro global, mas as APIs do Data Mart so conhecem as grandes.
+  const res = await globalThis.fetch(urlSemMarcasMenores(input), { credentials: "same-origin", ...init });
   if (
     res.status === 401 &&
     res.headers.get("X-Torre-Auth") === "sessao-ausente" &&

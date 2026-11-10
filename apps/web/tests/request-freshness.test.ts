@@ -600,7 +600,9 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
   //   planilha de sortimento; falha = sem curva, nunca "C").
   // O pino literal e' proposital: forca revisao consciente a cada funcao nova,
   // em vez de aceitar qualquer superficie publica em silencio.
-  assert.equal(assinaturas.length, 31, "nenhuma funcao publica foi adicionada ou removida");
+  // 31 -> 32 pelas MARCAS-MENORES (`fetchMarcasMenores`, Bling); 32 -> 33 pelos produtos delas
+  //   (`fetchProdutosMarcasMenores`, bloco proprio: falha sozinho e pode vir parcial).
+  assert.equal(assinaturas.length, 33, "nenhuma funcao publica foi adicionada ou removida");
   assert.ok(assinaturas.includes("fetchMonitoramentoPreco"));
   assert.ok(assinaturas.includes("fetchAvoeSnapshot"));
   assert.ok(assinaturas.includes("fetchMLFulfillment"));
@@ -627,6 +629,7 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
     "fetchInteligencia",
     "fetchMLFulfillment",
     "fetchMLFullEstoque",
+    "fetchMarcasMenores",
     "fetchMonitoramentoPreco",
     "fetchMonthly",
     "fetchOperacoes",
@@ -634,6 +637,7 @@ test("PF1 escopo: as 31 assinaturas publicas de fetchX nao mudaram", () => {
     "fetchPedidos",
     "fetchProdutosML",
     "fetchProdutosMLSummary",
+    "fetchProdutosMarcasMenores",
     "fetchProdutosShopee",
     "fetchProdutosShopeeSummary",
     "fetchProdutosTikTok",

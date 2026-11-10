@@ -6,7 +6,8 @@
  * com menores nunca é comparado com um anterior sem elas.
  */
 import type { Marketplace } from "../mock-data.ts";
-import { variacaoPct, type MarcasMenores } from "../marcas-menores.ts";
+import type { OverviewData } from "../api-client.ts";
+import { variacaoPct, type Consolidado, type DiaMarca, type MarcaMenor, type MarcasMenores } from "../marcas-menores.ts";
 
 const CANAL: Record<string, Marketplace> = { SHOPEE: "shopee", TIKTOK: "tiktok" };
 
@@ -46,7 +47,13 @@ function somaCanais(p: Record<string, number> | undefined, canais: readonly Mark
 const soma = (p: PorCanal) => Object.values(p).reduce((a, v) => a + (v ?? 0), 0);
 
 /** `ativo` = filtros permitem (todas as marcas, algum canal Shopee/TikTok, não é demonstração). */
-export function menoresNaGerencial(d: MarcasMenores | null | undefined, canais: readonly Marketplace[], ativo: boolean): Menores {
+export function menoresNaGerencial(
+  d: MarcasMenores | null | undefined,
+  canais: readonly Marketplace[],
+  ativo: boolean,
+  /** So' estas marcas (filtro de marca); sem lista, todas. */
+  selecionadas?: readonly string[],
+): Menores {
   if (!ativo) return { estado: "fora" };
   if (d === undefined) return { estado: "carregando" };
   if (d === null || !d.disponivel) return { estado: "indisponivel" };
@@ -54,8 +61,9 @@ export function menoresNaGerencial(d: MarcasMenores | null | undefined, canais: 
   const aguardando: string[] = [];
   const anteriores: PorCanal[] = [];
   for (const m of d.marcas) {
+    if (selecionadas && !selecionadas.includes(m.id) && m.status !== "aguardando_autorizacao") continue;
     if (m.status === "aguardando_autorizacao") {
-      aguardando.push(m.label);
+      if (!selecionadas || selecionadas.includes(m.id)) aguardando.push(m.label);
       continue;
     }
     const porCanal = somaCanais(Object.fromEntries(m.por_plataforma.map((p) => [p.plataforma, p.faturamento])), canais);
@@ -133,4 +141,102 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
       ? "A variação as inclui nos dois períodos."
       : "A variação não as inclui (sem base no período anterior).";
   return `Inclui as marcas menores pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag} ${variacao}`;
+}
+
+// ---------------------------------------------------------------------------
+// So' marcas menores selecionadas: a Gerencial inteira sai do Bling.
+
+const CANAL_DA_PLATAFORMA: Record<string, Marketplace> = { MELI: "ml", SHOPEE: "shopee", TIKTOK: "tiktok" };
+const ORDEM = ["MELI", "SHOPEE", "TIKTOK"];
+
+const soma2 = (v: Iterable<number>) => [...v].reduce((a, n) => a + n, 0);
+const filtrarDict = <T,>(d: Record<string, T> | undefined, canais: readonly Marketplace[]): Record<string, T> =>
+  Object.fromEntries(Object.entries(d ?? {}).filter(([p]) => canais.includes(CANAL_DA_PLATAFORMA[p])));
+
+/**
+ * `/marcas-menores` recortado pelo filtro: so' as marcas escolhidas e so' os canais escolhidos, com totais,
+ * serie, pedidos e consolidado refeitos. Sem dado no recorte = null, nunca 0; o anterior so' vale com base
+ * em todas as marcas somadas (o mesmo conjunto nos dois lados).
+ */
+export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], canais: readonly Marketplace[]): MarcasMenores {
+  const marcas: MarcaMenor[] = [];
+  for (const m of d.marcas) {
+    if (!ids.includes(m.id) || m.status === "aguardando_autorizacao") continue;
+    const por = m.por_plataforma.filter((p) => canais.includes(CANAL_DA_PLATAFORMA[p.plataforma]));
+    const ant = filtrarDict(m.por_plataforma_anterior, canais);
+    const ped = filtrarDict(m.pedidos_por_plataforma, canais);
+    const serie: DiaMarca[] = [];
+    for (const dia of m.serie) {
+      const pp = filtrarDict(dia.por_plataforma, canais);
+      if (Object.keys(pp).length) serie.push({ data: dia.data, faturamento: soma2(Object.values(pp)), por_plataforma: pp });
+    }
+    marcas.push({
+      ...m,
+      total: por.length && m.total != null ? soma2(por.map((p) => p.faturamento)) : null,
+      total_anterior: m.total_anterior == null || !Object.keys(ant).length ? null : soma2(Object.values(ant)),
+      por_plataforma: por,
+      por_plataforma_anterior: ant,
+      pedidos: Object.keys(ped).length ? soma2(Object.values(ped)) : null,
+      pedidos_por_plataforma: ped,
+      pedidos_por_plataforma_anterior: filtrarDict(m.pedidos_por_plataforma_anterior, canais),
+      serie,
+    });
+  }
+  const comDado = marcas.filter((m) => m.total != null);
+  const comBase = comDado.length > 0 && comDado.every((m) => m.total_anterior != null);
+  const agr = (pega: (m: MarcaMenor) => Record<string, number> | undefined) => {
+    const out: Record<string, number> = {};
+    for (const m of comDado) for (const [p, v] of Object.entries(pega(m) ?? {})) out[p] = (out[p] ?? 0) + v;
+    return out;
+  };
+  const plat = agr((m) => Object.fromEntries(m.por_plataforma.map((p) => [p.plataforma, p.faturamento])));
+  const consolidado: Consolidado = {
+    total: comDado.length ? soma2(comDado.map((m) => m.total as number)) : null,
+    total_anterior: comBase ? soma2(comDado.map((m) => m.total_anterior as number)) : null,
+    por_plataforma_anterior: comBase ? agr((m) => m.por_plataforma_anterior) : {},
+    pedidos: comDado.some((m) => m.pedidos != null) ? soma2(comDado.map((m) => m.pedidos ?? 0)) : null,
+    pedidos_por_plataforma: agr((m) => m.pedidos_por_plataforma),
+    pedidos_por_plataforma_anterior: comBase ? agr((m) => m.pedidos_por_plataforma_anterior) : {},
+    por_plataforma: Object.keys(plat)
+      .sort((a, b) => ORDEM.indexOf(a) - ORDEM.indexOf(b))
+      .map((p) => ({ plataforma: p, faturamento: plat[p] })),
+  };
+  return { ...d, consolidado, marcas };
+}
+
+/**
+ * O `OverviewData` das menores, para a faixa de KPIs da Gerencial (a mesma de sempre): GMV e pedidos do
+ * Bling, ticket = GMV / pedidos, e Ads e ACOS "sem dado" (null, nunca 0). Sem GMV no recorte, null.
+ */
+export function overviewDeMenores(f: MarcasMenores, canais: readonly Marketplace[]): OverviewData | null {
+  const c = f.consolidado;
+  if (!f.disponivel || !c || c.total == null) return null;
+  const gmv = c.total;
+  const orders = c.pedidos ?? 0;
+  const porCanal = (c2: Marketplace) => {
+    if (!canais.includes(c2)) return null;
+    const v = c.por_plataforma.find((p) => CANAL_DA_PLATAFORMA[p.plataforma] === c2)?.faturamento;
+    return v ?? null;
+  };
+  const prevOrders = c.pedidos_por_plataforma_anterior ? soma2(Object.values(c.pedidos_por_plataforma_anterior)) : null;
+  const prevGmv = c.total_anterior;
+  return {
+    gmv,
+    tiktok_gmv: porCanal("tiktok"),
+    ml_gmv: porCanal("ml"),
+    shopee_gmv: porCanal("shopee"),
+    orders,
+    avg_ticket: orders > 0 ? gmv / orders : NaN,
+    ad_spend: null,
+    ml_roas: null,
+    ml_cancel_rate_pct: null,
+    shopee_roas: null,
+    tiktok_customers: null,
+    ml_unique_buyers: null,
+    shopee_unique_buyers: null,
+    gmv_mom_pct: variacaoPct(gmv, prevGmv),
+    prev_gmv: prevGmv ?? 0,
+    prev_orders: prevGmv != null && prevOrders ? prevOrders : null,
+    prev_avg_ticket: prevGmv != null && prevOrders ? prevGmv / prevOrders : null,
+  };
 }

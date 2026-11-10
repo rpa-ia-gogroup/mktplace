@@ -106,10 +106,14 @@ test("o `main` do AppShell envolve o conteudo da rota", () => {
     if (ts.isJsxElement(no) && no.openingElement.tagName.getText(fonte) === "main") {
       envolve = no.children.some(
         (filho) =>
-          ts.isJsxExpression(filho) &&
-          filho.expression !== undefined &&
-          ts.isIdentifier(filho.expression) &&
-          filho.expression.text === "children",
+          // `{children}` direto ou dentro do guarda de marcas menores (que so' decide entre a aba e "sem dado").
+          (ts.isJsxExpression(filho) &&
+            filho.expression !== undefined &&
+            ts.isIdentifier(filho.expression) &&
+            filho.expression.text === "children") ||
+          (ts.isJsxElement(filho) &&
+            filho.openingElement.tagName.getText(fonte) === "GuardaMarcasMenores" &&
+            filho.children.some((c) => ts.isJsxExpression(c) && c.expression !== undefined && c.expression.getText(fonte) === "children")),
       );
     }
     ts.forEachChild(no, visitar);

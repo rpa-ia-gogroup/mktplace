@@ -121,6 +121,21 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
         d = ant_plat.setdefault(l["marca"], {})
         d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
     ant_marca = {m: sum(d.values()) for m, d in ant_plat.items()}
+    # Contagem de pedidos (cada linha da lista e um pedido nao cancelado): ticket = GMV / pedidos no front.
+    qtd: dict[str, dict[str, int]] = {}
+    for l in linhas:
+        d = qtd.setdefault(l["marca"], {})
+        d[l["plataforma"]] = d.get(l["plataforma"], 0) + 1
+    qtd_ant: dict[str, dict[str, int]] = {}
+    for l in ant:
+        d = qtd_ant.setdefault(l["marca"], {})
+        d[l["plataforma"]] = d.get(l["plataforma"], 0) + 1
+    qtd_total: dict[str, int] = {}
+    qtd_ant_total: dict[str, int] = {}
+    for src, dst in ((qtd, qtd_total), (qtd_ant, qtd_ant_total)):
+        for d in src.values():
+            for p, n in d.items():
+                dst[p] = dst.get(p, 0) + n
     ant_total_plat: dict[str, float] = {}
     for d in ant_plat.values():
         for p, v in d.items():
@@ -139,6 +154,9 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
             "total": sum(a["plat"].values()) if a["plat"] else None,
             "total_anterior": ant_marca.get(id_),
             "por_plataforma_anterior": ant_plat.get(id_, {}),
+            "pedidos": sum(qtd[id_].values()) if qtd.get(id_) else None,
+            "pedidos_por_plataforma": qtd.get(id_, {}),
+            "pedidos_por_plataforma_anterior": qtd_ant.get(id_, {}),
             "por_plataforma": [{"plataforma": p, "faturamento": a["plat"][p]} for p in sorted(a["plat"], key=ordem)],
             "serie": [{"data": d, "faturamento": sum(v.values()), "por_plataforma": v} for d, v in sorted(a["dias"].items())],
         })
@@ -148,6 +166,9 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
             "total": sum(por_plat.values()) if por_plat else None,
             "total_anterior": sum(ant_marca.values()) if ant_marca else None,
             "por_plataforma_anterior": ant_total_plat,
+            "pedidos": sum(qtd_total.values()) if qtd_total else None,
+            "pedidos_por_plataforma": qtd_total,
+            "pedidos_por_plataforma_anterior": qtd_ant_total,
             "por_plataforma": [{"plataforma": p, "faturamento": por_plat[p]} for p in sorted(por_plat, key=ordem)],
         },
         "periodo": {"inicio": inicio, "fim": fim},

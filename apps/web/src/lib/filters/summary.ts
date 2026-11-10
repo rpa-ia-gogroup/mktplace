@@ -10,7 +10,7 @@
  */
 import { ALL_MARKETPLACES, isAllSelected, isConsolidadoSelected } from "../marketplace-filter.ts";
 import type { Marketplace } from "../mock-data.ts";
-import { ALL_BRAND_KEYS, brandLabel } from "./brands.ts";
+import { FILTER_BRAND_KEYS, brandLabel } from "./brands.ts";
 import { fmtPeriodo } from "./format.ts";
 import type { GlobalFilters } from "./types.ts";
 
@@ -34,7 +34,7 @@ export function resumoCanais(channels: readonly Marketplace[]): string {
 export function resumoMarcas(brands: readonly string[]): string {
   // Vazio e' "todas" (sem filtro), nunca "nenhuma". Selecionar as cinco
   // explicitamente tambem e' "todas" para quem le.
-  if (brands.length === 0 || ALL_BRAND_KEYS.every((b) => brands.includes(b))) return "Todas as marcas";
+  if (brands.length === 0 || FILTER_BRAND_KEYS.every((b) => brands.includes(b))) return "Todas as marcas";
   return [...brands].sort().map(brandLabel).join(", ");
 }
 

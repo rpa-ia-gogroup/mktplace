@@ -76,6 +76,22 @@ def test_marca_sai_do_canal_total_quebra_serie_e_cancelado_fora():
     assert r["consolidado"]["total"] == 167.5
 
 
+def test_contagem_de_pedidos_por_marca_e_canal_sem_cancelados():
+    r = svc.get_marcas_menores(FakeBling(DADOS), date(2026, 11, 1), date(2026, 11, 9), HOJE)
+    m = _marcas(r)
+    assert m["yenzah"]["pedidos"] == 3  # 2 Shopee + 1 TikTok; o cancelado fora
+    assert m["yenzah"]["pedidos_por_plataforma"] == {"SHOPEE": 2, "TIKTOK": 1}
+    assert m["by-samia"]["pedidos"] is None  # sem pedido: sem dado, nunca 0
+    assert r["consolidado"]["pedidos"] == 4 and r["consolidado"]["pedidos_por_plataforma"] == {"SHOPEE": 3, "TIKTOK": 1}
+
+
+def test_pedidos_do_periodo_anterior_por_canal():
+    dados = {**DADOS, YENZAH_SHOPEE: DADOS[YENZAH_SHOPEE] + [pedido(9, "2026-10-25", 80.0), pedido(10, "2026-10-26", 20.0)]}
+    r = svc.get_marcas_menores(FakeBling(dados), date(2026, 11, 1), date(2026, 11, 9), HOJE)
+    assert _marcas(r)["yenzah"]["pedidos_por_plataforma_anterior"] == {"SHOPEE": 2}
+    assert r["consolidado"]["pedidos_por_plataforma_anterior"] == {"SHOPEE": 2}
+
+
 def test_ausencia_nao_vira_zero_e_denavita_aguarda_autorizacao():
     r = svc.get_marcas_menores(FakeBling(DADOS), date(2026, 11, 1), date(2026, 11, 9), HOJE)
     m = _marcas(r)

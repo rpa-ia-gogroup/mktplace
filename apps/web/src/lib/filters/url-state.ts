@@ -3,7 +3,7 @@ import {
   parseMarketplaceParam,
   serializeMarketplaceSelection,
 } from "../marketplace-filter.ts";
-import { ALL_BRAND_KEYS } from "./brands.ts";
+import { FILTER_BRAND_KEYS } from "./brands.ts";
 import { presetRange, toISODate } from "./presets.ts";
 import type { DatePreset, GlobalFilters } from "./types.ts";
 
@@ -75,7 +75,7 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFil
 
   const brandsRaw = params.get("brands");
   const brands = brandsRaw
-    ? [...new Set(brandsRaw.split(",").map((b) => b.trim()).filter((b) => ALL_BRAND_KEYS.includes(b)))]
+    ? [...new Set(brandsRaw.split(",").map((b) => b.trim()).filter((b) => FILTER_BRAND_KEYS.includes(b)))]
     : [];
 
   const dateFromRaw = params.get("date_from") ?? "";

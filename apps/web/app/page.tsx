@@ -62,7 +62,10 @@ import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
-import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
+import { escopoDeMarcas } from "@/lib/filters/brands";
+import GerencialMarcasMenores from "./GerencialMarcasMenores";
+import { Produtos as ProdutosMenores } from "@/components/marcas-menores/Blocos";
+import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { fmtCompacto } from "@/lib/metas";
 import { fetchMarcasMenores, type BrandRow } from "@/lib/api-client";
 import { KPI_META, type KpiKind } from "@/lib/kpi-drilldown";
@@ -143,11 +146,17 @@ type DialogView =
   | { kind: "dataWarning"; item: DataConfidenceItem }
   | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
 
-function GerencialInner() {
+function GerencialComGrandes() {
   // GERENCIAL-METAS-1: abre no mes corrente, porque e' nele que a meta ainda
   // pode ser decidida (ritmo, projecao e quanto falta por dia). O mes fechado
   // continua a um clique no seletor de periodo.
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_atual", defaultCompare: true });
+  const [filtersRaw, setFilters] = useGlobalFilters({ defaultPreset: "mes_atual", defaultCompare: true });
+  // Marcas grandes (Data Mart) e menores (Bling) vem no mesmo filtro; o resto da pagina so' ve as grandes
+  // (`filters.brands` vazio = todas as grandes) e as menores entram por `menores`, sem meta.
+  const escopo = escopoDeMarcas(filtersRaw.brands);
+  const grandesKey = escopo.grandes.join(",");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- grandesKey cobre a lista
+  const filters = useMemo(() => ({ ...filtersRaw, brands: escopo.grandes }), [filtersRaw, grandesKey]);
   const searchParams = useSearchParams();
 
   // Metrica do grafico: estado LOCAL. `/trend` entrega GMV e Pedidos na mesma
@@ -176,7 +185,7 @@ function GerencialInner() {
    */
   const filterIdentity = [
     filters.channels.join(","),
-    filters.brands.join(","),
+    filtersRaw.brands.join(","),
     filters.dateFrom,
     filters.dateTo,
     String(filters.compare),
@@ -388,8 +397,7 @@ function GerencialInner() {
     atual != null && antes != null && antes > 0 ? ((atual - antes) / antes) * 100 : null;
   // Marcas menores (Bling): somam no GMV do topo, na rosca e nas marcas, sem meta. Carregam EM PARALELO e
   // sozinhas: Bling lento ou fora nao atrasa nem apaga o resto (so o aviso no (i)). So a lista de pedidos.
-  const todasAsMarcas = filters.brands.length === 0 || ALL_BRAND_KEYS.every((b) => filters.brands.includes(b));
-  const querMenores = todasAsMarcas && !sources.demoMode && filters.channels.some((c) => c === "shopee" || c === "tiktok");
+  const querMenores = escopo.temMenores && !sources.demoMode && filters.channels.some((c) => c === "shopee" || c === "tiktok");
   const [menoresBruto, setMenoresBruto] = useState<MarcasMenores | null | undefined>(undefined);
   useEffect(() => {
     setMenoresBruto(undefined);
@@ -402,8 +410,9 @@ function GerencialInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- as datas e o filtro de canal/marca cobrem o recorte
   }, [filters.dateFrom, filters.dateTo, querMenores, sources.retryKey]);
   const menores = useMemo(
-    () => menoresNaGerencial(menoresBruto, filters.channels, querMenores),
-    [menoresBruto, filters.channels, querMenores],
+    () => menoresNaGerencial(menoresBruto, filters.channels, querMenores, escopo.menores),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a lista de menores vem do filtro (filtersRaw.brands)
+    [menoresBruto, filters.channels, querMenores, filtersRaw.brands.join(",")],
   );
   const menoresOk = menores.estado === "ok" ? menores : null;
   const topo = gmvComMenores(
@@ -450,6 +459,9 @@ function GerencialInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- menoresOk muda so com menores
     [brands, menores, comparar],
   );
+  // Mais vendidos das menores (Bling): so' com marca escolhida no filtro (em "Todas" nao pesa nem lota a tela).
+  const produtosMenoresAtivo = filtersRaw.brands.length > 0 && escopo.temMenores && menoresOk != null;
+  const prodMenores = useProdutosMarcasMenores(menoresBruto?.periodo?.inicio, menoresBruto?.periodo?.fim, produtosMenoresAtivo);
   const kpisDaTela = useMemo(() => {
     if (!compHoje) return kpis;
     const ref = (pct: number | null) =>
@@ -674,7 +686,7 @@ function GerencialInner() {
         live={headerLive}
         loading={sources.anyLoading}
       >
-        <GlobalFilterControls filters={filters} onChange={setFilters} loading={sources.anyLoading} />
+        <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} />
       </GerencialHeader>
 
       <span className="sr-only" aria-live="polite" aria-atomic="true">
@@ -802,6 +814,16 @@ function GerencialInner() {
         dateTo={filters.dateTo}
         compare={filters.compare}
       />
+
+      {produtosMenoresAtivo && (
+        <ProdutosMenores
+          r={prodMenores.produtos}
+          desistiu={prodMenores.desistiu}
+          onTentar={prodMenores.tentar}
+          titulo="Mais vendidos · marcas menores"
+          ids={escopo.menores}
+        />
+      )}
 
       {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
           Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
@@ -1049,6 +1071,13 @@ function GerencialInner() {
       </KpiDrilldownDialog>
     </div>
   );
+}
+
+/** So' marcas menores no filtro: a Gerencial inteira sai do Bling, sem chamar nenhuma fonte do Data Mart. */
+function GerencialInner() {
+  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_atual", defaultCompare: true });
+  if (escopoDeMarcas(filters.brands).soMenores) return <GerencialMarcasMenores filters={filters} onChange={setFilters} />;
+  return <GerencialComGrandes />;
 }
 
 export default function Gerencial() {
