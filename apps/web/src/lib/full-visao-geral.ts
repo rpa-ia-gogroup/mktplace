@@ -833,7 +833,8 @@ export function linhaCurvaCanal(canal: Canal, impacto: ImpactoRuptura | null, ab
 }
 
 export interface LinhaPorCurva {
-  curva: Curva | "sem"; pct: number | null; perda: number; rupturas: number;
+  /** `perda` null = o grupo tem ruptura mas nenhuma com preco: ausencia nao vira R$ 0. */
+  curva: Curva | "sem"; pct: number | null; perda: number | null; rupturas: number;
   /** Shopee: R$ 0 MEDIDO porque o vendedor tem estoque (a venda segue fora do Full). */
   vendedorCobre?: boolean;
 }
@@ -846,9 +847,9 @@ export function impactoPorCurva(canal: Canal, impacto: ImpactoRuptura | null, ab
   const total = its.reduce((s, t) => s + valor(t), 0);
   const linhas = ([...CURVAS, "sem"] as const).map((cv) => {
     const g = its.filter((t) => (curvaDe(t, abc) ?? "sem") === cv);
-    const perda = g.reduce((s, t) => s + valor(t), 0);
+    const perda = g.length > 0 && g.every((t) => t.perdaDia == null) ? null : g.reduce((s, t) => s + valor(t), 0);
     const vendedorCobre = canal === "shopee" && perda === 0 && g.length > 0 && g.every((t) => (t.estoqueVendedor ?? 0) > 0);
-    return { curva: cv, pct: total > 0 ? perda / total : null, perda, rupturas: g.length, vendedorCobre };
+    return { curva: cv, pct: total > 0 && perda !== null ? perda / total : null, perda, rupturas: g.length, vendedorCobre };
   });
   return { linhas, total: { curva: "sem", pct: total > 0 ? 1 : null, perda: total, rupturas: its.length } };
 }

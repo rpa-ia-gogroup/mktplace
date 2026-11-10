@@ -88,6 +88,7 @@ import {
   type GrupoCurva,
   DICA_ORDEM_FILA,
   type CurvaAbc,
+  type Curva,
   type FiltroCurva,
   heroiRuptura,
   impactoPorMarca,
@@ -308,38 +309,62 @@ function CabecaGrupo({ g, total, aberto, alternar }: { g: GrupoCurva; total: num
   );
 }
 
-/** Drilldown do cartao de impacto: marca | % do Full da marca | R$/dia potencial + o ⓘ do canal no rodape. */
-const NOME_CURVA: Record<string, string> = { AA: "AA", A: "A", B: "B", C: "C", sem: "Sem curva" };
 
-/** CURVA-ABC: R$/dia potencial por curva no canal (AA, A, B, C, sem curva) + total. % antes do R$. */
+/**
+ * CURVA-ABC: impacto potencial por curva no canal. % primeiro, com barra
+ * proporcional (cor do canal); R$/dia depois; "sem curva" apagada (nao e' C);
+ * total separado e sem barra. R$ nunca soma entre canais; ausencia fica "—".
+ */
 function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoRuptura | null; abc: CurvaAbc | null }) {
   const t = impactoPorCurva(canal, impacto, abc);
   if (!t) return <p className="text-sm text-ink-muted">Curva ABC {abc?.status === "ok" ? "sem impacto potencial do canal agora" : "sem leitura agora"}.</p>;
-  const linha = (l: (typeof t.linhas)[number], total = false) => (
-    <tr key={total ? "total" : l.curva} className={total ? "font-semibold" : undefined}>
-      <th scope="row" className="py-2 pr-2 text-left font-medium text-ink">{total ? "Total" : NOME_CURVA[l.curva]}</th>
-      <td className="px-2 py-2 text-right tabular-nums">{l.pct === null ? <Ausente motivo="sem impacto potencial medido" /> : total ? fmtPct(l.pct) : fmtFatia(l.pct)}</td>
-      <td className="px-2 py-2 text-right tabular-nums">
-        <Escondido texto={`${fmtReais(l.perda)}/dia`} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />
-      </td>
-      <td className="py-2 pl-2 text-right tabular-nums">{fmtInt(l.rupturas)}</td>
-    </tr>
-  );
+  const linha = (l: (typeof t.linhas)[number]) => {
+    const sem = l.curva === "sem";
+    return (
+      <tr key={l.curva} className={sem ? "text-ink-muted" : undefined}>
+        <th scope="row" className="py-2.5 pr-1 text-left font-medium">
+          {sem ? <span className="whitespace-nowrap text-xs text-ink-muted">Sem curva</span> : <ChipCurva curva={l.curva as Curva} />}
+        </th>
+        <td className="px-2 py-2.5">
+          {l.pct === null ? (
+            <Ausente motivo="sem impacto potencial medido" />
+          ) : (
+            <span className="flex items-center gap-2">
+              <span aria-hidden="true" className="h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-raised">
+                <span className={`block h-full rounded-full ${SELO_CANAL[canal].ponto} ${sem ? "opacity-40" : ""}`} style={{ width: `${l.pct > 0 ? Math.max(l.pct * 100, 2) : 0}%` }} />
+              </span>
+              <span className={`w-12 shrink-0 text-right tabular-nums ${sem ? "" : "font-semibold text-ink"}`}>{fmtFatia(l.pct)}</span>
+            </span>
+          )}
+        </td>
+        <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">
+          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />}
+        </td>
+        <td className="py-2.5 pl-2 text-right tabular-nums text-ink-muted">{fmtInt(l.rupturas)}</td>
+      </tr>
+    );
+  };
   return (
-    <table className="w-full text-sm">
+    <table className="w-full table-fixed text-sm">
+      <colgroup><col className="w-[4.25rem]" /><col /><col className="w-[5.5rem]" /><col className="w-[4.5rem]" /></colgroup>
       <caption className="sr-only">Impacto potencial por curva ABC {noCanal(canal, NOME_CANAL[canal])}</caption>
-      <thead className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+      <thead className="text-xs font-medium text-ink-faint">
         <tr>
-          <th scope="col" className="py-2 pr-2 text-left">Curva</th>
-          <th scope="col" className="px-2 py-2 text-right">% do impacto</th>
-          <th scope="col" className="px-2 py-2 text-right">R$/dia potencial</th>
-          <th scope="col" className="py-2 pl-2 text-right">Rupturas</th>
+          <th scope="col" className="py-1 pr-2 text-left font-medium"><span className="sr-only">Curva</span></th>
+          <th scope="col" className="px-2 py-1 text-left font-medium">Impacto</th>
+          <th scope="col" className="px-2 py-1 text-right font-medium">R$/dia</th>
+          <th scope="col" className="py-1 pl-2 text-right font-medium">Rupturas</th>
         </tr>
       </thead>
-      <tbody className="divide-y divide-line">
-        {t.linhas.map((l) => linha(l))}
-        {linha(t.total, true)}
-      </tbody>
+      <tbody>{t.linhas.map((l) => linha(l))}</tbody>
+      <tfoot>
+        <tr className="border-t-2 border-line-strong bg-raised font-semibold">
+          <th scope="row" className="rounded-l-md py-2.5 pl-2 pr-2 text-left">Total</th>
+          <td className="px-2 py-2.5" />
+          <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">{fmtReais(t.total.perda)}</td>
+          <td className="rounded-r-md py-2.5 pl-2 pr-2 text-right tabular-nums">{fmtInt(t.total.rupturas)}</td>
+        </tr>
+      </tfoot>
     </table>
   );
 }
@@ -630,8 +655,8 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
             {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ, nao em rodape de 4 frases. */}
             {abc?.status === "ok" && <div className="-mb-2 flex justify-end"><InfoDica texto={dicaCurva(abc, impacto)} /></div>}
             {CANAIS.map((c) => (
-              <section key={c} className="flex flex-col gap-1">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{NOME_CANAL[c]}</h3>
+              <section key={c} className="flex flex-col gap-2">
+                <h3 className="m-0"><SeloCanal canal={c} /></h3>
                 <DetalheCurva canal={c} impacto={impacto} abc={abc} />
               </section>
             ))}

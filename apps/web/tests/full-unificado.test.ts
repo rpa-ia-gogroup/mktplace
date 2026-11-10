@@ -741,6 +741,8 @@ test("drilldown por curva: % e R$/dia por curva + total; ⓘ cita as duplicatas 
   assert.deepEqual(t.linhas.map((l) => [l.curva, l.perda, l.rupturas]), [["AA", 60, 1], ["A", 0, 0], ["B", 0, 0], ["C", 30, 1], ["sem", 10, 2]]);
   assert.equal(t.total.perda, 100);
   assert.equal(t.total.rupturas, 4);
+  const semPreco = impactoPorCurva("ml", impactoCom([itemImp("kokeshi", "K1", 60), itemImp("kokeshi", "X1", null)]), ABC)!.linhas.find((l) => l.curva === "sem")!;
+  assert.deepEqual([semPreco.perda, semPreco.pct, semPreco.rupturas], [null, null, 1], "sem preco: ausencia, nao R$ 0");
   assert.match(dicaCurva(ABC, imp), /A fonte tem 2 SKUs repetidos \(vale a linha de maior faturamento\)/);
   assert.match(dicaCurva(ABC, imp), /ML: curva em 2 de 4 rupturas/);
 });
