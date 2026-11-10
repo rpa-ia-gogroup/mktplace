@@ -38,10 +38,14 @@ const NOME: Record<string, string> = {
   TIKTOK: "TikTok",
   AMAZON: "Amazon",
   KWAI: "Kwai",
+  MAGALU: "Magalu",
+  NETSHOES: "Netshoes",
   SHEIN: "Shein",
 };
 
-export const nomeDaPlataforma = (p: string): string => NOME[p] ?? p;
+/** Conhecida: nome amigavel; desconhecida: capitalizada ("NETSHOES" -> "Netshoes"). */
+export const nomeDaPlataforma = (p: string): string =>
+  NOME[p] ?? (p ? p.charAt(0).toUpperCase() + p.slice(1).toLowerCase() : p);
 
 const TOKEN: Record<string, string> = { MELI: "ml", SHOPEE: "shopee", TIKTOK: "tiktok", AMAZON: "amazon", KWAI: "kwai", SHEIN: "shein" };
 

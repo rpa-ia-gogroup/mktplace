@@ -6,9 +6,9 @@ import { temaDoGrafico } from "@/lib/chart-theme";
 import { corDaPlataforma, nomeDaPlataforma, plataformasDaSerie, type MarcaMenor } from "@/lib/marcas-menores";
 import { fmtCompacto } from "@/lib/metas";
 
-// Eixo curto e sem arredondar para "mil" inteiro: 7,5k nao pode virar "8 mil".
+// Eixo curto e sem arredondar: 7,5 mil nao vira "8 mil"; abaixo de R$ 1 mil, reais inteiros.
 const eixoY = (v: number) =>
-  v === 0 ? "0" : v >= 1e6 ? `${+(v / 1e6).toFixed(1)} mi`.replace(".", ",") : `${+(v / 1e3).toFixed(1)} mil`.replace(".", ",");
+  v === 0 ? "0" : v < 1e3 ? `R$ ${Math.round(v)}` : v >= 1e6 ? `${+(v / 1e6).toFixed(1)} mi`.replace(".", ",") : `${+(v / 1e3).toFixed(1)} mil`.replace(".", ",");
 const dd = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 
 /** Faturamento por dia, empilhado por plataforma. Só os dias com dado: dia sem linha não vira barra de zero. */
