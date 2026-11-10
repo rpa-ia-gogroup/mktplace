@@ -59,7 +59,10 @@ export default function GerencialMarcasMenores({
   const semCanalDelas = !filters.channels.some((c) => c === "shopee" || c === "tiktok");
   const comDado = !!f && f.marcas.some((m) => m.total != null);
   // Sem pedido nas marcas e canais escolhidos, os produtos nem sao pedidos (cada pedido custa uma chamada ao Bling).
-  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, comDado);
+  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, comDado, {
+    canais: filters.channels,
+    marcas: escopo.menores,
+  });
 
   return (
     <div className="flex w-full flex-col gap-3 px-4 py-4">

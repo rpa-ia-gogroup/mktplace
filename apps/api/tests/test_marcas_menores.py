@@ -386,3 +386,73 @@ def test_rotas(monkeypatch):
         assert p.status_code == 200 and p.json()["marcas"][1]["produtos"][0]["sku"] == "A"
     finally:
         app.dependency_overrides.pop(get_db, None)
+
+
+# ---- produtos respeitam os MESMOS filtros do GMV (canal, marca, periodo, cancelados fora) ----
+
+ITENS_OK = {
+    1: [{"codigo": "A", "descricao": "Sérum", "quantidade": 2, "valor": 50.0, "desconto": 0}],
+    2: [{"codigo": "A", "descricao": "Sérum", "quantidade": 1, "valor": 50.5}],
+    3: [{"codigo": "Z", "descricao": "Cancelado", "quantidade": 9, "valor": 111.0}],  # pedido cancelado
+    4: [{"codigo": "B", "descricao": "Óleo", "quantidade": 1, "valor": 10.0}],
+    5: [{"codigo": "C", "descricao": "Kit", "quantidade": 1, "valor": 7.0}],
+    11: [{"codigo": "OLD", "descricao": "Fora do periodo", "quantidade": 5, "valor": 99.0}],
+}
+DADOS_PERIODO = {**DADOS, YENZAH_SHOPEE: DADOS[YENZAH_SHOPEE] + [pedido(11, "2026-10-01", 495.0)]}
+
+
+def _prod(fake, **kw):
+    r = svc.get_produtos(fake, date(2026, 11, 1), date(2026, 11, 9), HOJE, **kw)
+    return r, {m["id"]: m for m in r["marcas"]}
+
+
+def test_produtos_so_do_canal_filtrado():
+    r, m = _prod(FakeBling(DADOS_PERIODO, ITENS_OK), plataformas=["TIKTOK"])
+    assert {p["sku"] for p in m["yenzah"]["produtos"]} == {"B"}  # Shopee fora
+    assert m["aua"]["produtos"] == []  # Aua so' vende na Shopee neste recorte
+    assert m["yenzah"]["gmv_pedidos"] == 10.0
+    assert r["pedidos_total"] == 1
+
+
+def test_produtos_so_da_marca_filtrada_e_nao_le_o_resto():
+    fake = FakeBling(DADOS_PERIODO, ITENS_OK)
+    r, m = _prod(fake, marcas=["aua"])
+    assert [p["sku"] for p in m["aua"]["produtos"]] == ["C"]
+    assert m["yenzah"]["produtos"] == []
+    lidos = [c for c, _ in fake.chamadas if c.startswith("/pedidos/vendas/")]
+    assert lidos == ["/pedidos/vendas/5"]  # nenhum pedido de outra marca foi detalhado
+
+
+def test_produtos_nao_entram_cancelado_nem_pedido_de_fora_do_periodo():
+    fake = FakeBling(DADOS_PERIODO, ITENS_OK)
+    _, m = _prod(fake)
+    skus = {p["sku"] for mm in m.values() for p in mm["produtos"]}
+    assert "Z" not in skus and "OLD" not in skus
+    lidos = {c for c, _ in fake.chamadas if c.startswith("/pedidos/vendas/")}
+    assert "/pedidos/vendas/3" not in lidos and "/pedidos/vendas/11" not in lidos
+
+
+def test_soma_dos_produtos_nao_passa_do_gmv_do_recorte():
+    for kw in ({}, {"plataformas": ["SHOPEE"]}, {"plataformas": ["TIKTOK"]}, {"marcas": ["yenzah"]}, {"plataformas": ["SHOPEE"], "marcas": ["aua"]}):
+        _, m = _prod(FakeBling(DADOS_PERIODO, ITENS_OK), **kw)
+        for marca in m.values():
+            if marca["receita_itens"] is None:
+                continue
+            assert marca["receita_itens"] <= marca["gmv_pedidos"] + 1e-9, (kw, marca["id"], marca["receita_itens"], marca["gmv_pedidos"])
+            por_canal = sum(l["receita"] or 0.0 for l in marca["itens_por_canal"])
+            assert abs(por_canal - marca["receita_itens"]) < 1e-9  # a quebra por canal fecha com o total
+
+
+def test_itens_por_canal_separam_o_mesmo_produto_entre_canais():
+    dados = {YENZAH_SHOPEE: [pedido(1, "2026-11-08", 100.0)], YENZAH_TIKTOK: [pedido(4, "2026-11-09", 30.0)]}
+    itens = {1: [{"codigo": "A", "quantidade": 2, "valor": 50.0}], 4: [{"codigo": "A", "quantidade": 1, "valor": 30.0}]}
+    _, m = _prod(FakeBling(dados, itens))
+    linhas = {(l["plataforma"], l["sku"]): l for l in m["yenzah"]["itens_por_canal"]}
+    assert linhas[("SHOPEE", "A")]["quantidade"] == 2.0 and linhas[("TIKTOK", "A")]["quantidade"] == 1.0
+    assert m["yenzah"]["produtos"][0]["quantidade"] == 3.0  # o agregado segue somando
+
+
+def test_serie_diaria_tem_pedidos_por_canal():
+    r = svc.get_marcas_menores(FakeBling(DADOS), date(2026, 11, 1), date(2026, 11, 9), HOJE)
+    serie = {d["data"]: d for d in _marcas(r)["yenzah"]["serie"]}
+    assert serie[date(2026, 11, 9)]["pedidos_por_plataforma"] == {"SHOPEE": 1, "TIKTOK": 1}

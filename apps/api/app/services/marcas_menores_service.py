@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date, timedelta
-from typing import Callable, Optional
+from typing import Callable, Iterable, Optional
 
 from app.config import settings
 from app.services.bling_client import BlingCliente
@@ -110,12 +110,14 @@ def pedidos(cli: BlingCliente, inicio: date, fim: date, agora: Callable[[], floa
 
 
 def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dict:
-    por_marca: dict[str, dict] = {id_: {"plat": {}, "dias": {}} for id_, _, _ in MARCAS}
+    por_marca: dict[str, dict] = {id_: {"plat": {}, "dias": {}, "dias_ped": {}} for id_, _, _ in MARCAS}
     for l in linhas:
         a = por_marca[l["marca"]]
         a["plat"][l["plataforma"]] = a["plat"].get(l["plataforma"], 0.0) + l["total"]
         d = a["dias"].setdefault(l["data"], {})
         d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
+        dp = a["dias_ped"].setdefault(l["data"], {})
+        dp[l["plataforma"]] = dp.get(l["plataforma"], 0) + 1
     ant_plat: dict[str, dict[str, float]] = {}  # marca -> plataforma -> total do periodo anterior
     for l in ant:
         d = ant_plat.setdefault(l["marca"], {})
@@ -158,7 +160,10 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
             "pedidos_por_plataforma": qtd.get(id_, {}),
             "pedidos_por_plataforma_anterior": qtd_ant.get(id_, {}),
             "por_plataforma": [{"plataforma": p, "faturamento": a["plat"][p]} for p in sorted(a["plat"], key=ordem)],
-            "serie": [{"data": d, "faturamento": sum(v.values()), "por_plataforma": v} for d, v in sorted(a["dias"].items())],
+            "serie": [
+                {"data": d, "faturamento": sum(v.values()), "por_plataforma": v, "pedidos_por_plataforma": a["dias_ped"].get(d, {})}
+                for d, v in sorted(a["dias"].items())
+            ],
         })
     return {
         "disponivel": True,
@@ -216,13 +221,23 @@ def get_produtos(
     hoje: date,
     limite_detalhes: int = DETALHES_POR_CHAMADA,
     agora: Callable[[], float] = time.monotonic,
+    plataformas: Optional[Iterable[str]] = None,
+    marcas: Optional[Iterable[str]] = None,
 ) -> dict:
     """Produto x quantidade x receita por marca. O detalhe de cada pedido custa 1 chamada (~3/s):
-    le ate' `limite_detalhes` por vez e devolve `completo=False` com o progresso; o cache aquece."""
+    le ate' `limite_detalhes` por vez e devolve `completo=False` com o progresso; o cache aquece.
+
+    Os MESMOS filtros do GMV valem para os itens: periodo, canal (`plataformas`) e marca (`marcas`),
+    com cancelados fora. Itens de um canal ou marca fora do recorte nunca entram (nem sao lidos)."""
     fim = min(date_to, hoje)
     inicio = min(date_from, fim)
+    plat_ok = {p.upper() for p in plataformas} if plataformas is not None else None
+    marca_ok = set(marcas) if marcas is not None else None
     try:
-        lista = pedidos(cli, inicio, fim, agora)
+        lista = [
+            p for p in pedidos(cli, inicio, fim, agora)
+            if (plat_ok is None or p["plataforma"] in plat_ok) and (marca_ok is None or p["marca"] in marca_ok)
+        ]
         novos = 0
         for p in lista:
             if p["id"] in _detalhe_cache:
@@ -235,20 +250,28 @@ def get_produtos(
         return {"disponivel": False, "motivo": str(exc), "marcas": []}
     lidos = [p for p in lista if p["id"] in _detalhe_cache]
     acum: dict[str, dict[str, dict]] = {id_: {} for id_, _, _ in MARCAS}
+    por_canal: dict[str, dict[tuple, dict]] = {id_: {} for id_, _, _ in MARCAS}
+    gmv_pedidos: dict[str, float] = {}
+    for p in lista:
+        gmv_pedidos[p["marca"]] = gmv_pedidos.get(p["marca"], 0.0) + p["total"]
     for p in lidos:
         for it in _detalhe_cache[p["id"]]:
             chave = str(it.get("codigo") or it.get("descricao") or "").strip()
             if not chave:
                 continue
-            linha = acum[p["marca"]].setdefault(chave, {"sku": chave, "produto": str(it.get("descricao") or chave), "quantidade": None, "receita": None})
+            q, r = None, receita_do_item(it)
             try:
                 q = float(it["quantidade"])
-                linha["quantidade"] = (linha["quantidade"] or 0.0) + q
             except (KeyError, TypeError, ValueError):
                 pass  # sem quantidade: continua sem dado, nunca 0
-            r = receita_do_item(it)
-            if r is not None:
-                linha["receita"] = (linha["receita"] or 0.0) + r
+            for mapa, k in ((acum[p["marca"]], chave), (por_canal[p["marca"]], (p["plataforma"], chave))):
+                linha = mapa.setdefault(k, {"sku": chave, "produto": str(it.get("descricao") or chave), "quantidade": None, "receita": None})
+                if mapa is por_canal[p["marca"]]:
+                    linha["plataforma"] = p["plataforma"]
+                if q is not None:
+                    linha["quantidade"] = (linha["quantidade"] or 0.0) + q
+                if r is not None:
+                    linha["receita"] = (linha["receita"] or 0.0) + r
     return {
         "disponivel": True,
         "completo": len(lidos) == len(lista),
@@ -260,6 +283,11 @@ def get_produtos(
                 "label": label,
                 "status": "ok" if conectada else "aguardando_autorizacao",
                 "produtos": sorted(acum[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:30],
+                #: Mesmo produto por canal (o Gerencial tem filtro de canal): so' o que o recorte tem.
+                "itens_por_canal": sorted(por_canal[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:100],
+                #: Soma dos itens lidos x GMV (total dos pedidos) do mesmo recorte: a conferencia.
+                "receita_itens": sum(l["receita"] or 0.0 for l in acum[id_].values()) if acum[id_] else None,
+                "gmv_pedidos": gmv_pedidos.get(id_),
             }
             for id_, label, conectada in MARCAS
         ],

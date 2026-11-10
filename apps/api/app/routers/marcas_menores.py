@@ -13,6 +13,8 @@ from app.services.bling_client import BlingCliente
 
 router = APIRouter(prefix="/api/v1/performance", tags=["marcas-menores"])
 
+_PLATAFORMA = {"shopee": "SHOPEE", "tiktok": "TIKTOK", "ml": "MELI"}
+
 
 def cliente_bling(db: Session) -> BlingCliente:
     armazem = bling_token.ArmazemPg(db)
@@ -40,9 +42,17 @@ def marcas_menores(date_from: Optional[date] = Query(None), date_to: Optional[da
 
 
 @router.get("/marcas-menores/produtos", response_model=ProdutosResponse)
-def marcas_menores_produtos(date_from: Optional[date] = Query(None), date_to: Optional[date] = Query(None), db: Session = Depends(get_db)):
+def marcas_menores_produtos(
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    canais: Optional[str] = Query(None, description="shopee,tiktok,ml; vazio = todos"),
+    marcas: Optional[str] = Query(None, description="ids das marcas; vazio = todas"),
+    db: Session = Depends(get_db),
+):
     """Produto x quantidade x receita por marca (itens dos pedidos do Bling). Bloco próprio:
     falha sozinho e pode vir parcial (`completo=false`) enquanto os itens são lidos."""
     hoje = today_brt()
     p = resolve_period(date_from=date_from, date_to=date_to, default_days=30, today=hoje)
-    return svc.get_produtos(cliente_bling(db), p.start, p.end, hoje)
+    plataformas = [_PLATAFORMA[c] for c in canais.split(",") if c in _PLATAFORMA] if canais else None
+    ids = [m for m in marcas.split(",") if m] if marcas else None
+    return svc.get_produtos(cliente_bling(db), p.start, p.end, hoje, plataformas=plataformas, marcas=ids)

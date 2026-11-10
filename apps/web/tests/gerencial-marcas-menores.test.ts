@@ -191,3 +191,13 @@ test("pagina: so' menores no filtro cai na Gerencial do Bling, sem as fontes do 
   const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(so, /useGerencialSources/);
 });
+
+test("produtos das menores pedem com os mesmos canais e marcas do GMV (Gerencial)", () => {
+  const cliente = readFileSync(new URL("../src/lib/api-client.ts", import.meta.url), "utf8");
+  assert.match(cliente, /qs\.set\("canais"/);
+  assert.match(cliente, /qs\.set\("marcas"/);
+  const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(pagina, /produtosMenoresAtivo, \{\s*canais: filters\.channels,\s*marcas: escopo\.menores/);
+  const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
+  assert.match(so, /canais: filters\.channels,\s*marcas: escopo\.menores/);
+});

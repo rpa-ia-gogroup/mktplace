@@ -16,6 +16,7 @@ class DiaMarca(BaseModel):
     data: date
     faturamento: float
     por_plataforma: dict[str, float]
+    pedidos_por_plataforma: dict[str, int] = {}
 
 
 class MarcaMenor(BaseModel):
@@ -66,6 +67,8 @@ class ProdutoLinha(BaseModel):
     produto: str
     quantidade: Optional[float] = None
     receita: Optional[float] = None
+    #: So' nos itens por canal.
+    plataforma: Optional[str] = None
 
 
 class ProdutosDaMarca(BaseModel):
@@ -73,6 +76,10 @@ class ProdutosDaMarca(BaseModel):
     label: str
     status: str = "ok"
     produtos: list[ProdutoLinha] = []
+    itens_por_canal: list[ProdutoLinha] = []
+    #: Conferencia: soma dos itens lidos e GMV (total dos pedidos) do mesmo recorte.
+    receita_itens: Optional[float] = None
+    gmv_pedidos: Optional[float] = None
 
 
 class ProdutosResponse(BaseModel):
