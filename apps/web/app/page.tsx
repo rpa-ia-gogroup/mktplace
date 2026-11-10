@@ -426,6 +426,16 @@ function GerencialInner() {
     );
   const canaisComMenores = { tiktok: canalMenores("tiktok"), ml: canalMenores("ml"), shopee: canalMenores("shopee") };
   const notaDasMenores = notaMenores(menores, topo.variacaoInclui, diaEmAndamento, fmtCompacto);
+  // Linha VISIVEL sob o GMV: o topo (com menores) e a barra da meta (so marcas com meta) mostram numeros diferentes,
+  // e Bling fora deixa o GMV menor: aviso de dado incompleto nunca fica so no (i).
+  const linhaMenores =
+    menores.estado === "ok" && menores.total > 0
+      ? { texto: `inclui ${fmtCompacto(menores.total)} de marcas menores, sem meta`, aviso: false }
+      : menores.estado === "indisponivel"
+        ? { texto: "sem marcas menores (Bling indisponível)", aviso: true }
+        : menores.estado === "carregando"
+          ? { texto: "somando marcas menores…", aviso: false }
+          : null;
   const brandsComMenores = useMemo<BrandRow[]>(
     () => [
       ...brands,
@@ -681,6 +691,7 @@ function GerencialInner() {
         prevGmv={topo.prevGmv}
         momPct={topo.momPct}
         notaMenores={notaDasMenores}
+        linhaMenores={linhaMenores}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}
         channels={filters.channels}

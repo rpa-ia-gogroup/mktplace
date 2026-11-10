@@ -93,6 +93,8 @@ interface Props {
   shareFull?: Partial<Record<Marketplace, number | null>> | null;
   /** (i) do GMV: marcas menores (Bling) somadas sem meta, ou indisponiveis. */
   notaMenores?: string | null;
+  /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
+  linhaMenores?: { texto: string; aviso: boolean } | null;
   /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
   tendenciaDoDia?: TendenciaConsolidada | null;
 }
@@ -131,7 +133,7 @@ export default function MetaHero(props: Props) {
   );
 }
 
-function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, notaMenores }: Props) {
+function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, notaMenores, linhaMenores }: Props) {
   const ate = ultimoDia ? ` · até ${ultimoDia.slice(8, 10)}/${ultimoDia.slice(5, 7)}` : "";
   return (
     <div className="min-w-0">
@@ -157,6 +159,9 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
                 onde a duvida nasce; o texto inteiro esta' no detalhe. */}
             {aviso && <SeloAviso aviso={aviso} />}
           </p>
+          {linhaMenores && (
+            <p className={`mt-1 text-xs ${linhaMenores.aviso ? "font-semibold text-warn-ink" : "text-ink-muted"}`}>{linhaMenores.texto}</p>
+          )}
           {compareActive && momPct != null && (
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted tabular-nums">
               <span

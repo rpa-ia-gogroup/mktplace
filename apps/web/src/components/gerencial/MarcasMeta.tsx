@@ -110,8 +110,9 @@ export default function MarcasMeta({
     .filter((b) => b.total_gmv > 0 || progressoPorMarca[b.brand])
     .sort((a, b) => valor(b) - valor(a));
   const algumaMeta = linhas.some((b) => progressoPorMarca[b.brand]);
+  // Sem meta (menores): sem traco de referencia, que nas outras marcas e' a meta.
   const referencia = (b: BrandRow) =>
-    progressoPorMarca[b.brand]?.meta ?? (compareActive && b.total_gmv_prev > 0 ? b.total_gmv_prev : null);
+    semMeta.includes(b.brand) ? null : progressoPorMarca[b.brand]?.meta ?? (compareActive && b.total_gmv_prev > 0 ? b.total_gmv_prev : null);
   const escala = Math.max(1, ...linhas.map((b) => Math.max(valor(b), referencia(b) ?? 0)));
   const canaisDaBarra = (b: BrandRow) => channels.filter((c) => canaisDa(b).includes(c));
   const divisao = (b: BrandRow): FullDaMarca | null =>
