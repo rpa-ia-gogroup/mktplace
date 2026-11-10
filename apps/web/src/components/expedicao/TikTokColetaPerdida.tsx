@@ -466,7 +466,7 @@ export default function TikTokColetaPerdida({
           ))}
         </select>
       </label>
-      <span className="min-w-0 flex-1 text-sm text-ink-muted" aria-live="polite">
+      <span className="min-w-0 flex-1 basis-full text-sm text-ink-muted sm:basis-0" aria-live="polite">
         {carga.tipo === "carregando"
           ? "Contando…"
           : carga.tipo === "erro"
@@ -481,7 +481,7 @@ export default function TikTokColetaPerdida({
         type="button"
         onClick={() => setAberto(true)}
         disabled={!dados || dados.list_total === 0}
-        className="inline-flex min-h-11 items-center rounded-md border border-line bg-raised px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
+        className="inline-flex min-h-11 w-full items-center justify-center rounded-md border border-line bg-raised px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40 sm:w-auto"
       >
         Ver pedidos
       </button>
