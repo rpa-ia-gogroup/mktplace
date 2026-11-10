@@ -175,11 +175,39 @@ def test_produtos_leem_os_itens_do_cache_sem_chamar_o_bling():
     assert {p["sku"] for p in m["yenzah"]["produtos"]} == {"A", "B"}
 
 
-def test_item_lido_ao_vivo_e_guardado_para_nunca_mais_ser_relido():
+def test_com_cache_e_rotina_a_requisicao_nao_le_item_no_bling_e_aciona_a_rotina():
+    """Causa dos 30 s: a rota lia 36 itens ao vivo por chamada enquanto a rotina ainda enchia o backlog."""
+    cache = FakeCache()
+    bling_warm.sincronizar(_bling(), cache, HOJE)  # lista + itens
+    for pid in (2, 5):  # backlog: dois pedidos ainda sem item
+        del cache.itens_[pid]
+    svc.limpar_cache()
+    acionou = []
+    fake = _bling()
+    r = svc.get_produtos(fake, date(2026, 11, 1), date(2026, 11, 9), HOJE, cache=cache, ao_faltar_cache=lambda: acionou.append(1))
+    assert [c for c, _ in fake.chamadas if c.startswith("/pedidos/vendas/")] == []  # nenhum item lido ao vivo
+    assert acionou  # a rotina e' acionada para preencher
+    assert r["completo"] is False and r["pedidos_lidos"] == 2 and r["pedidos_total"] == 4
+    assert {p["sku"] for mm in r["marcas"] for p in mm["produtos"]} == {"A", "B"}  # o que o banco tem ja' aparece
+    # a rotina preenche e a proxima leitura fecha, ainda sem tocar no Bling
+    bling_warm.sincronizar(_bling(), cache, HOJE)
+    svc.limpar_cache()
+    r2 = svc.get_produtos(_SemBling(), date(2026, 11, 1), date(2026, 11, 9), HOJE, cache=cache)
+    assert r2["completo"] is True and r2["pedidos_lidos"] == 4
+
+
+def test_item_lido_ao_vivo_e_guardado_quando_a_rotina_esta_desligada(monkeypatch):
+    monkeypatch.setattr(svc.settings, "bling_warm_enabled", False)
     cache = FakeCache()
     fake = _bling()
     svc.get_produtos(fake, date(2026, 11, 1), date(2026, 11, 9), HOJE, cache=cache)
     assert set(cache.itens_) == {1, 2, 4, 5}
+
+
+def test_proximo_ciclo_vem_logo_enquanto_ha_backlog_de_itens():
+    assert bling_warm.proxima_espera({"pedidos": 5, "itens_lidos": 600, "itens_faltando": 120}) == bling_warm.PROXIMO_COM_BACKLOG_S
+    assert bling_warm.proxima_espera({"pedidos": 5, "itens_lidos": 3, "itens_faltando": 0}) == max(60, bling_warm.settings.bling_warm_intervalo_s)
+    assert bling_warm.proxima_espera(None) == max(60, bling_warm.settings.bling_warm_intervalo_s)
 
 
 def test_falha_do_bling_no_ciclo_nao_derruba_nem_vaza():

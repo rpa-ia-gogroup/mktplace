@@ -25,8 +25,10 @@ logger = logging.getLogger(__name__)
 
 HISTORICO_RENOVA_S = 6 * 3600
 #: Itens lidos por ciclo (~85 s a 3 req/s): o resto fica para o proximo.
-DETALHES_POR_CICLO = 250
+DETALHES_POR_CICLO = 600
 MARGEM_ALTERACAO = timedelta(minutes=15)
+#: Com itens ainda por ler, o ciclo seguinte comeca depois disto (em vez do intervalo normal).
+PROXIMO_COM_BACKLOG_S = 60
 
 
 def _primeiro_dia_do_mes_anterior(hoje: date) -> date:
@@ -91,16 +93,25 @@ _ultimo_disparo = [0.0]
 DISPARO_MIN_S = 60.0
 
 
-def _ciclo() -> None:
+def proxima_espera(stats: Optional[dict]) -> float:
+    """Segundos ate' o proximo ciclo: logo se ainda ha itens por ler, senao o intervalo normal."""
+    if stats and stats.get("itens_faltando"):
+        return PROXIMO_COM_BACKLOG_S
+    return max(60, settings.bling_warm_intervalo_s)
+
+
+def _ciclo() -> Optional[dict]:
+    """Um ciclo; devolve as contagens (None se pulado/falhou)."""
     from app.database import SessionLocal
     from app.deps.period import today_brt
     from app.services.bling_cache import ArmazemCachePg
 
     if SessionLocal is None or not settings.bling_client_id:
-        return
+        return None
     if not _ocupado.acquire(blocking=False):
-        return  # ja' ha um ciclo neste processo
+        return None  # ja' ha um ciclo neste processo
     db = SessionLocal()
+    stats: Optional[dict] = None
     try:
         stats = sincronizar(cliente_com_sessao(db), ArmazemCachePg(db), today_brt())
         logger.info("bling aquecido: %s", stats)
@@ -111,6 +122,7 @@ def _ciclo() -> None:
     finally:
         db.close()
         _ocupado.release()
+    return stats
 
 
 def disparar_em_segundo_plano() -> None:
@@ -130,7 +142,8 @@ def iniciar_rotina() -> None:
     def laco() -> None:
         time.sleep(20)
         while True:
-            _ciclo()
-            time.sleep(max(60, settings.bling_warm_intervalo_s))
+            stats = _ciclo()
+            # Backlog de itens (pedidos novos ou primeira carga): o proximo ciclo vem logo, nao em 15 min.
+            time.sleep(proxima_espera(stats))
 
     threading.Thread(target=laco, name="bling-rotina", daemon=True).start()
