@@ -98,5 +98,5 @@ export function resumoAcao<T extends ItemComCurva>(itens: readonly T[], exige: (
   const n: Record<GrupoCurva, number> = { AA: 0, A: 0, demais: 0 };
   for (const t of itens) if (exige(t)) n[grupoDe(t.curva ?? null)]++;
   const fmt = (v: number) => v.toLocaleString("pt-BR");
-  return `Por curva: ${fmt(n.AA)} AA · ${fmt(n.A)} A · ${fmt(n.demais)} demais`;
+  return `Exigem ação por curva: ${fmt(n.AA)} AA · ${fmt(n.A)} A · ${fmt(n.demais)} demais`;
 }
