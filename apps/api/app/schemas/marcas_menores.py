@@ -27,6 +27,8 @@ class MarcaMenor(BaseModel):
     total: Optional[float] = None
     #: Mesma duracao, colado antes do inicio; `None` = sem base (nunca 0).
     total_anterior: Optional[float] = None
+    #: O anterior por canal: o front respeita o filtro de canal sem comparar com o total.
+    por_plataforma_anterior: dict[str, float] = {}
     por_plataforma: list[PlataformaValor] = []
     #: So' os dias com pedido; dia ausente e' sem dado.
     serie: list[DiaMarca] = []
@@ -40,6 +42,7 @@ class PeriodoBling(BaseModel):
 class Consolidado(BaseModel):
     total: Optional[float] = None
     total_anterior: Optional[float] = None
+    por_plataforma_anterior: dict[str, float] = {}
     por_plataforma: list[PlataformaValor] = []
 
 
