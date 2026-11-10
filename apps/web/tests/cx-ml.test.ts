@@ -5,15 +5,18 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { hrefCx, lerCanalCx, resumoFiltrosCx } from "../src/lib/cx.ts";
+import { hrefCx, lerCanalCx, resumoFiltrosCx, ROTULO_INDICADOR } from "../src/lib/cx.ts";
 import {
   AJUDA_ML,
   carregarCxMl,
+  heroiMl,
   itensAtencaoMl,
   montarAtendimentoMl,
   montarParetoMl,
   montarProblemasMl,
+  montarStatusMarcasMl,
   problemaNoPayloadMl,
+  ROTULO_ML,
   resumoMl,
   textoPrazo,
   urlCxMl,
@@ -251,6 +254,97 @@ test("telas: a pagina escolhe o corpo pelo canal; o filtro tem os dois canais; s
   }
   assert.doesNotMatch(tela, /<StatCard|<SummaryPanel/);
   assert.match(tela, /torreFetch/);
-  assert.match(tela, /data-testid="cx-ml-fora"/, "marca fora (Ápice) avisada à vista, não só em Mais detalhes");
+  assert.doesNotMatch(tela, /cx-ml-fora/, "a Ápice nao vende no ML: sem linha na tela, so' no ⓘ do heroi");
+  assert.match(tela, /fica fora dos números/);
+  // mesmo inicio da Shopee: heroi Taxa de resposta + Saude da Conta por marca + selo; cartoes Contact rate, Cancelamento, Reembolso
+  assert.match(tela, /rotulo=\{ROTULO_ML\.resposta\}/);
+  assert.match(tela, /<SaudePorMarca itens=\{status\}/);
+  assert.match(tela, /selo=\{heroi\.selo/);
+  const ordem = ['taxa("reclamacao"', 'taxa("cancelamento"', "ROTULO_INDICADOR.reembolso"].map((x) => tela.indexOf(x));
+  assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "cartoes na ordem da Shopee");
+  assert.doesNotMatch(tela, /MessageCircleQuestion|ShieldAlert/, "mediacoes e perguntas sairam da faixa");
   assert.doesNotMatch(tela, /\.devolucoes/, "devolucao nao e' desenhada: e' pendencia, nunca zero");
+});
+
+const conta = (marca: string, nivel: string, tom: "bom" | "atencao" | "critico", fora = false) => ({
+  marca, dia: "2026-11-10", capturado_em: "2026-11-10T20:00:00Z", nivel, tom, termometro: 5, termometro_max: 5, destaques: [], avisos: [],
+  metricas: [{ codigo: "ml_claims", rotulo: "Reclamações", valor: fora ? 2 : 0.5, unidade: "pct" as const, meta: 1, comparador: "<=", situacao: fora ? ("fora" as const) : ("ok" as const) }],
+});
+const perg = (extra: Partial<LinhaMl> = {}) => linha("kokeshi", {
+  perguntas: 100, perguntas_respondidas: 90, perguntas_anterior: 100, perguntas_respondidas_anterior: 80,
+  perguntas_sem_resposta: 4, perguntas_sem_resposta_24h: 1, tempo_resposta_min: 2400, ...extra,
+});
+
+test("herói: nomes iguais aos da Shopee (Taxa de resposta, Contact rate, Cancelamento, Reembolso)", () => {
+  assert.equal(ROTULO_ML.reclamacao, ROTULO_INDICADOR.contactRate);
+  assert.equal(ROTULO_ML.cancelamento, ROTULO_INDICADOR.cancelamento);
+  assert.equal(ROTULO_ML.reembolso, ROTULO_INDICADOR.reembolso);
+  assert.equal(ROTULO_ML.resposta, "Taxa de resposta");
+});
+
+test("taxa de resposta: respondidas ÷ perguntas, seta em p.p. (cair e' pior) e tempo oficial ponderado", () => {
+  const r = resumoMl(resp({ marcas: [perg(), perg({ marca: "barbours", perguntas: 300, perguntas_respondidas: 270, perguntas_respondidas_anterior: 240, perguntas_anterior: 300, tempo_resposta_min: 3000 })] }));
+  assert.equal(r.resposta, 90);
+  assert.deepEqual([r.respostaComparacao!.delta, r.respostaComparacao!.tone, r.respostaComparacao!.antes], [10, "higher_is_better", "antes 80,0%"]);
+  assert.equal(r.tempoRespostaMin, (2400 * 100 + 3000 * 300) / 400);
+  assert.equal(r.perguntasSemResposta24h, 2);
+});
+
+test("taxa de resposta: sem as perguntas nao ha numero; anterior parcial nao compara", () => {
+  const nada = resumoMl(resp({ marcas: [perg({ perguntas: null, perguntas_respondidas: null })] }));
+  assert.equal(nada.resposta, null);
+  assert.equal(nada.respostaComparacao, null);
+  const parcial = resumoMl(resp({ marcas: [perg(), perg({ marca: "barbours", perguntas_anterior: null })] }));
+  assert.equal(parcial.respostaComparacao, null);
+  const sem = resumoMl(resp({ marcas: [perg({ perguntas_anterior: null })], sem_anterior: { resposta: { motivo: "coleta desde 12/08", a_partir_de: "2026-10-11" } } }));
+  assert.equal(sem.semAnterior.resposta?.texto, "comparação a partir de 11/10");
+});
+
+test("herói: 'N aguardando · N há mais de 24 h · tempo de resposta' e selo da reputacao", () => {
+  const d = resp({
+    marcas: [perg()],
+    reputacao: { estado: "dado", fonte: "x", sem_foto: [], contas: [conta("kokeshi", "MercadoLíder Platinum", "bom"), conta("barbours", "Amarelo", "atencao", true)] },
+  });
+  const h = heroiMl(d, resumoMl(d));
+  assert.equal(h.contexto, "4 perguntas aguardando · 1 há mais de 24 h · tempo de resposta 1 d 16 h");
+  assert.deepEqual(h.selo, { texto: "1 loja abaixo da meta", tom: "critico" });
+  const ok = resp({ marcas: [perg()], reputacao: { estado: "dado", fonte: "x", sem_foto: [], contas: [conta("kokeshi", "Verde", "bom")] } });
+  assert.deepEqual(heroiMl(ok, resumoMl(ok)).selo, { texto: "Todas na meta", tom: "ok" });
+  const sem = resp({ marcas: [linha("kokeshi", { perguntas_sem_resposta: null, tempo_resposta_min: null })], reputacao: { estado: "erro", fonte: "x", contas: [], sem_foto: [] } });
+  assert.deepEqual(heroiMl(sem, resumoMl(sem)), { contexto: null, selo: null });
+});
+
+test("Saúde da Conta por marca: nível oficial, métrica fora vira alerta, sem foto e erro nunca viram 'bom'", () => {
+  const d = resp({
+    marcas: [perg(), linha("barbours"), linha("lescent")],
+    reputacao: {
+      estado: "dado", fonte: "x",
+      contas: [conta("kokeshi", "MercadoLíder Platinum", "bom"), conta("barbours", "Amarelo", "atencao", true)],
+      sem_foto: [{ marca: "lescent", motivo: "Sem fotografia capturada ainda." }],
+    },
+  });
+  const st = montarStatusMarcasMl(d, rotulo);
+  assert.deepEqual(st.map((s) => [s.marca, s.tom, s.rotulo]), [
+    ["BARBOURS", "atencao", "Amarelo"], ["KOKESHI", "bom", "MercadoLíder Platinum"], ["LESCENT", "ausente", "Sem reputação"],
+  ]);
+  assert.match(st[0].alertas[0], /Reclamações 2,0% \(meta ≤ 1%\)/);
+  assert.deepEqual(st[2].alertas, ["Sem fotografia capturada ainda."]);
+  assert.equal(st[1].aguardando, "4");
+  const erro = montarStatusMarcasMl(resp({ marcas: [perg()], reputacao: { estado: "erro", fonte: "x", contas: [], sem_foto: [] } }), rotulo);
+  assert.deepEqual([erro[0].tom, erro[0].alertas], ["ausente", ["Reputação indisponível nesta carga."]]);
+  // metrica fora do limite nunca fica verde, mesmo com o nivel "bom"
+  const verde = montarStatusMarcasMl(resp({ marcas: [perg()], reputacao: { estado: "dado", fonte: "x", sem_foto: [], contas: [conta("kokeshi", "Verde", "bom", true)] } }), rotulo);
+  assert.equal(verde[0].tom, "atencao");
+});
+
+test("fila de atenção: métrica oficial fora do limite e' crítica, na frente dos prazos", () => {
+  const d = resp({
+    marcas: [linha("kokeshi", { vencem_24h: 1, prazo_mais_antigo: "2026-11-11T01:00:00Z" })],
+    reputacao: { estado: "dado", fonte: "x", sem_foto: [], contas: [conta("kokeshi", "Verde", "bom", true)] },
+  });
+  const itens = itensAtencaoMl(d, rotulo, AGORA);
+  assert.deepEqual(itens.map((i) => [i.severidade, i.titulo]), [
+    ["critico", "KOKESHI: Reclamações 2,0%"], ["atencao", "KOKESHI: 1 reclamação vence em 24 h"],
+  ]);
+  assert.equal(itens[0].detalhe, "meta ≤ 1%");
 });

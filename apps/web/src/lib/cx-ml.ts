@@ -10,15 +10,21 @@ import {
   deltaPp,
   duracao,
   inteiro,
+  metaDaMetrica,
   pctCx,
   razaoPct,
   somar,
   textoSemComparacao,
+  valorOficial,
+  ROTULO_INDICADOR,
   type ComparacaoCard,
   type DeltaCx,
   type FiltrosCx,
   type SemComparacao,
+  type StatusMarca,
+  type TomStatus,
 } from "./cx.ts";
+import type { ContaOficial } from "./expedicao-performance.ts";
 import {
   ROTULO_NATUREZA,
   type BlocoMotivos,
@@ -27,17 +33,23 @@ import {
 } from "./performance-contas-atendimento.ts";
 import { MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS } from "./performance-contas.ts";
 
-export type IndicadorMl = "reclamacao" | "cancelamento" | "mediacao";
-export const INDICADORES_ML: readonly IndicadorMl[] = ["reclamacao", "cancelamento", "mediacao"];
-const CAMPO: Record<IndicadorMl, "reclamacoes" | "cancelamentos" | "mediacoes"> = {
+/** Taxas sobre pedidos (colunas da tabela por marca). */
+export type IndicadorTaxa = "reclamacao" | "cancelamento" | "mediacao";
+/** Chaves do `sem_anterior` da API: as taxas e a taxa de resposta. */
+export type IndicadorMl = IndicadorTaxa | "resposta";
+export const INDICADORES_ML: readonly IndicadorTaxa[] = ["reclamacao", "cancelamento", "mediacao"];
+const CAMPO: Record<IndicadorTaxa, "reclamacoes" | "cancelamentos" | "mediacoes"> = {
   reclamacao: "reclamacoes",
   cancelamento: "cancelamentos",
   mediacao: "mediacoes",
 };
-export const ROTULO_ML: Record<IndicadorMl, string> = {
-  reclamacao: "Taxa de reclamação",
-  cancelamento: "Cancelamentos",
+// Os mesmos nomes da CX da Shopee: o gestor le' os dois canais do mesmo jeito.
+export const ROTULO_ML: Record<IndicadorMl | "reembolso", string> = {
+  resposta: "Taxa de resposta",
+  reclamacao: ROTULO_INDICADOR.contactRate,
+  cancelamento: ROTULO_INDICADOR.cancelamento,
   mediacao: "Mediações",
+  reembolso: ROTULO_INDICADOR.reembolso,
 };
 
 export interface LinhaMl {
@@ -47,6 +59,9 @@ export interface LinhaMl {
   cancelamentos?: number | null;
   mediacoes?: number | null;
   perguntas?: number | null;
+  perguntas_respondidas?: number | null;
+  perguntas_anterior?: number | null;
+  perguntas_respondidas_anterior?: number | null;
   pedidos_anterior?: number | null;
   reclamacoes_anterior?: number | null;
   cancelamentos_anterior?: number | null;
@@ -56,6 +71,8 @@ export interface LinhaMl {
   vencem_24h?: number | null;
   prazo_mais_antigo?: string | null;
   perguntas_sem_resposta?: number | null;
+  perguntas_sem_resposta_24h?: number | null;
+  pergunta_mais_antiga?: string | null;
   tempo_resposta_min?: number | null;
   mensagens_pendentes?: number | null;
   conta_dia?: string | null;
@@ -73,6 +90,14 @@ export interface PontoDiaMl {
   mediacoes?: number | null;
 }
 
+export interface ReputacaoMl {
+  estado: "dado" | "sem_fonte" | "erro";
+  motivo?: string | null;
+  fonte: string;
+  contas: ContaOficial[];
+  sem_foto: { marca: string; motivo: string }[];
+}
+
 export interface CxMlResponse {
   gerado_em: string;
   janela: { inicio: string; fim: string; dias: number };
@@ -81,6 +106,7 @@ export interface CxMlResponse {
   diario_estado: "dado" | "erro";
   reclamacoes_estado: "dado" | "erro";
   motivo_indisponivel?: string | null;
+  reputacao?: ReputacaoMl | null;
   marcas: LinhaMl[];
   reclamacoes_motivos?: BlocoMotivos | null;
   cancelamentos_motivos?: BlocoMotivos | null;
@@ -163,7 +189,7 @@ async function umaVez(
 const num = (v: number | null | undefined): number | null => (v == null || !Number.isFinite(v) ? null : v);
 
 /** Taxa por dia somando as marcas; uma marca sem medida no dia anula o ponto, e um ponto nulo anula o grafico. */
-function serieDe(d: CxMlResponse, i: IndicadorMl): number[] | null {
+function serieDe(d: CxMlResponse, i: IndicadorTaxa): number[] | null {
   const pontos = d.serie_diaria ?? [];
   const dias = [...new Set(pontos.map((p) => p.dia))].sort();
   if (!dias.length) return null;
@@ -179,12 +205,18 @@ function serieDe(d: CxMlResponse, i: IndicadorMl): number[] | null {
 export interface ResumoMl {
   pedidos: number | null;
   /** Taxa (% dos pedidos) e contagem de cada indicador no periodo. */
-  taxa: Record<IndicadorMl, number | null>;
-  contagem: Record<IndicadorMl, number | null>;
-  comparacao: Record<IndicadorMl, ComparacaoCard | null>;
+  taxa: Record<IndicadorTaxa, number | null>;
+  contagem: Record<IndicadorTaxa, number | null>;
+  comparacao: Record<IndicadorTaxa, ComparacaoCard | null>;
   semAnterior: Partial<Record<IndicadorMl, { texto: string; detalhe: string | null }>>;
   perguntas: number | null;
   perguntasSemResposta: number | null;
+  perguntasSemResposta24h: number | null;
+  /** Taxa de resposta (herói): perguntas respondidas ÷ perguntas do período, e a seta contra o anterior. */
+  resposta: number | null;
+  respostaComparacao: ComparacaoCard | null;
+  /** Tempo de resposta oficial (min), média das marcas ponderada pelas perguntas do período. */
+  tempoRespostaMin: number | null;
 }
 
 export function resumoMl(d: CxMlResponse): ResumoMl {
@@ -211,8 +243,26 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
     const sem = textoSemComparacao(d.sem_anterior?.[i]);
     if (sem) semAnterior[i] = sem;
   }
+  const semResp = textoSemComparacao(d.sem_anterior?.resposta);
+  if (semResp) semAnterior.resposta = semResp;
   const comPerg = ms.filter((m) => num(m.perguntas) != null);
+  // taxa de resposta: so' a marca com os dois lados; o anterior so' se TODAS as dela o tem (nunca parcial)
+  const comResp = ms.filter((m) => num(m.perguntas_respondidas) != null && num(m.perguntas) != null);
+  const resposta = razaoPct(comResp.map((m) => [m.perguntas_respondidas, m.perguntas]));
+  const respAnt = comResp.filter((m) => num(m.perguntas_respondidas_anterior) != null && num(m.perguntas_anterior) != null);
+  const respostaAntes = respAnt.length === comResp.length ? razaoPct(respAnt.map((m) => [m.perguntas_respondidas_anterior, m.perguntas_anterior])) : null;
+  const respostaDelta = resposta != null && respostaAntes != null ? resposta - respostaAntes : null;
+  // tempo oficial: media ponderada pelas perguntas do periodo (so' marcas com os dois)
+  const comTempo = ms.filter((m) => num(m.tempo_resposta_min) != null && (num(m.perguntas) ?? 0) > 0);
+  const pesos = comTempo.reduce((a, m) => a + m.perguntas!, 0);
   return {
+    resposta,
+    respostaComparacao:
+      respostaDelta == null
+        ? null
+        : { delta: respostaDelta, unidade: "pp", tone: "higher_is_better", antes: respostaAntes == null ? null : `antes ${pctCx(respostaAntes)}`, serie: null, granularidade: "day" },
+    tempoRespostaMin: pesos ? comTempo.reduce((a, m) => a + m.tempo_resposta_min! * m.perguntas!, 0) / pesos : null,
+    perguntasSemResposta24h: somar(ms.map((m) => m.perguntas_sem_resposta_24h)),
     pedidos: somar(ms.map((m) => m.pedidos)),
     taxa,
     contagem,
@@ -237,12 +287,12 @@ export interface LinhaProblemasMl {
   chave: string;
   marca: string;
   pedidos: string;
-  celulas: Record<IndicadorMl, CelulaTaxa>;
+  celulas: Record<IndicadorTaxa, CelulaTaxa>;
   /** Para ordenar: a pior taxa de reclamacao primeiro, sem medida no fim. */
   ordem: number;
 }
 
-function celula(m: LinhaMl, i: IndicadorMl): CelulaTaxa {
+function celula(m: LinhaMl, i: IndicadorTaxa): CelulaTaxa {
   const c = CAMPO[i];
   const atual = razaoPct([[m[c], m.pedidos]]);
   const antes = razaoPct([[m[`${c}_anterior` as const], m.pedidos_anterior]]);
@@ -255,7 +305,7 @@ export function montarProblemasMl(d: CxMlResponse, rotuloMarca: (m: string) => s
       chave: m.marca,
       marca: rotuloMarca(m.marca),
       pedidos: inteiro(m.pedidos),
-      celulas: Object.fromEntries(INDICADORES_ML.map((i) => [i, celula(m, i)])) as Record<IndicadorMl, CelulaTaxa>,
+      celulas: Object.fromEntries(INDICADORES_ML.map((i) => [i, celula(m, i)])) as Record<IndicadorTaxa, CelulaTaxa>,
       ordem: razaoPct([[m.reclamacoes, m.pedidos]]) ?? -1,
     }))
     .sort((a, b) => b.ordem - a.ordem);
@@ -404,6 +454,16 @@ const plural = (n: number, um: string, varios: string) => `${inteiro(n)} ${n ===
 
 export function itensAtencaoMl(d: CxMlResponse, rotuloMarca: (m: string) => string, agora: number): ItemAtencaoMl[] {
   const itens: ItemAtencaoMl[] = [];
+  for (const c of d.reputacao?.estado === "dado" ? d.reputacao.contas : []) {
+    for (const m of c.metricas.filter((x) => x.situacao === "fora")) {
+      itens.push({
+        chave: `${c.marca}:${m.codigo}`,
+        severidade: "critico",
+        titulo: `${rotuloMarca(c.marca)}: ${m.rotulo} ${valorOficial(m)}`,
+        detalhe: metaDaMetrica(m),
+      });
+    }
+  }
   for (const m of d.marcas) {
     const marca = rotuloMarca(m.marca);
     const prazo = textoPrazo(m.prazo_mais_antigo, agora);
@@ -451,8 +511,14 @@ export function itensAtencaoMl(d: CxMlResponse, rotuloMarca: (m: string) => stri
 // Textos do ⓘ (a metodologia mora aqui, nao na tela)
 // ---------------------------------------------------------------------------
 export const AJUDA_ML = {
+  resposta:
+    "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período.",
+  status:
+    "Reputação OFICIAL do Mercado Livre de cada conta (termômetro de cor e MercadoLíder). Em vermelho, as métricas fora do limite para MercadoLíder.",
+  reembolso:
+    "Sem fonte: o Mercado Livre ainda não tem reembolso coletado (a coleta não lê devoluções). Não é zero.",
   reclamacao:
-    "Reclamações abertas no período (tipo mediação, sem os cancelamentos) ÷ pedidos criados no período, somando as marcas. Cálculo da Torre: não é a taxa de reputação do Mercado Livre, que tem regras e exclusões próprias. Sem faixa de cor porque não há meta definida.",
+    "Contact rate: de cada 100 pedidos, quantos viraram reclamação. Reclamações abertas no período (tipo mediação, sem os cancelamentos) ÷ pedidos criados no período, somando as marcas. Cálculo da Torre: não é a taxa de reputação do Mercado Livre, que tem regras e exclusões próprias. Sem faixa de cor porque não há meta definida.",
   cancelamento:
     "Solicitações de cancelamento (cancel_purchase e cancel_sale) abertas no período ÷ pedidos criados no período. Cálculo da Torre.",
   mediacao:
@@ -468,4 +534,71 @@ export const AJUDA_ML = {
   primeiraResposta:
     "Mediana do tempo entre a abertura da reclamação e a primeira ação nossa (mensagem, devolução liberada…). É PARCIAL: o histórico de ações só foi lido para as cerca de 300 reclamações mais recentes de cada conta; reclamações sem ação nossa (resolvidas pelo Mercado Livre) não entram na mediana.",
   comparacao: (dias: number) => `A seta compara com os ${dias} dias anteriores, em pontos percentuais; subir é pior.`,
+  comparacaoAlta: (dias: number) => `A seta compara com os ${dias} dias anteriores, em pontos percentuais; cair é pior.`,
 } as const;
+
+// ---------------------------------------------------------------------------
+// Heroi (Taxa de resposta) e Saude da Conta por marca: o mesmo inicio da CX da Shopee
+// ---------------------------------------------------------------------------
+export interface HeroiMl {
+  /** "7 perguntas aguardando · 3 há mais de 24 h · tempo de resposta 1 d 19 h"; null sem nenhuma leitura. */
+  contexto: string | null;
+  /** Regra: limite oficial do MercadoLider em alguma metrica da reputacao. null = nenhuma conta medida. */
+  selo: { texto: string; tom: "ok" | "critico" } | null;
+}
+
+export function heroiMl(d: CxMlResponse, r: ResumoMl): HeroiMl {
+  const aguardando = r.perguntasSemResposta;
+  const mais24 = r.perguntasSemResposta24h;
+  const partes = [
+    aguardando != null ? `${inteiro(aguardando)} ${aguardando === 1 ? "pergunta aguardando" : "perguntas aguardando"}` : null,
+    mais24 != null ? `${inteiro(mais24)} há mais de 24 h` : null,
+    r.tempoRespostaMin != null ? `tempo de resposta ${duracao(r.tempoRespostaMin * 60)}` : null,
+  ].filter(Boolean);
+  const contas = d.reputacao?.estado === "dado" ? d.reputacao.contas : [];
+  const fora = contas.filter((c) => c.metricas.some((m) => m.situacao === "fora")).length;
+  return {
+    contexto: partes.length ? partes.join(" · ") : null,
+    selo: !contas.length
+      ? null
+      : fora
+        ? { texto: `${fora} ${fora === 1 ? "loja abaixo" : "lojas abaixo"} da meta`, tom: "critico" }
+        : { texto: "Todas na meta", tom: "ok" },
+  };
+}
+
+const ORDEM_TOM: Record<TomStatus, number> = { critico: 0, atencao: 1, neutro: 2, bom: 3, ausente: 4 };
+
+/** Chips "Saude da Conta por marca" (o mesmo `StatusMarca` da Shopee): nivel oficial e o que esta' fora do limite. */
+export function montarStatusMarcasMl(d: CxMlResponse, rotuloMarca: (m: string) => string): StatusMarca[] {
+  const rep = d.reputacao;
+  const contas = new Map((rep?.estado === "dado" ? rep.contas : []).map((c) => [c.marca, c]));
+  const semFoto = new Map((rep?.sem_foto ?? []).map((s) => [s.marca, s.motivo]));
+  const linhas = new Map(d.marcas.map((m) => [m.marca, m]));
+  const marcas = [...new Set([...linhas.keys(), ...contas.keys(), ...semFoto.keys()])];
+  return marcas
+    .map((m): StatusMarca => {
+      const conta = contas.get(m);
+      const l = linhas.get(m);
+      const base = {
+        chave: m,
+        marca: rotuloMarca(m),
+        aguardando: inteiro(l?.perguntas_sem_resposta),
+        cancelamento: pctCx(razaoPct([[l?.cancelamentos, l?.pedidos]])),
+        devolucoes: "—",
+      };
+      if (!conta) {
+        const motivo = rep?.estado === "erro" ? "Reputação indisponível nesta carga." : semFoto.get(m);
+        return { ...base, tom: "ausente", rotulo: "Sem reputação", alertas: motivo ? [motivo] : [] };
+      }
+      const alertas = conta.metricas
+        .filter((x) => x.situacao === "fora")
+        .map((x) => {
+          const meta = metaDaMetrica(x);
+          return `${x.rotulo} ${valorOficial(x)}${meta ? ` (${meta})` : ""}`;
+        });
+      const tom: TomStatus = alertas.length && conta.tom === "bom" ? "atencao" : conta.tom;
+      return { ...base, tom, rotulo: conta.nivel ?? "Sem nível", alertas };
+    })
+    .sort((a, b) => ORDEM_TOM[a.tom] - ORDEM_TOM[b.tom] || a.marca.localeCompare(b.marca));
+}

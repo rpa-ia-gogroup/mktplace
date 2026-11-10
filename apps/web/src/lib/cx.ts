@@ -1333,7 +1333,7 @@ export const MAX_ITENS_ATENCAO = 8;
 const ORDEM_SEVERIDADE = { critico: 0, atencao: 1, info: 2 } as const;
 
 /** "meta ≥ 60%" a partir do numero da meta; sem numero, o rotulo da Shopee como veio. */
-function metaDaMetrica(m: ContaOficial["metricas"][number]): string | null {
+export function metaDaMetrica(m: ContaOficial["metricas"][number]): string | null {
   if (m.meta != null && Number.isFinite(m.meta)) {
     return `meta ${SINAL_META[m.comparador ?? ""] ?? m.comparador ?? ""} ${valorMetrica({ valor: m.meta, unidade: m.unidade })}`.replace(/\s+/g, " ");
   }

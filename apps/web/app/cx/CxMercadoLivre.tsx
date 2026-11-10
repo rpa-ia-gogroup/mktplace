@@ -4,17 +4,20 @@
  * Aba CX · Mercado Livre (10/11/2026) — o mesmo esqueleto da CX da Shopee (e da
  * Gerencial), com os numeros do ML:
  *   0. cabecalho com chip (periodo, e dado velho quando e' o caso);
- *   1. heroi: taxa de reclamacao, com a taxa de cada marca no meio;
- *   2. faixa: cancelamentos, mediacoes, perguntas sem resposta;
- *   3. "O que exige atencao agora": prazos vencidos, perguntas e mensagens;
+ *   1. heroi: Taxa de resposta (perguntas respondidas ÷ perguntas), selo da reputacao
+ *      e Saude da Conta por marca (reputacao oficial do ML), como na Shopee;
+ *   2. faixa, na mesma ordem da Shopee: Contact rate (reclamacoes ÷ pedidos),
+ *      Cancelamento e Reembolso (sem fonte: o ML ainda nao coleta);
+ *   3. "O que exige atencao agora": metrica fora do limite, prazos vencidos, perguntas;
  *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
  *   5. atendimento por loja: fila, prazo, perguntas, tempo de resposta;
  *   6. Mais detalhes: o que ainda falta (devolucoes) e a cobertura.
  * A metodologia mora nos ⓘ. Busca pelo navegador (`torreFetch`), como a Shopee.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessageCircleQuestion, ShieldAlert } from "lucide-react";
+import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
 import { LinhaSemComparacao, pilula } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
@@ -26,20 +29,22 @@ import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
-import { inteiro, pctCx, type FiltrosCx } from "@/lib/cx";
+import { ROTULO_INDICADOR, inteiro, pctCx, type FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_ML,
   INDICADORES_ML,
   ROTULO_ML,
   carregarCxMl,
+  heroiMl,
   itensAtencaoMl,
   montarAtendimentoMl,
   montarParetoMl,
   montarProblemasMl,
+  montarStatusMarcasMl,
   resumoMl,
   type CelulaTaxa,
   type CxMlResponse,
-  type IndicadorMl,
+  type IndicadorTaxa,
   type ResultadoMl,
   type ResumoMl,
 } from "@/lib/cx-ml";
@@ -48,7 +53,7 @@ import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
 import { torreFetch } from "@/lib/torre-fetch";
 
-import { COR_DELTA, Celula, Notas, TD, THEAD, TH, TH_MARCA, TR, TR_TOTAL, ThAjuda, dica } from "./CxConteudo";
+import { COR_DELTA, Celula, DetalheMarca, Notas, SaudePorMarca, TD, THEAD, TH, TH_MARCA, TR, TR_TOTAL, ThAjuda, dica } from "./CxConteudo";
 
 export default function CxMercadoLivre({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
   const { marca, dias } = filtros;
@@ -91,7 +96,7 @@ export default function CxMercadoLivre({ filtros, barra }: { filtros: FiltrosCx;
       />
       {!resultado ? (
         <>
-          <Heroi rotulo={ROTULO_ML.reclamacao} valor="—" carregando meio={null} />
+          <Heroi rotulo={ROTULO_ML.resposta} valor="—" carregando meio={null} />
           <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX do Mercado Livre"} />
         </>
       ) : !resultado.ok ? (
@@ -129,42 +134,54 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
   const atend = montarAtendimentoMl(dados, brandLabel, agora);
   const pareto = montarParetoMl(dados);
   const atencao = itensAtencaoMl(dados, brandLabel, agora);
+  const status = montarStatusMarcasMl(dados, brandLabel);
+  const heroi = heroiMl(dados, r);
   const semDiario = dados.diario_estado === "erro";
   const semRecl = dados.reclamacoes_estado === "erro";
-  const sem = r.semAnterior.reclamacao;
-  const comp = r.comparacao.reclamacao;
-  const valor = pctCx(r.taxa.reclamacao);
-  const porMarca = [...prob.linhas].filter((l) => l.celulas.reclamacao.pct !== "—");
+  const sem = r.semAnterior.resposta;
+  const comp = r.respostaComparacao;
+  const valor = pctCx(r.resposta);
+  const semNoHeroi = !comp?.delta && r.resposta != null && !!sem;
+  const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
+  const aberta = status.find((x) => x.chave === marcaAberta) ?? null;
+  // a marca fora (Apice) nao e' problema: so' no ⓘ do heroi
+  const fora = dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ");
 
   return (
     <>
       <Heroi
-        rotulo={ROTULO_ML.reclamacao}
-        ajuda={<InfoDica titulo={ROTULO_ML.reclamacao} texto={[AJUDA_ML.reclamacao, comp?.delta != null ? AJUDA_ML.comparacao(dias) : sem?.detalhe].filter(Boolean).join(" ")} />}
+        rotulo={ROTULO_ML.resposta}
+        ajuda={
+          <InfoDica
+            titulo={ROTULO_ML.resposta}
+            texto={[
+              AJUDA_ML.resposta,
+              comp?.delta != null ? AJUDA_ML.comparacaoAlta(dias) : sem?.detalhe,
+              fora ? `${fora}: sem conta no Mercado Livre, fica fora dos números.` : undefined,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          />
+        }
         valor={valor}
         tom={valor === "—" ? "ausente" : "neutro"}
         delta={comp ? pilula(comp) : undefined}
         contexto={
-          <>
-            {r.contagem.reclamacao != null && r.pedidos != null && (
-              <span>
-                {inteiro(r.contagem.reclamacao)} {r.contagem.reclamacao === 1 ? "reclamação" : "reclamações"} em {inteiro(r.pedidos)} pedidos
-              </span>
-            )}
-            {!comp?.delta && r.taxa.reclamacao != null && sem && <LinhaSemComparacao {...sem} />}
-          </>
+          semNoHeroi ? (
+            <>
+              {heroi.contexto && <span>{heroi.contexto}</span>}
+              <LinhaSemComparacao {...sem!} />
+            </>
+          ) : (
+            heroi.contexto
+          )
         }
-        erro={semDiario || semRecl ? (dados.motivo_indisponivel ?? "Fonte indisponível nesta carga.") : undefined}
-        meio={porMarca.length ? <TaxaPorMarca linhas={porMarca} /> : undefined}
+        selo={heroi.selo ?? undefined}
+        erro={semDiario ? (dados.motivo_indisponivel ?? "Fonte indisponível nesta carga.") : undefined}
+        meio={status.length ? <SaudePorMarca itens={status} abrir={setMarcaAberta} ajuda={AJUDA_ML.status} /> : undefined}
       />
 
-      {dados.cobertura.fora.length > 0 && (
-        <p className="text-xs font-medium text-warn-ink" data-testid="cx-ml-fora">
-          Sem {dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ")} (sem conta no Mercado Livre): os números não incluem {dados.cobertura.fora.length === 1 ? "essa marca" : "essas marcas"}.
-        </p>
-      )}
-
-      <Faixa r={r} dias={dias} esconderSem={!comp?.delta && r.taxa.reclamacao != null && !!sem ? sem.texto : null} />
+      <Faixa r={r} dias={dias} semNoHeroi={semNoHeroi ? sem!.texto : null} />
 
       <FilaAtencao
         titulo={
@@ -174,7 +191,7 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
           </span>
         }
         itens={atencao.map((x) => ({ chave: x.chave, severidade: x.severidade, titulo: x.titulo, detalhe: x.detalhe ?? undefined }))}
-        vazio="Nenhuma reclamação com prazo vencido ou perto de vencer, nem pergunta sem resposta."
+        vazio="Nenhuma loja fora do limite, reclamação com prazo vencido ou pergunta sem resposta."
         erro={semRecl ? "A fila de reclamações está indisponível nesta carga." : undefined}
       />
 
@@ -197,37 +214,21 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
           ]}
         />
       </MaisDetalhes>
+
+      <KpiDrilldownDialog open={aberta != null} onClose={() => setMarcaAberta(null)} title={aberta ? `${aberta.marca} · Saúde da Conta` : ""}>
+        <DetalheMarca s={aberta} fila={null} />
+      </KpiDrilldownDialog>
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// 1. Heroi: taxa de reclamacao por marca (o "meio")
+// 2. Faixa de KPIs: Contact rate, Cancelamento e Reembolso, na ordem da Shopee
 // ---------------------------------------------------------------------------
-function TaxaPorMarca({ linhas }: { linhas: ReturnType<typeof montarProblemasMl>["linhas"] }) {
-  return (
-    <div data-testid="cx-ml-taxa-marcas">
-      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Por marca, da maior para a menor</p>
-      <ul className="flex flex-wrap gap-1.5" aria-label="Taxa de reclamação por marca, da maior para a menor">
-        {linhas.map((l) => (
-          <li key={l.chave}>
-            <Chip title={`${l.celulas.reclamacao.n} reclamações em ${l.pedidos} pedidos`}>
-              <span className="font-semibold">{l.marca}</span> · {l.celulas.reclamacao.pct}
-            </Chip>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// 2. Faixa de KPIs
-// ---------------------------------------------------------------------------
-function Faixa({ r, dias, esconderSem }: { r: ResumoMl; dias: number; esconderSem: string | null }) {
+function Faixa({ r, dias, semNoHeroi }: { r: ResumoMl; dias: number; semNoHeroi: string | null }) {
   // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
-  const visto = new Set<string>(esconderSem ? [esconderSem] : []);
-  const taxa = (i: IndicadorMl, identidade: IdentidadeKpi, icone: typeof Ban, comparacao: ReactNode) => {
+  const visto = new Set<string>(semNoHeroi ? [semNoHeroi] : []);
+  const taxa = (i: IndicadorTaxa, identidade: IdentidadeKpi, icone: typeof Ban, comparacao: ReactNode) => {
     const c = r.comparacao[i];
     const sem = c?.delta == null && r.taxa[i] != null ? r.semAnterior[i] : undefined;
     let linha: ReactNode;
@@ -257,22 +258,23 @@ function Faixa({ r, dias, esconderSem }: { r: ResumoMl; dias: number; esconderSe
       />
     );
   };
-  const n = (i: IndicadorMl, um: string, varios: string) =>
+  const n = (i: IndicadorTaxa, um: string, varios: string) =>
     r.contagem[i] == null ? null : `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}`;
   return (
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
+        {taxa("reclamacao", "atendimento", MessagesSquare, n("reclamacao", "reclamação", "reclamações"))}
         {taxa("cancelamento", "ads", Ban, n("cancelamento", "pedido de cancelamento", "pedidos de cancelamento"))}
-        {taxa("mediacao", "prazo", ShieldAlert, n("mediacao", "mediação", "mediações"))}
+        {/* sem fonte: o ML ainda nao coleta reembolso; "—" e o motivo, nunca 0 */}
         <KpiTile
           variante="gerencial"
-          identidade="atendimento"
-          icone={MessageCircleQuestion}
-          rotulo="Perguntas sem resposta"
-          valor={inteiro(r.perguntasSemResposta)}
-          tom={r.perguntasSemResposta == null ? "ausente" : "neutro"}
-          comparacao={r.perguntas != null ? `${inteiro(r.perguntas)} perguntas no período` : null}
-          ajuda={<InfoDica texto={AJUDA_ML.perguntas} />}
+          identidade="gmv"
+          icone={Undo2}
+          rotulo={ROTULO_INDICADOR.reembolso}
+          valor="—"
+          tom="ausente"
+          comparacao="Sem fonte"
+          ajuda={<InfoDica texto={AJUDA_ML.reembolso} />}
         />
       </div>
     </section>
