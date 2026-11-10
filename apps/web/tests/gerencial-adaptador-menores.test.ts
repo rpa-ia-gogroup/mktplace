@@ -171,3 +171,14 @@ test("pagina so' menores: monta a Gerencial dos mesmos componentes, sem Data Mar
   assert.ok(pagina.indexOf("const matrix = useMemo") > pagina.indexOf("const brandsComMenores"), "matriz declarada antes das menores (TDZ)");
   assert.match(pagina, /MARCAS_MENORES_KEYS\.includes\(brand\)\) setDialog/);
 });
+
+test("UX: nenhum controle sem destino na visao das menores; Pedidos/Ticket de Todas/mista avisam 'so' marcas grandes' de forma visivel", () => {
+  const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(so, /(onOpenGmv|onOpen|onSelectBucket|onOpenChannelSeries)=\{\(\) => \{\}\}/, "handler vazio: botao que nao leva a lugar nenhum");
+  for (const prop of ["onOpenGmv", "onOpen", "onSelectBucket", "onOpenChannelSeries"]) assert.match(so, new RegExp(`${prop}=\{abrirAbaMenores\}`), `${prop} sem destino`);
+  assert.match(so, /router\.push\(`\/marcas-menores\?date_from=/);
+  const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(pagina, /Pedidos e Ticket: só marcas grandes \(sem as menores\)\./);
+  assert.match(pagina, /text-xs font-semibold text-warn-ink" role="status"/);
+  assert.ok(pagina.indexOf("const avisoKpisSoGrandes") > pagina.indexOf("const menoresOk"), "TDZ");
+});

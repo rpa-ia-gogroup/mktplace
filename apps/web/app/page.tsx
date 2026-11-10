@@ -470,6 +470,9 @@ function GerencialComGrandes() {
       k.key === "orders" ? { ...k, ...ref(compHoje.pedidosPct) } : k.key === "avg_ticket" ? { ...k, ...ref(compHoje.ticketPct) } : k,
     );
   }, [kpis, compHoje]);
+  // Pedidos e Ticket vem so' das marcas grandes (o overview); com as menores no GMV do topo, GMV / Pedidos nao daria o
+  // Ticket. O aviso fica VISIVEL logo sob a faixa, em cor de aviso, nao so' no (i).
+  const avisoKpisSoGrandes = menoresOk != null && menoresOk.total > 0;
   const diaMeta = diaDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const mesMeta = diaMeta ? null : mesDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const metas = useMetasDoMes(mesMeta ?? diaMeta?.slice(0, 7) ?? null);
@@ -744,6 +747,11 @@ function GerencialComGrandes() {
         semGmv
         tendencias={tendencias}
       />
+      {avisoKpisSoGrandes && (
+        <p className="-mt-1 text-xs font-semibold text-warn-ink" role="status">
+          Pedidos e Ticket: só marcas grandes (sem as menores).
+        </p>
+      )}
 
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:

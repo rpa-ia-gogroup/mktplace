@@ -9,6 +9,7 @@
  * Sem campo no Bling = vazio do componente, nunca 0: Ads e ACOS "sem dado", meta "sem meta", sem tendencia
  * do dia, sem "vs periodo" nos produtos, sem Full. Blocos sem fonte (CX, qualidade...) nao aparecem.
  */
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
@@ -45,6 +46,10 @@ export default function GerencialMarcasMenores({
   onChange: (v: Partial<GlobalFilters>) => void;
 }) {
   const escopo = escopoDeMarcas(filters.brands);
+  const router = useRouter();
+  // Cards, "Detalhar" e barras/legenda da Evolucao nao tem detalhe do Data Mart para estas marcas: levam para a aba
+  // Marcas menores (o mesmo periodo), nunca a um botao que nao abre nada.
+  const abrirAbaMenores = () => router.push(`/marcas-menores?date_from=${filters.dateFrom}&date_to=${filters.dateTo}`);
   const [dados, setDados] = useState<MarcasMenores | null | undefined>(undefined);
   const [recarga, setRecarga] = useState(0);
   const [metric, setMetric] = useState<TrendMetric>("gmv");
@@ -160,13 +165,13 @@ export default function GerencialMarcasMenores({
             ultimoDia={null}
             aviso={null}
             metasHref="/metas"
-            onOpenGmv={() => {}}
+            onOpenGmv={abrirAbaMenores}
             shareFull={null}
             semMetaDaMarca
             notaMenores={NOTA_FONTE}
             linhaMenores={emAndamento ? { texto: "inclui hoje, dia em andamento", aviso: false } : null}
           />
-          <KpiBand kpis={kpis} loading={false} error={false} onOpen={() => {}} onRetry={() => setRecarga((n) => n + 1)} semGmv />
+          <KpiBand kpis={kpis} loading={false} error={false} onOpen={abrirAbaMenores} onRetry={() => setRecarga((n) => n + 1)} semGmv />
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
             <div className="lg:col-span-7">
               <EvolutionCard
@@ -178,9 +183,9 @@ export default function GerencialMarcasMenores({
                 reconciliation={reconciliation}
                 compareActive={false}
                 loading={false}
-                onSelectBucket={() => {}}
+                onSelectBucket={abrirAbaMenores}
                 bucketHoje={null}
-                onOpenChannelSeries={() => {}}
+                onOpenChannelSeries={abrirAbaMenores}
                 highlightedChannel={null}
               />
             </div>

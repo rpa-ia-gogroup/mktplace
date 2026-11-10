@@ -87,8 +87,8 @@ interface Props {
   ultimoDia: string | null;
   aviso: { texto: string; onOpen: () => void } | null;
   metasHref: string;
-  /** Abre o detalhe do GMV (o mesmo drill-down que o card de GMV abria). */
-  onOpenGmv: () => void;
+  /** Abre o detalhe do GMV (o mesmo drill-down que o card de GMV abria). Sem destino (marcas menores): sem botao. */
+  onOpenGmv?: () => void;
   /** Proporcao Full (0..1) de cada canal; ausente = canal sem a medida. */
   shareFull?: Partial<Record<Marketplace, number | null>> | null;
   /** Marcas que nao tem meta (menores, Bling): a faixa da meta diz isso, sem convite a definir meta. */
@@ -125,7 +125,7 @@ export default function MetaHero(props: Props) {
             total={gmv}
           />
         </div>
-        {props.diaMeta ? (
+        {props.semMetaDaMarca ? null : props.diaMeta ? (
           <SeloDoDia progressoDia={props.progressoDia} metasHref={props.metasHref} />
         ) : (
           <Selo progresso={props.progresso} metasHref={props.metasHref} mesMeta={props.mesMeta} />
@@ -181,15 +181,17 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
               {prevGmv != null ? `antes ${fmtCompacto(prevGmv)}` : rotuloComparacao ?? "vs anterior"}
             </p>
           )}
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            onClick={onOpenGmv}
-            title={`GMV de ${periodLabel}, por marca e canal`}
-            className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            Detalhar →
-          </button>
+          {onOpenGmv && (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={onOpenGmv}
+              title={`GMV de ${periodLabel}, por marca e canal`}
+              className="mt-1 inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              Detalhar →
+            </button>
+          )}
         </>
       )}
     </div>
