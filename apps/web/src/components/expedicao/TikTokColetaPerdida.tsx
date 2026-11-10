@@ -246,7 +246,7 @@ export function PopupColetaPerdida({
   const titulo =
     escopo === "todos"
       ? `Vencidos sem coleta — prazo de coleta ${diaCurto(vencimento)} (TikTok)`
-      : `Não coletados no prazo — coleta vencida ${diaCurto(vencimento)} (TikTok)`;
+      : `Coleta perdida (TikTok) — prazo ${diaCurto(vencimento).slice(4)}`;
 
   return (
     <KpiDrilldownDialog open={aberto} onClose={aoFechar} title={titulo} largura="larga" focusResetKey={vencimento}>
@@ -274,7 +274,7 @@ export function PopupColetaPerdida({
                 {formatarInteiro(total)}
               </span>
               <span className="pb-0.5 text-xs text-ink-faint">
-                {formatarInteiro(total - dados.still_waiting)} coletados depois · {formatarInteiro(dados.still_waiting)} ainda
+                {formatarInteiro(total - dados.still_waiting)} coletados com atraso · {formatarInteiro(dados.still_waiting)} ainda
                 sem coleta · {marcaSel ? brandLabel(marcaSel) : "todas as marcas"}
                 {statusDiaSel ? ` · em ${dia}: ${rotuloStatusTikTok(statusDiaSel)}` : ""}
                 {statusSel ? ` · hoje: ${rotuloStatusTikTok(statusSel)}` : ""}
@@ -395,7 +395,7 @@ function fraseColeta(total: number, aindaSem: number) {
   const atrasados = total - aindaSem;
   return (
     <>
-      <strong className="font-semibold text-ink">{formatarInteiro(total)} pedidos não foram coletados no dia</strong>
+      <strong className="text-base font-bold text-crit-ink">{formatarInteiro(total)} pedidos não coletados no prazo</strong>
       {atrasados > 0 ? ` · ${formatarInteiro(atrasados)} coletados com atraso` : ""}
       {aindaSem > 0 ? ` · ${formatarInteiro(aindaSem)} ainda sem coleta` : ""}
     </>
