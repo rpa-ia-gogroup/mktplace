@@ -71,7 +71,7 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
             {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-slate-300">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-slate-600">{fmtNumber(p.orders)} ped.</p>
+            <p className="tabular-nums text-slate-600">{p.orders != null ? `${fmtNumber(p.orders)} ped.` : <span className="text-slate-300">—</span>}</p>
             {p.items_sold != null && p.items_sold !== p.orders && (
               <p className="text-[11px] text-slate-500 tabular-nums mt-0.5">{fmtNumber(p.items_sold)} unid.</p>
             )}

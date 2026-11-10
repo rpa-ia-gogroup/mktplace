@@ -18,6 +18,11 @@ import ProductFilterBar, { ProductSelect } from "@/components/ProductFilterBar";
 import ProductParetoSummary from "@/components/ProductParetoSummary";
 import ScopeQualityBanner from "@/components/ScopeQualityBanner";
 import ProductCount from "@/components/ProductCount";
+import InfoDica from "@/components/ui/InfoDica";
+import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
+import { MARCAS_MENORES_KEYS, MARCAS_MENORES_OPTIONS } from "@/lib/filters/brands";
+import { toISODate } from "@/lib/filters/presets";
+import { linhasDoCanal, listaShopee, listaTikTok, periodoDoMes, resumoDoCanal, type CanalProduto } from "@/lib/produtos-marcas-menores";
 import ProductExportButton from "@/components/ProductExportButton";
 import MercadoLivreProductTable from "@/components/MercadoLivreProductTable";
 import TikTokProductTable from "@/components/TikTokProductTable";
@@ -65,6 +70,8 @@ const TK_SH_BRANDS = [
   { value: "kokeshi", label: "KOKESHI" },
   { value: "lescent", label: "LESCENT" },
   { value: "rituaria", label: "RITUARIA" },
+  // Marcas menores: dado do Bling, mesmo layout das outras (so' TikTok e Shopee; no ML elas nao vendem).
+  ...MARCAS_MENORES_OPTIONS,
 ];
 
 // Linha curta sob os cards A/B/C/D: so' o que muda a leitura do Pareto.
@@ -79,6 +86,8 @@ function precoMedio(avg: number | null | undefined): string | null {
 }
 // Ressalvas de metodologia vao para o ⓘ ao lado da linha.
 const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio ponderado por unidade.";
+const DICA_BLING =
+  "Marca menor: dado do Bling (conta da Rituária), pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). O A/B/C/D é feito só entre os produtos desta marca neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 
 function fmtRefreshedAt(iso: string | null): string {
   if (!iso) return "";
@@ -132,6 +141,21 @@ function ProdutosPageInner() {
   const [mlOffset, setMlOffset] = useState(0);
   const [tkOffset, setTkOffset] = useState(0);
   const [shOffset, setShOffset] = useState(0);
+
+  const [menoresOffset, setMenoresOffset] = useState(0);
+  // Marcas menores (Bling): MESMO layout das outras marcas, com os dados adaptados para as props existentes
+  // (`lib/produtos-marcas-menores.ts`). Os itens do Bling vem por canal e marca, do cache persistente.
+  const ehMenor = MARCAS_MENORES_KEYS.includes(brand);
+  const canalBling: CanalProduto | null = tab === "ml" ? null : tab;
+  const periodoBling = useMemo(() => periodoDoMes(period, toISODate(new Date())), [period]);
+  const blingMarca = useProdutosMarcasMenores(periodoBling.inicio, periodoBling.fim, ehMenor && canalBling != null, {
+    canais: canalBling ? [canalBling] : [],
+    marcas: [brand],
+  });
+  // "Todas as marcas": as menores entram num bloco proprio logo abaixo (o ranking e o Pareto acima sao do Data Mart).
+  const blingTodas = useProdutosMarcasMenores(periodoBling.inicio, periodoBling.fim, brand === "" && canalBling != null, {
+    canais: canalBling ? [canalBling] : [],
+  });
 
   // Estado assincrono por canal (dados + loading + "ao vivo") centralizado em
   // async-channel-state.ts: cada resolucao so e aplicada se ainda for a
@@ -201,11 +225,18 @@ function ProdutosPageInner() {
   const shSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period }), [brand, period]);
 
   const mlTableAvail = resolveChannelAvailability({ resolvedKey: mlResolvedKey, requestKey: mlTableKey, loading: mlState.loading, hasData: mlState.data !== null });
-  const tkTableAvail = resolveChannelAvailability({ resolvedKey: tkResolvedKey, requestKey: tkTableKey, loading: tkState.loading, hasData: tkState.data !== null });
-  const shTableAvail = resolveChannelAvailability({ resolvedKey: shResolvedKey, requestKey: shTableKey, loading: shState.loading, hasData: shState.data !== null });
+  const tkTableAvailDM = resolveChannelAvailability({ resolvedKey: tkResolvedKey, requestKey: tkTableKey, loading: tkState.loading, hasData: tkState.data !== null });
+  const shTableAvailDM = resolveChannelAvailability({ resolvedKey: shResolvedKey, requestKey: shTableKey, loading: shState.loading, hasData: shState.data !== null });
   const mlSummaryAvail = resolveChannelAvailability({ resolvedKey: mlSummaryResolvedKey, requestKey: mlSummaryKey, loading: mlSummaryState.loading, hasData: mlSummaryState.data !== null });
-  const tkSummaryAvail = resolveChannelAvailability({ resolvedKey: tkSummaryResolvedKey, requestKey: tkSummaryKey, loading: tkSummaryState.loading, hasData: tkSummaryState.data !== null });
-  const shSummaryAvail = resolveChannelAvailability({ resolvedKey: shSummaryResolvedKey, requestKey: shSummaryKey, loading: shSummaryState.loading, hasData: shSummaryState.data !== null });
+  const tkSummaryAvailDM = resolveChannelAvailability({ resolvedKey: tkSummaryResolvedKey, requestKey: tkSummaryKey, loading: tkSummaryState.loading, hasData: tkSummaryState.data !== null });
+  const shSummaryAvailDM = resolveChannelAvailability({ resolvedKey: shSummaryResolvedKey, requestKey: shSummaryKey, loading: shSummaryState.loading, hasData: shSummaryState.data !== null });
+
+  const blingAvail: ProdutosSectionState =
+    blingMarca.produtos === undefined ? "loading" : blingMarca.produtos === null || !blingMarca.produtos.disponivel ? "unavailable" : "available";
+  const tkTableAvail = ehMenor ? blingAvail : tkTableAvailDM;
+  const shTableAvail = ehMenor ? blingAvail : shTableAvailDM;
+  const tkSummaryAvail = ehMenor ? blingAvail : tkSummaryAvailDM;
+  const shSummaryAvail = ehMenor ? blingAvail : shSummaryAvailDM;
 
   const activeTableAvail: ProdutosSectionState = tab === "ml" ? mlTableAvail : tab === "tiktok" ? tkTableAvail : shTableAvail;
   const activeSummaryAvail: ProdutosSectionState = tab === "ml" ? mlSummaryAvail : tab === "tiktok" ? tkSummaryAvail : shSummaryAvail;
@@ -216,11 +247,35 @@ function ProdutosPageInner() {
   // mostre tabela, resumo, badge, escopo ou linhas de exportacao de uma
   // identidade antiga.
   const mlDisplayData = mlTableAvail === "available" ? mlState.data : null;
-  const tkDisplayData = tkTableAvail === "available" ? tkState.data : null;
-  const shDisplayData = shTableAvail === "available" ? shState.data : null;
+  const refMes = period;
+  const progressoBling =
+    ehMenor && blingMarca.produtos?.disponivel && !blingMarca.produtos.completo
+      ? `${blingMarca.desistiu ? "leitura parcial" : "lendo os itens"}: ${blingMarca.produtos.pedidos_lidos} de ${blingMarca.produtos.pedidos_total} pedidos`
+      : null;
+  const linhasBling = useMemo(
+    () => (canalBling && ehMenor ? linhasDoCanal(blingMarca.produtos, canalBling, [brand]) : []),
+    [blingMarca.produtos, canalBling, ehMenor, brand],
+  );
+  const linhasTodasMenores = useMemo(
+    () => (canalBling && brand === "" ? linhasDoCanal(blingTodas.produtos, canalBling) : []),
+    [blingTodas.produtos, canalBling, brand],
+  );
+  const opcoesBling = (sort: { sort: { column: string | null; direction: "asc" | "desc" | null } }, bucket: string | null, offset: number) => ({
+    refMonth: refMes, sortColumn: sort.sort.column, sortDirection: sort.sort.direction, bucket, offset, limit: PAGE_SIZE,
+  });
+  const tkDisplayData = ehMenor
+    ? (tkTableAvail === "available" ? listaTikTok(linhasBling, opcoesBling(tkSort, tkBucket, tkOffset)) : null)
+    : tkTableAvail === "available" ? tkState.data : null;
+  const shDisplayData = ehMenor
+    ? (shTableAvail === "available" ? listaShopee(linhasBling, opcoesBling(shSort, shBucket, shOffset)) : null)
+    : shTableAvail === "available" ? shState.data : null;
   const mlDisplaySummary = mlSummaryAvail === "available" ? mlSummaryState.data : null;
-  const tkDisplaySummary = tkSummaryAvail === "available" ? tkSummaryState.data : null;
-  const shDisplaySummary = shSummaryAvail === "available" ? shSummaryState.data : null;
+  const tkDisplaySummary = ehMenor
+    ? (tkSummaryAvail === "available" ? resumoDoCanal(linhasBling, refMes, brand) : null)
+    : tkSummaryAvail === "available" ? tkSummaryState.data : null;
+  const shDisplaySummary = ehMenor
+    ? (shSummaryAvail === "available" ? resumoDoCanal(linhasBling, refMes, brand) : null)
+    : shSummaryAvail === "available" ? shSummaryState.data : null;
   // Lidos do selo, nunca recalculados aqui: a tela nao decide sozinha o que e
   // ausencia.
   const shUnavailable = scopeUnavailableReason(shDisplaySummary?.quality);
@@ -229,7 +284,7 @@ function ProdutosPageInner() {
   // somente quando a tabela da aba ativa esta "available" para a identidade
   // ATUAL — nunca fica true so porque outra aba/identidade teve sucesso
   // antes (cobre inclusive o frame de render anterior ao efeito rodar).
-  const isLive = activeTableAvail === "available" && (tab === "ml" ? mlState.live : tab === "tiktok" ? tkState.live : shState.live);
+  const isLive = activeTableAvail === "available" && (ehMenor ? true : tab === "ml" ? mlState.live : tab === "tiktok" ? tkState.live : shState.live);
   // Enquanto a tabela OU o resumo Pareto da aba ativa ainda estao "loading"
   // (busca em andamento OU chave resolvida desatualizada), o badge de fonte
   // mostra um estado neutro — nunca o `live`/mock de uma identidade antiga.
@@ -316,8 +371,8 @@ function ProdutosPageInner() {
   }, [brand, period, shBucket, shOffset, shSort.sort.column, shSort.sort.direction, shTableKey]);
 
   useEffect(() => { if (tab === "ml") loadML(); }, [tab, loadML]);
-  useEffect(() => { if (tab === "tiktok") loadTK(); }, [tab, loadTK]);
-  useEffect(() => { if (tab === "shopee") loadSH(); }, [tab, loadSH]);
+  useEffect(() => { if (tab === "tiktok" && !ehMenor) loadTK(); }, [tab, loadTK, ehMenor]);
+  useEffect(() => { if (tab === "shopee" && !ehMenor) loadSH(); }, [tab, loadSH, ehMenor]);
 
   // Summary (cards A/B/C/D) — mesmos filtros da tabela, exceto o proprio bucket.
   useEffect(() => {
@@ -343,7 +398,7 @@ function ProdutosPageInner() {
   }, [tab, brand, mlSignal, mlStatus, mlVelocity, mlSummaryKey]);
 
   useEffect(() => {
-    if (tab !== "tiktok") return;
+    if (tab !== "tiktok" || ehMenor) return;
     const id = ++tkSummaryReqId.current;
     setTkSummaryState(startFetch);
     (async () => {
@@ -359,10 +414,10 @@ function ProdutosPageInner() {
         if (isCurrent) setTkSummaryResolvedKey(tkSummaryKey);
       }
     })();
-  }, [tab, brand, period, tkSummaryKey]);
+  }, [tab, brand, period, tkSummaryKey, ehMenor]);
 
   useEffect(() => {
-    if (tab !== "shopee") return;
+    if (tab !== "shopee" || ehMenor) return;
     const id = ++shSummaryReqId.current;
     setShSummaryState(startFetch);
     (async () => {
@@ -378,7 +433,7 @@ function ProdutosPageInner() {
         if (isCurrent) setShSummaryResolvedKey(shSummaryKey);
       }
     })();
-  }, [tab, brand, period, shSummaryKey]);
+  }, [tab, brand, period, shSummaryKey, ehMenor]);
 
   // Reset offset quando filtros mudam (nunca usa a pagina visivel como base)
   useEffect(() => { setMlOffset(0); }, [brand, mlBucket, mlSignal, mlStatus, mlVelocity]);
@@ -570,10 +625,11 @@ function ProdutosPageInner() {
               activeBucket={tkBucket}
               onSelectBucket={setTkBucket}
               scopeNote={paretoLinha([
+                progressoBling,
                 semGmv(tkDisplaySummary?.excluded_zero_gmv_count),
                 precoMedio(tkDisplaySummary?.avg_price_weighted),
               ])}
-              dica={`${DICA_PARETO} ${marginUnavailableNote("tiktok")}`}
+              dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("tiktok")}`}
             />
 
             <div className="flex items-center px-6 py-2 border-b border-violet-50">
@@ -632,10 +688,11 @@ function ProdutosPageInner() {
               onSelectBucket={setShBucket}
               unavailableReason={shUnavailable}
               scopeNote={paretoLinha([
+                progressoBling,
                 shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
                 precoMedio(shDisplaySummary?.avg_price_weighted),
               ])}
-              dica={`${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
+              dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
             />
 
             <div className="flex items-center px-6 py-2 border-b border-violet-50">
@@ -657,6 +714,34 @@ function ProdutosPageInner() {
             />
           </div>
         )}
+
+      {/* "Todas as marcas": as menores (Bling) entram aqui, no MESMO layout, abaixo do ranking do Data Mart.
+          Nao entram no ranking nem no A/B/C/D de cima: aquele e' calculado e paginado no servidor. */}
+      {brand === "" && canalBling != null && linhasTodasMenores.length > 0 && (
+        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="flex items-center gap-2 px-6 pt-4 pb-2">
+            <h2 className="text-sm font-semibold text-slate-800">Marcas menores · {activeChannelLabel}</h2>
+            <InfoDica texto={`Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia. Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. ${DICA_BLING}`} />
+          </div>
+          {canalBling === "tiktok" ? (
+            <TikTokProductTable
+              items={listaTikTok(linhasTodasMenores, { refMonth: refMes, offset: menoresOffset, limit: PAGE_SIZE })}
+              loading={false}
+              sort={{ column: null, direction: null }}
+              onSort={() => {}}
+              pagination={{ limit: PAGE_SIZE, offset: menoresOffset, onChange: setMenoresOffset }}
+            />
+          ) : (
+            <ShopeeProductTable
+              items={listaShopee(linhasTodasMenores, { refMonth: refMes, offset: menoresOffset, limit: PAGE_SIZE })}
+              loading={false}
+              sort={{ column: null, direction: null }}
+              onSort={() => {}}
+              pagination={{ limit: PAGE_SIZE, offset: menoresOffset, onChange: setMenoresOffset }}
+            />
+          )}
+        </div>
+      )}
     </PageContainer>
   );
 }

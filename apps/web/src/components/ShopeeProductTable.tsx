@@ -67,8 +67,8 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
               </span>
             )}
           </td>
-          <td className="px-4 py-3 text-right tabular-nums text-slate-600 whitespace-nowrap">{fmtNumber(p.units_sold)}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-slate-600 whitespace-nowrap">{fmtNumber(p.orders)}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-slate-600 whitespace-nowrap">{p.units_sold != null ? fmtNumber(p.units_sold) : <span className="text-slate-300">—</span>}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-slate-600 whitespace-nowrap">{p.orders != null ? fmtNumber(p.orders) : <span className="text-slate-300">—</span>}</td>
           <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
             {p.cancel_rate_pct != null ? (
               <span className={p.cancel_rate_pct < 2 ? "text-emerald-700" : p.cancel_rate_pct < 5 ? "text-amber-700 font-semibold" : "text-rose-700 font-semibold"}>

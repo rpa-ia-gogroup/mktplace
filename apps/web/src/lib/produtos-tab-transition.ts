@@ -3,7 +3,8 @@ import { fmtBrlFull } from "./formatters.ts";
 export type ProdutosTab = "ml" | "tiktok" | "shopee";
 
 export const ML_BRAND_VALUES = ["barbours", "kokeshi", "lescent", "rituaria"];
-export const TK_SH_BRAND_VALUES = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
+// As marcas menores (Bling) vendem so' no TikTok e na Shopee: entram nessas duas abas, nunca no ML.
+export const TK_SH_BRAND_VALUES = ["apice", "barbours", "kokeshi", "lescent", "rituaria", "yenzah", "aua", "by-samia"];
 
 export function brandsForTab(tab: ProdutosTab): string[] {
   return tab === "ml" ? ML_BRAND_VALUES : TK_SH_BRAND_VALUES;

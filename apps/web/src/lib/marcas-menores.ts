@@ -91,6 +91,9 @@ export interface ProdutoLinha {
   produto: string;
   quantidade: number | null;
   receita: number | null;
+  /** So' nos itens por canal: plataforma (SHOPEE/TIKTOK/MELI) e pedidos distintos que trazem o produto. */
+  plataforma?: string | null;
+  pedidos?: number | null;
 }
 
 export interface ProdutosDaMarca {
@@ -98,6 +101,11 @@ export interface ProdutosDaMarca {
   label: string;
   status?: string;
   produtos: ProdutoLinha[];
+  /** O mesmo produto por canal (o Gerencial e a aba Produtos filtram por canal). */
+  itens_por_canal?: ProdutoLinha[];
+  /** Conferencia: soma dos itens lidos x GMV (total dos pedidos) do mesmo recorte. */
+  receita_itens?: number | null;
+  gmv_pedidos?: number | null;
 }
 
 export interface ProdutosMarcas {
