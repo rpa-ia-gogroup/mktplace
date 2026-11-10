@@ -80,13 +80,13 @@ export function rolagemAoAbrir(
 
 /** O miolo do balao. Puro (sem portal nem estado), para teste. */
 export function ConteudoDaDica({ titulo, texto, nota }: { titulo?: string; texto: string; nota?: string }) {
-  if (!titulo && !nota) return <span className="block text-sm leading-normal text-ink">{texto}</span>;
+  if (!titulo && !nota) return <span className="block whitespace-pre-line text-sm leading-normal text-ink">{texto}</span>;
   return (
     <>
       {titulo ? <span className="block text-sm font-semibold leading-snug text-ink">{titulo}</span> : null}
-      <span className={`block text-sm leading-normal text-ink ${titulo ? "mt-1" : ""}`}>{texto}</span>
+      <span className={`block whitespace-pre-line text-sm leading-normal text-ink ${titulo ? "mt-1" : ""}`}>{texto}</span>
       {nota ? (
-        <span className="mt-2 block border-t border-line pt-2 text-xs leading-snug text-ink-muted">{nota}</span>
+        <span className="mt-2 block whitespace-pre-line border-t border-line pt-2 text-xs leading-snug text-ink-muted">{nota}</span>
       ) : null}
     </>
   );
@@ -127,7 +127,9 @@ export default function InfoDica({
       );
       const altura = balao.current?.offsetHeight ?? 0;
       const acima = r.bottom + 8 + altura > window.innerHeight - MARGEM && r.top - 8 - altura > MARGEM;
-      setPos({ left, top: acima ? r.top - 8 - altura : r.bottom + 8, acima });
+      // Balao maior que o espaco dos dois lados: encaixa na tela em vez de cortar o fim.
+      const top = Math.max(MARGEM, Math.min(acima ? r.top - 8 - altura : r.bottom + 8, window.innerHeight - altura - MARGEM));
+      setPos({ left, top, acima });
     };
     posicionar();
 

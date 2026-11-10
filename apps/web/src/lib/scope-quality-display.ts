@@ -20,10 +20,3 @@ export function scopeUnavailableReason(q: ScopeQuality | null | undefined): stri
   }
   return null;
 }
-
-/** Nota curta para o total quando alguma marca esperada ficou de fora. */
-export function partialTotalNote(q: ScopeQuality | null | undefined): string | null {
-  const bc = q?.brand_coverage;
-  if (!bc || !bc.total_is_partial || q?.brand) return null;
-  return `Total PARCIAL — fora do total: ${bc.missing.join(", ")}.`;
-}

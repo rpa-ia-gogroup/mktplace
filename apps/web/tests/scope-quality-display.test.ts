@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { partialTotalNote, scopeUnavailableReason } from "../src/lib/scope-quality-display.ts";
+import { scopeUnavailableReason } from "../src/lib/scope-quality-display.ts";
 
 function readSource(...segments: string[]): string {
   return readFileSync(fileURLToPath(new URL(`../${segments.join("/")}`, import.meta.url)), "utf8");
@@ -51,21 +51,22 @@ test("ausencia nunca vira zero: sem linha ou so GMV zero tem motivo explicito", 
   assert.equal(scopeUnavailableReason(null), null, "selo nao medido nao e ausencia afirmada");
 });
 
-test("total de todas as marcas com marca esperada ausente e rotulado PARCIAL", () => {
-  assert.equal(partialTotalNote(AGO_TODAS), "Total PARCIAL — fora do total: kokeshi.");
-  assert.equal(partialTotalNote(JUL_APICE), null);
-  // No filtro de uma marca o aviso e de ausencia, nao de total parcial.
-  assert.equal(partialTotalNote(SET_KOKESHI), null);
-});
-
-test("o selo titula o total parcial e mostra o detalhe por marca", () => {
+test("total parcial: UMA linha curta na tela, todo o detalhe no ⓘ", () => {
   const src = readSource("src", "components", "ScopeQualityBanner.tsx");
-  assert.match(src, /Total PARCIAL — fora do total/);
+  assert.match(src, /Parcial: sem \$\{faltam\} na Shopee/);
+  assert.match(src, /· mês em andamento/);
+  assert.ok(!/Total PARCIAL/.test(src), "o painel longo voltou");
+  // detalhe (bullets, indice, fontes, publicacao) vai no ⓘ
+  assert.match(src, /<InfoDica texto=\{detalheTexto\(quality\)\} nota=\{detalheNota\(quality, publicacao\)\}/);
   assert.match(src, /Marcas com dados: .* esperadas: .* ausentes:/);
-  assert.match(src, /Fonte ativa/);
+  assert.match(src, /fonte ativa/);
   assert.match(src, /total_is_partial/);
+  assert.ok(!/<table|<ul/.test(src), "tabela/lista na tela: devia estar no ⓘ");
   // total parcial nunca cai no caminho calmo "madura nos seis eixos"
   assert.match(src, /calmo = quality\.definitive && pior === "info" && !parcial/);
+  // o rodape de Produtos nao repete o aviso: so o preco medio
+  const page = readSource("app", "produtos", "page.tsx");
+  assert.ok(!/partialTotalNote|shPartialNote/.test(page));
 });
 
 test("a data geral mostra a publicacao mais antiga e quem e", () => {

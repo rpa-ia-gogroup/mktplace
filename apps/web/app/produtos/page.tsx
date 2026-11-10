@@ -8,7 +8,7 @@ import {
   type ProdutosMLResponse, type ProdutosTikTokResponse, type ProdutosShopeeListResponse,
   type ProdutosMLSummary, type ProdutosChannelSummary,
 } from "@/lib/api-client";
-import { scopeUnavailableReason, partialTotalNote } from "@/lib/scope-quality-display";
+import { scopeUnavailableReason } from "@/lib/scope-quality-display";
 import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -222,9 +222,8 @@ function ProdutosPageInner() {
   const tkDisplaySummary = tkSummaryAvail === "available" ? tkSummaryState.data : null;
   const shDisplaySummary = shSummaryAvail === "available" ? shSummaryState.data : null;
   // Lidos do selo, nunca recalculados aqui: a tela nao decide sozinha o que e
-  // ausencia nem o que e total parcial.
+  // ausencia.
   const shUnavailable = scopeUnavailableReason(shDisplaySummary?.quality);
-  const shPartialNote = partialTotalNote(shDisplaySummary?.quality);
 
   // "Ao vivo" reflete exclusivamente o ultimo resultado do PROPRIO canal, e
   // somente quando a tabela da aba ativa esta "available" para a identidade
@@ -633,7 +632,6 @@ function ProdutosPageInner() {
               onSelectBucket={setShBucket}
               unavailableReason={shUnavailable}
               scopeNote={paretoLinha([
-                shPartialNote,
                 shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
                 precoMedio(shDisplaySummary?.avg_price_weighted),
               ])}

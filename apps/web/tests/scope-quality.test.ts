@@ -362,7 +362,7 @@ test("faixa: TODOS os avisos sao exibidos, nao apenas o mais grave", () => {
   // Mostrar so o pior esconderia, por exemplo, a carga defasada atras da
   // imaturidade — o defeito exato que este contrato veio corrigir.
   const src = readSource("src", "components", "ScopeQualityBanner.tsx");
-  assert.match(src, /quality\.warnings\.map/);
+  assert.match(src, /q\.warnings\.map/);
 });
 
 test("faixa: a data de publicacao do mart aparece tambem no caso saudavel", () => {

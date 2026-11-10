@@ -1,4 +1,5 @@
 import type { ScopeBrandCoverage, ScopeBrandStatus, ScopeQuality, ScopeQualityWarning } from "@/lib/api-client";
+import InfoDica from "@/components/ui/InfoDica";
 
 interface Props {
   quality: ScopeQuality | null | undefined;
@@ -34,7 +35,7 @@ interface Props {
  */
 export default function ScopeQualityBanner({ quality, loading }: Props) {
   if (loading && !quality) {
-    return <div className="mx-6 mt-3 h-9 rounded-xl bg-slate-50 animate-pulse" aria-hidden />;
+    return <div className="mx-6 mt-3 h-4 w-56 rounded bg-slate-50 animate-pulse" aria-hidden />;
   }
   if (!quality) return null;
 
@@ -53,48 +54,30 @@ export default function ScopeQualityBanner({ quality, loading }: Props) {
   const parcial = quality.brand_coverage?.total_is_partial === true;
   const calmo = quality.definitive && pior === "info" && !parcial;
 
+  // Menos legendas: a tela leva UMA linha curta; avisos, indice de maturacao,
+  // fonte e data de publicacao por marca ficam no ⓘ ao lado dela.
+  const dica = <InfoDica texto={detalheTexto(quality)} nota={detalheNota(quality, publicacao)} />;
+
   if (calmo || (quality.warnings.length === 0 && !parcial)) {
     return (
-      <div className="px-6 pt-2" data-testid="scope-quality-ok">
-        <p className="text-xs text-slate-500">
-          Competência madura nos seis eixos.{publicacao ? ` ${publicacao}` : ""}
-        </p>
-        {quality.warnings.length > 0 && (
-          <ul className="mt-1 space-y-0.5 text-xs text-slate-400">
-            {quality.warnings.map((w) => (
-              <li key={w.code} data-code={w.code}>· {w.message}</li>
-            ))}
-          </ul>
-        )}
-        <BrandCoverageDetail coverage={quality.brand_coverage} meta="text-slate-400" />
+      <div className="flex items-center gap-1.5 px-6 pt-2 text-xs text-slate-500" data-testid="scope-quality-ok">
+        <span>Competência madura nos seis eixos.</span>
+        {dica}
       </div>
     );
   }
 
-  const tom = pior === "critical"
-    ? { box: "bg-rose-50 border-rose-200", title: "text-rose-900", body: "text-rose-800", meta: "text-rose-600" }
-    : pior === "warning"
-      ? { box: "bg-amber-50 border-amber-200", title: "text-amber-900", body: "text-amber-800", meta: "text-amber-700" }
-      : { box: "bg-slate-50 border-slate-200", title: "text-slate-800", body: "text-slate-700", meta: "text-slate-600" };
+  const tom = pior === "critical" ? "text-rose-700" : pior === "warning" ? "text-amber-700" : "text-slate-600";
 
   return (
     <div
-      className={`mx-6 mt-3 rounded-xl border px-4 py-3 ${tom.box}`}
+      className={`mx-6 mt-3 flex items-center gap-1.5 text-xs font-medium ${tom}`}
       role={pior === "critical" ? "alert" : "status"}
       data-testid="scope-quality-banner"
       data-severity={pior}
     >
-      <p className={`text-xs font-semibold ${tom.title}`}>{headline(quality)}</p>
-      <ul className={`mt-1.5 space-y-1 text-xs ${tom.body}`}>
-        {quality.warnings.map((w) => (
-          <li key={w.code} data-code={w.code}>
-            {w.severity === "critical" ? "• " : "· "}
-            {w.message}
-          </li>
-        ))}
-      </ul>
-      {publicacao && <p className={`mt-1.5 text-xs ${tom.meta}`}>{publicacao}</p>}
-      <BrandCoverageDetail coverage={quality.brand_coverage} meta={tom.meta} />
+      <span>{headline(quality)}</span>
+      {dica}
     </div>
   );
 }
@@ -106,44 +89,34 @@ const STATUS_LABEL: Record<ScopeBrandStatus["status"], string> = {
   absent: "sem dado nesta competência",
 };
 
+/** Frase de abertura do balao. O detalhe longo (avisos do backend) vai na parte menor. */
+function detalheTexto(q: ScopeQuality): string {
+  return q.brand_coverage?.total_is_partial && !q.brand
+    ? "O número exibido não é o consolidado da Shopee: falta ao menos uma marca esperada."
+    : headline(q);
+}
+
 /**
  * Quem esta e quem falta no total, de que fonte cada marca e lida e quando foi
  * publicada. Sem isto, "todas as marcas" parece o consolidado mesmo quando a
  * maior marca ficou de fora.
  */
-function BrandCoverageDetail({ coverage, meta }: { coverage: ScopeBrandCoverage | null | undefined; meta: string }) {
-  if (!coverage || coverage.brands.length === 0) return null;
-  const ausentes = coverage.missing.length > 0 ? coverage.missing.join(", ") : "nenhuma";
-  return (
-    <div className={`mt-2 text-xs ${meta}`} data-testid="scope-brand-coverage">
-      <p>
-        Marcas com dados: {coverage.with_data.length} · esperadas: {coverage.expected.length} · ausentes: {ausentes}
-      </p>
-      <table className="mt-1 w-full max-w-xl text-left">
-        <thead>
-          <tr>
-            <th className="pr-3 font-semibold">Marca</th>
-            <th className="pr-3 font-semibold">Fonte ativa</th>
-            <th className="pr-3 font-semibold">Situação</th>
-            <th className="font-semibold">Publicação no mart</th>
-          </tr>
-        </thead>
-        <tbody>
-          {coverage.brands.map((b) => (
-            <tr key={b.brand} data-brand={b.brand} data-status={b.status}>
-              <td className="pr-3">{b.brand}</td>
-              <td className="pr-3">{SOURCE_LABEL[b.active_source] ?? b.active_source}</td>
-              <td className="pr-3">{b.expected || b.status === "with_data" ? STATUS_LABEL[b.status] : "sem venda na diária"}</td>
-              <td>
-                {dia(b.published_at) ?? "—"}
-                {b.published_at && !b.published_in_scope ? " (última, em outra competência)" : ""}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+function detalheNota(q: ScopeQuality, publicacao: string | null): string {
+  // Avisos do backend (o indice de maturacao chega aqui, ja com a nota de que nao e %).
+  const linhas: string[] = q.warnings.map((w) => `${w.severity === "critical" ? "•" : "·"} ${w.message}`);
+  const bc: ScopeBrandCoverage | null | undefined = q.brand_coverage;
+  if (bc && bc.brands.length > 0) {
+    linhas.push("");
+    const ausentes = bc.missing.length > 0 ? bc.missing.join(", ") : "nenhuma";
+    linhas.push(`Marcas com dados: ${bc.with_data.length} · esperadas: ${bc.expected.length} · ausentes: ${ausentes}`);
+    for (const b of bc.brands) {
+      const situacao = b.expected || b.status === "with_data" ? STATUS_LABEL[b.status] : "sem venda na diária";
+      const pub = `${dia(b.published_at) ?? "—"}${b.published_at && !b.published_in_scope ? " (última, em outra competência)" : ""}`;
+      linhas.push(`${b.brand}: fonte ativa ${SOURCE_LABEL[b.active_source] ?? b.active_source} · ${situacao} · publicação no mart ${pub}`);
+    }
+  }
+  if (publicacao) linhas.push("", publicacao);
+  return linhas.join("\n");
 }
 
 function dia(iso: string | null | undefined): string | null {
@@ -157,7 +130,9 @@ function headline(q: ScopeQuality): string {
   if (q.load_status === "load_absent") return "Sem dados de produto nesta competência";
   if (q.eligibility_status === "no_eligible_rows") return "Nenhum produto concluído nesta competência";
   if (q.brand_coverage?.total_is_partial && !q.brand) {
-    return `Total PARCIAL — fora do total: ${q.brand_coverage.missing.join(", ")}`;
+    const faltam = q.brand_coverage.missing.map((m) => m.charAt(0).toUpperCase() + m.slice(1)).join(", ");
+    const andamento = q.maturity_status === "materially_immature" ? " · mês em andamento" : "";
+    return `Parcial: sem ${faltam} na Shopee${andamento}`;
   }
   if (q.maturity_status === "materially_immature") return "Competência ainda em maturação — números vão subir";
   if (q.source_status === "source_never_loaded") return "Esta competência nunca foi carregada da fonte";
