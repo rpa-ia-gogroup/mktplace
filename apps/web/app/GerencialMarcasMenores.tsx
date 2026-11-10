@@ -43,7 +43,6 @@ export default function GerencialMarcasMenores({
     };
   }, [filters.dateFrom, filters.dateTo, recarga]);
 
-  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, !!dados?.disponivel);
   const idsKey = escopo.menores.join(",");
   const f = useMemo(
     () => (dados?.disponivel ? filtrarMarcasMenores(dados, escopo.menores, filters.channels) : null),
@@ -57,6 +56,8 @@ export default function GerencialMarcasMenores({
   const periodLabel = dados?.periodo ? fmtPeriodo(dados.periodo.inicio, dados.periodo.fim) : fmtPeriodo(filters.dateFrom, filters.dateTo);
   const carregando = dados === undefined;
   const comDado = !!f && f.marcas.some((m) => m.total != null);
+  // Sem pedido nas marcas e canais escolhidos, os produtos nem sao pedidos (cada pedido custa uma chamada ao Bling).
+  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, comDado);
 
   return (
     <div className="flex w-full flex-col gap-3 px-4 py-4">
