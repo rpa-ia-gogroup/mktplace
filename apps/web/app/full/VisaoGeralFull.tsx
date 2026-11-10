@@ -247,7 +247,11 @@ function CelulaEstoque({ t, alinhar = "start" }: { t: ItemRuptura; alinhar?: "st
   const c = celulaEstoque(t);
   return (
     <span className={`flex flex-col ${alinhar === "end" ? "items-end" : "items-start"}`} title={c.ausente}>
-      <span className="text-sm font-semibold text-ink">{c.texto}</span>
+      <span className="inline-flex items-center gap-1.5">
+        <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-crit" />
+        <span className="text-sm font-semibold text-crit-ink">{c.texto}</span>
+        <span className="text-xs font-normal text-ink-muted">no Full</span>
+      </span>
       {c.apoio && <span className="text-xs font-normal text-ink-muted">{c.apoio}</span>}
       {c.ausente && <span className="sr-only"> ({c.ausente})</span>}
     </span>

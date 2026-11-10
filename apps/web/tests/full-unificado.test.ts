@@ -866,14 +866,27 @@ test("celula de impacto: Shopee com estoque do vendedor = 'sem perda' explicado;
   assert.match(DICA_IMPACTO_FILA, /É potencial/);
 });
 
-test("celula de estoque: '0 no Full' so' quando medido; fora do Full so' quando existe; ausencia nunca vira 0", () => {
-  assert.deepEqual(celulaEstoque(rup("ml", "M1", { naoDisponivel: 5 })), { texto: "— no Full", apoio: "5 não disponível", ausente: "estoque no Full não informado" });
-  assert.equal(celulaEstoque(rup("shopee", "S1", { estoqueFull: null, estoqueVendedor: 3 })).ausente, "estoque no Full não informado");
-  assert.deepEqual(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: 150, transferencia: 120 })), { texto: "0 no Full", apoio: "150 não disponível · 120 em transferência", ausente: undefined });
-  assert.equal(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: 0, transferencia: 0 })).apoio, "0 não disponível", "zero medido");
-  assert.deepEqual(celulaEstoque(rup("ml", "M1", { estoqueFull: 0, naoDisponivel: null })), { texto: "0 no Full", ausente: "estoque fora do Full não informado" });
-  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueFull: 0, estoqueVendedor: 35 })), { texto: "0 no Full", apoio: "35 com o vendedor", ausente: undefined });
-  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueFull: 0, estoqueVendedor: null })), { texto: "0 no Full", ausente: "estoque do vendedor não informado" });
+test("celula de estoque: Full e' 0 por definicao da fila; fora do Full so' quando existe; ausencia nunca vira 0", () => {
+  assert.deepEqual(celulaEstoque(rup("ml", "M1", { naoDisponivel: 150, transferencia: 120 })), { texto: "0", apoio: "150 não disponível · 120 em transferência" });
+  assert.equal(celulaEstoque(rup("ml", "M1", { naoDisponivel: 0, transferencia: 0 })).apoio, "0 não disponível", "zero medido");
+  assert.deepEqual(celulaEstoque(rup("ml", "M1", {})), { texto: "0", ausente: "estoque fora do Full não informado" });
+  assert.deepEqual(celulaEstoque(rup("shopee", "S1", { estoqueVendedor: 2316 })), { texto: "0", apoio: "2.316 com o vendedor" });
+  assert.equal(celulaEstoque(rup("shopee", "S1", { estoqueVendedor: null })).ausente, "estoque do vendedor não informado");
+});
+
+test("fila com impacto: o estoque fora do Full do ML vem da lista de estoque (join por marca+SKU)", () => {
+  const inv = { ...inventario("kokeshi", "RUPTURA_CANDIDATA", 3), sku: "K1", nao_disponivel: 150, transfer: 120 };
+  const canais = [resumoML(ml([inv], [marcaML("kokeshi", 1, 1)]))];
+  const imp: ImpactoRuptura = {
+    janela_gmv_dias: 28, limitacoes: [], shopee: canalImpacto("shopee"),
+    ml: canalImpacto("ml", { itens: [
+      { brand: "kokeshi", sku: "K1", titulo: "Kit", media_diaria_28d: 3, preco_medio: 100, fonte_preco: "vendas_30d", mes_preco: null, estoque_vendedor: null, perda_dia: 300 },
+      { brand: "kokeshi", sku: "K9", titulo: "Sem match", media_diaria_28d: 1, preco_medio: 100, fonte_preco: "vendas_30d", mes_preco: null, estoque_vendedor: null, perda_dia: 100 },
+    ] }),
+  };
+  const fila = rankingRupturas(canais, imp);
+  assert.deepEqual(celulaEstoque(fila[0]), { texto: "0", apoio: "150 não disponível · 120 em transferência" });
+  assert.equal(celulaEstoque(fila[1]).ausente, "estoque fora do Full não informado", "sem match = ausente, nunca 0");
 });
 
 test("filtro canal x curva combinados: cada contagem reflete o outro filtro", () => {

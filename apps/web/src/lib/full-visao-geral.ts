@@ -57,8 +57,6 @@ export interface ItemRuptura {
   mediaDiaria: number;
   /** Shopee: estoque do vendedor (fora do Full). `undefined` no ML: nao se aplica. */
   estoqueVendedor?: number | null;
-  /** Estoque no Full que a rota ja' manda (ML: disponivel; Shopee: vendavel). `null`/`undefined` = nao informado. */
-  estoqueFull?: number | null;
   /** ML: nao disponivel no Full (reservado, em transferencia etc.) e, dele, o que esta em transferencia. */
   naoDisponivel?: number | null;
   transferencia?: number | null;
@@ -139,7 +137,6 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
       canal: "shopee" as const, marca: p.brand, nome: nomeExibido(p), sku: p.item_name?.trim() ? p.item_sku?.trim() || null : null,
       codigo: p.item_sku?.trim() || null, kit: p.is_kit || ehKit(p.item_sku),
       mediaDiaria: numero(p.avg_daily_units_28d) ?? 0, estoqueVendedor: p.seller_stock_total,
-      estoqueFull: p.full_stock_saleable,
     }));
   const rupturasCompletas = rupturas.length === i.produtos_ruptura;
   const faltam = contasAusentes(CONTAS_ESPERADAS_API, r.contas_cobertas);
@@ -180,7 +177,7 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
     .filter((v) => v.classificacao_torre === "RUPTURA_CANDIDATA")
     .map((v) => ({ canal: "ml" as const, marca: v.brand, ...nomeESku(v.sku, v.titulo, SEM_IDENTIFICACAO_ML), mediaDiaria: numero(v.media_diaria_28d) ?? 0,
       codigo: v.sku?.trim() || null, kit: ehKit(v.sku),
-      estoqueFull: v.disponivel, naoDisponivel: v.nao_disponivel, transferencia: v.transfer }));
+      naoDisponivel: v.nao_disponivel, transferencia: v.transfer }));
 
   return {
     canal: "ml",
@@ -357,7 +354,17 @@ export function vendedorTemEstoque(t: ItemRuptura): boolean {
 export function rankingRupturas(canais: ResumoCanal[], impacto: ImpactoRuptura | null, abc: CurvaAbc | null = null): ItemRuptura[] {
   const comImpacto = new Map(impactosOk(impacto).map((c) => [c.canal, c]));
   return oks(canais)
-    .flatMap((c) => comImpacto.get(c.canal)?.itens.map((i) => itemDoImpacto(c.canal, i)) ?? c.rupturas)
+    .flatMap((c) => {
+      const imp = comImpacto.get(c.canal);
+      if (!imp) return c.rupturas;
+      // A rota de impacto nao traz o estoque fora do Full: junta pelo SKU+marca da lista de estoque ja' carregada.
+      // shortcut: ML com 2 inventarios no mesmo SKU usa o 1o; sem match, a celula diz "nao informado".
+      const estoque = new Map(c.rupturas.map((r) => [`${r.marca}|${r.codigo}`, r]));
+      return imp.itens.map((i) => {
+        const e = estoque.get(`${i.brand}|${i.sku?.trim() || null}`);
+        return { ...itemDoImpacto(c.canal, i), naoDisponivel: e?.naoDisponivel, transferencia: e?.transferencia };
+      });
+    })
     .sort((a, b) =>
       ORDEM_GRUPO[grupoDe(curvaDe(a, abc))] - ORDEM_GRUPO[grupoDe(curvaDe(b, abc))]
       // Shopee com estoque do vendedor (a venda segue): fim do grupo, abaixo de quem tem perda.
@@ -1004,23 +1011,21 @@ export function celulaImpacto(t: ItemRuptura): { texto: string; apoio?: string; 
 }
 
 /**
- * Celula "Estoque" da fila: onde esta' o estoque que repoe o Full.
- * ML: "0 no Full" + "N não disponível · M em transferência"; Shopee: "0 no Full" + "N com o vendedor".
- * Dado nao informado = ausencia com motivo, nunca 0.
+ * Celula "Estoque" da fila. Todo item da fila esta' nela por estar SEM estoque
+ * no Full (a definicao da lista), entao o Full e' 0 por definicao: "0" fixo.
+ * Apoio so' quando existe: ML "N não disponível · M em transferência";
+ * Shopee "N com o vendedor". Fora do Full ausente = motivo no title, nunca 0.
  */
 export function celulaEstoque(t: ItemRuptura): { texto: string; apoio?: string; ausente?: string } {
-  // "0" so' quando medido: ausencia e' "—" com motivo (a lista ja' diz que sao rupturas).
-  const full = t.estoqueFull == null ? null : fmtInt(t.estoqueFull);
-  const texto = `${full ?? "—"} no Full`;
-  const semFull = full === null ? "estoque no Full não informado" : undefined;
+  const texto = "0";
   if (t.canal === "shopee") {
     return t.estoqueVendedor == null
-      ? { texto, ausente: semFull ?? "estoque do vendedor não informado" }
-      : { texto, apoio: `${fmtInt(t.estoqueVendedor)} com o vendedor`, ausente: semFull };
+      ? { texto, ausente: "estoque do vendedor não informado" }
+      : { texto, apoio: `${fmtInt(t.estoqueVendedor)} com o vendedor` };
   }
-  if (t.naoDisponivel == null) return { texto, ausente: semFull ?? "estoque fora do Full não informado" };
+  if (t.naoDisponivel == null) return { texto, ausente: "estoque fora do Full não informado" };
   const transf = t.transferencia ? ` · ${fmtInt(t.transferencia)} em transferência` : "";
-  return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}`, ausente: semFull };
+  return { texto, apoio: `${fmtInt(t.naoDisponivel)} não disponível${transf}` };
 }
 
 export const DICA_IMPACTO_FILA =
