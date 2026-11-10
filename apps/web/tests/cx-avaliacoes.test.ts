@@ -50,7 +50,7 @@ test("respostas nao coletadas: a coluna sai e o ⓘ diz por que", async () => {
   assert.match(ajudaAvaliacoes({ ...base, respostas_medidas: false }, (m) => m), /Respostas da loja: ainda não coletadas/);
   assert.doesNotMatch(ajudaAvaliacoes({ ...base, respostas_medidas: true }, (m) => m), /ainda não coletadas/);
   const src = readFileSync(new URL("../app/cx/AvaliacoesProduto.tsx", import.meta.url), "utf-8");
-  assert.match(src, /d\.respostas_medidas \? \["% respondidas"\] : \[\]/);
+  assert.match(src, /d\.respostas_medidas \? `\$\{l\.pctRespondidas\} respondidas` : null/);
 });
 
 test("truncado: contagem com '≥' e motivo do piso", () => {

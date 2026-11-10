@@ -214,7 +214,7 @@ test("atendimento: sem coleta de conversas avisa no rodape; truncado vira piso",
   const v = montarAtendimentoCx(trunc, rotulo);
   assert.equal(v.linhas[0].conversas, "≥ 200");
   assert.equal(v.linhas[0].aguardandoPct, "≤ 1,5%", "conversas sao piso: o % e' teto");
-  assert.ok(v.notas.some((n) => /piso/.test(n)));
+  assert.ok(!v.notas.some((n) => /piso/.test(n)), "o piso mora no title do cabecalho, nao em nota fixa");
 });
 
 test("pareto: devolucoes e cancelamentos juntos, do maior para o menor, com acumulado", () => {
@@ -243,7 +243,7 @@ test("pareto: devolucoes e cancelamentos juntos, do maior para o menor, com acum
     ],
   );
   assert.ok(v.notas.some((n) => /^9 pedidos não pagos/.test(n)));
-  assert.ok(v.notas.some((n) => /Reenvios/.test(n)));
+  assert.ok(!v.notas.some((n) => /Reenvios/.test(n)), "sem nota fixa de reenvio sem fonte");
   assert.equal(v.resto, null);
 });
 
@@ -322,7 +322,7 @@ test("ajuda: conversas e cancelamentos explicados no ⓘ, nao em nota", () => {
   assert.match(AJUDA_CX.conversas, /Cada comprador conta uma vez/);
   assert.match(AJUDA_CX.cancelamentos, /não pagos/);
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.conversas\} dica=\{v\.rotuloConversas\}>Conversas<\/ThAjuda>/);
+  assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.conversas\} dica=\{dica\(v\.rotuloConversas,[\s\S]*?\}>Conversas<\/ThAjuda>/);
   assert.match(AJUDA_CX.cancelamentosMarca, /não pagos/);
   assert.match(tela, /<ThAjuda ajuda=\{AJUDA_CX\.cancelamentosMarca\}>Cancel\.<\/ThAjuda>/);
   // CX-IDENTIDADE: o status por marca virou pilulas no heroi, com uma ou todas as marcas
@@ -716,9 +716,11 @@ test("chips: janela, hora da resposta e a captura MAIS ANTIGA da Saude da Conta"
   p.chat.contas[1] = { ...p.chat.contas[1], capturado_em: "2026-11-03T09:05:00Z" };
   const c = chipsCx(p);
   assert.equal(c.janela, "30 dias fechados · 05/10 a 03/11");
-  assert.match(c.geradoEm, /^gerado em 04\/11\/2026/);
-  assert.equal(c.saudeDaConta, "Saúde da Conta: 03/11 06:05", "horario de Brasilia, a mais antiga");
-  assert.equal(chipsCx(comConversas(30)).saudeDaConta, null, "sem captura: sem chip (nunca inventa data)");
+  const emDia = chipsCx(p, Date.parse("2026-11-04T08:00:00Z"));
+  assert.match(emDia.detalhe, /^gerado em 04\/11\/2026.* · Saúde da Conta: 03\/11 06:05$/, "horario de Brasilia, a mais antiga, no title");
+  assert.equal(emDia.saudeDesatualizada, null, "captura de menos de 24 h: so' no title");
+  assert.equal(chipsCx(p, Date.parse("2026-11-05T12:00:00Z")).saudeDesatualizada, "Saúde da Conta: 03/11 06:05", "mais de 24 h: escrita no chip");
+  assert.doesNotMatch(chipsCx(comConversas(30)).detalhe, /Saúde/, "sem captura: nunca inventa data");
 });
 
 test("aviso da coleta do chat: so' quando falta a leitura", () => {
