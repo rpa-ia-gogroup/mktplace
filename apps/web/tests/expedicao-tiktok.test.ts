@@ -132,8 +132,7 @@ test("cada severidade tem rotulo distinto, e nenhum atribui o veredito ao TikTok
   assert.equal(new Set(rotulos).size, rotulos.length);
   // O rotulo diz que a MEDICAO e' nossa. Quem declara penalizacao e' o TikTok,
   // com o proprio relogio e o proprio denominador — nao esta tela.
-  assert.match(ROTULO_SEVERIDADE.fora_da_meta, /medição interna/i);
-  assert.match(ROTULO_SEVERIDADE.ok, /medição interna/i);
+  assert.ok(!/medição interna/i.test(ROTULO_SEVERIDADE.fora_da_meta + ROTULO_SEVERIDADE.ok));
   assert.match(ROTULO_SEVERIDADE.critico, /interno/i);
   for (const r of rotulos) {
     assert.ok(!/penaliz/i.test(r), r);
@@ -519,16 +518,13 @@ test("onde agir do TikTok: sem vencido cai para acima de 48 h; uma marca so' nao
   assert.equal(ondeAgirNosAbertos(null, marcas), null);
 });
 
-test("prazo reconstruido vira chip curto, com o texto inteiro no ⓘ", () => {
+test("prazo reconstruido e vencimentos parciais nao viram chip: a metodologia mora no ⓘ do Prazo", () => {
   const barra = barraTk({
     deadline_is_reconstructed: true,
     alerts: [],
     ldr: { partial_due_days: 1 },
   } as unknown as Parameters<typeof barraTk>[0]);
-  assert.equal(barra.severidade, "info");
-  assert.ok(barra.detalhes.every((d) => d.curto), "todo item tem rotulo curto: a barra vira linha discreta");
-  assert.equal(barra.detalhes[0].curto, "Prazo reconstruído · medição interna");
-  assert.equal(barra.detalhes[1].curto, "1 vencimento ainda no prazo");
+  assert.deepEqual(barra.detalhes, []);
 });
 
 test("filtros do TikTok numa linha: Evento curto e 'Período' como nos outros canais", () => {

@@ -339,8 +339,8 @@ export function severidadeDoDia(dia: TikTokLdrDia): Severidade {
 }
 
 export const ROTULO_SEVERIDADE: Record<Severidade, string> = {
-  ok: "Dentro da meta (medição interna)",
-  fora_da_meta: "Acima da meta (medição interna)",
+  ok: "Dentro da meta",
+  fora_da_meta: "Acima da meta",
   critico: "Crítico (limiar interno)",
   parcial: "Ainda no prazo (parcial)",
 };
@@ -501,28 +501,7 @@ export function montarBarraDeQualidadeTikTok(p: TikTokPayload | null): BarraQual
         "não agora.",
     });
   }
-  if (p.deadline_is_reconstructed) {
-    // EXPEDICAO-TIKTOK-PADRAO: ressalva permanente do canal, nao problema do
-    // dado de hoje. Vira chip curto com o texto inteiro no "ⓘ" (DESIGN.md:
-    // "no methodology on screen"), como a cobertura na Shopee e no ML.
-    itens.push({
-      chave: "prazo_reconstruido",
-      severidade: "info",
-      texto: AVISO_PRAZO_RECONSTRUIDO,
-      curto: "Prazo reconstruído · medição interna",
-    });
-  }
-  const parciais = p.ldr?.partial_due_days ?? 0;
-  if (parciais > 0) {
-    itens.push({
-      chave: "vencimentos_parciais",
-      severidade: "info",
-      texto:
-        `${parciais} vencimento(s) da janela ainda no prazo: a taxa desses dias ainda ` +
-        "vai mudar e fica fora da LDR.",
-      curto: `${parciais} ${parciais === 1 ? "vencimento" : "vencimentos"} ainda no prazo`,
-    });
-  }
+  // Prazo reconstruído e vencimentos parciais saíram da tela: a metodologia mora no ⓘ do título "Prazo".
   return consolidarQualidade(itens);
 }
 
