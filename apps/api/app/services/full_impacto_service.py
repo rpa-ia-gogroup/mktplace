@@ -38,6 +38,7 @@ from typing import Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from app.services import full_curva_abc_service as curva_abc_svc
 from app.services import ml_full_stock_service as ml_stock_svc
 from app.services import shopee_fbs_stock_service as fbs_stock_svc
 
@@ -325,6 +326,8 @@ def _ml_na_foto(db: Session, marcas: list[str], ref: date) -> dict:
             "mes_preco": None, "estoque_vendedor": None,
             "perda_dia": None if preco is None or media is None else media * preco,
         })
+    # Brinde e descontinuado nao sao perda de venda: fora do impacto (planilha BD; sem leitura, todos contam).
+    itens = curva_abc_svc.fora_da_fila(itens, db)
     gmv = db.execute(SQL_ML_GMV, p).mappings().all()
     return _montar_canal("ml", ref, itens, gmv, fallback)
 
@@ -359,6 +362,7 @@ def _shopee_na_foto(db: Session, ref: date) -> dict:
             "estoque_vendedor": None if r["estoque_vendedor"] is None else int(r["estoque_vendedor"]),
             "perda_dia": None if preco is None or media is None else media * preco,
         })
+    itens = curva_abc_svc.fora_da_fila(itens, db)
     gmv = db.execute(SQL_SHOPEE_GMV, p).mappings().all()
     return _montar_canal("shopee", ref, itens, gmv, 0)
 

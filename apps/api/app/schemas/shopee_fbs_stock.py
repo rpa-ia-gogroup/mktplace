@@ -21,7 +21,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo
+from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo, Situacao
 
 
 class EstoquePorCD(BaseModel):
@@ -55,6 +55,9 @@ class ProdutoEstoque(BaseModel):
     #: None quando a planilha nao foi lida (`curva_meta.motivo`). Nunca "C" por falta.
     curva: Optional[Curva] = None
     curva_motivo: Optional[CurvaMotivo] = None
+    #: Brinde/descontinuado (aba BD da planilha): fora da fila e dos numeros do topo.
+    #: None = conta normal (SKU fora da BD, BD nao lida).
+    situacao: Optional[Situacao] = None
 
     #: Demanda OPERACIONAL: so' status com pagamento comprovado. `unpaid` fora.
     units_sold_28d: int
@@ -91,6 +94,11 @@ class Indicadores(BaseModel):
     produtos_total: int
     #: Ruptura + baixo: o que a operacao precisa olhar hoje.
     produtos_exigem_acao: int
+    #: Brindes/descontinuados (aba BD) JA' descontados dos numeros acima. False = lista
+    #: incompleta ou BD nao lida: nada foi descontado (a tela avisa).
+    situacao_aplicada: bool = False
+    brindes_fora: int = 0
+    descontinuados_fora: int = 0
 
 
 class Frescor(BaseModel):

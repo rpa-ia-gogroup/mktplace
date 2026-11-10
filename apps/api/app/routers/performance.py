@@ -49,6 +49,7 @@ from app.services import shopee_fbs_service as shopee_fbs_svc
 from app.services import shopee_fbs_stock_service as fbs_stock_svc
 from app.services import ml_full_stock_service as ml_stock_svc
 from app.services import full_impacto_service as impacto_svc
+from app.services import full_situacao_service as situacao_svc
 from app.schemas.full_impacto import ImpactoRupturaResponse
 from app.services import full_curva_abc_service as curva_abc_svc
 from app.schemas.full_curva_abc import CurvaAbcResponse, CurvaMeta
@@ -1045,6 +1046,17 @@ def shopee_fbs_estoque(
         # PR3: curva ABC por produto (mesma leitura e cache do /full-curva-abc)
         resp.curva_meta = CurvaMeta(**curva_abc_svc.anotar_curva(
             resp.produtos, db, sku_de=lambda p: p.item_sku, kit_de=lambda p: p.is_kit))
+        # Indicadores sem brinde/descontinuado (batem com a Visao geral). Precisa da lista COMPLETA do
+        # escopo: a filtrada e' refeita sem filtro; truncada = nada e' descontado (`situacao_aplicada` False).
+        if resp.curva_meta.bd_lida:
+            completa = resp.produtos
+            if classificacoes or busca or somente_acao:
+                completa = fbs_stock_svc.get_estoque_full_block(
+                    _require_db(db), hoje=hoje, ref_date=ref_date, brands=brands, accounts=accounts,
+                    limite=fbs_stock_svc.MAX_PRODUTOS).produtos
+                curva_abc_svc.anotar_curva(completa, db, sku_de=lambda p: p.item_sku, kit_de=lambda p: p.is_kit)
+            if len(completa) == resp.indicadores.produtos_total:  # lista completa do escopo
+                situacao_svc.descontar_shopee(resp.indicadores, completa)
         return resp
     except fbs_stock_svc.FiltroInvalido as invalido:
         # Filtro fora da allowlist. AQUI o 422 e' correto: mudar a requisicao
@@ -1138,6 +1150,10 @@ def ml_full_estoque(
         )
         # PR3: curva ABC por inventario (SKU do anuncio-ancora)
         resp.curva_meta = CurvaMeta(**curva_abc_svc.anotar_curva(resp.inventarios, db, sku_de=lambda i: i.sku))
+        # Indicadores sem brinde/descontinuado (batem com a Visao geral). Lista truncada ou com
+        # inventario fora do Full: nada e' descontado (`situacao_aplicada` False; a tela avisa).
+        if resp.curva_meta.bd_lida and not resp.truncado and not resp.incluiu_fora_do_full:
+            situacao_svc.descontar_ml(resp, resp.inventarios)
         return resp
     except ml_stock_svc.FiltroInvalido as invalido:
         # Mensagem so' com constantes: o valor recebido nao volta no corpo.
