@@ -297,7 +297,6 @@ function CabecaGrupo({ g, total, aberto, alternar }: { g: GrupoCurva; total: num
     <span className="flex items-center justify-between gap-2">
       <span className="flex items-center gap-2 text-xs font-semibold text-ink-faint">
         {g === "demais" ? <span className="uppercase tracking-wide">Demais (B, C, sem curva)</span> : <ChipCurva curva={g} />}
-        {g !== "demais" && <span className="font-normal">{fmtInt(total)} {total === 1 ? "ruptura" : "rupturas"}</span>}
       </span>
       {total > POR_GRUPO && (
         <button type="button" onClick={alternar} aria-expanded={aberto}
@@ -802,9 +801,11 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
               const ehPior = l === pior;
               const ft = colunas.length > 1 && colunas.every((c) => l.celulas[c]?.ruptura != null) ? fracao(l.ruptura, l.base) : null;
               return (
-                <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined}>
+                <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
                   <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
                     <Escondido texto={tituloMarca(l.marca)} detalhe={ft ? `Total: ${ft.texto} (${ft.detalhe})` : null} />
+                    {/* A linha vermelha nao pode ser o unico sinal: leitor de tela ouve "pior". */}
+                    {ehPior && <span className="sr-only"> ({l.maiorPerda !== null ? "maior impacto" : "pior"})</span>}
                   </th>
                   {colunas.map((canal) => {
                     const cel: MarcaCanal | undefined = l.celulas[canal];
