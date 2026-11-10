@@ -196,6 +196,17 @@ def test_com_cache_e_rotina_a_requisicao_nao_le_item_no_bling_e_aciona_a_rotina(
     assert r2["completo"] is True and r2["pedidos_lidos"] == 4
 
 
+def test_itens_por_canal_contam_pedidos_distintos_por_produto():
+    dados = {YENZAH_SHOPEE: [pedido(1, "2026-11-08", 100.0), pedido(2, "2026-11-09", 50.0)]}
+    itens = {
+        1: [{"codigo": "A", "quantidade": 1, "valor": 60.0}, {"codigo": "A", "quantidade": 1, "valor": 40.0}],  # repetido no mesmo pedido
+        2: [{"codigo": "A", "quantidade": 1, "valor": 50.0}],
+    }
+    r = svc.get_produtos(FakeBling(dados, itens), date(2026, 11, 1), date(2026, 11, 9), HOJE)
+    linha = {m["id"]: m for m in r["marcas"]}["yenzah"]["itens_por_canal"][0]
+    assert linha["quantidade"] == 3.0 and linha["pedidos"] == 2  # 3 unidades em 2 pedidos
+
+
 def test_item_lido_ao_vivo_e_guardado_quando_a_rotina_esta_desligada(monkeypatch):
     monkeypatch.setattr(svc.settings, "bling_warm_enabled", False)
     cache = FakeCache()

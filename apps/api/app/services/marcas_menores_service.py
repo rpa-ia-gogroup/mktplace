@@ -343,6 +343,7 @@ def get_produtos(
     for p in lista:
         gmv_pedidos[p["marca"]] = gmv_pedidos.get(p["marca"], 0.0) + p["total"]
     for p in lidos:
+        no_pedido: set = set()  # um produto conta 1 pedido, mesmo repetido nos itens dele
         for it in _detalhe_cache[p["id"]]:
             chave = str(it.get("codigo") or it.get("descricao") or "").strip()
             if not chave:
@@ -356,6 +357,9 @@ def get_produtos(
                 linha = mapa.setdefault(k, {"sku": chave, "produto": str(it.get("descricao") or chave), "quantidade": None, "receita": None})
                 if mapa is por_canal[p["marca"]]:
                     linha["plataforma"] = p["plataforma"]
+                    if (p["id"], k) not in no_pedido:
+                        no_pedido.add((p["id"], k))
+                        linha["pedidos"] = linha.get("pedidos", 0) + 1
                 if q is not None:
                     linha["quantidade"] = (linha["quantidade"] or 0.0) + q
                 if r is not None:

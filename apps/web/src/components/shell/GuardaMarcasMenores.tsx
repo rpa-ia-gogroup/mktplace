@@ -15,7 +15,7 @@ import { brandLabel, escopoDeMarcas, FILTER_BRAND_KEYS } from "@/lib/filters/bra
  *  - menores junto de grandes: a aba mostra as grandes e uma linha avisa quais ficaram de fora.
  * "Todas" (sem selecao) nao muda nada.
  */
-const ROTAS_COM_DADO_DAS_MENORES = ["/", "/marcas-menores"];
+const ROTAS_COM_DADO_DAS_MENORES = ["/", "/marcas-menores", "/produtos"]; // /produtos tem a marca no seletor da propria aba
 
 function Guarda({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

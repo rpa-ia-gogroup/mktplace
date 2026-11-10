@@ -69,6 +69,8 @@ class ProdutoLinha(BaseModel):
     receita: Optional[float] = None
     #: So' nos itens por canal.
     plataforma: Optional[str] = None
+    #: Pedidos (distintos) que trazem o produto; so' nos itens por canal.
+    pedidos: Optional[int] = None
 
 
 class ProdutosDaMarca(BaseModel):
