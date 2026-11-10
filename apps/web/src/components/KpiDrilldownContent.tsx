@@ -22,7 +22,9 @@ import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import DrilldownCta from "@/components/drilldown/DrilldownCta";
 import InfoDica from "@/components/ui/InfoDica";
+import { IDENTIDADE, type IdentidadeKpi } from "@/components/ui/KpiTile";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
+import Sparkline from "@/components/ui/Sparkline";
 
 interface Props {
   kind: KpiKind;
@@ -48,6 +50,8 @@ interface Props {
   comparar?: boolean;
   /** Periodo e' so' o dia de hoje, ainda aberto. */
   diaEmAndamento?: boolean;
+  /** Cor de identidade do cartao que abriu o detalhe (gráfico da tendencia). */
+  identidade?: IdentidadeKpi;
 }
 
 function fmtPct1(v: number | null): string {
@@ -113,6 +117,7 @@ export default function KpiDrilldownContent({
   tendencia,
   comparar = true,
   diaEmAndamento = false,
+  identidade,
 }: Props) {
   const meta = KPI_META[kind];
   const comparacao = comparar ? comparacaoDoCard : undefined;
@@ -135,7 +140,7 @@ export default function KpiDrilldownContent({
         </div>
       </div>
 
-      {tendencia && tendencia.pontos.length >= 4 && <Tendencia t={tendencia} />}
+      {tendencia && tendencia.pontos.length >= 4 && <Tendencia t={tendencia} identidade={identidade} />}
 
       {kind === "gmv" && <GmvBreakdown overview={overview} brands={brands} channels={channels} />}
       {kind === "orders" && <OrdersBreakdown brands={brands} />}
@@ -160,14 +165,10 @@ const DICA: Partial<Record<KpiKind, string>> = {
 };
 
 /** Serie do periodo em area, suavizada como no card, com a variacao recente. */
-function Tendencia({ t }: { t: TendenciaKpi }) {
-  const pontos = suavizar(t.pontos);
-  const min = Math.min(...pontos);
-  const max = Math.max(...pontos);
-  const faixa = max - min || 1;
-  const passo = 300 / (pontos.length - 1);
-  const y = (v: number) => 58 - ((v - min) / faixa) * 50;
-  const linha = pontos.map((v, i) => `${(i * passo).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+function Tendencia({ t, identidade }: { t: TendenciaKpi; identidade?: IdentidadeKpi }) {
+  // IDENTIDADE-GERENCIAL: o mesmo desenho do cartao (cor do KPI, degrade e ponto
+  // final), so' mais alto. Sem identidade, o violeta de destaque de antes.
+  const tinta = identidade ? IDENTIDADE[identidade].tinta : "text-accent";
   return (
     <DrilldownSecao
       titulo="Tendência"
@@ -179,10 +180,10 @@ function Tendencia({ t }: { t: TendenciaKpi }) {
         )
       }
     >
-      <svg viewBox="0 0 300 64" preserveAspectRatio="none" aria-hidden="true" className="tc-revela h-16 w-full text-accent">
-        <polygon points={`0,64 ${linha} 300,64`} fill="currentColor" opacity={0.12} />
-        <polyline points={linha} fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      </svg>
+      {/* Mais alto que no cartao (h-9): a altura vem de fora, o Sparkline fica igual. */}
+      <div className="[&>span]:h-16">
+        <Sparkline pontos={suavizar(t.pontos)} tinta={tinta} />
+      </div>
     </DrilldownSecao>
   );
 }

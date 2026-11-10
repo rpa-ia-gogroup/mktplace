@@ -77,12 +77,51 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", "src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
   // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
   // MetaHero: linha de tendencia do dia no topo (pedido da Nathalia)
   // InfoDica: so' aditivo (quebra de linha no balao e encaixe na tela quando ele e' maior que o espaco) — PR do aviso de total parcial
   // MarcasMeta e app/page.tsx: tendencia do mes por marca (pedido da operacao), mudanca de produto intencional
+  // KpiDrilldownDialog: EXCECAO aprovada (10/11/2026, padronizacao das abas, PR 0): props opcionais `icone` +
+  // `identidade` para o detalhe herdar o ladrilho e a cor do cartao. Aditivo; o teste abaixo trava o contrato.
   assert.equal(mudou, "", mudou);
+});
+
+test("KpiDrilldownDialog: excecao ao congelamento so' aditiva (icone + identidade opcionais, resto igual)", () => {
+  const src = ler("src/components/KpiDrilldownDialog.tsx");
+  assert.ok(src.includes("icone?: LucideIcon;") && src.includes("identidade?: IdentidadeKpi;"));
+  assert.ok(src.includes("{Icone && identidade && ("), "o ladrilho so' aparece com os dois");
+  assert.ok(src.includes('<h2 id={titleId} className="text-sm font-bold text-ink">{title}</h2>'), "titulo igual");
+  assert.ok(src.includes('aria-label="Fechar detalhes"') && src.includes("animate-[tc-sobe_320ms_var(--mov-ease)]"), "fechar e entrada iguais");
+  assert.ok(src.includes('largura = "padrao"'), "largura padrao igual");
+});
+
+test("KpiCardSkeleton compartilhado tem as mesmas classes do esqueleto da KpiBand", () => {
+  const classes = 'className="h-full bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 animate-pulse"';
+  assert.ok(ler("src/components/ui/KpiCardSkeleton.tsx").includes(classes));
+  assert.ok(ler("src/components/gerencial/KpiBand.tsx").includes(classes));
+});
+
+test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
+  const src = ler("src/components/KpiDrilldownContent.tsx");
+  assert.ok(src.includes('<div className="[&>span]:h-16">') && src.includes("<Sparkline pontos={suavizar(t.pontos)} tinta={tinta} />"));
+  assert.ok(src.includes('identidade ? IDENTIDADE[identidade].tinta : "text-accent"'));
+});
+
+test("kpi-identidade.ts repete os 5 pares icone + cor do ICONE_KPI da KpiBand (duas fontes, uma verdade)", () => {
+  const mapa = ler("src/lib/gerencial/kpi-identidade.ts");
+  const band = ler("src/components/gerencial/KpiBand.tsx");
+  const pares: [string, string, string][] = [
+    ["gmv", "CircleDollarSign", "gmv"],
+    ["orders", "ShoppingBag", "pedidos"],
+    ["avg_ticket", "Receipt", "ticket"],
+    ["ad_spend", "Megaphone", "ads"],
+    ["roas", "Gauge", "roas"],
+  ];
+  for (const [kpi, icone, identidade] of pares) {
+    assert.ok(mapa.includes(`${kpi}: { icone: ${icone}, identidade: "${identidade}" }`), `mapa novo: ${kpi}`);
+    assert.ok(band.includes(`${kpi}: { Icone: ${icone}, tinta: "text-kpi-${identidade}"`), `KpiBand: ${kpi}`);
+  }
 });
 
 // ---------------------------------------------------------------------------
