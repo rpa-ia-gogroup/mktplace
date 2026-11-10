@@ -399,7 +399,7 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
   assert.match(CLIENTE, /fila=\{linhasDaFila\}/);
   assert.match(CLIENTE, /const filaDeAtencao = \(\s*<FilaAtencao\s+itens=\{itensDaFila\}/);
   // marca de varias contas: a lista vazia diz POR QUE esta' vazia
-  assert.match(CLIENTE, /Leitura por conta: veja “Backlog por marca”\./);
+  assert.match(CLIENTE, /Leitura por conta, sem total./);
   assert.ok(!gestor.includes("{painelFila}"), "a fila paginada nao e' visao do gestor");
   for (const s of ["{faixaPrincipal}", "Indicadores secundários", "{painelMaisCriticos}", "{painelFila}", "{painelFonte}", "painelContas("]) {
     assert.ok(detalhe.includes(s), `detalhe sem ${s}`);

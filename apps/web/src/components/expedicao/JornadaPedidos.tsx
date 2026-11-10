@@ -247,7 +247,6 @@ function BlocoFilaAberta({ r, compacta = false }: { r: RespostaJornada; compacta
   return (
     <Panel
       titulo={TITULO_FILA_ABERTA}
-      descricao={`${formatarInteiro(f.base)} ${f.grain === "shipment" ? "envios" : "pedidos"} agora, por etapa.`}
       // O "ⓘ" fica fora do h3: o nome do titulo continua so' o titulo.
       // EXPEDICAO-ULTIMA-ATUALIZACAO: a hora fica so' no topo da tela; aqui,
       // so' o aviso quando a leitura esta' velha.
