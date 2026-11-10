@@ -52,6 +52,8 @@ test("TikTok: formato das props existentes; campo sem fonte no Bling fica vazio,
   assert.deepEqual([a.product_id, a.gmv, a.items_sold, a.orders, a.avg_price], ["A", 600, 6, 4, 100]);
   assert.equal(c.items_sold, null); // quantidade desconhecida
   assert.equal(c.orders, null);
+  const aua = listaTikTok(linhasDoCanal(R, "tiktok", ["aua"]), { refMonth: "2026-11", offset: 0, limit: 25 });
+  assert.equal(aua.items[0].brand, "AUÁ"); // rotulo do seletor, nao o slug
   assert.equal(c.avg_price, null); // sem quantidade, sem preco medio (nao e' 0)
   for (const x of r.items) {
     assert.equal(x.pct_gmv_video, null);

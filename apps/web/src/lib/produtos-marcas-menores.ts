@@ -15,6 +15,7 @@ import type {
   ProdutosShopeeListResponse,
   ProdutosTikTokResponse,
 } from "./api-client.ts";
+import { brandLabel } from "./filters/brands.ts";
 import type { ProdutosMarcas } from "./marcas-menores.ts";
 
 export type CanalProduto = "tiktok" | "shopee";
@@ -131,7 +132,7 @@ export interface OpcoesLista {
 export function listaTikTok(linhas: LinhaProduto[], o: OpcoesLista): ProdutosTikTokResponse {
   const { total, itens } = ordenarEPaginar(linhas, CHAVES_TIKTOK, o);
   const items: ProdutoTikTokRow[] = itens.map((l) => ({
-    brand: l.marca,
+    brand: brandLabel(l.marca), // "AUÁ", "BY SAMIA" como no seletor (nao o slug)
     product_id: l.sku,
     product_name: l.produto,
     gmv: l.receita,
@@ -153,7 +154,7 @@ export function listaTikTok(linhas: LinhaProduto[], o: OpcoesLista): ProdutosTik
 export function listaShopee(linhas: LinhaProduto[], o: OpcoesLista): ProdutosShopeeListResponse {
   const { total, itens } = ordenarEPaginar(linhas, CHAVES_SHOPEE, o);
   const items: ProdutoShopeeRow[] = itens.map((l) => ({
-    brand: l.marca,
+    brand: brandLabel(l.marca), // "AUÁ", "BY SAMIA" como no seletor (nao o slug)
     sku_ref: l.sku,
     product_name: l.produto,
     variation_name: null,
