@@ -124,7 +124,7 @@ test("comparar: tabela so' com colunas dos canais da marca e traco para ausencia
   assert.match(src, /const canais = m\.canais\.map/, "colunas vem dos canais da marca");
   assert.match(src, /f === undefined[\s\S]*?—[\s\S]*?sem venda/, "ausencia e' traco com o motivo");
   const card = readFileSync(new URL("../src/components/gerencial/TopProdutosMarca.tsx", import.meta.url), "utf8");
-  assert.match(card, /canal === "todos" \? modoEscolhido : "ranking"/, "um canal so' volta ao ranking");
+  assert.match(card, /canal === "todos" && !fonte \? modoEscolhido : "ranking"/, "um canal so' volta ao ranking");
 });
 
 test("comparar: busca de novo uma vez se falhar; cancelada nao repete", async () => {

@@ -20,6 +20,7 @@ import Segmented from "@/components/ui/Segmented";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
 import { MARCAS, hojeBrt } from "@/lib/metas";
+import { brandLabel } from "@/lib/filters/brands";
 import type { Marketplace } from "@/lib/mock-data";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtVezes } from "@/lib/formatters";
 import {
@@ -60,7 +61,7 @@ const DICA_COMPARAR =
   "O TikTok entra pelo GMV de cada produto (o mesmo do Ranking), ligado ao seller SKU pelas vendas dos últimos 180 dias. " +
   "Selo “forte no canal”: fatia de pelo menos 3%, 2× a maior dos outros canais e 3 p.p. acima. " +
   "“Sem venda”: o produto tem 3% ou mais num canal e nenhuma venda em outro que a marca tem. Respeita o período do filtro.";
-const rotuloMarca = (id: string) => MARCAS.find((m) => m.id === id)?.label ?? id.toUpperCase();
+const rotuloMarca = (id: string) => MARCAS.find((m) => m.id === id)?.label ?? brandLabel(id);
 const TH = "py-2 px-2 text-xs font-semibold uppercase tracking-wide text-ink-faint";
 
 interface Props {
@@ -69,11 +70,17 @@ interface Props {
   dateFrom: string;
   dateTo: string;
   compare: boolean;
+  /**
+   * Fonte EXTERNA (marcas menores, Bling): no lugar de buscar no Data Mart, usa estes dados — `dadosPara` recebe os
+   * canais do card e devolve a resposta (`undefined` carregando, `null` falha). Sem comparacao com o periodo
+   * anterior, sem "Comparar canais" e sem o detalhe por produto (o Bling nao tem a serie por produto).
+   */
+  fonte?: { dadosPara: (canais: Marketplace[]) => TopProdutosResponse | null | undefined };
 }
 
-export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, compare }: Props) {
-  const [dados, setDados] = useState<TopProdutosResponse | null>(null);
-  const [erro, setErro] = useState(false);
+export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, compare, fonte }: Props) {
+  const [dadosBusca, setDados] = useState<TopProdutosResponse | null>(null);
+  const [erroBusca, setErro] = useState(false);
   const [tentativa, setTentativa] = useState(0);
   const [abertas, setAbertas] = useState<Record<string, boolean>>({});
   const [marcaSel, setMarcaSel] = useState<string | null>(null);
@@ -88,11 +95,15 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
   const canaisTopo = channels.join(",");
   useEffect(() => setCanal(doTopo()), [canaisTopo]); // `channels` muda de identidade a cada render
   const canais = canal === "todos" ? TODOS_CANAIS : [canal];
-  // Um canal so' nao tem o que comparar: volta para o Ranking.
-  const modo: Modo = canal === "todos" ? modoEscolhido : "ranking";
+  // Um canal so' nao tem o que comparar: volta para o Ranking (e a fonte externa nunca compara canais).
+  const modo: Modo = canal === "todos" && !fonte ? modoEscolhido : "ranking";
+  const doBling = fonte ? fonte.dadosPara(canais) : undefined;
+  const dados = fonte ? (doBling ?? null) : dadosBusca;
+  const erro = fonte ? doBling === null : erroBusca;
   const chave = [canais.join(","), brands.join(","), dateFrom, dateTo, compare].join("|");
 
   useEffect(() => {
+    if (fonte) return; // dados vem da fonte externa
     const ac = new AbortController();
     const q = new URLSearchParams({ channels: canais.join(","), date_from: dateFrom, date_to: dateTo, compare: String(compare) });
     if (brands.length) q.set("brands", brands.join(","));
@@ -170,7 +181,7 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
         <div className="-mx-1 max-w-full overflow-x-auto px-1">
           <Segmented rotulo="Canal" opcoes={OPCOES_CANAL} valor={canal} aoEscolher={setCanal} className="whitespace-nowrap" />
         </div>
-        {canal === "todos" && (
+        {canal === "todos" && !fonte && (
           <div className="-mx-1 flex max-w-full items-center gap-2 overflow-x-auto px-1">
             <span id="top-produtos-modo" className="text-xs text-ink-faint">Ver</span>
             <Segmented
@@ -280,7 +291,7 @@ export default function TopProdutosMarca({ channels, brands, dateFrom, dateTo, c
               comparando={comparando}
               aberta={Boolean(abertas[marca.marca])}
               alternar={() => setAbertas((a) => ({ ...a, [marca.marca]: !a[marca.marca] }))}
-              abrir={(produto) => setAberto({ marca: marca.marca, produto })}
+              abrir={fonte ? undefined : (produto) => setAberto({ marca: marca.marca, produto })}
             />
           </table>
         </TableScrollHint>
@@ -397,7 +408,7 @@ function KitSelo() {
 
 function BlocoMarca({
   m, comparando, aberta, alternar, abrir,
-}: { m: MarcaTop; comparando: boolean; aberta: boolean; alternar: () => void; abrir: (p: ProdutoTop) => void }) {
+}: { m: MarcaTop; comparando: boolean; aberta: boolean; alternar: () => void; abrir?: (p: ProdutoTop) => void }) {
   const visiveis = aberta ? m.produtos : m.produtos.slice(0, VISIVEIS);
   const colunas = comparando ? 7 : 6;
   return (
@@ -405,20 +416,24 @@ function BlocoMarca({
       {visiveis.map((p) => (
         <tr
           key={`${p.canal}:${p.sku}`}
-          onClick={() => abrir(p)}
-          className="group cursor-pointer transition-colors hover:bg-accent-soft/50"
+          onClick={abrir ? () => abrir(p) : undefined}
+          className={`group transition-colors ${abrir ? "cursor-pointer hover:bg-accent-soft/50" : ""}`}
         >
           <td className="px-2 py-2 align-top text-xs font-semibold tabular-nums text-ink-faint">{p.posicao}</td>
           <td className="px-2 py-2">
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); abrir(p); }}
-              aria-haspopup="dialog"
-              className="line-clamp-2 w-full rounded text-left text-sm font-medium leading-snug text-ink group-hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              title={p.produto}
-            >
-              {p.produto}
-            </button>
+            {abrir ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); abrir(p); }}
+                aria-haspopup="dialog"
+                className="line-clamp-2 w-full rounded text-left text-sm font-medium leading-snug text-ink group-hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                title={p.produto}
+              >
+                {p.produto}
+              </button>
+            ) : (
+              <span className="line-clamp-2 w-full text-left text-sm font-medium leading-snug text-ink" title={p.produto}>{p.produto}</span>
+            )}
             <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               <CanalSelo canal={p.canal} />
               {p.kit && <KitSelo />}
@@ -429,7 +444,7 @@ function BlocoMarca({
           {comparando && (
             <td className="px-2 py-2 text-right align-top"><Delta valor={variacao(p.receita, p.receita_ant)} /></td>
           )}
-          <td className="tabular px-2 py-2 text-right align-top text-sm text-ink-muted">{fmtNumCurto(p.pecas)}</td>
+          <td className="tabular px-2 py-2 text-right align-top text-sm text-ink-muted">{p.pecas != null ? fmtNumCurto(p.pecas) : "—"}</td>
           <td className="tabular px-2 py-2 text-right align-top text-sm text-ink-muted">
             {p.preco_medio != null ? fmtBrlCurto(p.preco_medio) : "—"}
           </td>

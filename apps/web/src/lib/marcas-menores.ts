@@ -12,6 +12,7 @@ export interface DiaMarca {
   data: string;
   faturamento: number;
   por_plataforma: Record<string, number>;
+  pedidos_por_plataforma?: Record<string, number>;
 }
 
 export interface MarcaMenor {

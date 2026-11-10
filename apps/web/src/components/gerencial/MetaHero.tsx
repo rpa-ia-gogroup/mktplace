@@ -91,6 +91,8 @@ interface Props {
   onOpenGmv: () => void;
   /** Proporcao Full (0..1) de cada canal; ausente = canal sem a medida. */
   shareFull?: Partial<Record<Marketplace, number | null>> | null;
+  /** Marcas que nao tem meta (menores, Bling): a faixa da meta diz isso, sem convite a definir meta. */
+  semMetaDaMarca?: boolean;
   /** (i) do GMV: marcas menores (Bling) somadas sem meta, ou indisponiveis. */
   notaMenores?: string | null;
   /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
@@ -370,7 +372,15 @@ function TendenciaTopo({ t }: { t: TendenciaConsolidada }) {
   );
 }
 
-function SemMeta({ mesMeta, diaMeta, metasStatus, metasHref, onRetryMetas }: Props) {
+function SemMeta({ mesMeta, diaMeta, metasStatus, metasHref, onRetryMetas, semMetaDaMarca }: Props) {
+  if (semMetaDaMarca) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-dashed border-line-strong px-3 py-3 text-sm text-ink-muted">
+        <Target aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-faint" />
+        <span className="min-w-0 flex-1">Sem meta: as marcas menores não têm meta.</span>
+      </div>
+    );
+  }
   const mes = mesMeta ?? diaMeta?.slice(0, 7) ?? null;
   let texto: string;
   if (!mes) texto = "Escolha “Hoje”, “Mês atual” ou um mês fechado no período para ver a meta.";
