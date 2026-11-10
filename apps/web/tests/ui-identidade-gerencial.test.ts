@@ -106,9 +106,21 @@ test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
   const src = ler("src/components/KpiDrilldownContent.tsx");
   assert.ok(src.includes('<div className="[&>span]:h-16">') && src.includes("<Sparkline pontos={suavizar(t.pontos)} tinta={tinta} />"));
   assert.ok(src.includes('identidade ? IDENTIDADE[identidade].tinta : "text-accent"'));
+});
+
+test("kpi-identidade.ts repete os 5 pares icone + cor do ICONE_KPI da KpiBand (duas fontes, uma verdade)", () => {
   const mapa = ler("src/lib/gerencial/kpi-identidade.ts");
-  for (const par of ['orders: { icone: ShoppingBag, identidade: "pedidos" }', 'avg_ticket: { icone: Receipt, identidade: "ticket" }']) {
-    assert.ok(mapa.includes(par), par);
+  const band = ler("src/components/gerencial/KpiBand.tsx");
+  const pares: [string, string, string][] = [
+    ["gmv", "CircleDollarSign", "gmv"],
+    ["orders", "ShoppingBag", "pedidos"],
+    ["avg_ticket", "Receipt", "ticket"],
+    ["ad_spend", "Megaphone", "ads"],
+    ["roas", "Gauge", "roas"],
+  ];
+  for (const [kpi, icone, identidade] of pares) {
+    assert.ok(mapa.includes(`${kpi}: { icone: ${icone}, identidade: "${identidade}" }`), `mapa novo: ${kpi}`);
+    assert.ok(band.includes(`${kpi}: { Icone: ${icone}, tinta: "text-kpi-${identidade}"`), `KpiBand: ${kpi}`);
   }
 });
 
