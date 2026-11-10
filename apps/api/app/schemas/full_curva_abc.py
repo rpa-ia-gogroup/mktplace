@@ -14,6 +14,11 @@ Curva = Literal["AA", "A", "B", "C"]
 CurvaMotivo = Literal["kit", "sem_ponte", "marca_fora"]
 
 
+#: Tira o item da fila e dos numeros do topo (brinde nao e' perda de venda; descontinuado nao se repoe).
+#: None = conta normal (inclui SKU fora da BD e BD nao lida).
+Situacao = Literal["brinde", "descontinuado"]
+
+
 class CurvaMeta(BaseModel):
     """PR3: curva ABC nas listas de estoque do Full (Shopee e ML)."""
     #: False = planilha nao lida (sem credencial, falha, formato): todo item
@@ -23,6 +28,10 @@ class CurvaMeta(BaseModel):
     lida_em: Optional[datetime] = None
     itens_com_curva: int = 0
     itens_total: int = 0
+    #: A aba BD (Status) foi lida? False = ninguem sai da fila por situacao.
+    bd_lida: bool = False
+    brindes: int = 0
+    descontinuados: int = 0
 
 
 class CurvaAbcResponse(BaseModel):
@@ -38,5 +47,11 @@ class CurvaAbcResponse(BaseModel):
     duplicadas: list[str] = Field(default_factory=list)
     #: "marca|SKU do canal" -> AA | A | B | C. Fora daqui = sem curva.
     curva_por_sku: dict[str, Literal["AA", "A", "B", "C"]] = Field(default_factory=dict)
+    #: "marca|SKU do canal" -> brinde | descontinuado (aba BD). Fora daqui = conta normal.
+    situacao_por_sku: dict[str, Situacao] = Field(default_factory=dict)
+    bd_lida: bool = False
+    #: Marcas que a BD traz e SKUs com status conflitante (conferencia da chave marca+SKU).
+    bd_marcas: list[str] = Field(default_factory=list)
+    bd_conflitos: list[str] = Field(default_factory=list)
     #: Leitura nova falhou, mas a anterior (dentro do cache) segue valendo.
     aviso: Optional[str] = None

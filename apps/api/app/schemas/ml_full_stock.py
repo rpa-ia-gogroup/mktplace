@@ -41,7 +41,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo
+from app.schemas.full_curva_abc import Curva, CurvaMeta, CurvaMotivo, Situacao
 
 MotivoIndisponivel = Literal[
     "feature_flag_desligada",
@@ -106,6 +106,9 @@ class InventarioEstoque(BaseModel):
     #: None quando a planilha nao foi lida (`curva_meta.motivo`). Nunca "C" por falta.
     curva: Optional[Curva] = None
     curva_motivo: Optional[CurvaMotivo] = None
+    #: Brinde/descontinuado (aba BD da planilha): fora da fila e dos numeros do topo.
+    #: None = conta normal (SKU fora da BD, BD nao lida).
+    situacao: Optional[Situacao] = None
 
 
 class StatusNaoDisponivel(BaseModel):
