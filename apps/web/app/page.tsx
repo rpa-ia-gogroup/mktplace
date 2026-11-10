@@ -70,6 +70,7 @@ import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { fmtCompacto } from "@/lib/metas";
 import { fetchMarcasMenores, type BrandRow } from "@/lib/api-client";
 import { KPI_META, type KpiKind } from "@/lib/kpi-drilldown";
+import { IDENTIDADE_DO_KPI } from "@/lib/gerencial/kpi-identidade";
 
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
@@ -681,6 +682,9 @@ function GerencialComGrandes() {
   // Canal realcado no grafico enquanto o detalhe da serie esta aberto.
   const highlightedChannel = dialog?.kind === "channelSeries" ? dialog.channel : null;
 
+  // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
+  const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
+
   return (
     <div className="w-full px-4 py-4 flex flex-col gap-3">
       <GerencialHeader
@@ -905,10 +909,17 @@ function GerencialComGrandes() {
       </details>
 
       {/* ---- Shell UNICO de dialogo, para todos os drill-downs ---- */}
-      <KpiDrilldownDialog open={dialog != null} onClose={() => setDialog(null)} title={dialogTitle}>
+      <KpiDrilldownDialog
+        open={dialog != null}
+        onClose={() => setDialog(null)}
+        title={dialogTitle}
+        icone={kpiDoDialogo?.icone}
+        identidade={kpiDoDialogo?.identidade}
+      >
         {dialog?.kind === "kpi" && overview && (
           <KpiDrilldownContent
             kind={dialog.key}
+            identidade={kpiDoDialogo?.identidade}
             // O detalhe mostra o valor EXATO; o card, o curto (UI-DENSIDADE-1).
             value={(() => {
               const k = kpis.find((x) => x.key === dialog.key);

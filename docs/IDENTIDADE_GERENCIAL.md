@@ -185,7 +185,7 @@ KPI**; a página guarda um `DialogView` (`app/page.tsx`) e troca só o conteúdo
 - Fecha com `Esc`, clique fora do painel e botão "Fechar detalhes"; Tab fica preso no painel (`lib/focus-trap.ts`).
 - Véu: `bg-[rgb(0_0_0/0.45)]`, entra com `tc-fade 200ms`. Neutro nos dois temas.
 - Painel: `bg-surface w-full sm:max-w-lg` (`largura="larga"` → `sm:max-w-4xl`), `sm:rounded-2xl shadow-xl`, `h-[92vh] sm:h-auto sm:max-h-[85vh]`, `flex flex-col overflow-hidden`; entrada `tc-sobe 320ms` (`translateY(16px) scale(.98)` → normal). No mobile ancora embaixo (`items-end`), no desktop centraliza.
-- Cabeçalho: `px-5 py-4 border-b border-line`; título `h2 text-sm font-bold text-ink`; botão fechar `w-8 h-8 rounded-lg`, hover `bg-accent-soft text-accent`.
+- Cabeçalho: `px-5 py-4 border-b border-line`; título `h2 text-sm font-bold text-ink`; botão fechar `w-8 h-8 rounded-lg`, hover `bg-accent-soft text-accent`. Com as props `icone` + `identidade`, o título ganha antes o ladrilho do cartão que abriu o detalhe (`h-8 w-8 rounded-lg`, `bg-kpi-*/10` e `text-kpi-*`, as classes de `IDENTIDADE` em `KpiTile.tsx`). Sem as props, o cabeçalho é o de antes.
 - Corpo: `px-5 py-4 flex flex-col gap-4 overflow-y-auto`.
 - Fundo do painel quase opaco: `[role="dialog"].bg-surface { rgb(surface/.96) }`.
 - Rota ainda não tematizada: o portal herda `CLASSE_TEMA_CLARO_FIXO` (`lib/theme.ts`).
@@ -196,7 +196,7 @@ Receita do conteúdo (peças em `src/components/drilldown/`; exemplo completo:
 
 1. **Topo**: valor exato em `text-[32px] font-bold` (`NumeroAnimado`) + pílula de variação + `vs {antes} no período anterior` (`KpiReference`).
 2. **Contexto em selos**: `DrilldownContextLine` — período (`rounded-full border bg-raised`), "Atualizado …" (`rounded-full border`), e opcional selo `bg-accent-soft text-accent-ink` ("Dia em andamento"). ⓘ (`InfoDica`) ao lado, só quando muda a leitura do número.
-3. **Tendência** (só com ≥ 4 pontos): `DrilldownSecao titulo="Tendência"` com SVG `h-16 w-full text-accent`, `tc-revela`.
+3. **Tendência** (só com ≥ 4 pontos): `DrilldownSecao titulo="Tendência"` com o mesmo `Sparkline` do cartão (cor `text-kpi-*` da identidade, degradê, ponto final), `h-16` dado por fora (`[&>span]:h-16`). Sem `identidade`, `text-accent`.
 4. **Seções**: `DrilldownSecao` — `border-t border-line pt-3`, título `text-xs font-semibold uppercase tracking-wide text-ink-faint`, ação à direita (contagem, selo, ⓘ).
 5. **Linhas de evidência**: `EvidenceRow` — rótulo à esquerda, valor à direita `tabular-nums`, ponto de identidade de canal (`bg-canal-*`), pílula de variação, barra de participação `h-1.5 rounded-full bg-raised` + `tc-barra`; ausente = "Sem dado" (`tone="muted"`).
 6. **Ressalva**: `DataQualityNote` — uma linha `text-xs text-warn-ink` com ponto `bg-warn`; `null` não renderiza nada.
@@ -229,7 +229,7 @@ faixa de KPIs em `grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3`
 Estes pontos não são bug de aba; são divergências dentro do padrão. Cada um
 afeta o que "replicar" quer dizer.
 
-1. **O modal não herda a identidade do cartão.** O cartão tem ícone e cor `kpi-*`; o modal abre com título `text-sm font-bold` sem ícone, e o gráfico de Tendência usa `text-accent` (violeta), não a cor do KPI (`KpiDrilldownContent.tsx`, `Tendencia`). O gráfico do modal é outra implementação (SVG de polilinha) e **não tem o ponto final** do cartão.
+1. ~~O modal não herda a identidade do cartão.~~ **Resolvido no PR 0 da fase 2** (aprovado em 10/11/2026): `KpiDrilldownDialog` ganhou `icone` + `identidade` opcionais, e o gráfico de Tendência do modal passou a usar o `Sparkline` do cartão, com cor do KPI e ponto final. O mapa dos 5 KPIs da Gerencial está em `src/lib/gerencial/kpi-identidade.ts`. Cada aba passa as duas props ao abrir o modal do seu cartão.
 2. **Pílula de variação em 3 cópias** (`DeltaBadge`, `KpiReference`, `EvidenceRow`), com tamanhos diferentes (ícone 14/16/12 px, `text-xs`/`text-sm`).
 3. **`card-hover` só em 4 consumidores** (`KpiBand`, `KpiTile`, `CxResumo`, `app/full/VisaoGeralFull.tsx`). Cartões clicáveis das outras abas e os da própria Gerencial que não são KPI (matriz, movimentos, saúde do volume) não têm o mesmo hover.
 4. **O brilho de canto depende de uma classe `border-kpi-*`** num `.rounded-xl.border.bg-surface`. Um cartão que use cor de identidade por `style` ou por `bg-*` não ganha o gradiente.

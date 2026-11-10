@@ -14,7 +14,7 @@ import { TOM_PONTO, TOM_SUPERFICIE, TOM_TINTA, type Tom } from "./tone";
  */
 export type IdentidadeKpi = "gmv" | "pedidos" | "ticket" | "ads" | "roas" | "prazo" | "atendimento";
 
-const IDENTIDADE: Record<IdentidadeKpi, { tinta: string; borda: string; ladrilho: string }> = {
+export const IDENTIDADE: Record<IdentidadeKpi, { tinta: string; borda: string; ladrilho: string }> = {
   gmv: { tinta: "text-kpi-gmv", borda: "border-kpi-gmv/30", ladrilho: "bg-kpi-gmv/10" },
   pedidos: { tinta: "text-kpi-pedidos", borda: "border-kpi-pedidos/35", ladrilho: "bg-kpi-pedidos/10" },
   ticket: { tinta: "text-kpi-ticket", borda: "border-kpi-ticket/30", ladrilho: "bg-kpi-ticket/10" },
