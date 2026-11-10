@@ -74,3 +74,33 @@ test("tendencia so' com os canais mostrados: com TikTok fora do valor, TikTok fi
   assert.equal(tendenciaNosCanais({ ...m, por_canal: [] }, ["ml"]), null);
   assert.equal(tendenciaNosCanais(m, ["ml", "shopee", "tiktok"])!.ontemDia, 340);
 });
+
+import { tendenciaConsolidada } from "../src/lib/gerencial/hoje-por-hora.ts";
+
+const marca = (brand: string, hoje: number, ate: number, dia: number) => ({
+  brand, hoje, ontem_mesma_hora: ate, ontem_dia: dia, projecao: null,
+  por_canal: [{ channel: "ml" as const, hoje, ontem_mesma_hora: ate, ontem_dia: dia, projecao: null }],
+});
+const esp = (meta: number) => ({ meta, canais: ["ml" as const] });
+
+test("tendencia consolidada: soma das marcas, % sobre a meta delas", () => {
+  const c = tendenciaConsolidada(
+    { a: marca("a", 50, 100, 200), b: marca("b", 30, 60, 120) }, // 100 + 60
+    { a: esp(200), b: esp(100) },
+  )!;
+  assert.equal(c.projecao, 160);
+  assert.equal(c.meta, 300);
+  assert.deepEqual([c.somadas, c.total], [2, 2]);
+});
+
+test("tendencia consolidada: marca sem projecao nao vira zero, fica parcial", () => {
+  const c = tendenciaConsolidada(
+    { a: marca("a", 50, 100, 200), b: marca("b", 30, 0, 0) },
+    { a: esp(200), b: esp(100), c: esp(50) }, // b sem ritmo, c sem linha
+  )!;
+  assert.equal(c.projecao, 100);
+  assert.equal(c.meta, 200);
+  assert.deepEqual([c.somadas, c.total], [1, 3]);
+  assert.equal(tendenciaConsolidada({ b: marca("b", 30, 0, 0) }, { b: esp(100) }), null);
+  assert.equal(tendenciaConsolidada(null, { b: esp(100) }), null);
+});

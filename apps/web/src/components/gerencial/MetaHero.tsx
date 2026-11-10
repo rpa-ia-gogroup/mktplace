@@ -27,6 +27,7 @@ import { diaDaSemana, type ProgressoDia, type StatusDia } from "@/lib/metas-curv
 import { fmtCompacto, rotuloMes } from "@/lib/metas";
 import { fmtPctBr } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
+import type { TendenciaConsolidada } from "@/lib/gerencial/hoje-por-hora";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 
 const SELO: Record<StatusMeta, string> = {
@@ -90,6 +91,8 @@ interface Props {
   onOpenGmv: () => void;
   /** Proporcao Full (0..1) de cada canal; ausente = canal sem a medida. */
   shareFull?: Partial<Record<Marketplace, number | null>> | null;
+  /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
+  tendenciaDoDia?: TendenciaConsolidada | null;
 }
 
 export default function MetaHero(props: Props) {
@@ -282,7 +285,7 @@ function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta }: Prop
   );
 }
 
-function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta }: Props & { progressoDia: ProgressoDia }) {
+function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenciaDoDia: t }: Props & { progressoDia: ProgressoDia }) {
   const titulo = p.dia === hoje ? "Meta de hoje" : "Meta do dia";
   const escala = Math.max(1, p.atingimento ?? 0);
   const larg = (f: number) => `${(Math.min(f, escala) / escala) * 100}%`;
@@ -324,6 +327,7 @@ function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta }: Props 
               </span>
             )}
           </div>
+          {t && p.dia === hoje && <TendenciaTopo t={t} />}
         </>
       ) : (
         <p className="rounded-lg border border-dashed border-line-strong px-3 py-3 text-sm text-ink-muted">
@@ -338,6 +342,21 @@ function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta }: Props 
         </p>
       )}
     </div>
+  );
+}
+
+/** "Tendência R$ 1,2 mi · 98% da meta"; parcial (falta marca, nunca soma como 0) mostra só o valor: o % seria sobre outra meta que a da barra. */
+function TendenciaTopo({ t }: { t: TendenciaConsolidada }) {
+  const parcial = t.somadas < t.total;
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
+      <span>
+        Tendência <b className="font-semibold text-ink">{fmtCompacto(t.projecao)}</b>
+        {!parcial && t.meta != null && ` · ${pct0(t.projecao / t.meta)} da meta`}
+      </span>
+      {parcial && <span className="font-semibold text-warn-ink">parcial ({t.somadas} de {t.total} marcas)</span>}
+      <InfoDica texto="Soma das tendências de cada marca: o GMV de hoje no ritmo de ontem até a mesma hora. Marca sem ritmo ainda fica de fora, e o total diz que é parcial." />
+    </p>
   );
 }
 

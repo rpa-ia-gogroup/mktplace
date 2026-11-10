@@ -77,8 +77,9 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", "src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", "src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", "src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", "src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
   // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
+  // MetaHero: linha de tendencia do dia no topo (pedido da Nathalia)
   // MarcasMeta e app/page.tsx: tendencia do mes por marca (pedido da operacao), mudanca de produto intencional
   assert.equal(mudou, "", mudou);
 });
