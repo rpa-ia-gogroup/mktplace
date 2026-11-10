@@ -8,7 +8,6 @@ import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import { brandLabel } from "@/lib/filters/brands";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import {
-  ROTULO_OFICIAL,
   ROTULO_SITUACAO,
   detalheForaDoLimite,
   diaCurto,
@@ -100,7 +99,6 @@ export default function PerformanceOficial({ estado }: { estado: Estado }) {
         <h3 id="perf-oficial-titulo" className="text-sm font-semibold text-ink">
           Performance · nota oficial de cada conta
         </h3>
-        <p className="text-xs text-ink-faint">O que a plataforma usa para reputação e penalidade · fotografia diária</p>
       </div>
 
       {estado.tipo === "carregando" && <StateBlock tipo="carregando" titulo="Carregando a performance oficial" compacto />}
@@ -223,7 +221,6 @@ function Conta({ conta, canal }: { conta: ContaOficial; canal: CanalOficial }) {
       ))}
 
       <p className="text-[11px] text-ink-faint">
-        <span className="mr-1.5 rounded bg-accent-soft px-1.5 py-0.5 font-semibold text-accent">{ROTULO_OFICIAL[canal]}</span>
         capturado em {diaCurto(conta.dia)}
       </p>
     </article>

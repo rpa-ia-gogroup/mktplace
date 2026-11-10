@@ -165,9 +165,12 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
     : textoDaCobertura(r);
   return (
     <>
-      <p className="mb-2 text-xs text-ink-muted" data-testid="exp-ldr-shopee-periodo">
-        Vencimentos de {diaCurto(l.from)} a {diaCurto(l.to)} ({l.days} dias + hoje) · {l.mature_due_days}{" "}
-        fechado(s) na taxa, {l.partial_due_days} em aberto.
+      <p
+        className="mb-2 text-xs text-ink-muted"
+        data-testid="exp-ldr-shopee-periodo"
+        title={`${l.mature_due_days} fechado(s) na taxa, ${l.partial_due_days} em aberto.`}
+      >
+        Vencimentos de {diaCurto(l.from)} a {diaCurto(l.to)} ({l.days} dias + hoje)
       </p>
       {alertas.length > 0 && (
         <ul className="mb-3 space-y-1.5" data-testid="exp-ldr-shopee-alertas">

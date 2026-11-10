@@ -95,14 +95,10 @@ export default function LdrTopo({ api, marca }: { api: string; marca: string | n
                     ? ` · ${f.diasMaduros} de ${f.diasPedidos} dias`
                     : "";
                 return (
-                  <th key={c.canal} scope="col" className="px-4 py-2.5 align-bottom" title={c.regra}>
+                  <th key={c.canal} scope="col" className="px-4 py-2.5 align-bottom" title={`${c.regra} Meta ${pct(mt.meta)} · teto ${pct(mt.teto)}${parcial}`}>
                     <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
                       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO_CANAL[c.canal]}`} />
                       {c.titulo}
-                    </span>
-                    <span className="block text-[11px] font-medium tabular-nums text-ink-faint">
-                      meta {pct(mt.meta)} · teto {pct(mt.teto)}
-                      {parcial}
                     </span>
                   </th>
                 );

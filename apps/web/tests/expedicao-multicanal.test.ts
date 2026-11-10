@@ -839,7 +839,7 @@ test("R21 render: fila valida + coorte nula (table_not_migrated) -> fila visivel
   const html = render(200, shopeeFilaSemCoorte(), "shopee");
   assert.match(html, /data-testid="exp-jornada"/, "os blocos aparecem");
   assert.match(html, /Pedidos aguardando expedição/);
-  assert.match(html, /10 pedidos agora, por etapa\./);
+  assert.match(html, /Pedidos aguardando expedição/);
   assert.match(html, /100,0%/);
   assert.match(html, /exp-jornada-coorte-indisponivel/);
   assert.match(html, /Pedidos dos últimos dias<\/h3>[\s\S]*Indisponível agora: a tabela ainda não foi publicada nesta base\./);

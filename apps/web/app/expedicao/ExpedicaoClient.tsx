@@ -385,6 +385,9 @@ function BlocoFbs({ divisao }: { divisao: DivisaoDaFila }) {
     <section aria-label="Pedidos FBS" className="mt-3" data-testid="exp-fila-fbs">
       <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
         Pedidos FBS — despacho da Shopee
+        <span className="ml-1 inline-flex align-middle normal-case tracking-normal">
+          <InfoDica texto={textoDaReconciliacao(divisao)} />
+        </span>
       </h4>
       <FaixaKpis rotulo="Pedidos FBS" secundaria>
         <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Em aberto (FBS)" valor={numero(f.backlog_count)} />
@@ -392,9 +395,6 @@ function BlocoFbs({ divisao }: { divisao: DivisaoDaFila }) {
         <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Acima de 48 h (FBS)" valor={numero(f.over_48h_count)} />
         <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Travados (FBS)" valor={numero(f.stalled_count)} />
       </FaixaKpis>
-      <p className="mt-2 text-xs text-ink-muted" data-testid="exp-fila-conferencia">
-        {textoDaReconciliacao(divisao)}
-      </p>
     </section>
   );
 }
@@ -971,8 +971,8 @@ export default function ExpedicaoClient({
       ) : (
         <>
           <ItemLegenda cor="bg-accent/70">Backlog</ItemLegenda>
-          <ItemLegenda cor="bg-warn">Acima de 48h (sobrepõe)</ItemLegenda>
-          <ItemLegenda cor="bg-crit">Travados (sobrepõe)</ItemLegenda>
+          <ItemLegenda cor="bg-warn">Acima de 48h</ItemLegenda>
+          <ItemLegenda cor="bg-crit">Travados</ItemLegenda>
         </>
       )}
     </ul>
@@ -1029,7 +1029,7 @@ export default function ExpedicaoClient({
   // a tela nao soma contas. Com a divisao, o recorte vem do servidor.
   const avisoRecorte =
     recorte.variasContas && !divisao
-      ? `${brandLabel(recorte.marca ?? "")}: ${recorte.contas.length} contas, sem total — veja “Backlog por marca”.`
+      ? `${brandLabel(recorte.marca ?? "")}: ${recorte.contas.length} contas, sem total.`
       : null;
 
   // ---- IDENTIDADE-GERENCIAL (spec do Prumo, 08/11/2026) ----
@@ -1174,7 +1174,7 @@ export default function ExpedicaoClient({
             onClick={abrirHeroi}
             aria-haspopup="dialog"
             aria-label={`Ver os ${numero(valorHeroi ?? 0)} pedidos: ${temPrazo ? "Vencidos" : "Acima de 48 h"}`}
-            className="inline-flex min-h-[44px] items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="inline-flex min-h-[44px] items-center text-xs font-semibold text-accent-ink underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Ver pedidos →
           </button>
@@ -1273,7 +1273,7 @@ export default function ExpedicaoClient({
       itens={itensDaFila}
       vazio={
         recorte.variasContas && !divisao
-          ? "Leitura por conta: veja “Backlog por marca”."
+          ? "Leitura por conta, sem total."
           : temPrazo
             ? "Nesta fotografia, nenhum pedido vencido, perto de vencer ou travado."
             : "Nesta fotografia, nenhum pedido acima de 48 h ou travado."
@@ -1373,7 +1373,8 @@ export default function ExpedicaoClient({
         </div>
       }
       // A legenda e' da barra de prazo, que so' existe na aba "Agora".
-      rodape={abaMarcas === "7d" ? undefined : legendaDaBarra}
+      // A legenda de cor da barra e' a do heroi (mesmas faixas); so' sem heroi ela fica aqui.
+      rodape={abaMarcas === "7d" || temBarraDePrazo ? undefined : legendaDaBarra}
     >
       {estadoTend === "carregando" && (
         <p role="status" className="mb-2 text-xs text-ink-muted">
@@ -1742,9 +1743,7 @@ export default function ExpedicaoClient({
                 </th>
                 <td className={f.alerta ? "text-warn-ink" : "text-ink-muted"}>
                   {f.rotulo}
-                  {f.derivado && (
-                    <span className="ml-1 text-xs text-ink-faint">(derivado do lote)</span>
-                  )}
+                  {f.derivado && <span className="sr-only"> (derivado do lote)</span>}
                 </td>
                 <td className="tabular-nums text-ink">{formatarHoras(f.sourceAgeHours)}</td>
                 <td className="tabular-nums text-ink-faint">

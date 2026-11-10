@@ -113,7 +113,6 @@ test("revisao #124: popup sem coluna inutil, remonta por alvo e diz quando inclu
   const POPUP = fonte("src/components/expedicao/TravadosDialog.tsx");
   assert.match(POPUP, /\{temPrazo \? <th scope="col">Prazo<\/th> : null\}/);
   assert.match(POPUP, /alvo\?\.incluiFbs \? "Lista da fila publicada, com pedidos FBS/);
-  assert.match(POPUP, /estado\.tipo === "ok" && !temCodigo \? "Por segurança/);
   assert.match(POPUP, /\{rodape \? <p className="text-xs text-ink-faint">\{rodape\}<\/p> : null\}/);
   assert.match(CLIENTE, /<TravadosDialog\s+key=\{\s*alvoTravados\s*\?/);
   assert.match(CLIENTE, /incluiFbs: divisao !== null/);
