@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import InfoDica from "@/components/ui/InfoDica";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -389,6 +390,18 @@ export function PopupColetaPerdida({
   );
 }
 
+/** Número primeiro; partes zeradas somem. */
+function fraseColeta(total: number, aindaSem: number) {
+  const atrasados = total - aindaSem;
+  return (
+    <>
+      <strong className="font-semibold text-ink">{formatarInteiro(total)} pedidos não foram coletados no dia</strong>
+      {atrasados > 0 ? ` · ${formatarInteiro(atrasados)} coletados com atraso` : ""}
+      {aindaSem > 0 ? ` · ${formatarInteiro(aindaSem)} ainda sem coleta` : ""}
+    </>
+  );
+}
+
 /** Faixa com o seletor do dia de prazo e o atalho para a lista. */
 export default function TikTokColetaPerdida({
   api,
@@ -431,9 +444,15 @@ export default function TikTokColetaPerdida({
       }`}
       data-testid="exp-tiktok-coleta-perdida"
     >
-      <p className="text-sm font-semibold text-ink">Não coletados no prazo</p>
+      <p className="text-sm font-semibold text-ink">
+        Coleta perdida (TikTok)
+        <InfoDica
+          texto="Pedidos com etiqueta pronta até o fim do dia do prazo que a transportadora não coletou nesse dia. Use a lista (CSV) para contestar a punição no TikTok."
+          className="ml-1 align-middle"
+        />
+      </p>
       <label className="flex items-center gap-2 text-xs text-ink-muted">
-        Prazo de coleta
+        Prazo
         <select
           value={vencimento ?? ""}
           onChange={(e) => setVencimento(e.target.value)}
@@ -454,7 +473,7 @@ export default function TikTokColetaPerdida({
             ? "Não foi possível contar agora."
             : dados
               ? dados.list_total > 0
-                ? `${formatarInteiro(dados.list_total)} pedidos já aguardando coleta e não coletados até o fim do dia · ${formatarInteiro(dados.still_waiting)} ainda sem coleta`
+                ? fraseColeta(dados.list_total, dados.still_waiting)
                 : "Nenhum pedido ficou sem coleta nesse prazo."
               : null}
       </span>
