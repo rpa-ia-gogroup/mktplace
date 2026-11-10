@@ -43,7 +43,8 @@ COLETA_DESDE = date(2026, 8, 12)
 #: `raw.vw_ml_cx_diario` so' guarda pedidos dos ultimos 90 dias.
 DIAS_PEDIDOS_NA_VIEW = 90
 #: A coleta roda a cada ~2 h; passou disso por 3, o dado e' velho.
-LIMITE_FRESCOR_HORAS = 6.0
+# A DAG mercadolivre_cx_coleta roda 1x por dia (06:20 BRT): 30 h toleram um atraso sem alarme falso.
+LIMITE_FRESCOR_HORAS = 30.0
 #: Perguntas nao respondidas somem do ML apos 7 meses: a "foto de agora" le' ate' la'.
 DIAS_PERGUNTAS = 210
 

@@ -189,9 +189,9 @@ def test_uma_fonte_cai_a_outra_segue_sem_vazar_a_excecao(cai):
 
 
 def test_coleta_velha_ganha_aviso():
-    velha = [{**x, "instante_em": AGORA - timedelta(hours=30)} if x["bloco"] == "fonte" else x for x in reclamacoes()]
+    velha = [{**x, "instante_em": AGORA - timedelta(hours=40)} if x["bloco"] == "fonte" else x for x in reclamacoes()]
     r, _ = montar(Fonte(recl=velha))
-    assert "30 h" in r.aviso_frescor
+    assert "40 h" in r.aviso_frescor
     assert montar()[0].aviso_frescor is None
 
 
