@@ -24,16 +24,20 @@ BD = [
     ["Kokeshi", "KK1", "Brinde", "x", ""],
     ["Kokeshi", "KK1", "Ativo", "x", ""],              # conflito: conta normal
     ["", "SEM-MARCA", "Brinde", "x", ""],              # sem marca: ignorada
+    ["Apice", "BD01", "Descontinuado", "x", ""],       # PRECEDENCIA brinde > descontinuado:
+    ["Apice", "BD01", "Brinde", "x", ""],              # o mesmo SKU nas duas = brinde
 ]
 
 
-def test_status_sem_acento_e_sem_maiuscula_e_marca_pela_coluna_a():
+def test_status_sem_acento_sem_maiuscula_marca_pela_coluna_a_e_precedencia_brinde():
     sit, marcas, conflitos = svc.interpretar_bd(BD)
     assert sit == {("apice", "BR001"): "brinde", ("barbours", "BB02027"): "brinde",
                    ("rituaria", "RT01002"): "descontinuado"}
     assert ("apice", "20690") not in sit and ("lescent", "LC01") not in sit, "Ativo/Lançamento ficam na fila"
     assert conflitos == (("kokeshi", "KK1"),), "status conflitante nao tira da fila"
     assert "apice" in marcas
+    # precedencia brinde > descontinuado; misturado com Ativo e' conflito (nenhum dos dois vale)
+    assert sit[("apice", "BD01")] == "brinde"
 
 
 def test_bd_sem_as_colunas_e_formato_inesperado():

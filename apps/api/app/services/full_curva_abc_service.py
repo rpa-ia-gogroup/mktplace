@@ -154,9 +154,11 @@ def interpretar_bd(valores: list[list[str]]):
             continue
         marcas.add(marca)
         por_chave.setdefault((marca, sku), set()).add(_norm(cel(i_st)))
-    situacoes = {k: SITUACOES[next(iter(st))] for k, st in por_chave.items()
-                 if len(st) == 1 and next(iter(st)) in SITUACOES}
-    conflitos = tuple(sorted(k for k, st in por_chave.items() if len(st) > 1 and st & SITUACOES.keys()))
+    # PRECEDENCIA brinde > descontinuado: o mesmo SKU com as duas linhas vale como brinde.
+    # Misturado com Ativo/Lancamento e' conflito: nenhum dos dois vale e o item conta normal.
+    situacoes = {k: SITUACOES["brinde" if "brinde" in st else "descontinuado"]
+                 for k, st in por_chave.items() if st and st <= SITUACOES.keys()}
+    conflitos = tuple(sorted(k for k, st in por_chave.items() if st & SITUACOES.keys() and not st <= SITUACOES.keys()))
     return situacoes, tuple(sorted(marcas)), conflitos
 
 

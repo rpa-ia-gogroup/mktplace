@@ -191,6 +191,11 @@ class Indicadores(BaseModel):
     inventarios_sem_demanda_medida: int
     #: Ruptura + baixo.
     inventarios_exigem_acao: int
+    #: Brindes/descontinuados (aba BD) JA' descontados dos numeros acima. False = lista
+    #: incompleta ou BD nao lida: nada foi descontado (a tela avisa).
+    situacao_aplicada: bool = False
+    brindes_fora: int = 0
+    descontinuados_fora: int = 0
 
 
 class Frescor(BaseModel):

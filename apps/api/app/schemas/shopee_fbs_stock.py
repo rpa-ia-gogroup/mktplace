@@ -94,6 +94,11 @@ class Indicadores(BaseModel):
     produtos_total: int
     #: Ruptura + baixo: o que a operacao precisa olhar hoje.
     produtos_exigem_acao: int
+    #: Brindes/descontinuados (aba BD) JA' descontados dos numeros acima. False = lista
+    #: incompleta ou BD nao lida: nada foi descontado (a tela avisa).
+    situacao_aplicada: bool = False
+    brindes_fora: int = 0
+    descontinuados_fora: int = 0
 
 
 class Frescor(BaseModel):
