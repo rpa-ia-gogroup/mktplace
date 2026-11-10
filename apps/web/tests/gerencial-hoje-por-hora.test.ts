@@ -53,9 +53,14 @@ test("sem card proprio: a pagina usa a comparacao de hoje nos cards de sempre", 
 });
 
 test("busca /hoje-por-hora sem o cache de 5 min", () => {
-  const fn = cliente.slice(cliente.indexOf("export async function fetchHojePorHora"));
+  // So' o corpo de fetchHojePorHora: da assinatura ate' o "}" de fechamento na coluna 0. Fatiar ate' o fim do
+  // arquivo alcancava o withCache das funcoes que vem depois (fetchMarcasMenores etc.), e `indexOf("\n}\n")`
+  // nao acha nada em arquivo CRLF.
+  const resto = cliente.slice(cliente.indexOf("export async function fetchHojePorHora")).replace(/\r\n/g, "\n");
+  const fn = resto.slice(0, resto.indexOf("\n}\n") + 3);
+  assert.ok(fn.length > 50 && fn.length < 800, "o corpo isolado tem o tamanho de uma funcao so'");
   assert.match(fn, /apiFetch<HojePorHora>\(`\/api\/v1\/performance\/hoje-por-hora\?\$\{qs\.toString\(\)\}`\)/);
-  assert.doesNotMatch(fn.slice(0, fn.indexOf("\n}\n")), /withCache/);
+  assert.doesNotMatch(fn, /withCache/);
 });
 
 test("tendencia so' com os canais mostrados: com TikTok fora do valor, TikTok fica fora da conta", async () => {

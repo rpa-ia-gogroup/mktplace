@@ -14,7 +14,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
-import { Marcas, Produtos, Topo } from "@/components/marcas-menores/Blocos";
+import { EsqueletoMarcasMenores, Marcas, Produtos, Topo } from "@/components/marcas-menores/Blocos";
 import StateBlock from "@/components/ui/StateBlock";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { fetchMarcasMenores } from "@/lib/api-client";
@@ -42,8 +42,8 @@ export default function MarcasMenoresPage() {
       vivo = false;
     };
   }, [filters.dateFrom, filters.dateTo]);
-  // Os produtos so' pedem depois do periodo efetivo (o Bling recorta o futuro) e falham sozinhos.
-  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(dados?.periodo?.inicio, dados?.periodo?.fim, estado === "ok");
+  // Os produtos pedem JUNTO com as marcas (a API recorta o futuro) e falham sozinhos: nada espera nada.
+  const { produtos, desistiu, tentar } = useProdutosMarcasMenores(filters.dateFrom, filters.dateTo, true);
 
   // O dia de hoje ainda está andando: comparar com o período anterior inteiro enganaria. Sem variação.
   const emAndamento = !!dados?.periodo && dados.periodo.fim >= toISODate(new Date());
@@ -71,7 +71,7 @@ export default function MarcasMenoresPage() {
         }
       />
       {estado === "carregando" ? (
-        <StateBlock tipo="carregando" titulo="Carregando as marcas" />
+        <EsqueletoMarcasMenores />
       ) : estado === "erro" || !dados ? (
         <StateBlock tipo="erro" titulo="Não foi possível contatar a API" />
       ) : !dados.disponivel ? (

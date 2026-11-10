@@ -69,3 +69,22 @@ class BlingCliente:
             except Exception as exc:  # noqa: BLE001
                 raise BlingIndisponivel("Bling indisponível agora.") from exc
         raise BlingIndisponivel("Bling limitou as consultas; tente de novo em instantes.")
+
+
+def cliente_com_sessao(db) -> BlingCliente:
+    """Cliente do Bling com o token da conta (tabela do banco), lido UMA vez por uso: nao uma por chamada."""
+    from app.services import bling_token
+
+    armazem = bling_token.ArmazemPg(db)
+    atual: list[Optional[str]] = [None]
+
+    def token() -> str:
+        if atual[0] is None:
+            atual[0] = bling_token.obter_access_token(armazem)
+        return atual[0]
+
+    def invalidar() -> None:
+        atual[0] = None
+        bling_token.invalidar(armazem)
+
+    return BlingCliente(token=token, invalidar=invalidar)

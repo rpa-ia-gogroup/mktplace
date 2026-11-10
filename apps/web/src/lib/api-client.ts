@@ -1676,8 +1676,15 @@ export async function fetchMarcasMenores(dateFrom: string, dateTo: string): Prom
 }
 
 /** Produtos por marca (itens dos pedidos do Bling): bloco proprio, falha sozinho, pode vir parcial. */
-export async function fetchProdutosMarcasMenores(dateFrom: string, dateTo: string): Promise<ProdutosMarcas | null> {
+export async function fetchProdutosMarcasMenores(
+  dateFrom: string,
+  dateTo: string,
+  /** Os MESMOS filtros do GMV: canais (shopee,tiktok,ml) e marcas; vazio = todos. */
+  filtro: { canais?: readonly string[]; marcas?: readonly string[] } = {},
+): Promise<ProdutosMarcas | null> {
   const qs = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
+  if (filtro.canais?.length) qs.set("canais", [...filtro.canais].sort().join(","));
+  if (filtro.marcas?.length) qs.set("marcas", [...filtro.marcas].sort().join(","));
   return apiFetch<ProdutosMarcas>(`/api/v1/performance/marcas-menores/produtos?${qs.toString()}`);
 }
 

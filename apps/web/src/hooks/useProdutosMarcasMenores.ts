@@ -11,7 +11,14 @@ import type { ProdutosMarcas } from "@/lib/marcas-menores";
  * tabela se completa sozinha. Falha passageira no meio da leitura mantem a tabela parcial. Bloco proprio:
  * nao depende nem atrasa mais nada.
  */
-export function useProdutosMarcasMenores(inicio: string | undefined, fim: string | undefined, ativo = true) {
+export function useProdutosMarcasMenores(
+  inicio: string | undefined,
+  fim: string | undefined,
+  ativo = true,
+  /** Mesmos filtros do GMV: so' estes canais e marcas (vazio = todos). */
+  filtro: { canais?: readonly string[]; marcas?: readonly string[] } = {},
+) {
+  const filtroKey = `${(filtro.canais ?? []).join(",")}|${(filtro.marcas ?? []).join(",")}`;
   const [produtos, setProdutos] = useState<ProdutosMarcas | null | undefined>(undefined);
   const [desistiu, setDesistiu] = useState(false);
   const [recarga, setRecarga] = useState(0);
@@ -23,7 +30,7 @@ export function useProdutosMarcasMenores(inicio: string | undefined, fim: string
     let vivo = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const busca = (n: number) =>
-      fetchProdutosMarcasMenores(inicio, fim).then((r) => {
+      fetchProdutosMarcasMenores(inicio, fim, filtro).then((r) => {
         if (!vivo) return;
         setProdutos((antes) => (r === null && antes ? antes : r));
         if (r?.disponivel && !r.completo) {
@@ -36,7 +43,8 @@ export function useProdutosMarcasMenores(inicio: string | undefined, fim: string
       vivo = false;
       if (timer) clearTimeout(timer);
     };
-  }, [inicio, fim, ativo, recarga]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- filtroKey cobre o conteudo do filtro
+  }, [inicio, fim, ativo, recarga, filtroKey]);
 
   return { produtos, desistiu, tentar: () => setRecarga((n) => n + 1) };
 }
