@@ -19,6 +19,7 @@ import StateBlock from "@/components/ui/StateBlock";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { fetchMarcasMenores, fetchProdutosMarcasMenores } from "@/lib/api-client";
 import { fmtPeriodo } from "@/lib/filters/format";
+import { toISODate } from "@/lib/filters/presets";
 import { fmtNumber, fmtPctBr } from "@/lib/formatters";
 import {
   corDaPlataforma,
@@ -44,11 +45,14 @@ export default function MarcasMenoresPage() {
   const [dados, setDados] = useState<MarcasMenores | null>(null);
   const [estado, setEstado] = useState<"carregando" | "ok" | "erro">("carregando");
   const [produtos, setProdutos] = useState<ProdutosMarcas | null | undefined>(undefined);
+  const [desistiu, setDesistiu] = useState(false);
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     let vivo = true;
     setEstado("carregando");
     setProdutos(undefined);
+    setDesistiu(false);
     fetchMarcasMenores(filters.dateFrom, filters.dateTo).then((d) => {
       if (!vivo) return;
       setDados(d);
@@ -58,16 +62,22 @@ export default function MarcasMenoresPage() {
       const busca = (n: number) =>
         fetchProdutosMarcasMenores(p?.inicio ?? filters.dateFrom, p?.fim ?? filters.dateTo).then((r) => {
           if (!vivo) return;
-          setProdutos(r);
-          if (r?.disponivel && !r.completo && n < 60) setTimeout(() => vivo && busca(n + 1), 2000);
+          // Falha passageira no meio da leitura: mantem a tabela parcial em vez de apagá-la.
+          setProdutos((antes) => (r === null && antes ? antes : r));
+          if (r?.disponivel && !r.completo) {
+            if (n < 60) setTimeout(() => vivo && busca(n + 1), 2000);
+            else setDesistiu(true);
+          }
         });
       busca(0);
     });
     return () => {
       vivo = false;
     };
-  }, [filters.dateFrom, filters.dateTo]);
+  }, [filters.dateFrom, filters.dateTo, recarga]);
 
+  // O dia de hoje ainda está andando: comparar com o período anterior inteiro enganaria. Sem variação.
+  const emAndamento = !!dados?.periodo && dados.periodo.fim >= toISODate(new Date());
   const periodo = dados?.periodo ? fmtPeriodo(dados.periodo.inicio, dados.periodo.fim) : fmtPeriodo(filters.dateFrom, filters.dateTo);
   return (
     <PageContainer>
@@ -99,9 +109,9 @@ export default function MarcasMenoresPage() {
         <StateBlock tipo="indisponivel" titulo="Marcas menores indisponíveis" descricao={dados.motivo ?? undefined} />
       ) : (
         <>
-          {dados.consolidado && <Topo c={dados.consolidado} marcas={dados.marcas} />}
-          <Marcas marcas={dados.marcas} />
-          <Produtos r={produtos} />
+          {dados.consolidado && <Topo c={dados.consolidado} marcas={dados.marcas} emAndamento={emAndamento} />}
+          <Marcas marcas={dados.marcas} emAndamento={emAndamento} />
+          <Produtos r={produtos} desistiu={desistiu} onTentar={() => setRecarga((n) => n + 1)} />
         </>
       )}
     </PageContainer>
@@ -119,7 +129,7 @@ function Variacao({ pct }: { pct: number | null }) {
 }
 
 /** Receita consolidada das 4 marcas + rosca por canal (o mesmo desenho da Gerencial, sem meta). */
-function Topo({ c, marcas }: { c: Consolidado; marcas: MarcaMenor[] }) {
+function Topo({ c, marcas, emAndamento }: { c: Consolidado; marcas: MarcaMenor[]; emAndamento: boolean }) {
   const total = c.total;
   const partes = c.por_plataforma.filter((p) => p.faturamento > 0);
   const pct = (x: number) => Math.round(x * 100);
@@ -128,7 +138,7 @@ function Topo({ c, marcas }: { c: Consolidado; marcas: MarcaMenor[] }) {
   const parcial = comDado < marcas.length;
   // Variacao so' sobre as marcas que tem base nos dois periodos: o mesmo conjunto nos dois lados.
   const comBase = marcas.filter((m) => m.total != null && m.total_anterior != null && m.total_anterior > 0);
-  const v = variacaoPct(
+  const v = emAndamento ? null : variacaoPct(
     comBase.reduce((a, m) => a + (m.total ?? 0), 0),
     comBase.reduce((a, m) => a + (m.total_anterior ?? 0), 0) || null,
   );
@@ -146,14 +156,19 @@ function Topo({ c, marcas }: { c: Consolidado; marcas: MarcaMenor[] }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Receita das marcas</p>
           <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-ink">{total == null ? "—" : fmtCompacto(total)}</p>
-          {(v != null || parcial) && (
+          {(v != null || parcial || emAndamento) && (
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
               {v != null && (
                 <span>
                   <Variacao pct={v} /> vs período anterior
                 </span>
               )}
-              {parcial && <span className="font-semibold text-warn-ink">parcial ({comDado} de {marcas.length} marcas)</span>}
+              {emAndamento && <span>inclui hoje, dia em andamento</span>}
+              {parcial && (
+                <span className="font-semibold text-warn-ink">
+                  parcial (sem {marcas.filter((m) => m.total == null).map((m) => m.label).join(", ")})
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -201,7 +216,7 @@ function Topo({ c, marcas }: { c: Consolidado; marcas: MarcaMenor[] }) {
 }
 
 /** Bloco de marcas no padrão da Gerencial: linha por marca (barra por canal, total, variação) e a série diária. */
-function Marcas({ marcas }: { marcas: MarcaMenor[] }) {
+function Marcas({ marcas, emAndamento }: { marcas: MarcaMenor[]; emAndamento: boolean }) {
   const escala = Math.max(1, ...marcas.map((m) => m.total ?? 0));
   return (
     <section aria-labelledby="mm-marcas" className="rounded-xl border border-line bg-surface p-5">
@@ -211,14 +226,14 @@ function Marcas({ marcas }: { marcas: MarcaMenor[] }) {
       <ul className="flex flex-col">
         {marcas.map((m) => {
           const partes = fatias(m);
-          const v = variacaoPct(m.total, m.total_anterior);
+          const v = emAndamento ? null : variacaoPct(m.total, m.total_anterior);
           return (
             <li key={m.id} className="flex flex-col gap-2 border-t border-line py-3 first:border-t-0 first:pt-0">
               <div className="grid min-h-11 grid-cols-[88px_1fr_auto] items-center gap-3">
                 <span className="truncate text-sm font-semibold text-ink">{m.label}</span>
                 {m.total == null ? (
                   <span className="text-xs text-ink-muted">
-                    {m.status === "aguardando_autorizacao" ? "Aguardando autorização." : "Sem pedidos no período."}
+                    {m.status === "aguardando_autorizacao" ? "Aguardando autorização." : "Sem dado no período."}
                   </span>
                 ) : (
                   <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
@@ -261,7 +276,7 @@ function Marcas({ marcas }: { marcas: MarcaMenor[] }) {
 const LINHAS_VISIVEIS = 10;
 
 /** Produto, quantidade e receita por marca (itens dos pedidos). Sem item = "sem dado", nunca 0. */
-function Produtos({ r }: { r: ProdutosMarcas | null | undefined }) {
+function Produtos({ r, desistiu, onTentar }: { r: ProdutosMarcas | null | undefined; desistiu: boolean; onTentar: () => void }) {
   return (
     <section aria-labelledby="mm-produtos" className="rounded-xl border border-line bg-surface p-5">
       <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -270,8 +285,13 @@ function Produtos({ r }: { r: ProdutosMarcas | null | undefined }) {
         </h2>
         <InfoDica texto={FONTE_PRODUTOS} />
         {r?.disponivel && !r.completo && (
-          <span className="text-xs font-semibold text-warn-ink">
-            lendo os itens: {r.pedidos_lidos} de {r.pedidos_total} pedidos
+          <span className="flex items-center gap-2 text-xs font-semibold text-warn-ink">
+            {desistiu ? "leitura parcial" : "lendo os itens"}: {r.pedidos_lidos} de {r.pedidos_total} pedidos
+            {desistiu && (
+              <button type="button" onClick={onTentar} className="min-h-11 rounded px-2 text-accent-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                Tentar de novo
+              </button>
+            )}
           </span>
         )}
       </div>
@@ -281,14 +301,10 @@ function Produtos({ r }: { r: ProdutosMarcas | null | undefined }) {
         <StateBlock tipo="indisponivel" titulo="Produtos indisponíveis" descricao={r?.motivo ?? undefined} compacto />
       ) : (
         <ul className="flex flex-col gap-4">
-          {r.marcas.map((m) => (
+          {r.marcas.filter((m) => m.status !== "aguardando_autorizacao").map((m) => (
             <li key={m.id}>
               <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">{m.label}</h3>
-              {m.status === "aguardando_autorizacao" ? (
-                <p className="text-sm text-ink-muted">Aguardando autorização.</p>
-              ) : (
-                <TabelaProdutos m={m} lendo={!r.completo} />
-              )}
+              <TabelaProdutos m={m} lendo={!r.completo && !desistiu} />
             </li>
           ))}
         </ul>
