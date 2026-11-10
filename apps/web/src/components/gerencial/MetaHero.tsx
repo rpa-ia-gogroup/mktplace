@@ -345,14 +345,14 @@ function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenci
   );
 }
 
-/** "Tendência R$ 1,2 mi · 98% da meta"; parcial quando falta marca (nunca soma ausência como 0). */
+/** "Tendência R$ 1,2 mi · 98% da meta"; parcial (falta marca, nunca soma como 0) mostra só o valor: o % seria sobre outra meta que a da barra. */
 function TendenciaTopo({ t }: { t: TendenciaConsolidada }) {
   const parcial = t.somadas < t.total;
   return (
     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
       <span>
         Tendência <b className="font-semibold text-ink">{fmtCompacto(t.projecao)}</b>
-        {t.meta != null && ` · ${pct0(t.projecao / t.meta)} da meta`}
+        {!parcial && t.meta != null && ` · ${pct0(t.projecao / t.meta)} da meta`}
       </span>
       {parcial && <span className="font-semibold text-warn-ink">parcial ({t.somadas} de {t.total} marcas)</span>}
       <InfoDica texto="Soma das tendências de cada marca: o GMV de hoje no ritmo de ontem até a mesma hora. Marca sem ritmo ainda fica de fora, e o total diz que é parcial." />
