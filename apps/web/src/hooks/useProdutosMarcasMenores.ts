@@ -34,7 +34,7 @@ export function useProdutosMarcasMenores(
         if (!vivo) return;
         setProdutos((antes) => (r === null && antes ? antes : r));
         if (r?.disponivel && !r.completo) {
-          if (n < 60) timer = setTimeout(() => busca(n + 1), 2000);
+          if (n < 150) timer = setTimeout(() => busca(n + 1), 2000); // a rotina preenche o resto; cada consulta so le o banco
           else setDesistiu(true);
         }
       });

@@ -319,6 +319,14 @@ def get_produtos(
         if cache is not None:  # itens ja' lidos (pela rotina ou por pedidos anteriores): 1 consulta ao banco
             faltam = [p["id"] for p in lista if p["id"] not in _detalhe_cache]
             _detalhe_cache.update(cache.itens(faltam))
+        # Com o cache persistente e a rotina ligados, a REQUISICAO nao le item no Bling (36 itens ~ 30 s): devolve o
+        # que o banco tem, com o progresso, e aciona a rotina, que preenche o resto. Sem cache (ou rotina
+        # desligada) continua lendo ao vivo, por partes.
+        ao_vivo = cache is None or not settings.bling_warm_enabled
+        if not ao_vivo:
+            limite_detalhes = 0
+            if ao_faltar_cache is not None and any(p["id"] not in _detalhe_cache for p in lista):
+                ao_faltar_cache()
         for p in lista:
             if p["id"] in _detalhe_cache:
                 continue
