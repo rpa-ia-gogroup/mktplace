@@ -15,7 +15,7 @@ import {
 } from "./envelope.ts";
 import { toolError } from "./errors.ts";
 import {
-  ALWAYS_APPLICABLE, ML_COMMISSION_PARTIAL_WINDOW, ML_PRODUCTS_CUMULATIVE,
+  ALWAYS_APPLICABLE, gmvMaturing, ML_COMMISSION_PARTIAL_WINDOW, ML_PRODUCTS_CUMULATIVE,
   mlCommissionMissing, scopeWarningToLimitation,
   REGIONAL_COVERAGE, REGIONAL_UNITS_NOT_MEASURED,
   TIKTOK_ADS_SEM_FONTE, TIKTOK_CANCEL_NOT_MEASURED, TIKTOK_SETTLEMENT_DIRECTIONAL,
@@ -27,7 +27,7 @@ import {
 } from "./schemas.ts";
 import { numOrNull } from "./torre-client.ts";
 import {
-  asWindow, envelopeSchema, limitationSchema, ok, periodWarnings, safeResolvePeriod,
+  asWindow, envelopeSchema, limitationSchema, ok, periodWarnings, safeResolvePeriod, safeText,
   windowSchema, type OracleTool,
 } from "./tool-kit.ts";
 
@@ -200,6 +200,8 @@ const desempenhoOutput = envelopeSchema(
         }),
       )
       .nullable(),
+    /** T-0080: ressalvas do periodo (ex.: GMV em maturacao por canal). */
+    limitations: z.array(limitationSchema),
   }),
 );
 
@@ -214,6 +216,7 @@ export const desempenhoTool: OracleTool = {
       "Retorna o universo completo dos canais e marcas no escopo — nao e' top-N.",
       "NAO use para produto individual, regiao/UF, qualidade de entrega, dados intradiarios ou margem/lucro (nao existe CMV nesta base).",
       "Limitacao relevante: o dia corrente e' sempre parcial e vem sinalizado em warnings.",
+      "Quando o periodo cobre dias de GMV em maturacao (TikTok e/ou Mercado Livre), data.limitations e warnings dizem o canal e o intervalo: o GMV desses dias ainda pode cair.",
     ].join(" "),
     inputSchema: desempenhoInput,
     outputSchema: desempenhoOutput,
@@ -279,6 +282,27 @@ export const desempenhoTool: OracleTool = {
       }));
     }
 
+    // T-0080: maturacao vem do backend (`/brands`). Ausente ou null = sem
+    // rotulo para o canal; nada e' inventado aqui. Canal fora do pedido e'
+    // ignorado mesmo que a fonte mande o bloco.
+    const limitations: Limitation[] = [];
+    const maturacaoWarnings: string[] = [];
+    for (const [canal, info] of [
+      ["tiktok", brandsPayload.tiktok_maturacao],
+      ["ml", brandsPayload.ml_maturacao],
+    ] as const) {
+      if (!info || !requested.includes(canal) || info.em_maturacao_desde > period.end) continue;
+      const janela = {
+        start: info.em_maturacao_desde > period.start ? info.em_maturacao_desde : period.start,
+        end: period.end,
+      };
+      const motivo = safeText(info.motivo) ?? "valor pode cair";
+      limitations.push(gmvMaturing(CHANNEL_LABELS[canal], janela, info.janela_dias, motivo));
+      maturacaoWarnings.push(
+        `GMV de ${CHANNEL_LABELS[canal]} em maturacao de ${janela.start} a ${janela.end}: o valor desses dias ainda pode mudar (${motivo}).`,
+      );
+    }
+
     const env = buildEnvelope({
       period: asWindow(period),
       filtersApplied: echoFilters(overview.filters, {
@@ -289,7 +313,7 @@ export const desempenhoTool: OracleTool = {
       refreshedAt: overview.refreshed_at ?? null,
       coverage: "universo completo dos canais e marcas no escopo",
       returnedCount: byChannel.length + byBrand.length,
-      warnings: periodWarnings(period),
+      warnings: periodWarnings(period, maturacaoWarnings),
       data: {
         total: {
           gmv: totalGmv,
@@ -301,6 +325,7 @@ export const desempenhoTool: OracleTool = {
         by_channel: byChannel,
         by_brand: byBrand,
         series,
+        limitations,
       },
     });
 

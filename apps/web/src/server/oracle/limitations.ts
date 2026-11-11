@@ -146,6 +146,24 @@ export function scopeWarningToLimitation(
   };
 }
 
+/**
+ * T-0080 — GMV em maturacao (T-0074 TikTok, T-0077 ML). O gatilho e' o bloco
+ * `*_maturacao` do backend; o intervalo e' a intersecao do periodo pedido com
+ * `[em_maturacao_desde, ...]`. Sem bloco, nenhuma limitacao e' inventada.
+ */
+export function gmvMaturing(
+  channelLabel: string,
+  window: { start: string; end: string },
+  janelaDias: number,
+  motivo: string,
+): Limitation {
+  return {
+    topic: "gmv_em_maturacao",
+    scope: `Desempenho — ${channelLabel} (${window.start} a ${window.end})`,
+    description: `O GMV de ${channelLabel} de ${window.start} a ${window.end} ainda esta em maturacao (janela de ${janelaDias} dias; ${motivo}): o valor desses dias ainda pode mudar, normalmente para baixo. Nao trate como numero fechado nem compare com meses maduros sem essa ressalva.`,
+  };
+}
+
 /** O dia corrente e' sempre parcial. */
 export const CURRENT_DAY_PARTIAL: Limitation = {
   topic: "dia_corrente",

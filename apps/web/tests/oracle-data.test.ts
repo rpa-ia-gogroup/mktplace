@@ -615,3 +615,57 @@ test("T-0080 estoque ML: limite sempre enviado; ref_date/incluir_fora_do_full nu
   }
   assert.deepEqual(env.data.ml_estoque.marcas_nao_cobertas, ["apice"]);
 });
+
+// ---------------------------------------------------------------------------
+// T-0080 — GMV em maturacao (TikTok/ML) vira limitacao explicita
+// ---------------------------------------------------------------------------
+
+const MATURACAO = (desde: string, dias = 35) => ({
+  em_maturacao_desde: desde, janela_dias: dias, motivo: "cancelamentos ate ~D+30; valor pode cair",
+});
+
+test("T-0080 desempenho: periodo em maturacao traz limitacao com canal e intervalo", async () => {
+  const env = await call(
+    await connect({
+      ...ROUTES,
+      "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-07-14"), ml_maturacao: MATURACAO("2026-07-14") },
+    }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior" },
+  );
+  const lims = env.data.limitations.filter((l: any) => l.topic === "gmv_em_maturacao");
+  assert.equal(lims.length, 2);
+  assert.ok(lims.some((l: any) => /TikTok/.test(l.scope) && /2026-07-14 a 2026-07-31/.test(l.scope)));
+  assert.ok(lims.some((l: any) => /Mercado Livre/.test(l.scope)));
+  assert.match(lims[0].description, /ainda pode mudar/);
+  assert.ok(env.meta.warnings.some((w: string) => /em maturacao de 2026-07-14 a 2026-07-31/.test(w)));
+  // So' rotulo: nenhum numero muda.
+  assert.equal(env.data.total.gmv, 1000);
+});
+
+test("T-0080 desempenho: sem campo de maturacao, periodo maduro ou canal fora do pedido -> sem limitacao", async () => {
+  const semCampo = await call(await connect(), "torre_desempenho_marketplaces", { periodo: "mes_anterior" });
+  assert.deepEqual(semCampo.data.limitations, [], "campo ausente: nada inventado");
+
+  const maduro = await call(
+    await connect({ ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-08-05"), ml_maturacao: null } }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior" },
+  );
+  assert.deepEqual(maduro.data.limitations, []);
+  assert.ok(!maduro.meta.warnings.some((w: string) => /maturacao/.test(w)));
+
+  const foraDoPedido = await call(
+    await connect({ ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-07-14") } }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior", canais: ["shopee"] },
+  );
+  assert.deepEqual(foraDoPedido.data.limitations, []);
+});
+
+test("T-0080 desempenho: bloco de maturacao malformado e' contrato quebrado", async () => {
+  const res = await (await connect({
+    ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: { em_maturacao_desde: "ontem", janela_dias: 35, motivo: "x" } },
+  })).callTool({ name: "torre_desempenho_marketplaces", arguments: { periodo: "mes_anterior" } });
+  assert.equal(res.isError, true);
+});
