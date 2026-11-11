@@ -1112,3 +1112,14 @@ test("A1-08 carga da série diária não aparece como modo demonstração", () =
   const pagina = read("app/brand/[brand]/page.tsx");
   assert.match(pagina, /changesState\(filters\.compare, isLive, prevDaily\.length, !dailyIsFresh\)/);
 });
+
+test("T-0097: Marca 360 mostra o frescor de /brand-detail; sem refreshed_at vira 'frescor indisponivel'", async () => {
+  const { rotuloFrescor, FRESCOR_INDISPONIVEL } = await import("../src/lib/frescor-carga.ts");
+  assert.match(rotuloFrescor("2026-08-01T10:05:00Z"), /^Atualizado em \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}$/);
+  assert.equal(rotuloFrescor(null), FRESCOR_INDISPONIVEL);
+  assert.equal(rotuloFrescor(undefined), FRESCOR_INDISPONIVEL);
+  const P = readFileSync(new URL("../app/brand/[brand]/page.tsx", import.meta.url), "utf-8").replace(/\r\n/g, "\n");
+  assert.ok(P.includes("rotuloFrescor((displayDetail as ComFrescor<BrandDetail>).refreshed_at)"),
+    "o rotulo le o refreshed_at da resposta mensal protegida (displayDetail)");
+  assert.ok(/\{displayDetail && \(\s*<p/.test(P), "sem resposta da chave atual, nenhum frescor de outra marca/mes");
+});
