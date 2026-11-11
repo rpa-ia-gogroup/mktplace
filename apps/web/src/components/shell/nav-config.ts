@@ -31,7 +31,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/dre", label: "DRE" },
       { href: "/regioes", label: "Regiões" },
       // Marcas menores: dado do Avoe, fora do GMV total e da meta da Gerencial.
-      { href: "/marcas-menores", label: "Marcas menores" },
+      { href: "/marcas-menores", label: "Demais marcas" },
     ],
   },
   {

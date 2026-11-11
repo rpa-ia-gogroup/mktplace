@@ -143,6 +143,6 @@ test("pagina /produtos: leitura parcial em cor de aviso (marca e 'Todas'), orden
   assert.match(pagina, /\{progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-warn-ink"/);
   assert.match(pagina, /sort=\{menoresSort\.sort\}/);
   assert.doesNotMatch(pagina, /onSort=\{\(\) => \{\}\}/, "seta de ordenacao inerte");
-  assert.match(pagina, /Marcas menores indisponíveis agora \(Bling\)/);
-  assert.match(pagina, /O A\/B\/C\/D deste bloco é feito só entre as marcas menores/);
+  assert.match(pagina, /Demais marcas indisponíveis agora \(Bling\)/);
+  assert.match(pagina, /O A\/B\/C\/D deste bloco é feito só entre as demais marcas/);
 });

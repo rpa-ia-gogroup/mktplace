@@ -36,8 +36,8 @@ function Guarda({ children }: { children: React.ReactNode }) {
       <div className="w-full px-4 py-4">
         <StateBlock
           tipo="vazio"
-          titulo="Sem dado das marcas menores nesta aba"
-          descricao={`${escopo.menores.map(brandLabel).join(", ")}: o dado delas vem do Bling e está na Gerencial e em Marcas menores.`}
+          titulo="Sem dado das demais marcas nesta aba"
+          descricao={`${escopo.menores.map(brandLabel).join(", ")}: o dado delas vem do Bling e está na Gerencial e em Demais marcas.`}
           acao={
             <Link href={`${pathname}${qs ? `?${qs}` : ""}`} className="min-h-11 py-2.5 text-xs font-semibold text-accent-ink hover:underline">
               Ver todas as marcas

@@ -458,11 +458,11 @@ function GerencialComGrandes() {
   // e Bling fora deixa o GMV menor: aviso de dado incompleto nunca fica so no (i).
   const linhaMenores =
     menores.estado === "ok" && menores.total > 0
-      ? { texto: `inclui ${fmtCompacto(menores.total)} de marcas menores, sem meta`, aviso: false }
+      ? { texto: `inclui ${fmtCompacto(menores.total)} das demais marcas, sem meta`, aviso: false }
       : menores.estado === "indisponivel"
-        ? { texto: "sem marcas menores (Bling indisponível)", aviso: true }
+        ? { texto: "sem as demais marcas (Bling indisponível)", aviso: true }
         : menores.estado === "carregando"
-          ? { texto: "somando marcas menores…", aviso: false }
+          ? { texto: "somando as demais marcas…", aviso: false }
           : null;
   const brandsComMenores = useMemo<BrandRow[]>(
     () => [
@@ -856,7 +856,7 @@ function GerencialComGrandes() {
           r={prodMenores.produtos}
           desistiu={prodMenores.desistiu}
           onTentar={prodMenores.tentar}
-          titulo="Mais vendidos · marcas menores"
+          titulo="Mais vendidos · demais marcas"
           ids={escopo.menores}
         />
       )}
