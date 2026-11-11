@@ -245,7 +245,8 @@ test("nenhum componente da DRE depende de title nativo", async () => {
   for (const rel of arquivos) {
     const src = readFileSync(join(raiz, rel), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
     // `title="DRE"` do PageHeader e' o titulo da pagina, nao tooltip.
-    const achados = [...src.matchAll(/\stitle=\{?["'`]?([^"'`}\s]*)/g)].filter((m) => m[1] !== "DRE");
+    // `title={detalhe ...}` e' a PROP do KpiDrilldownDialog (titulo do modal), nao tooltip nativo.
+    const achados = [...src.matchAll(/\stitle=\{?["'`]?([^"'`}\s]*)/g)].filter((m) => m[1] !== "DRE" && m[1] !== "detalhe");
     assert.deepEqual(achados.map((m) => m[0]), [], `${rel} usa title`);
     assert.doesNotMatch(src, /\scontexto=/, `${rel}: contexto do KpiTile vira title`);
   }

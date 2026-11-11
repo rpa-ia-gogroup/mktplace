@@ -27,9 +27,11 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Calculator, Filter } from "lucide-react";
+import { Calculator, Filter, ShieldCheck, TrendingUp } from "lucide-react";
 
 import PageContainer from "@/components/layout/PageContainer";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import DreDetalheConta, { TITULO_DETALHE_DRE, type ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
 import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
@@ -94,6 +96,8 @@ export default function DreClient() {
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [tentativa, setTentativa] = useState(0);
   const [recorte, setRecorte] = useState("total");
+  // Cartao aberto no detalhe (dialogo unico da pagina): so' Margem e Classificacao da visao Conhecida.
+  const [detalhe, setDetalhe] = useState<ChaveDetalheDre | null>(null);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -263,7 +267,7 @@ export default function DreClient() {
           <>
           <section aria-labelledby="dre-resumo" className="flex flex-col gap-3">
             <h2 id="dre-resumo" className="sr-only">Resumo da seleção</h2>
-            <DreResumo total={resp.total} competencia={competencia ?? ""} bloqueadores={bloqueadores} />
+            <DreResumo total={resp.total} competencia={competencia ?? ""} bloqueadores={bloqueadores} onAbrir={setDetalhe} />
             <div className="flex flex-wrap items-center gap-1.5">
               {receitaAte && <Chip>Receita até {fmtInstanteBrt(receitaAte)}</Chip>}
               {resp.total.data_maxima.cmv_ultima_emissao && (
@@ -307,6 +311,17 @@ export default function DreClient() {
           )}
         </>
       ) : null}
+      <KpiDrilldownDialog
+        open={detalhe != null && resp?.total != null}
+        onClose={() => setDetalhe(null)}
+        title={detalhe ? TITULO_DETALHE_DRE[detalhe] : ""}
+        icone={detalhe === "classificacao" ? ShieldCheck : TrendingUp}
+        identidade={detalhe === "classificacao" ? "atendimento" : "roas"}
+      >
+        {detalhe && resp?.total && (
+          <DreDetalheConta chave={detalhe} total={resp.total} competencia={competencia ?? ""} bloqueadores={bloqueadores} />
+        )}
+      </KpiDrilldownDialog>
     </PageContainer>
   );
 }

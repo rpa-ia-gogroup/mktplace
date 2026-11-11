@@ -9,7 +9,7 @@
  * subtraida ou misturada com a estimada no mesmo numero.
  */
 import { useId } from "react";
-import { BookOpenCheck, FileSpreadsheet, Scale, Table2 } from "lucide-react";
+import { BookOpenCheck, CircleDollarSign, FileSpreadsheet, Percent, Scale, Table2, TrendingUp } from "lucide-react";
 
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
@@ -87,16 +87,21 @@ export function ResumoEstimado({ cenario }: { cenario: CenarioPremissas }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <KpiTile
+        variante="gerencial"
+        identidade="gmv"
+        icone={CircleDollarSign}
         rotulo="Receita base"
         valor={cenario.receita_base !== null ? fmtReais(cenario.receita_base) : "Sem valor"}
         tom={cenario.receita_base === null ? "ausente" : "neutro"}
         comparacao="Receita realizada; a mesma da visão Conhecida"
       />
       <KpiTile
+        variante="gerencial"
+        identidade="roas"
+        icone={TrendingUp}
         rotulo={ROTULO_MARGEM_ESTIMADA}
         valor={textoMargemEstimada(cenario)}
         tom={nc ? "ausente" : "neutro"}
-        destaque={!nc}
         comparacao={
           <span className="flex flex-wrap items-center gap-1.5">
             <EstadoCenarioChip cenario={cenario} />
@@ -105,12 +110,18 @@ export function ResumoEstimado({ cenario }: { cenario: CenarioPremissas }) {
         }
       />
       <KpiTile
+        variante="gerencial"
+        identidade="ticket"
+        icone={Percent}
         rotulo="% da receita (estimada)"
         valor={textoMargemEstimadaPct(cenario)}
         tom={nc ? "ausente" : "neutro"}
         comparacao={nc ? "Depende da margem estimada" : "Margem estimada ÷ receita base"}
       />
       <KpiTile
+        variante="gerencial"
+        identidade="prazo"
+        icone={BookOpenCheck}
         rotulo="Premissas"
         valor={<span className="text-base">{cenario.fonte_premissas.rotulo}</span>}
         comparacao={
