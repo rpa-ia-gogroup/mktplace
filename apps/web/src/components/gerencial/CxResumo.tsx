@@ -6,6 +6,8 @@
  * Mesma rota da /cx (`/api/v1/cx/shopee`), buscada pelo navegador. Sempre 30
  * dias fechados, escrito no cabecalho, sem casar com o periodo da Gerencial.
  * Marca segue o filtro global; a pagina so' monta isto com a Shopee no filtro.
+ * Com TikTok/ML tambem no filtro (o padrao desde o T-0089 sao os tres canais),
+ * o painel avisa que eles estao sem dado nesta visao, em vez de cala-los.
  *
  * Card = rotulo, valor e no maximo UMA linha (reservada em todos, para a
  * mesma altura). Clicar abre o dialogo unico da pagina com o valor de cada
@@ -20,6 +22,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Ban, MessageCircle, MessagesSquare, Repeat2, Undo2, type LucideIcon } from "lucide-react";
 
+import AvisoCanaisSemDado from "@/components/ui/AvisoCanaisSemDado";
 import InfoDica from "@/components/ui/InfoDica";
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
@@ -43,6 +46,7 @@ import {
   type ResumoCx,
 } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
+import type { Marketplace } from "@/lib/mock-data";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const DIAS: JanelaDias = 30;
@@ -156,13 +160,19 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias: number = DIAS): s
   ];
 }
 
+/** A fonte do CX (`/api/v1/cx/shopee`) so' tem Shopee. */
+const CX_CANAIS_COBERTOS: readonly Marketplace[] = ["shopee"];
+
 export default function CxResumo({
   brands,
+  canais,
   dateFrom,
   dateTo,
   onOpen,
 }: {
   brands: string[];
+  /** Canais do filtro global: o CX so' tem Shopee; os demais selecionados ganham o aviso de sem dado. */
+  canais: readonly Marketplace[];
   /** Periodo da Gerencial: o CX segue quando for 7, 30 ou 90 dias fechados; senao, 30. */
   dateFrom?: string;
   dateTo?: string;
@@ -207,6 +217,7 @@ export default function CxResumo({
         </Link>
       }
     >
+      <AvisoCanaisSemDado selecao={canais} cobertos={CX_CANAIS_COBERTOS} className="mb-3" />
       {!resultado ? (
         <StateBlock tipo="carregando" compacto titulo="Carregando CX da Shopee" />
       ) : !resultado.ok || !r ? (

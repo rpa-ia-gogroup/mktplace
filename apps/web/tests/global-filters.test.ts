@@ -148,9 +148,9 @@ test("parseFiltersFromSearchParams: marca desconhecida e descartada silenciosame
   assert.deepEqual(filters.brands, ["barbours"]);
 });
 
-test("parseFiltersFromSearchParams: sem parametros usa o Consolidado (ML + Shopee) e 'todas as marcas'", () => {
+test("parseFiltersFromSearchParams: sem parametros usa os tres canais e 'todas as marcas' (T-0089)", () => {
   const filters = parseFiltersFromSearchParams(new URLSearchParams());
-  assert.deepEqual(filters.channels, ["ml", "shopee"]);
+  assert.deepEqual(filters.channels, ["tiktok", "ml", "shopee"]);
   assert.deepEqual(filters.brands, []);
 });
 
@@ -226,7 +226,7 @@ test("hasExplicitFilterParams: parametro nao relacionado a filtro (ex: paginacao
 
 test("computeDefaultFilters: URL vazia no Gerencial -> mes calendario anterior completo + compare=true", () => {
   const filters = computeDefaultFilters({ defaultPreset: "mes_anterior", defaultCompare: true, now: () => TODAY });
-  assert.deepEqual(filters.channels, ["ml", "shopee"]);
+  assert.deepEqual(filters.channels, ["tiktok", "ml", "shopee"]);
   assert.deepEqual(filters.brands, []);
   assert.equal(filters.dateFrom, "2026-05-01");
   assert.equal(filters.dateTo, "2026-05-31");
@@ -250,7 +250,7 @@ test("computeDefaultFilters: URL vazia em Pedidos -> ultimos 30 dias + compare=f
 test("computeDefaultFilters: default sem opcoes cai em ultimos 30 dias + compare=false (fallback neutro)", () => {
   const filters = computeDefaultFilters({ now: () => TODAY });
   assert.equal(filters.compare, false);
-  assert.deepEqual(filters.channels, ["ml", "shopee"]);
+  assert.deepEqual(filters.channels, ["tiktok", "ml", "shopee"]);
   assert.deepEqual({ dateFrom: filters.dateFrom, dateTo: filters.dateTo }, presetRange("30d", TODAY));
 });
 

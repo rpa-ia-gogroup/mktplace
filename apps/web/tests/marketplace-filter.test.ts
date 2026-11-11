@@ -16,11 +16,13 @@ import {
   parseMarketplaceParam,
 } from "../src/lib/marketplace-filter.ts";
 
-test("estado inicial (DEFAULT_MARKETPLACE_SELECTION) e' o Consolidado: ML + Shopee, sem TikTok", () => {
-  assert.deepEqual(DEFAULT_MARKETPLACE_SELECTION, ["ml", "shopee"]);
+test("estado inicial (DEFAULT_MARKETPLACE_SELECTION) e' os tres canais, TikTok incluso (T-0089)", () => {
+  assert.deepEqual(DEFAULT_MARKETPLACE_SELECTION, ["tiktok", "ml", "shopee"]);
+  assert.ok(isAllSelected(DEFAULT_MARKETPLACE_SELECTION));
+  assert.equal(serializeMarketplaceSelection(DEFAULT_MARKETPLACE_SELECTION), "all");
+  // O Consolidado continua existindo como atalho do filtro, so' nao e' mais o padrao.
   assert.deepEqual(CONSOLIDADO_SELECTION, ["ml", "shopee"]);
-  assert.ok(isConsolidadoSelected(DEFAULT_MARKETPLACE_SELECTION));
-  assert.ok(!isAllSelected(DEFAULT_MARKETPLACE_SELECTION));
+  assert.ok(!isConsolidadoSelected(DEFAULT_MARKETPLACE_SELECTION));
 });
 
 test("ALL_MARKETPLACE_SELECTION (botao Todos) continua com os tres canais", () => {

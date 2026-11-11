@@ -9,13 +9,18 @@ export type MarketplaceSelection = Marketplace[];
 export const ALL_MARKETPLACE_SELECTION: MarketplaceSelection = [...ALL_MARKETPLACES];
 
 /**
- * Consolidado: Mercado Livre + Shopee, sem TikTok Shop. E' o escopo padrao
- * das telas — o TikTok continua a um clique ("Todos" ou o proprio botao).
+ * Consolidado: Mercado Livre + Shopee, sem TikTok Shop. Atalho do filtro de
+ * canais (botao "Consolidado"); deixou de ser o padrao das telas (T-0089).
  */
 export const CONSOLIDADO_SELECTION: MarketplaceSelection = ["ml", "shopee"];
 
-/** Selecao aplicada quando a URL nao diz o canal (entrada direta na tela). */
-export const DEFAULT_MARKETPLACE_SELECTION: MarketplaceSelection = [...CONSOLIDADO_SELECTION];
+/**
+ * Selecao aplicada quando a URL nao diz o canal (entrada direta na tela): os
+ * tres canais, materializados como `channels=all` (T-0089, decisao do
+ * proprietario). Antes era o Consolidado (763ecf1) e o TikTok sumia dos
+ * totais sem aviso.
+ */
+export const DEFAULT_MARKETPLACE_SELECTION: MarketplaceSelection = [...ALL_MARKETPLACE_SELECTION];
 
 /** Remove duplicados e ordena na ordem canônica TikTok, ML, Shopee. */
 export function canonicalizeSelection(selection: readonly Marketplace[]): MarketplaceSelection {
@@ -69,8 +74,8 @@ export function serializeMarketplaceSelection(selection: readonly Marketplace[])
 /**
  * Compat: aceita o parâmetro escalar legado ("all"|"tiktok"|"ml"|"shopee") e devolve a seleção equivalente.
  * "all" explícito (e valor inválido) continua sendo os três canais — links antigos e o botão "Todos".
- * Parâmetro AUSENTE é decidido por quem chama: as telas de filtro global caem no Consolidado
- * (ver `parseFiltersFromSearchParams`).
+ * Parâmetro AUSENTE é decidido por quem chama: as telas de filtro global caem em
+ * `DEFAULT_MARKETPLACE_SELECTION` (ver `parseFiltersFromSearchParams`).
  */
 export function parseMarketplaceParam(value: string): MarketplaceSelection {
   if (value === "all" || value === "") return [...ALL_MARKETPLACE_SELECTION];
