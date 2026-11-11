@@ -29,6 +29,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { useGerencialSources } from "@/hooks/useGerencialSources";
+import { HOME_FILTER_DEFAULTS } from "@/lib/filters/home-defaults";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { toISODate } from "@/lib/filters/presets";
@@ -153,7 +154,7 @@ function GerencialComGrandes() {
   // GERENCIAL-METAS-1: abre no mes corrente, porque e' nele que a meta ainda
   // pode ser decidida (ritmo, projecao e quanto falta por dia). O mes fechado
   // continua a um clique no seletor de periodo.
-  const [filtersRaw, setFilters] = useGlobalFilters({ defaultPreset: "mes_atual", defaultCompare: true });
+  const [filtersRaw, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
   // Marcas grandes (Data Mart) e menores (Bling) vem no mesmo filtro; o resto da pagina so' ve as grandes
   // (`filters.brands` vazio = todas as grandes) e as menores entram por `menores`, sem meta.
   const escopo = escopoDeMarcas(filtersRaw.brands);
@@ -1119,7 +1120,7 @@ function GerencialComGrandes() {
 
 /** So' marcas menores no filtro: a Gerencial inteira sai do Bling, sem chamar nenhuma fonte do Data Mart. */
 function GerencialInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_atual", defaultCompare: true });
+  const [filters, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
   if (escopoDeMarcas(filters.brands).soMenores) return <GerencialMarcasMenores filters={filters} onChange={setFilters} />;
   return <GerencialComGrandes />;
 }

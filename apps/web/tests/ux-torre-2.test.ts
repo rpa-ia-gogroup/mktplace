@@ -13,6 +13,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { resumoCanais, resumoDosFiltros, resumoMarcas } from "../src/lib/filters/summary.ts";
+import { HOME_FILTER_DEFAULTS } from "../src/lib/filters/home-defaults.ts";
 import type { GlobalFilters } from "../src/lib/filters/types.ts";
 
 const RAIZ = join(import.meta.dirname, "..");
@@ -94,7 +95,11 @@ test("comparacao: so' a Gerencial oferece; Canais e Financeiro seguem sem delta"
 test("defaults de periodo de cada tela nao mudaram", () => {
   // GERENCIAL-METAS-1: a Gerencial passou a abrir no mes corrente (decisao do
   // proprietario), para a meta mostrar ritmo e projecao. As demais seguem.
-  assert.match(fonte(PAGINAS.gerencial), /useGlobalFilters\(\{ defaultPreset: "mes_atual", defaultCompare: true \}\)/);
+  // T-0089: os defaults da Gerencial moram em HOME_FILTER_DEFAULTS (que tambem
+  // abre com os tres canais); o periodo e a comparacao sao os mesmos.
+  assert.match(fonte(PAGINAS.gerencial), /useGlobalFilters\(HOME_FILTER_DEFAULTS\)/);
+  assert.equal(HOME_FILTER_DEFAULTS.defaultPreset, "mes_atual");
+  assert.equal(HOME_FILTER_DEFAULTS.defaultCompare, true);
   assert.match(fonte(PAGINAS.canais), /useGlobalFilters\(\{ defaultPreset: "mes_anterior" \}\)/);
   assert.match(fonte(PAGINAS.financeiro), /useGlobalFilters\(\{ defaultPreset: "mes_anterior" \}\)/);
 });

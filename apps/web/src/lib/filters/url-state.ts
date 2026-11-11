@@ -3,6 +3,7 @@ import {
   parseMarketplaceParam,
   serializeMarketplaceSelection,
 } from "../marketplace-filter.ts";
+import type { Marketplace } from "../mock-data.ts";
 import { FILTER_BRAND_KEYS } from "./brands.ts";
 import { presetRange, toISODate } from "./presets.ts";
 import type { DatePreset, GlobalFilters } from "./types.ts";
@@ -109,18 +110,29 @@ export interface DefaultFiltersOptions {
   defaultPreset?: DatePreset;
   /** Comparacao (MoM) ativa por padrao quando a URL chega vazia. */
   defaultCompare?: boolean;
+  /** Canais aplicados quando a URL chega vazia. Sem ele, o Consolidado
+   * (`DEFAULT_MARKETPLACE_SELECTION`). A Gerencial (home) passa os tres
+   * canais: o "GMV do periodo" dela e' o total dos marketplaces (T-0089). */
+  defaultChannels?: readonly Marketplace[];
   /** Relogio injetavel — usado nos testes para nao depender da data real. */
   now?: () => Date;
 }
 
 /** Resolve o default de uma tela (usado so quando a URL nao tem NENHUM
- * parametro de filtro reconhecido) — Consolidado (ML + Shopee), sem marca, o intervalo do
- * `defaultPreset` e `defaultCompare`. */
+ * parametro de filtro reconhecido) — `defaultChannels` (sem ele, Consolidado
+ * ML + Shopee), sem marca, o intervalo do `defaultPreset` e `defaultCompare`. */
 export function computeDefaultFilters(options: DefaultFiltersOptions = {}): GlobalFilters {
-  const { defaultPreset = "30d", defaultCompare = false, now = () => new Date() } = options;
+  const {
+    defaultPreset = "30d",
+    defaultCompare = false,
+    defaultChannels = DEFAULT_MARKETPLACE_SELECTION,
+    now = () => new Date(),
+  } = options;
   const range = presetRange(defaultPreset, now());
   return {
-    channels: [...DEFAULT_MARKETPLACE_SELECTION],
+    // Ida e volta pela URL: o default e' exatamente o que o eco do
+    // router.replace vai ler (ordem canonica; vazio vira os tres canais).
+    channels: parseMarketplaceParam(serializeMarketplaceSelection(defaultChannels)),
     brands: [],
     dateFrom: range.dateFrom,
     dateTo: range.dateTo,
