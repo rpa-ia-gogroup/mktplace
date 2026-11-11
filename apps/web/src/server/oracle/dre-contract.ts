@@ -20,8 +20,9 @@
  * - margem conhecida: a da API (`margem_contribuicao_conhecida`), com
  *   `componentes_usados`, `componentes_parciais` e `aviso`. Sai NAO_CALCULAVEL
  *   se a API nao a calculou ou se algum custo que a API pos nela nao foi
- *   exposto pelo conector (ex.: lote vencido); PARCIAL se a API declarou
- *   parciais, se a receita e' parcial ou se o CMV nao entrou na conta;
+ *   exposto pelo conector (ex.: lote vencido) ou se o CMV nao entrou na
+ *   conta (R172: null, "sem CMV na conta"); PARCIAL se a API declarou
+ *   parciais ou se a receita e' parcial;
  * - custos conhecidos = soma dos custos que a API pos na margem, so' quando
  *   todos tem valor exposto;
  * - cenario_premissas sai com as linhas ESTIMADAS, compactas (linha -> valor):
@@ -462,11 +463,13 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
     resultado = naoCalc(margemValor === null ? "a fonte nao calculou a margem conhecida (sem receita)" : "receita sem valor exposto: margem nao existe");
   } else if (naoExpostos.length > 0) {
     resultado = naoCalc(`custo usado na margem pela fonte sem valor exposto (${naoExpostos.join(", ")}): margem nao exposta`);
+  } else if (semCmv) {
+    // Revisao R172: margem sem CMV nao sai como numero (muito acima da real).
+    resultado = naoCalc("sem CMV na conta: margem nao exposta");
   } else {
     const porque: string[] = [];
     if (parciaisApi.length > 0) porque.push(`custos parciais na conta (${parciaisApi.join(", ")})`);
     if (l.receita.status === "PARCIAL") porque.push("receita parcial");
-    if (semCmv) porque.push("sem CMV na conta: margem muito acima da real");
     resultado = derivada({
       valor: margemValor,
       pct_receita: numOrNull(m.pct_receita),
@@ -818,7 +821,7 @@ export const dreTool: OracleTool = {
       "Use para 'DRE de outubro', 'margem de contribuicao por canal ou marca', 'CMV, taxas, frete, ads, afiliados, impostos do mes'.",
       "Um mes por chamada (ref_month YYYY-MM), com filtro opcional de canais e marcas. Devolve o total, por canal, por marca e as celulas canal x marca da DRE gerencial da Torre.",
       "Cada linha traz valor, status (CALCULADO, PARCIAL, NAO_CALCULAVEL, NAO_APLICAVEL), status_fonte (o status real da API: parcial, nao_reconciliado, indisponivel...), motivo, origem (realizado, parcial, extrapolado...), entra_na_margem e cobertura_rotulo. PARCIAL = valor com cobertura incompleta (extrapolado: valor_medido e' o medido cru). Valor nulo = nao calculado, nunca zero.",
-      "Resultado = margem de contribuicao CONHECIDA da API, com margem_conhecida (componentes_usados, componentes_parciais, aviso); com parciais ou sem CMV ela sai PARCIAL e tende a ficar acima da real; nao e' lucro. cenario_premissas (com linhas_premissa e linhas_extrapoladas) e' ESTIMATIVA com premissas de orcamento, nao realizado: origem premissa nao foi medida.",
+      "Resultado = margem de contribuicao CONHECIDA da API, com margem_conhecida (componentes_usados, componentes_parciais, aviso); com parciais ela sai PARCIAL e tende a ficar acima da real; sem CMV na conta ela sai nula (NAO_CALCULAVEL); nao e' lucro. cenario_premissas (com linhas_premissa e linhas_extrapoladas) e' ESTIMATIVA com premissas de orcamento, nao realizado: origem premissa nao foi medida.",
       "Mes imaturo (regra M+2) sai com classificacao_fonte PREVIA e fecha_em (data em que fecha): numeros provisorios. PREVIA, parciais, cenario estimado, impostos e premissas nao publicados, insumos vencidos e qualquer corte por tamanho aparecem em limitations.",
     ].join(" "),
     inputSchema: dreInput,

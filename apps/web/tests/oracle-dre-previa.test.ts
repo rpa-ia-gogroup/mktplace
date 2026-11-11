@@ -237,7 +237,7 @@ test("margem conhecida da API: PARCIAL com componentes_parciais e aviso; custos 
   assert.match(lim.description, /ACIMA da real/);
 });
 
-test("margem sem CMV na conta sai PARCIAL e diz por que (reflete a API, nao vira CALCULADO)", () => {
+test("margem sem CMV na conta sai NULA, NAO_CALCULAVEL, com o motivo (R172)", () => {
   const sem = celulaPrevia();
   (sem.componentes as any).cmv = comp("indisponivel", null, "indisponivel");
   sem.margem_contribuicao_conhecida = {
@@ -247,9 +247,14 @@ test("margem sem CMV na conta sai PARCIAL e diz por que (reflete a API, nao vira
   };
   const tk = proj(resposta([sem])).data.celulas[0];
   assert.equal(tk.cmv.valor, null);
-  assert.equal(tk.resultado.status, "PARCIAL");
-  assert.equal(tk.resultado.valor, 650);
+  assert.equal(tk.resultado.status, "NAO_CALCULAVEL");
+  assert.equal(tk.resultado.valor, null, "a API calculou 650 sem CMV: o conector nao expoe");
+  assert.equal(tk.margem_pct, null);
   assert.match(tk.resultado.motivo, /sem CMV na conta/);
+  // Os outros casos PARCIAL seguem: com CMV na conta e parciais, a margem sai com numero.
+  const com = proj(T0090()).data.celulas[0];
+  assert.equal(com.resultado.status, "PARCIAL");
+  assert.equal(com.resultado.valor, 250);
 });
 
 test("cenario estimado: linhas com origem premissa/extrapolado, nulo continua nulo, limitacao declarada", () => {
