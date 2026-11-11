@@ -46,6 +46,7 @@ import {
 } from "@/lib/expedicao-contract";
 import {
   LISTAS,
+  buscarListaCompleta,
   csvDaLista,
   diaBrtDe,
   filtrarPorVencimento,
@@ -71,7 +72,7 @@ import ConsolidadoEtapas from "./ConsolidadoEtapas";
 export type { AlvoTravados };
 
 type Estado =
-  | { tipo: "carregando" }
+  | { tipo: "carregando"; /** Paginando a lista inteira: quantos ja' vieram do total. */ carregados?: number; total?: number }
   | { tipo: "erro" }
   | {
       tipo: "ok";
@@ -106,6 +107,15 @@ function contagemDoRecorte(
   const contas = (json.accounts ?? []).filter((a) => (conta ? a.shop_account === conta : a.brand === marca));
   if (!contas.length || contas.some((a) => typeof a[campo] !== "number")) return null;
   return contas.reduce((soma, a) => soma + (a[campo] as number), 0);
+}
+
+/** Uma pagina da fila; `ok` falso vira erro (a lista inteira falha junto). */
+function paginaDaFila(api: string) {
+  return async (query: string): Promise<RespostaExpedicao> => {
+    const r = await buscarExpedicao(`${api}/api/v1/expedicao?${query}`, { headers: { Accept: "application/json" } });
+    if (!r.ok) throw new Error("http");
+    return (await r.json()) as RespostaExpedicao;
+  };
 }
 
 /** Lista do proximo dia buscada a parte quando a de "perto de vencer" vem cortada. */
@@ -186,11 +196,11 @@ export default function TravadosDialog({
     let vivo = true;
     setEstado({ tipo: "carregando" });
     void tentativa; // "Tentar de novo" refaz a mesma busca
-    buscarExpedicao(`${api}/api/v1/expedicao?${query}`, { headers: { Accept: "application/json" } })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("http");
-        return (await r.json()) as RespostaExpedicao;
-      })
+    // Paginas em sequencia (a API limita 500 por chamada); `query` so' chaveia o efeito.
+    buscarListaCompleta(paginaDaFila(api), lista, canal, alvo?.marca ?? null, alvo?.conta ?? null, {
+      ativo: () => vivo,
+      aoProgredir: (carregados, total) => setEstado({ tipo: "carregando", carregados, total }),
+    })
       .then((json) => {
         if (!vivo) return;
         const linhas = json.queue ?? [];
@@ -228,11 +238,9 @@ export default function TravadosDialog({
     if (!queryProximo || listaProximo?.tipo === "ok") return;
     let vivo = true;
     setListaProximo({ tipo: "carregando" });
-    buscarExpedicao(`${api}/api/v1/expedicao?${queryProximo}`, { headers: { Accept: "application/json" } })
-      .then(async (r) => {
-        if (!r.ok) throw new Error("http");
-        return (await r.json()) as RespostaExpedicao;
-      })
+    buscarListaCompleta(paginaDaFila(api), "vence_proximo", canal, alvo?.marca ?? null, alvo?.conta ?? null, {
+      ativo: () => vivo,
+    })
       .then((json) => {
         if (vivo) setListaProximo({ tipo: "ok", linhas: json.queue ?? [] });
       })
@@ -338,7 +346,15 @@ export default function TravadosDialog({
           {estado.tipo === "ok" ? <ConsolidadoEtapas itens={consolidado} total={estado.total} /> : null}
 
           {estado.tipo === "carregando" ? (
-            <StateBlock compacto tipo="carregando" titulo="Carregando pedidos…" />
+            <StateBlock
+              compacto
+              tipo="carregando"
+              titulo={
+                estado.total
+                  ? `Carregando pedidos… ${formatarInteiro(estado.carregados ?? 0)} de ${formatarInteiro(estado.total)}`
+                  : "Carregando pedidos…"
+              }
+            />
           ) : estado.tipo === "erro" ? (
             <StateBlock
               compacto

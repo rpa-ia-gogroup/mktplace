@@ -18,7 +18,7 @@ const CLIENTE = fonte("app/expedicao/ExpedicaoClient.tsx");
 
 const { createElement: h } = await import("react");
 const { renderToStaticMarkup } = await import("react-dom/server");
-const { motivoDoTravado, percentualDaFila, queryDosTravados, LIMITE_TRAVADOS } = await import(
+const { motivoDoTravado, percentualDaFila, queryDosTravados, queryDaLista, buscarListaCompleta, LIMITE_TRAVADOS } = await import(
   "../src/lib/expedicao-travados.ts"
 );
 const { default: BarraDeQualidade } = await import("../src/components/expedicao/BarraDeQualidade.tsx");
@@ -284,4 +284,90 @@ test("consolidado TikTok: etapa de cada lista do resumo; 100% numa etapa aparece
   const misto = { ...t, over_48h: 10, over_48h_collection: 7, over_48h_shipment: 3 };
   assert.deepEqual(etapasDaLista("over_48h", misto, 10).map((e) => e.n), [7, 3]);
   assert.deepEqual(etapasDaLista("awaiting_shipment", t, 5).map((e) => e.n), [5]);
+});
+
+// ---------------------------------------------------------------------------
+// Lista INTEIRA: a API limita limit<=500; o popup pagina por offset ate' has_more=false
+// ---------------------------------------------------------------------------
+/** API falsa com `total` pedidos: pagina como a rota real e conta chamadas em voo. */
+function apiFalsa(total: number, opts: { falhaNoOffset?: number } = {}) {
+  const chamadas: { offset: number; limit: number }[] = [];
+  let emVoo = 0;
+  let maxEmVoo = 0;
+  const buscar = async (query: string) => {
+    const q = new URLSearchParams(query);
+    const offset = Number(q.get("offset"));
+    const limit = Number(q.get("limit"));
+    chamadas.push({ offset, limit });
+    emVoo++;
+    maxEmVoo = Math.max(maxEmVoo, emVoo);
+    await new Promise((r) => setTimeout(r, 1));
+    emVoo--;
+    if (offset === opts.falhaNoOffset) throw new Error("http");
+    const n = Math.max(0, Math.min(limit, total - offset));
+    const queue = Array.from({ length: n }, (_, i) => ({ order_ref: `P${offset + i}` }));
+    return {
+      queue,
+      snapshot: { effective_at: "2026-11-11T12:00:00Z" },
+      pagination: { limit, offset, returned: n, total, has_more: offset + n < total },
+    } as unknown as import("../src/lib/expedicao-contract.ts").RespostaExpedicao;
+  };
+  return { buscar, chamadas, emVoo: () => maxEmVoo };
+}
+
+test("lista inteira: 1705 pedidos vem em 4 paginas por offset, em sequencia, sem perder nem repetir", async () => {
+  const api = apiFalsa(1705);
+  const progresso: number[] = [];
+  const r = await buscarListaCompleta(api.buscar, "vence_proximo", "shopee", "kokeshi", null, {
+    aoProgredir: (carregados) => progresso.push(carregados),
+  });
+  assert.equal(r.queue.length, 1705);
+  assert.equal(new Set(r.queue.map((l) => l.order_ref)).size, 1705);
+  assert.deepEqual(api.chamadas.map((c) => c.offset), [0, 500, 1000, 1500]);
+  assert.ok(api.chamadas.every((c) => c.limit === 500)); // teto da API intacto
+  assert.equal(api.emVoo(), 1); // nunca duas chamadas ao mesmo tempo
+  assert.deepEqual(progresso, [500, 1000, 1500]);
+  assert.equal(r.pagination?.total, 1705); // contagem do cartao
+  assert.equal(r.snapshot?.effective_at, "2026-11-11T12:00:00Z"); // meta da 1a pagina
+});
+
+test("lista inteira: total multiplo de 500 nao faz chamada a mais; lista curta, uma so'", async () => {
+  const exato = apiFalsa(1000);
+  assert.equal((await buscarListaCompleta(exato.buscar, "vencidos", "shopee", null, null)).queue.length, 1000);
+  assert.equal(exato.chamadas.length, 2);
+  const curta = apiFalsa(37);
+  assert.equal((await buscarListaCompleta(curta.buscar, "acima_48h", "shopee", null, null)).queue.length, 37);
+  assert.equal(curta.chamadas.length, 1);
+});
+
+test("lista inteira vale para todos os cartoes de prazo/idade; travados segue em 200 (de proposito)", async () => {
+  for (const tipo of ["vencidos", "perto_de_vencer", "vence_24h", "vence_proximo", "acima_48h"] as const) {
+    const api = apiFalsa(1200);
+    assert.equal((await buscarListaCompleta(api.buscar, tipo, "shopee", null, null)).queue.length, 1200, tipo);
+  }
+  const t = apiFalsa(1200);
+  const r = await buscarListaCompleta(t.buscar, "travados", "shopee", null, null);
+  assert.equal(r.queue.length, LIMITE_TRAVADOS); // "mostrando 200 de 1.200", como antes
+  assert.equal(t.chamadas.length, 1);
+  assert.equal(r.pagination?.has_more, true);
+});
+
+test("lista inteira: erro numa pagina rejeita (nada de lista pela metade); popup fechado para de buscar", async () => {
+  const falha = apiFalsa(1705, { falhaNoOffset: 1000 });
+  await assert.rejects(buscarListaCompleta(falha.buscar, "vencidos", "shopee", null, null), /http/);
+  const api = apiFalsa(1705);
+  // popup fechado depois da 1a pagina: a 2a nem sai
+  await buscarListaCompleta(api.buscar, "vencidos", "shopee", null, null, { ativo: () => api.chamadas.length < 1 });
+  assert.equal(api.chamadas.length, 1);
+});
+
+test("lista inteira: pagina vazia com has_more nao vira loop infinito", async () => {
+  const buscar = async () =>
+    ({ queue: [], pagination: { limit: 500, offset: 0, returned: 0, total: 9, has_more: true } }) as never;
+  assert.equal((await buscarListaCompleta(buscar, "vencidos", "shopee", null, null)).queue.length, 0);
+});
+
+test("queryDaLista aceita offset (padrao 0, igual ao de antes)", () => {
+  assert.equal(new URLSearchParams(queryDaLista("vencidos", "shopee", null, null)).get("offset"), "0");
+  assert.equal(new URLSearchParams(queryDaLista("vencidos", "shopee", null, null, 1500)).get("offset"), "1500");
 });
