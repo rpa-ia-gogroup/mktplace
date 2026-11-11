@@ -52,6 +52,7 @@ Tokens `--tc-kpi-*` em `globals.css` (claro → escuro), expostos no Tailwind co
 | `prazo` | 37 99 235 | 96 165 250 | (definido pelo consumidor) | `border-kpi-prazo/30` |
 | `atendimento` | 15 118 110 | 45 212 191 | (definido pelo consumidor) | `border-kpi-atendimento/35` |
 
+- **Identidade nas outras abas (sem cor nova, decisão de 10/11/2026):** só as 7 acima; o canal (TikTok/ML/Shopee) é um ponto `bg-canal-*` antes do rótulo, nunca cor de cartão. Em Canais (`components/canais/CartaoKpiCanal.tsx`): mix de GMV (vídeo, live, card) → `gmv`; novos compradores e recompra → `pedidos`; GMV por comprador → `ticket`; visitantes → `atendimento`; conversão → `roas`.
 - Mapa identidade → classes: `IDENTIDADE` em `KpiTile.tsx` (tipo `IdentidadeKpi`);
   mapa KPI → ícone + classes: `ICONE_KPI` em `KpiBand.tsx`. As classes são
   literais para o Tailwind enxergar.

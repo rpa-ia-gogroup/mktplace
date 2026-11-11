@@ -16,7 +16,10 @@ import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import { Store } from "lucide-react";
-import StatCard from "@/components/ui/StatCard";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
+import CartaoKpiCanal, { VISUAL_DO_KPI_CANAL } from "@/components/canais/CartaoKpiCanal";
+import KpiCanalDrilldownContent from "@/components/canais/KpiCanalDrilldownContent";
+import { KPI_CANAL, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
 import Freshness, { PeriodChip } from "@/components/ui/Freshness";
 import Note from "@/components/ui/Note";
 import Segmented from "@/components/ui/Segmented";
@@ -57,6 +60,22 @@ import {
   MIX_UNAVAILABLE_LABEL,
   type ContentMix,
 } from "@/lib/tiktok-content-mix";
+
+const CHAVES_TIKTOK: KpiCanalChave[] = ["tiktok_video", "tiktok_live", "tiktok_card", "tiktok_conversao"];
+const CHAVES_ML: KpiCanalChave[] = ["ml_novos", "ml_recompra", "ml_gmv_comprador"];
+const CHAVES_SHOPEE: KpiCanalChave[] = ["shopee_novos", "shopee_recompra", "shopee_gmv_comprador", "shopee_visitantes", "shopee_conversao"];
+
+/** "Carregando" da faixa de cartoes: um aviso so' para o leitor de tela, cartoes mudos. */
+function FaixaCarregando({ cartoes, className }: { cartoes: number; className: string }) {
+  return (
+    <div role="status" aria-busy="true" className={className}>
+      <span className="sr-only">Carregando indicadores…</span>
+      {Array.from({ length: cartoes }, (_, i) => (
+        <KpiCardSkeleton key={i} anunciar={false} />
+      ))}
+    </div>
+  );
+}
 
 function fmtPct(v: number | null, dec = 1): string {
   if (v == null) return "—";
@@ -248,6 +267,8 @@ function CanaisPageInner() {
   const [retryKey, setRetryKey] = useState(0);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   const [detailRow, setDetailRow] = useState<CanaisChannelRow | null>(null);
+  // Cartao de indicador aberto no detalhe (mesmo dialogo da pagina, outro conteudo).
+  const [kpiAberto, setKpiAberto] = useState<KpiCanalChave | null>(null);
   // Chave da ultima requisicao resolvida com sucesso — comparada com a chave
   // atual para decidir se o estado em memoria reflete de fato os filtros
   // exibidos agora (mesmo padrao da Gerencial, Gate U2 Finding 2).
@@ -374,6 +395,10 @@ function CanaisPageInner() {
   const hasShopeeData = !dataIsFresh || shBrands.length > 0;
 
   const periodLabel = fmtPeriodo(filters.dateFrom, filters.dateTo);
+  const abrirKpi = (chave: KpiCanalChave) => {
+    setDetailRow(null);
+    setKpiAberto(chave);
+  };
   const isEmpty = dataIsFresh && displayBrands.length === 0;
 
   const tkColumnTypes = useMemo(() => ({
@@ -758,38 +783,15 @@ function CanaisPageInner() {
             Mix do GMV de conteúdo do TikTok
             <InfoDica texto="% da base de conteúdo (vídeo + live + card/vitrine). Não representa participação nas vendas totais." />
           </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {!dataIsFresh ? (
-              <><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /></>
-            ) : (
-              <>
-                <StatCard
-                  rotulo="Vídeo — % da base de conteúdo"
-                  valor={formatContentPctBr(displayKpis?.tiktok_video_pct)}
-                  contexto={displayKpis?.tiktok_gmv_video != null ? fmtBrl(displayKpis.tiktok_gmv_video) : undefined}
-                  canal={MIX_SERIE.video}
-                />
-                <StatCard
-                  rotulo="Live — % da base de conteúdo"
-                  valor={formatContentPctBr(displayKpis?.tiktok_live_pct)}
-                  contexto={displayKpis?.tiktok_gmv_live != null ? fmtBrl(displayKpis.tiktok_gmv_live) : undefined}
-                  canal={MIX_SERIE.live}
-                />
-                <StatCard
-                  rotulo="Card/vitrine — % da base de conteúdo"
-                  valor={formatContentPctBr(displayKpis?.tiktok_card_pct)}
-                  contexto={displayKpis?.tiktok_gmv_card != null ? fmtBrl(displayKpis.tiktok_gmv_card) : undefined}
-                  canal={MIX_SERIE.card}
-                />
-                <StatCard
-                  rotulo="Conversao TikTok"
-                  valor={formatContentPctBr(displayKpis?.tiktok_conversion_rate)}
-                  contexto={displayKpis?.tiktok_customers != null ? `${fmtNumber(displayKpis.tiktok_customers)} compradores (soma diária)` : undefined}
-                  canal="bg-canal-tiktok"
-                />
-              </>
-            )}
-          </div>
+          {!dataIsFresh ? (
+            <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {CHAVES_TIKTOK.map((chave) => (
+                <CartaoKpiCanal key={chave} chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
+              ))}
+            </div>
+          )}
           {/* Faixa de reconciliacao — diagnostico NEUTRO entre duas linhagens.
             * Fica FORA da barra de composicao de proposito: a divergencia nao e'
             * um quarto segmento do mix. Sem cor de julgamento (positivo nao e'
@@ -979,32 +981,18 @@ function CanaisPageInner() {
       {showMl && (
         <section id="mercado-livre" aria-labelledby="mercado-livre-heading" className="scroll-mt-24 flex flex-col gap-3" aria-busy={!dataIsFresh}>
           <h2 id="mercado-livre-heading" className="text-sm font-semibold text-ink-muted">Mercado Livre</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {!dataIsFresh ? (
-              <><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /></>
-            ) : (
-              <>
-                <StatCard
-                  rotulo="Novos Compradores ML"
-                  valor={fmtPct(displayKpis?.ml_new_buyer_pct ?? null)}
-                  contexto={displayKpis?.ml_new_buyers != null ? `${fmtNumber(displayKpis.ml_new_buyers)} novos` : undefined}
-                  canal="bg-canal-ml"
-                />
-                <StatCard
-                  rotulo="Recompra ML"
-                  valor={fmtPct(displayKpis?.ml_repeat_buyer_rate_pct ?? null)}
-                  contexto={displayKpis?.ml_repeat_buyers != null ? `${fmtNumber(displayKpis.ml_repeat_buyers)} recorrentes` : undefined}
-                  canal="bg-canal-ml"
-                />
-                <StatCard
-                  rotulo="GMV por Comprador ML"
-                  valor={displayKpis?.ml_gmv_per_buyer != null ? fmtBrl(displayKpis.ml_gmv_per_buyer) : "—"}
-                  contexto={displayKpis?.ml_unique_buyers != null ? `${fmtNumber(displayKpis.ml_unique_buyers)} compradores (soma diária)` : undefined}
-                  canal="bg-canal-ml"
-                />
-              </>
-            )}
-          </div>
+          {!dataIsFresh ? (
+            <FaixaCarregando cartoes={3} className="grid grid-cols-2 md:grid-cols-3 gap-3" />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {CHAVES_ML.map((chave, i) => (
+                // 3 cartoes em 2 colunas: o ultimo ocupa a linha inteira no mobile.
+                <div key={chave} className={i === CHAVES_ML.length - 1 ? "col-span-2 md:col-span-1" : undefined}>
+                  <CartaoKpiCanal chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -1113,44 +1101,18 @@ function CanaisPageInner() {
       {showShopee && hasShopeeData && (
         <section id="shopee" aria-labelledby="shopee-heading" className="scroll-mt-24 flex flex-col gap-3" aria-busy={!dataIsFresh}>
           <h2 id="shopee-heading" className="text-sm font-semibold text-ink-muted">Shopee</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {!dataIsFresh ? (
-              <><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /><StatCard rotulo="" valor="" carregando /></>
-            ) : (
-              <>
-                <StatCard
-                  rotulo="Novos Compradores Shopee"
-                  valor={fmtPct(displayKpis?.shopee_new_buyer_pct ?? null)}
-                  contexto={displayKpis?.shopee_new_buyers != null ? `${fmtNumber(displayKpis.shopee_new_buyers)} novos` : undefined}
-                  canal="bg-canal-shopee"
-                />
-                <StatCard
-                  rotulo="Recompra Shopee"
-                  valor={fmtPct(displayKpis?.shopee_repeat_buyer_rate_pct ?? null)}
-                  contexto={displayKpis?.shopee_repeat_buyers != null ? `${fmtNumber(displayKpis.shopee_repeat_buyers)} recorrentes` : undefined}
-                  canal="bg-canal-shopee"
-                />
-                <StatCard
-                  rotulo="GMV / Comprador Shopee"
-                  valor={displayKpis?.shopee_gmv_per_buyer != null ? fmtBrl(displayKpis.shopee_gmv_per_buyer) : "—"}
-                  contexto={displayKpis?.shopee_unique_buyers != null ? `${fmtNumber(displayKpis.shopee_unique_buyers)} compradores (soma diária)` : undefined}
-                  canal="bg-canal-shopee"
-                />
-                <StatCard
-                  rotulo="Visitantes Shopee"
-                  valor={displayKpis?.shopee_visitors != null ? fmtNumber(displayKpis.shopee_visitors) : "—"}
-                  contexto="Visitas ao perfil no mês"
-                  canal="bg-canal-shopee"
-                />
-                <StatCard
-                  rotulo="Conversão Shopee"
-                  valor={displayKpis?.shopee_conversion_rate != null ? fmtPct(displayKpis.shopee_conversion_rate) : "—"}
-                  contexto="Compradores / Visitantes"
-                  canal="bg-canal-shopee"
-                />
-              </>
-            )}
-          </div>
+          {!dataIsFresh ? (
+            <FaixaCarregando cartoes={5} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3" />
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              {CHAVES_SHOPEE.map((chave, i) => (
+                // 5 cartoes: o ultimo fecha a linha no mobile (2 colunas) e no tablet (3 colunas).
+                <div key={chave} className={i === CHAVES_SHOPEE.length - 1 ? "col-span-2 lg:col-span-1" : undefined}>
+                  <CartaoKpiCanal chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
@@ -1282,10 +1244,24 @@ function CanaisPageInner() {
       )}
 
       <KpiDrilldownDialog
-        open={dataIsFresh && detailRow != null}
-        onClose={() => setDetailRow(null)}
-        title={detailRow ? `${detailRow.label} · ${detailRow.channel_label}` : ""}
+        open={dataIsFresh && (detailRow != null || kpiAberto != null)}
+        onClose={() => {
+          setDetailRow(null);
+          setKpiAberto(null);
+        }}
+        title={kpiAberto ? KPI_CANAL[kpiAberto].rotulo : detailRow ? `${detailRow.label} · ${detailRow.channel_label}` : ""}
+        icone={kpiAberto ? VISUAL_DO_KPI_CANAL[kpiAberto].icone : undefined}
+        identidade={kpiAberto ? VISUAL_DO_KPI_CANAL[kpiAberto].identidade : undefined}
       >
+        {dataIsFresh && kpiAberto && (
+          <KpiCanalDrilldownContent
+            chave={kpiAberto}
+            kpis={displayKpis}
+            marcas={{ tiktok: tkBrands, ml: mlBrands, shopee: shBrands }[KPI_CANAL[kpiAberto].canal]}
+            periodLabel={periodLabel}
+            refreshedAt={refreshedAt}
+          />
+        )}
         {dataIsFresh && detailRow && (
           <ChannelComparisonDialogContent
             row={detailRow}
