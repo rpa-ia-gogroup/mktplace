@@ -366,6 +366,29 @@ class FinanceiroKpis(BaseModel):
     shopee_avg_settlement_pct: Optional[float] = None
     shopee_ad_spend: Optional[float] = None
     shopee_roas: Optional[float] = None
+    # T-0085: quantas marcas com GMV no canal entraram no % consolidado de
+    # taxa/repasse (numerador e denominador so' das marcas com o dado).
+    # `None` = canal sem GMV no recorte. Opcionais e aditivos.
+    tiktok_fee_cobertura: Optional["CoberturaMarcas"] = None
+    tiktok_settlement_cobertura: Optional["CoberturaMarcas"] = None
+    ml_fee_cobertura: Optional["CoberturaMarcas"] = None
+    shopee_fee_cobertura: Optional["CoberturaMarcas"] = None
+    shopee_settlement_cobertura: Optional["CoberturaMarcas"] = None
+
+
+class CoberturaMarcas(BaseModel):
+    """T-0085 — cobertura por marca de um % consolidado do Financeiro.
+
+    `status`: "completa" | "parcial" | "sem_dado" (texto livre de proposito:
+    um valor novo nao derruba a resposta).
+    """
+    status: str
+    marcas_com_dado: int
+    marcas_total: int
+    marcas_sem_dado: list[str] = []
+
+
+FinanceiroKpis.model_rebuild()
 
 
 class FinanceiroBrandRow(BaseModel):
