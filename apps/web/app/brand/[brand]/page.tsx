@@ -11,16 +11,20 @@ import { isMarketplaceSelected, serializeMarketplaceSelection } from "@/lib/mark
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { previousEquivalentRange } from "@/lib/filters/presets";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
+import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "@/lib/brand-daily-summary";
 import { tiktokMaturacaoRotulo, TIKTOK_MATURACAO_DICA } from "@/lib/tiktok-maturacao";
 import { mlMaturacaoRotulo, ML_MATURACAO_DICA } from "@/lib/ml-maturacao";
 import DailyChart from "@/components/DailyChart";
-import KpiCard from "@/components/KpiCard";
+import { FaixaSituacao, VISUAL_SITUACAO } from "@/components/brand/SituacaoCartoes";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
-import { SkeletonKpiCard } from "@/components/Skeleton";
-import { fmtBrl, fmtNumber, calcMoM } from "@/lib/formatters";
+import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import {
+  cartoesSituacao, DICA_SITUACAO, ROTULO_SITUACAO, valorExato, type ChaveSituacao,
+} from "@/lib/brand/situacao-cartoes";
 // Apresentacao decimal em pt-BR. O modulo nasceu no V3-1A, quando o QA visual
 // achou PONTO decimal em toda percentagem da Inteligencia, e e generico: cuida
 // so de formatacao, sem calculo, metrica nem arredondamento de negocio.
@@ -196,7 +200,9 @@ const MIX_TOM: Record<string, string> = {
 /** Detalhe mensal aberto — um por vez, sempre no shell unico. */
 type BrandDialog =
   | { kind: "channel"; row: BrandDetailChannelRow }
-  | { kind: "product"; produto: BrandDetailProduto };
+  | { kind: "product"; produto: BrandDetailProduto }
+  /** Cartao da Situacao da marca (intervalo global). */
+  | { kind: "kpi"; chave: ChaveSituacao };
 
 function BrandPageInner() {
   const { brand } = useParams<{ brand: string }>();
@@ -417,7 +423,6 @@ function BrandPageInner() {
   const ordersReliable = isOrdersReliable(isLive, filter);
   const cur = summarize(daily, filter, ordersReliable);
   const prev = summarize(prevDaily, filter, ordersReliable);
-  const gmvMoM = filters.compare && prev.gmv > 0 ? calcMoM(cur.gmv, prev.gmv) : null;
 
   const showTk = isMarketplaceSelected(filter, "tiktok");
   const showMl = isMarketplaceSelected(filter, "ml");
@@ -437,6 +442,12 @@ function BrandPageInner() {
   const last7 = [...projectedDaily].reverse().slice(0, 7);
 
   const mixCanais = channelTotals(projectedDaily, filter);
+  // Periodo anterior REAL: comparacao ligada E janela anterior com linhas.
+  const cartoesMarca = cartoesSituacao(cur, prev, projectedDaily, filters.compare && prevDaily.length > 0);
+  const roasMarca = cur.adSpend != null && cur.adSpend > 0 ? roasBr(cur.gmv / cur.adSpend) : null;
+  const periodoAnteriorLabel = filters.compare
+    ? (() => { const r = previousEquivalentRange(filters.dateFrom, filters.dateTo); return fmtPeriodo(r.dateFrom, r.dateTo); })()
+    : "";
   const mudancas = changesState(filters.compare, isLive, prevDaily.length);
   const linhasMudanca = mudancas === "ready"
     ? sortByImpact(decomposeByChannel(daily, prevDaily, filter))
@@ -537,9 +548,7 @@ function BrandPageInner() {
       >
         <SectionTitle badge={`intervalo global ${periodLabel}`}>Situação da marca</SectionTitle>
         {!dailyIsFresh ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <SkeletonKpiCard /><SkeletonKpiCard /><SkeletonKpiCard /><SkeletonKpiCard />
-          </div>
+          <FaixaCarregando cartoes={4} className="grid grid-cols-2 gap-3 md:grid-cols-4" />
         ) : (
           <div className="flex flex-col gap-4">
             {!isLive && (
@@ -554,21 +563,7 @@ function BrandPageInner() {
                 <InfoDica texto="Em modo demonstração, os dados de exemplo não separam pedidos por canal. GMV continua filtrável." />
               </p>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <KpiCard label="GMV" value={fmtBrl(cur.gmv)} mom={gmvMoM} accent={meta.color} />
-              <KpiCard label="Pedidos" value={cur.orders != null ? fmtNumber(cur.orders) : "N/D"} accent="bg-cyan-500" />
-              <KpiCard label="Ticket médio" value={cur.avgTicket != null ? fmtBrl(cur.avgTicket) : "N/D"} accent="bg-amber-500" />
-              {cur.adSpend != null && cur.adSpend > 0 ? (
-                <KpiCard
-                  label="Ad Spend"
-                  value={fmtBrl(cur.adSpend)}
-                  subvalue={`ROAS ~${roasBr(cur.gmv / cur.adSpend)}`}
-                  accent="bg-emerald-500"
-                />
-              ) : (
-                <KpiCard label="Ad Spend" value="—" subvalue="N/D para TikTok Shop" accent="bg-slate-300" />
-              )}
-            </div>
+            <FaixaSituacao cartoes={cartoesMarca} roas={roasMarca} aoAbrir={(chave) => setDialog({ kind: "kpi", chave })} />
           </div>
         )}
       </section>
@@ -804,16 +799,62 @@ function BrandPageInner() {
 
       {/* ══ shell UNICO de detalhe — um dialogo por vez ═════════════════ */}
       <KpiDrilldownDialog
-        open={dialog != null}
+        open={dialog != null && (dialog.kind !== "kpi" || dailyIsFresh)}
         onClose={() => setDialog(null)}
+        icone={dialog?.kind === "kpi" ? VISUAL_SITUACAO[dialog.chave].icone : undefined}
+        identidade={dialog?.kind === "kpi" ? VISUAL_SITUACAO[dialog.chave].identidade : undefined}
         title={
           dialog == null
             ? ""
-            : dialog.kind === "channel"
-              ? `${dialog.row.label} · ${competenciaLabel}`
-              : `${dialog.produto.product_name} · ${competenciaLabel}`
+            : dialog.kind === "kpi"
+              ? `${ROTULO_SITUACAO[dialog.chave]} · ${periodLabel}`
+              : dialog.kind === "channel"
+                ? `${dialog.row.label} · ${competenciaLabel}`
+                : `${dialog.produto.product_name} · ${competenciaLabel}`
         }
       >
+        {dialog?.kind === "kpi" && dailyIsFresh && (() => {
+          const c = cartoesMarca.find((x) => x.chave === dialog.chave);
+          if (!c || c.valor == null) return null;
+          return (
+            <div className="flex flex-col gap-4 text-sm">
+              <CabecalhoDoDetalhe
+                valor={valorExato(c.chave, c.valor)}
+                rotulo={ROTULO_SITUACAO[c.chave]}
+                contexto={<DrilldownContextLine leading={meta.label} periodLabel={`intervalo global ${periodLabel}`} refreshedAt={null} />}
+                dica={DICA_SITUACAO[c.chave]}
+              />
+              {c.chave === "gmv" && mixCanais.length > 0 && (
+                <DrilldownSecao titulo="Por canal">
+                  <ul className="flex flex-col list-none p-0 m-0">
+                    {mixCanais.map((m) => (
+                      <EvidenceRow
+                        key={m.key}
+                        label={m.label}
+                        value={m.gmv == null ? "Sem dado" : valorExato("gmv", m.gmv)}
+                        tone={m.gmv == null ? "muted" : "value"}
+                        ponto={CHANNEL_DOT[m.key]}
+                        pct={m.sharePct}
+                      />
+                    ))}
+                  </ul>
+                </DrilldownSecao>
+              )}
+              {c.antes != null && (
+                <DrilldownSecao titulo="Período anterior">
+                  <ul className="flex flex-col list-none p-0 m-0">
+                    <EvidenceRow
+                      label={periodoAnteriorLabel}
+                      value={valorExato(c.chave, c.antes)}
+                      delta={c.deltaPct != null ? { pct: c.deltaPct, neutro: c.chave === "adspend" } : null}
+                    />
+                  </ul>
+                </DrilldownSecao>
+              )}
+            </div>
+          );
+        })()}
+
         {/* POPUPS-1 — numero grande no topo, competencia em selo, a limitacao
             do escopo e o que NAO viaja no CTA no ⓘ (antes, dois paragrafos). */}
         {dialog?.kind === "channel" && (() => {

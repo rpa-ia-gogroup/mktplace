@@ -723,7 +723,8 @@ test("V32 um único shell de diálogo, e um único diálogo por vez", () => {
   assert.equal((PAGINA.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um shell só");
   // estado único e discriminado ⇒ nunca dois abertos
   assert.match(PAGINA, /const \[dialog, setDialog\] = useState<BrandDialog \| null>\(null\)/);
-  assert.match(PAGINA, /open=\{dialog != null\}/);
+  // o detalhe dos cartoes da Situacao so' abre com a janela diaria FRESCA
+  assert.match(PAGINA, /open=\{dialog != null && \(dialog\.kind !== "kpi" \|\| dailyIsFresh\)\}/);
   // e as primitives do G2 são reutilizadas, não recriadas. POPUPS-1: a nota de
   // escopo do detalhe (metodologia, não alerta de dado) foi para o ⓘ; sai o
   // DataQualityNote, entra a seção compartilhada.
@@ -769,7 +770,7 @@ test("V32 nada de Ads, margem, afiliado, benchmark, ranking novo ou previsão na
     assert.doesNotMatch(src, proibido, nome);
   }
   // o único "Ad Spend" é o KPI global preexistente, com N/D declarado no TikTok
-  assert.match(PAGINA, /N\/D para TikTok Shop/);
+  assert.match(read("src/components/brand/SituacaoCartoes.tsx"), /N\/D para TikTok Shop/);
   // o contêiner mensal não RENDERIZA Ads nem ROAS. A nota de limitação menciona
   // os dois para dizer que não existem — negar não é prometer.
   assert.doesNotMatch(PAINEL_CODIGO, /label="Ad Spend"|label="ROAS"/);
