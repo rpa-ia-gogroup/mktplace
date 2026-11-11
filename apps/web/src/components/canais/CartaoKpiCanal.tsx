@@ -68,7 +68,6 @@ export default function CartaoKpiCanal({
       valor={texto.valor}
       comparacao={texto.comparacao}
       tom={texto.ausente ? "ausente" : "neutro"}
-      contexto={texto.ausente ? "Sem dado neste período para o filtro atual" : undefined}
       onAbrir={() => onAbrir(chave)}
     />
   );

@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { KPI_CANAL, linhasPorMarca, textoDoCartao, type KpiCanalChave } from "../src/lib/canais-kpi-detalhe.ts";
+import { KPI_CANAL, linhasPorMarca, textoDoCartao, tituloDoDetalhe, type KpiCanalChave } from "../src/lib/canais-kpi-detalhe.ts";
 import type { CanaisBrandRow, CanaisKpis } from "../src/lib/api-client.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -53,12 +53,26 @@ test("cartao: formato pt-BR da casa, nunca K/M com ponto", () => {
 
 test("cartao: ausencia nunca vira zero", () => {
   const sem = textoDoCartao("shopee_novos", KPIS);
-  assert.deepEqual([sem.valor, sem.ausente, sem.comparacao], ["—", true, undefined]);
+  // Sem dado: o motivo fica VISIVEL no cartao (nao so' no hover), no lugar do apoio.
+  assert.deepEqual([sem.valor, sem.ausente, sem.comparacao], ["—", true, "Sem dado no período"]);
   assert.equal(textoDoCartao("tiktok_card", KPIS).valor, "—");
   const semKpis = textoDoCartao("ml_novos", null);
   assert.deepEqual([semKpis.valor, semKpis.ausente], ["—", true]);
-  // "Compradores / Visitantes" e' texto fixo da definicao, nao dado: aparece mesmo sem valor.
-  assert.equal(textoDoCartao("shopee_conversao", KPIS).comparacao, "Compradores / Visitantes");
+  // O texto fixo de apoio ("Visitas ao perfil no mês") nao pode parecer descricao de um numero que nao existe.
+  assert.equal(textoDoCartao("shopee_conversao", KPIS).comparacao, "Sem dado no período");
+  assert.equal(textoDoCartao("shopee_visitantes", { ...KPIS, shopee_visitors: null } as unknown as CanaisKpis).comparacao, "Sem dado no período");
+});
+
+test("rotulo do cartao e' curto; o titulo do detalhe mantem o canal", () => {
+  assert.equal(KPI_CANAL.tiktok_video.rotulo, "Vídeo");
+  assert.equal(KPI_CANAL.shopee_novos.rotulo, "Novos compradores");
+  assert.equal(tituloDoDetalhe("tiktok_video"), "Vídeo · TikTok");
+  assert.equal(tituloDoDetalhe("shopee_novos"), "Novos compradores · Shopee");
+  assert.equal(tituloDoDetalhe("ml_gmv_comprador"), "GMV por comprador · Mercado Livre");
+  for (const chave of Object.keys(KPI_CANAL) as KpiCanalChave[]) {
+    assert.ok(KPI_CANAL[chave].rotulo.length <= 20, `${chave}: rotulo curto (cabe em 1 linha no 390)`);
+    assert.doesNotMatch(KPI_CANAL[chave].rotulo, /TikTok|ML|Shopee|base de conteúdo/, `${chave}: nao repete o canal nem a faixa`);
+  }
 });
 
 test("detalhe por marca: com valor primeiro (maior -> menor), sem dado depois, barra coerente", () => {
@@ -106,6 +120,14 @@ test("cartao de Canais: so' as 7 identidades existentes; canal e' ponto, nao cor
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
   assert.ok(cartao.includes('variante="gerencial"') && cartao.includes("onAbrir={() => onAbrir(chave)}"));
   assert.ok(cartao.includes("PONTO_DO_CANAL[def.canal]"));
+});
+
+test("faixa de reconciliacao do TikTok, colada nos cartoes, usa o mesmo formato dos cartoes", () => {
+  const pag = ler("app/canais/page.tsx");
+  assert.ok(pag.includes("fmtBrlCurto(tkMixTotal.base)") && pag.includes("fmtBrlCurto(displayKpis.tiktok_gmv)"));
+  // So' o trecho da faixa (a tabela por marca, mais abaixo, fica para outro PR).
+  const faixa = pag.slice(pag.indexOf("Base de conteúdo:"), pag.indexOf("Diferença entre base de conteúdo"));
+  assert.ok(faixa.length > 50 && !faixa.includes("fmtBrl("), "faixa de reconciliacao sem fmtBrl (K/M com ponto)");
 });
 
 test("modais da Gerencial e de Canais usam os formatadores da casa (nada de 35.5K)", () => {

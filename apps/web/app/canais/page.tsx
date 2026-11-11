@@ -19,7 +19,7 @@ import { Store } from "lucide-react";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import CartaoKpiCanal, { VISUAL_DO_KPI_CANAL } from "@/components/canais/CartaoKpiCanal";
 import KpiCanalDrilldownContent from "@/components/canais/KpiCanalDrilldownContent";
-import { KPI_CANAL, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
+import { KPI_CANAL, tituloDoDetalhe, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
 import Freshness, { PeriodChip } from "@/components/ui/Freshness";
 import Note from "@/components/ui/Note";
 import Segmented from "@/components/ui/Segmented";
@@ -36,7 +36,7 @@ import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import InfoDica from "@/components/ui/InfoDica";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrl, fmtBrlCurto, fmtNumber } from "@/lib/formatters";
 import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
 import { detectPreset } from "@/lib/filters/presets";
 import { useSortableTable } from "@/lib/use-sortable-table";
@@ -141,7 +141,7 @@ function ContentMixBar({ mix, gmvVideo, gmvLive, gmvCard }: {
   }
   const w = contentMixWeights(gmvVideo, gmvLive, gmvCard);
   const label =
-    `Mix do GMV de conteúdo sobre base de ${fmtBrl(mix.base)}: ` +
+    `Mix do GMV de conteúdo sobre base de ${fmtBrlCurto(mix.base)}: ` +
     `vídeo ${formatContentPctBr(mix.videoPct)}, live ${formatContentPctBr(mix.livePct)}, card/vitrine ${formatContentPctBr(mix.cardPct)}.`;
   return (
     <div
@@ -801,13 +801,13 @@ function CanaisPageInner() {
               <div className="flex items-baseline gap-2">
                 <span className="text-xs text-ink-faint">Base de conteúdo:</span>
                 <span className="text-xs font-semibold tabular-nums text-ink-muted">
-                  {tkMixTotal.base != null ? fmtBrl(tkMixTotal.base) : "N/D"}
+                  {tkMixTotal.base != null ? fmtBrlCurto(tkMixTotal.base) : "N/D"}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="text-xs text-ink-faint">GMV comercial TikTok:</span>
                 <span className="text-xs font-semibold tabular-nums text-ink-muted">
-                  {displayKpis?.tiktok_gmv != null ? fmtBrl(displayKpis.tiktok_gmv) : "N/D"}
+                  {displayKpis?.tiktok_gmv != null ? fmtBrlCurto(displayKpis.tiktok_gmv) : "N/D"}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
@@ -1249,7 +1249,7 @@ function CanaisPageInner() {
           setDetailRow(null);
           setKpiAberto(null);
         }}
-        title={kpiAberto ? KPI_CANAL[kpiAberto].rotulo : detailRow ? `${detailRow.label} · ${detailRow.channel_label}` : ""}
+        title={kpiAberto ? tituloDoDetalhe(kpiAberto) : detailRow ? `${detailRow.label} · ${detailRow.channel_label}` : ""}
         icone={kpiAberto ? VISUAL_DO_KPI_CANAL[kpiAberto].icone : undefined}
         identidade={kpiAberto ? VISUAL_DO_KPI_CANAL[kpiAberto].identidade : undefined}
       >

@@ -49,43 +49,52 @@ const n = (v: Num, sufixo: string) => (v != null ? `${fmtNumCurto(v)} ${sufixo}`
 const brl = (v: Num) => (v != null ? fmtBrlCurto(v) : undefined);
 
 export const KPI_CANAL: Record<KpiCanalChave, Definicao> = {
-  tiktok_video: { rotulo: "Vídeo — % da base de conteúdo", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_video_pct, apoio: (f) => brl(f.tiktok_gmv_video), dica: DICA_MIX },
-  tiktok_live: { rotulo: "Live — % da base de conteúdo", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_live_pct, apoio: (f) => brl(f.tiktok_gmv_live), dica: DICA_MIX },
-  tiktok_card: { rotulo: "Card/vitrine — % da base de conteúdo", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_card_pct, apoio: (f) => brl(f.tiktok_gmv_card), dica: DICA_MIX },
+  tiktok_video: { rotulo: "Vídeo", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_video_pct, apoio: (f) => brl(f.tiktok_gmv_video), dica: DICA_MIX },
+  tiktok_live: { rotulo: "Live", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_live_pct, apoio: (f) => brl(f.tiktok_gmv_live), dica: DICA_MIX },
+  tiktok_card: { rotulo: "Card/vitrine", canal: "tiktok", tipo: "pct", valor: (f) => f.tiktok_card_pct, apoio: (f) => brl(f.tiktok_gmv_card), dica: DICA_MIX },
   tiktok_conversao: {
-    rotulo: "Conversão TikTok",
+    rotulo: "Conversão",
     canal: "tiktok",
     tipo: "pct",
     valor: (f) => f.tiktok_conversion_rate,
     apoio: (f) => n(f.tiktok_customers, "compradores (soma diária)"),
   },
-  ml_novos: { rotulo: "Novos Compradores ML", canal: "ml", tipo: "pct", valor: (f) => f.ml_new_buyer_pct, apoio: (f) => n(f.ml_new_buyers, "novos") },
-  ml_recompra: { rotulo: "Recompra ML", canal: "ml", tipo: "pct", valor: (f) => f.ml_repeat_buyer_rate_pct, apoio: (f) => n(f.ml_repeat_buyers, "recorrentes") },
+  ml_novos: { rotulo: "Novos compradores", canal: "ml", tipo: "pct", valor: (f) => f.ml_new_buyer_pct, apoio: (f) => n(f.ml_new_buyers, "novos") },
+  ml_recompra: { rotulo: "Recompra", canal: "ml", tipo: "pct", valor: (f) => f.ml_repeat_buyer_rate_pct, apoio: (f) => n(f.ml_repeat_buyers, "recorrentes") },
   ml_gmv_comprador: {
-    rotulo: "GMV por Comprador ML",
+    rotulo: "GMV por comprador",
     canal: "ml",
     tipo: "brl",
     valor: (f) => f.ml_gmv_per_buyer,
     apoio: (f) => n(f.ml_unique_buyers, "compradores (soma diária)"),
   },
-  shopee_novos: { rotulo: "Novos Compradores Shopee", canal: "shopee", tipo: "pct", valor: (f) => f.shopee_new_buyer_pct, apoio: (f) => n(f.shopee_new_buyers, "novos") },
+  shopee_novos: { rotulo: "Novos compradores", canal: "shopee", tipo: "pct", valor: (f) => f.shopee_new_buyer_pct, apoio: (f) => n(f.shopee_new_buyers, "novos") },
   shopee_recompra: {
-    rotulo: "Recompra Shopee",
+    rotulo: "Recompra",
     canal: "shopee",
     tipo: "pct",
     valor: (f) => f.shopee_repeat_buyer_rate_pct,
     apoio: (f) => n(f.shopee_repeat_buyers, "recorrentes"),
   },
   shopee_gmv_comprador: {
-    rotulo: "GMV / Comprador Shopee",
+    rotulo: "GMV por comprador",
     canal: "shopee",
     tipo: "brl",
     valor: (f) => f.shopee_gmv_per_buyer,
     apoio: (f) => n(f.shopee_unique_buyers, "compradores (soma diária)"),
   },
-  shopee_visitantes: { rotulo: "Visitantes Shopee", canal: "shopee", tipo: "num", valor: (f) => f.shopee_visitors, apoioFixo: "Visitas ao perfil no mês" },
-  shopee_conversao: { rotulo: "Conversão Shopee", canal: "shopee", tipo: "pct", valor: (f) => f.shopee_conversion_rate, apoioFixo: "Compradores / Visitantes" },
+  shopee_visitantes: { rotulo: "Visitantes", canal: "shopee", tipo: "num", valor: (f) => f.shopee_visitors, apoioFixo: "Visitas ao perfil no mês" },
+  shopee_conversao: { rotulo: "Conversão", canal: "shopee", tipo: "pct", valor: (f) => f.shopee_conversion_rate, apoioFixo: "Compradores / Visitantes" },
 };
+
+/** Nome do canal para o titulo do detalhe, que nao tem o titulo da faixa por perto. */
+const NOME_DO_CANAL: Record<CanalDoKpi, string> = { tiktok: "TikTok", ml: "Mercado Livre", shopee: "Shopee" };
+
+/** Titulo do detalhe: "Vídeo · TikTok", "Novos compradores · Shopee". */
+export function tituloDoDetalhe(chave: KpiCanalChave): string {
+  const def = KPI_CANAL[chave];
+  return `${def.rotulo} · ${NOME_DO_CANAL[def.canal]}`;
+}
 
 /** Ponto de identidade do canal (so' identidade, nunca estado): classe `bg-canal-*`. */
 export const PONTO_DO_CANAL: Record<CanalDoKpi, string> = {
@@ -104,7 +113,7 @@ export interface TextoDoCartao {
   /** "—" quando nao ha' valor (nunca "0"). */
   valor: string;
   ausente: boolean;
-  /** Segunda linha: base do indicador, so' quando existe. */
+  /** Segunda linha: a base do indicador; sem valor, "Sem dado no período" (visivel, nao so' no hover). */
   comparacao?: string;
 }
 
@@ -115,7 +124,7 @@ export function textoDoCartao(chave: KpiCanalChave, kpis: CanaisKpis | null): Te
   return {
     valor: v != null ? formatar(def.tipo, v) : "—",
     ausente: v == null,
-    comparacao: (kpis && def.apoio?.(kpis)) || def.apoioFixo,
+    comparacao: v == null ? "Sem dado no período" : (kpis && def.apoio?.(kpis)) || def.apoioFixo,
   };
 }
 
