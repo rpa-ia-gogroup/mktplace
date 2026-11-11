@@ -4,6 +4,7 @@ import InfoDica from "@/components/ui/InfoDica";
 import TableScrollHint from "@/components/TableScrollHint";
 import type { CanaisChannelMedian } from "@/lib/api-client";
 import { formatChannelMetric, type FormattedMetric } from "@/lib/canais-channel-metrics";
+import { fmtPctSimples, fmtVezes } from "@/lib/formatters";
 
 /**
  * UX-TORRE-B2B-1 — os canais lado a lado, na primeira dobra de Canais.
@@ -76,8 +77,6 @@ export default function ChannelOverview({
   const total = colunas.reduce((s, c) => s + (c.gmv ?? 0), 0);
   const share = (c: ColunaCanal) => (c.gmv != null && total > 0 ? (c.gmv / total) * 100 : null);
   const semDado = <span className="rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn-ink">Sem dado</span>;
-  const pct1 = (v: number) => `${v.toFixed(1)}%`;
-  const roas = (v: number) => `${v.toFixed(2)}x`;
 
   type Linha = { rotulo: string; dica?: string; valor: (c: ColunaCanal) => React.ReactNode };
   const grupos: { titulo: string; linhas: Linha[] }[] = [
@@ -90,7 +89,7 @@ export default function ChannelOverview({
           dica: "Entre os canais selecionados",
           valor: (c) => {
             const s = share(c);
-            return s == null ? <span className="text-xs text-ink-faint">—</span> : <span className="text-ink-muted">{pct1(s)}</span>;
+            return s == null ? <span className="text-xs text-ink-faint">—</span> : <span className="text-ink-muted">{fmtPctSimples(s)}</span>;
           },
         },
         { rotulo: "Pedidos", valor: (c) => (c.pedidos == null ? semDado : <span className="text-ink-muted">{fmtNumber(c.pedidos)}</span>) },
@@ -103,24 +102,24 @@ export default function ChannelOverview({
           rotulo: "Custo marketplace / GMV",
           valor: (c) => (
             <span className="inline-flex items-baseline gap-1.5">
-              <Celula m={formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, pct1)} />
+              <Celula m={formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, fmtPctSimples)} />
               {c.mediana?.marketplace_cost_pct_p75 != null && c.aplicavel.custo && c.disponivel.custo && (
-                <span className="text-xs text-ink-faint">p75 {pct1(c.mediana.marketplace_cost_pct_p75)}</span>
+                <span className="text-xs text-ink-faint">p75 {fmtPctSimples(c.mediana.marketplace_cost_pct_p75)}</span>
               )}
             </span>
           ),
         },
         {
           rotulo: "Ads / GMV",
-          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.ads_gmv_pct_median ?? null, c.aplicavel.ads, c.disponivel.ads, pct1)} />,
+          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.ads_gmv_pct_median ?? null, c.aplicavel.ads, c.disponivel.ads, fmtPctSimples)} />,
         },
         {
           rotulo: "ROAS",
-          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.roas_median ?? null, c.aplicavel.ads, c.disponivel.ads, roas)} />,
+          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.roas_median ?? null, c.aplicavel.ads, c.disponivel.ads, fmtVezes)} />,
         },
         {
           rotulo: "Frete seller / GMV",
-          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.seller_shipping_pct_median ?? null, c.aplicavel.frete, c.disponivel.frete, pct1)} />,
+          valor: (c) => <Celula m={formatChannelMetric(c.mediana?.seller_shipping_pct_median ?? null, c.aplicavel.frete, c.disponivel.frete, fmtPctSimples)} />,
         },
       ],
     },
@@ -161,7 +160,7 @@ export default function ChannelOverview({
             className="flex h-2.5 w-full overflow-hidden rounded-full bg-raised"
             role="img"
             aria-label={`Participação no GMV: ${colunas
-              .map((c) => `${c.rotulo} ${share(c) == null ? "—" : pct1(share(c)!)}`)
+              .map((c) => `${c.rotulo} ${share(c) == null ? "—" : fmtPctSimples(share(c)!)}`)
               .join(", ")}`}
           >
             {colunas.map((c) => (
