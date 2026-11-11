@@ -89,8 +89,10 @@ export function resolverTema(
  * literais para os tokens.
  * MONITORAMENTO-TEMA-ESCURO (11/11/2026) acrescentou `/monitoramento-preco`
  * (o prefixo leva junto `/monitoramento-preco/revendedores`).
+ * OPERACOES-TEMA-ESCURO (11/11/2026) acrescentou `/operacoes`; o grafico de
+ * tendencia usa `temaDoGrafico`.
  */
-export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco"] as const;
+export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes"] as const;
 
 export function rotaTematizada(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

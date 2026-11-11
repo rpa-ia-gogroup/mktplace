@@ -13,10 +13,10 @@ interface Props {
 
 function SortIcon({ active, direction }: { active: boolean; direction: SortState["direction"] }) {
   if (!active || !direction) {
-    return <span className="text-slate-300 text-xs leading-none" aria-hidden="true">↕</span>;
+    return <span className="text-ink-faint text-xs leading-none" aria-hidden="true">↕</span>;
   }
   return (
-    <span className="text-violet-600 text-xs leading-none" aria-hidden="true">
+    <span className="text-accent text-xs leading-none" aria-hidden="true">
       {direction === "asc" ? "▲" : "▼"}
     </span>
   );
@@ -40,16 +40,16 @@ export default function SortableHeader({ label, column, sort, onSort, align = "r
     <th
       scope="col"
       aria-sort={ariaSort}
-      className={`text-xs font-semibold text-slate-600 uppercase tracking-wider p-0 ${
+      className={`text-xs font-semibold text-ink-muted uppercase tracking-wider p-0 ${
         align === "right" ? "text-right" : "text-left"
       } ${className}`}
     >
       <button
         type="button"
         onClick={() => onSort(column)}
-        className={`w-full h-full min-h-11 flex items-center gap-1 px-4 py-3 hover:text-violet-700 hover:bg-slate-100/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-violet-500 ${
+        className={`w-full h-full min-h-11 flex items-center gap-1 px-4 py-3 hover:text-accent-ink hover:bg-raised/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
           align === "right" ? "justify-end flex-row-reverse" : "justify-start"
-        } ${active ? "text-violet-700" : ""}`}
+        } ${active ? "text-accent-ink" : ""}`}
       >
         <span>{label}</span>
         <SortIcon active={active} direction={sort.direction} />

@@ -206,7 +206,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
   // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco"]);
+  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -230,6 +230,7 @@ const PAGINA_DA_ROTA: Record<string, string> = {
   "/full": "app/full/page.tsx",
   "/marcas-menores": "app/marcas-menores/page.tsx",
   "/monitoramento-preco": "app/monitoramento-preco/page.tsx",
+  "/operacoes": "app/operacoes/page.tsx",
 };
 
 // A propria fonte da paleta dos graficos (SVG precisa de cor resolvida).
