@@ -215,7 +215,7 @@ export interface ResumoMl {
   /** Taxa (% dos pedidos) e contagem de cada indicador no periodo. */
   taxa: Record<IndicadorTaxa, number | null>;
   contagem: Record<IndicadorTaxa, number | null>;
-  /** Valor reembolsado (R$) das marcas com reembolso medido; null = sem leitura. */
+  /** Valor reembolsado (R$); null se alguma marca com reembolso medido veio sem valor. */
   valorReembolsado: number | null;
   comparacao: Record<IndicadorTaxa, ComparacaoCard | null>;
   semAnterior: Partial<Record<IndicadorMl, { texto: string; detalhe: string | null }>>;
@@ -227,6 +227,12 @@ export interface ResumoMl {
   respostaComparacao: ComparacaoCard | null;
   /** Tempo de resposta oficial (min), média das marcas ponderada pelas perguntas do período. */
   tempoRespostaMin: number | null;
+}
+
+/** Soma o valor so' se TODA marca com reembolso medido tem valor; senao null (nunca um total menor que o real). */
+function valorReembolsado(ms: LinhaMl[]): number | null {
+  const com = ms.filter((m) => num(m.reembolsos) != null);
+  return com.length && com.every((m) => num(m.valor_reembolsado) != null) ? somar(com.map((m) => m.valor_reembolsado)) : null;
 }
 
 export function resumoMl(d: CxMlResponse): ResumoMl {
@@ -276,7 +282,7 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
     pedidos: somar(ms.map((m) => m.pedidos)),
     taxa,
     contagem,
-    valorReembolsado: somar(ms.filter((m) => num(m.reembolsos) != null).map((m) => m.valor_reembolsado)),
+    valorReembolsado: valorReembolsado(ms),
     comparacao,
     semAnterior,
     perguntas: somar(comPerg.map((m) => m.perguntas)),
@@ -526,7 +532,7 @@ export function itensAtencaoMl(d: CxMlResponse, rotuloMarca: (m: string) => stri
 // ---------------------------------------------------------------------------
 export const AJUDA_ML = {
   resposta:
-    "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período; as de mais de 24 h vêm da base diária, que guarda cada pergunta no dia em que foi feita.",
+    "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período. As de mais de 24 h contam desde o dia da pergunta.",
   status:
     "Reputação OFICIAL do Mercado Livre de cada conta (termômetro de cor e MercadoLíder). Em vermelho, as métricas fora do limite para MercadoLíder.",
   reembolso:

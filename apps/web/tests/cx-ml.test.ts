@@ -149,6 +149,9 @@ test("reembolso: taxa e valor somando as marcas; sem leitura nao vira zero; valo
   const sem = resumoMl(resp({ marcas: [linha("kokeshi")] })); // a API nao mandou reembolso
   assert.deepEqual([sem.taxa.reembolso, sem.contagem.reembolso, sem.valorReembolsado, sem.comparacao.reembolso], [null, null, null, null]);
   assert.equal(montarProblemasMl(resp({ marcas: [linha("kokeshi")] }), rotulo).linhas[0].celulas.reembolso.pct, "—");
+  // uma marca com reembolso medido mas sem valor: o total em R$ some (nunca parcial); a taxa segue
+  const parcial = resumoMl(resp({ marcas: [linha("kokeshi", { reembolsos: 40, valor_reembolsado: 2000 }), linha("barbours", { reembolsos: 20, valor_reembolsado: null })] }));
+  assert.deepEqual([parcial.valorReembolsado, parcial.taxa.reembolso], [null, 3]);
 });
 
 test("sem anterior de cancelamento/reembolso: so' a base de pedidos; reclamacao tem o seu proprio motivo", () => {
@@ -279,6 +282,8 @@ test("ⓘ: a metodologia diz que e' calculo Torre, que a 1a acao e' parcial e qu
   assert.match(AJUDA_ML.tempoResposta, /OFICIAL/);
   assert.doesNotMatch(AJUDA_ML.reembolso, /Sem fonte/);
   assert.match(AJUDA_ML.reembolso, /devolução ainda não tem fonte/);
+  assert.match(AJUDA_ML.resposta, /As de mais de 24 h contam desde o dia da pergunta\./);
+  assert.doesNotMatch(AJUDA_ML.resposta, /base diária/);
 });
 
 test("telas: a pagina escolhe o corpo pelo canal; o filtro tem os dois canais; sem legenda solta", () => {
