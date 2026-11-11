@@ -28,6 +28,8 @@ export const VISUAL_DETALHE: Record<ChaveDetalhe, { icone: LucideIcon; identidad
   ml_pedidos: { icone: ShoppingBag, identidade: "pedidos" },
   tk_cancelados: { icone: PackageX, identidade: "atendimento" },
   ml_cancelados: { icone: PackageX, identidade: "atendimento" },
+  tk_gmv: { icone: CircleDollarSign, identidade: "gmv" },
+  ml_gmv: { icone: CircleDollarSign, identidade: "gmv" },
 };
 
 interface Props {
@@ -91,9 +93,9 @@ export function FaixaTotais({ dados, series, onAbrir }: Props) {
   );
 }
 
-/** Um canal: pedidos, GMV, cancelados e entregues. So' pedidos e cancelados abrem detalhe (so' eles tem dado por marca). */
+/** Um canal: pedidos, GMV, cancelados e entregues. So' "Entregues" nao abre detalhe (nao ha dado por marca). */
 export function GrupoCanal({
-  canal, titulo, dados, serieOrders, serieCancelados, chaveOrders, chaveCancelados, onAbrir,
+  canal, titulo, dados, serieOrders, serieCancelados, chaveOrders, chaveGmv, chaveCancelados, onAbrir,
 }: {
   canal: "tiktok" | "ml";
   titulo: string;
@@ -101,6 +103,7 @@ export function GrupoCanal({
   serieOrders: number[];
   serieCancelados: number[];
   chaveOrders: ChaveDetalhe;
+  chaveGmv: ChaveDetalhe;
   chaveCancelados: ChaveDetalhe;
   onAbrir: (chave: ChaveDetalhe) => void;
 }) {
@@ -113,7 +116,7 @@ export function GrupoCanal({
       </h3>
       <div className={GRADE}>
         <Tile rotulo="Pedidos" icone={ShoppingBag} identidade="pedidos" valor={fmtNumCurto(dados.orders)} serie={serieOrders} onAbrir={() => onAbrir(chaveOrders)} />
-        <Tile rotulo="GMV" icone={CircleDollarSign} identidade="gmv" valor={fmtBrlCurto(dados.gmv)} />
+        <Tile rotulo="GMV" icone={CircleDollarSign} identidade="gmv" valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)} />
         <Tile
           rotulo="Cancelados"
           icone={PackageX}

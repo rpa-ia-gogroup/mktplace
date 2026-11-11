@@ -2,9 +2,9 @@
 
 import type { PedidosBrandRow } from "@/lib/api-client";
 import { suavizar, tendencia } from "@/lib/gerencial/kpi-trend";
-import { fmtPctBr } from "@/lib/formatters";
+import { fmtDelta, fmtPctBr } from "@/lib/formatters";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { linhasPorCanal, linhasPorMarca, serieDoDetalhe, valorExato, type ChaveDetalhe, type Dados, type Selecao, type Series } from "@/lib/pedidos-cartoes";
+import { linhasPorCanal, linhasPorMarca, serieDoDetalhe, valorExato, variacaoEmPp, type ChaveDetalhe, type Dados, type Selecao, type Series } from "@/lib/pedidos-cartoes";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
@@ -34,6 +34,8 @@ export default function PedidosDrilldownContent({
   const t = tendencia(serieDoDetalhe(chave, series), "day");
   const porCanal = linhasPorCanal(chave, dados, sel);
   const porMarca = linhasPorMarca(chave, marcas, sel);
+  // Taxa: a variacao e' em pontos percentuais; contagem e valor, relativa.
+  const variacao = t == null ? null : chave === "cancelamento" ? (variacaoEmPp(t.pontos) != null ? fmtDelta(variacaoEmPp(t.pontos)!, "pp") : null) : t.variacaoPct != null ? fmtPctBr(t.variacaoPct) : null;
   const canalDoDetalhe = chave.startsWith("tk_") ? "tiktok" : chave.startsWith("ml_") ? "ml" : null;
   return (
     <div className="flex flex-col gap-4 text-sm">
@@ -50,9 +52,9 @@ export default function PedidosDrilldownContent({
         <DrilldownSecao
           titulo="Tendência"
           acao={
-            t.variacaoPct != null && (
+            variacao != null && (
               <span className="tabular-nums">
-                <b className="font-semibold text-ink-muted">{fmtPctBr(t.variacaoPct)}</b> · {t.rotulo}
+                <b className="font-semibold text-ink-muted">{variacao}</b> · {t.rotulo}
               </span>
             )
           }

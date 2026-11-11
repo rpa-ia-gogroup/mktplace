@@ -13,6 +13,7 @@ import {
   seriesDoPeriodo,
   tomDoCancelamento,
   valorExato,
+  variacaoEmPp,
   type Dados,
 } from "../src/lib/pedidos-cartoes.ts";
 import type { PedidosBrandRow, PedidosDailyRow } from "../src/lib/api-client.ts";
@@ -131,13 +132,43 @@ test("pagina de Pedidos: sem KpiCard legado nem CanalCard, formato da casa, dial
   assert.ok(!pag.includes("bg-rose-50 border border-rose-200"), "sem a caixa de erro feita a mao");
 });
 
-test("cartoes de Pedidos: so' as 7 identidades existentes; canal e' ponto; GMV e Entregues por canal nao abrem detalhe", () => {
+test("cartoes de Pedidos: so' as 7 identidades existentes; canal e' ponto; so' Entregues por canal nao abre detalhe", () => {
   const src = ler("src/components/pedidos/PedidosCartoes.tsx");
   const usadas = [...src.matchAll(/identidade[:=]\s*"([a-z]+)"/g)].map((m) => m[1]);
   assert.ok(usadas.length >= 10);
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
   assert.ok(src.includes("CHANNEL_DOT[canal]"));
-  assert.ok(/rotulo="GMV" icone=\{CircleDollarSign\} identidade="gmv" valor=\{fmtBrlCurto\(dados\.gmv\)\} \/>/.test(src), "GMV do canal: sem onAbrir (sem dado por marca por canal)");
+  assert.ok(src.includes("valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)}"), "GMV do canal abre o detalhe por marca (a API traz tiktok_gmv/ml_gmv por marca)");
   assert.ok(/rotulo="Entregues"[^\n]*\/>/.test(src) && !/rotulo="Entregues"[^\n]*onAbrir/.test(src));
   assert.ok(src.includes('tom={ausente ? "ausente" : tom ?? "neutro"}'), "ausencia = tom ausente, nunca zero");
+});
+
+test("GMV por canal: detalhe por marca existe, sem tendencia (a API nao traz GMV por canal por dia)", () => {
+  const marcas = [
+    marca("a", "A", { tiktok_gmv: 2_000_000, ml_gmv: 500_000 }),
+    marca("b", "B", { tiktok_gmv: 900_000, ml_gmv: null }),
+    marca("c", "C", { tiktok_gmv: null, ml_gmv: 1_200_000 }),
+  ];
+  assert.deepEqual(linhasPorMarca("tk_gmv", marcas, AMBOS).map((l) => [l.label, l.valor]), [["A", "R$ 2,00 mi"], ["B", "R$ 900,0 mil"], ["C", "Sem dado"]]);
+  assert.deepEqual(linhasPorMarca("ml_gmv", marcas, AMBOS).map((l) => l.label), ["C", "A", "B"]);
+  const s0 = seriesDoPeriodo([dia(1, 1, 0, 1, 0, 1), dia(2, 1, 0, 1, 0, 1), dia(3, 1, 0, 1, 0, 1), dia(4, 1, 0, 1, 0, 1)], AMBOS);
+  assert.deepEqual(serieDoDetalhe("tk_gmv", s0), []);
+  const d: Dados = { kpis: null, tk: { orders: 1, canceled: 0, gmv: 3_360_000, cancel_rate_pct: 0, delivered: null }, ml: null };
+  assert.equal(valorExato("tk_gmv", d).split(String.fromCharCode(160)).join(" "), "R$ 3.360.000");
+  assert.equal(valorExato("ml_gmv", d), "—");
+});
+
+test("taxa: a variacao do detalhe e' em pontos percentuais (nao relativa); sem serie curta", () => {
+  assert.equal(variacaoEmPp([1, 2, 3]), null);
+  assert.equal(variacaoEmPp([4, 4, 4, 5, 5, 5]), 1);
+  assert.ok(Object.is(variacaoEmPp([3.8, 3.8, 3.8, 3.78, 3.78, 3.78]), 0), "-0,02 arredonda para 0, sem sinal");
+  assert.ok(Math.abs(variacaoEmPp([3.8, 3.8, 3.8, 3.3, 3.3, 3.3])! - -0.5) < 1e-9, "3,8% -> 3,3% = -0,5 p.p.");
+  const src = ler("src/components/pedidos/PedidosDrilldownContent.tsx");
+  assert.ok(src.includes('fmtDelta(variacaoEmPp(t.pontos)!, "pp")') && src.includes('chave === "cancelamento"'));
+});
+
+test("KpiTile: o rodape ocupa a largura do cartao (o grafico fica sempre a direita, em qualquer largura)", () => {
+  const kpi = ler("src/components/ui/KpiTile.tsx");
+  assert.ok(kpi.includes("self-stretch pt-1"), "rodape com self-stretch (o <button> traz align-items:flex-start)");
+  assert.ok(kpi.includes('<span className="ml-auto">'), "e o grafico com ml-auto quando quebra para a linha de baixo");
 });

@@ -359,14 +359,14 @@ function PedidosPageInner() {
             <GrupoCanal
               canal="tiktok" titulo="TikTok Shop" dados={tk}
               serieOrders={series.tkPedidos} serieCancelados={series.tkCancelados}
-              chaveOrders="tk_pedidos" chaveCancelados="tk_cancelados" onAbrir={setDetalhe}
+              chaveOrders="tk_pedidos" chaveGmv="tk_gmv" chaveCancelados="tk_cancelados" onAbrir={setDetalhe}
             />
           )}
           {!isLoadingState && ml && (
             <GrupoCanal
               canal="ml" titulo="Mercado Livre" dados={ml}
               serieOrders={series.mlPedidos} serieCancelados={series.mlCancelados}
-              chaveOrders="ml_pedidos" chaveCancelados="ml_cancelados" onAbrir={setDetalhe}
+              chaveOrders="ml_pedidos" chaveGmv="ml_gmv" chaveCancelados="ml_cancelados" onAbrir={setDetalhe}
             />
           )}
           {!isLoadingState && !tk && !ml && dataIsFresh && (

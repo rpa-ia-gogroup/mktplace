@@ -25,7 +25,9 @@ export type ChaveDetalhe =
   | "tk_pedidos"
   | "tk_cancelados"
   | "ml_pedidos"
-  | "ml_cancelados";
+  | "ml_cancelados"
+  | "tk_gmv"
+  | "ml_gmv";
 
 export const TITULO_DETALHE: Record<ChaveDetalhe, string> = {
   total_pedidos: "Total de pedidos",
@@ -36,6 +38,8 @@ export const TITULO_DETALHE: Record<ChaveDetalhe, string> = {
   tk_cancelados: "Cancelados · TikTok Shop",
   ml_pedidos: "Pedidos · Mercado Livre",
   ml_cancelados: "Cancelados · Mercado Livre",
+  tk_gmv: "GMV · TikTok Shop",
+  ml_gmv: "GMV · Mercado Livre",
 };
 
 /** Cancelamento: a regra de negocio que ja' existia (<2% ok, <5% atencao, senao critico). */
@@ -62,6 +66,8 @@ export function valorExato(chave: ChaveDetalhe, d: Dados): string {
     case "ml_pedidos": return d.ml ? NUM.format(d.ml.orders) : "—";
     case "tk_cancelados": return d.tk ? NUM.format(d.tk.canceled) : "—";
     case "ml_cancelados": return d.ml ? NUM.format(d.ml.canceled) : "—";
+    case "tk_gmv": return d.tk ? BRL0.format(d.tk.gmv) : "—";
+    case "ml_gmv": return d.ml ? BRL0.format(d.ml.gmv) : "—";
   }
 }
 
@@ -124,7 +130,24 @@ export function serieDoDetalhe(chave: ChaveDetalhe, s: Series): number[] {
     case "ml_pedidos": return s.mlPedidos;
     case "tk_cancelados": return s.tkCancelados;
     case "ml_cancelados": return s.mlCancelados;
+    // A API nao traz o GMV por canal por dia: sem serie, sem tendencia (nada inventado).
+    case "tk_gmv":
+    case "ml_gmv": return [];
   }
+}
+
+/**
+ * Variacao de uma TAXA entre o trecho recente e o anterior, em PONTOS PERCENTUAIS
+ * (media dos ultimos N contra a dos N anteriores, mesma janela da tendencia).
+ * "−0,5%" ao lado de uma taxa de 3,8% seria lido como pontos; a conta e' a diferenca.
+ */
+export function variacaoEmPp(pontos: number[]): number | null {
+  if (pontos.length < 4) return null;
+  const janela = pontos.length >= 14 ? 7 : Math.floor(pontos.length / 2);
+  const media = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const pp = Math.round((media(pontos.slice(-janela)) - media(pontos.slice(-2 * janela, -janela))) * 10) / 10;
+  // 1 casa, como sera' escrito: -0,04 vira 0 (nunca "−0,0 p.p.", um sinal sobre um valor que arredonda para zero).
+  return pp === 0 ? 0 : pp;
 }
 
 // ---------------------------------------------------------------------------
@@ -169,6 +192,8 @@ const DEF_MARCA: Record<ChaveDetalhe, DefMarca> = {
   ml_pedidos: { num: (r) => r.ml_orders ?? null, fmt: fmtNumCurto },
   tk_cancelados: { num: (r) => r.tiktok_cancel_rate_pct ?? null, fmt: fmtPctSimples, apoio: (r) => cancelados(r.tiktok_canceled) },
   ml_cancelados: { num: (r) => r.ml_cancel_rate_pct ?? null, fmt: fmtPctSimples, apoio: (r) => cancelados(r.ml_canceled) },
+  tk_gmv: { num: (r) => r.tiktok_gmv ?? null, fmt: fmtBrlCurto },
+  ml_gmv: { num: (r) => r.ml_gmv ?? null, fmt: fmtBrlCurto },
 };
 
 /**
