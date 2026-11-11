@@ -101,9 +101,9 @@ const GRADE_KPIS = "grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6";
 /** Identidade (cor) e icone de cada cartao: so' as 7 identidades da Gerencial. */
 const VISUAL_KPI: Record<string, { identidade: IdentidadeKpi; icone: LucideIcon }> = {
   monitored: { identidade: "pedidos", icone: Boxes },
-  comparable: { identidade: "ticket", icone: Scale },
-  below: { identidade: "ads", icone: TrendingDown },
-  at_or_above: { identidade: "roas", icone: TrendingUp },
+  comparable: { identidade: "gmv", icone: Scale },
+  below: { identidade: "ticket", icone: TrendingDown },
+  at_or_above: { identidade: "ticket", icone: TrendingUp },
   no_reference: { identidade: "atendimento", icone: CircleSlash },
   inactive: { identidade: "prazo", icone: PauseCircle },
   ambiguous: { identidade: "atendimento", icone: AlertTriangle },
@@ -821,16 +821,20 @@ export default function MonitoramentoPrecoPage() {
                 ativo={k.status ? status === k.status : undefined}
                 acaoFalada="ver na fila"
                 onAbrir={
-                  k.status
-                    ? () => trocaFiltro(() => setStatus(k.status as string))
-                    : () => limparFiltros()
+                  canalIndisponivel
+                    ? undefined
+                    : k.status
+                      ? () => trocaFiltro(() => setStatus(k.status as string))
+                      : () => limparFiltros()
                 }
               />
             ))}
           </div>
         )}
         {qualidadeViews.length > 0 && (
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <>
+          <h2 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Qualidade do dado</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {qualidadeViews.map((k, i) => (
               <div
                 key={k.chave}
@@ -845,11 +849,12 @@ export default function MonitoramentoPrecoPage() {
                   valor={canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
                   ativo={k.status ? status === k.status : undefined}
                   acaoFalada="ver na fila"
-                  onAbrir={k.status ? () => trocaFiltro(() => setStatus(k.status as string)) : undefined}
+                  onAbrir={k.status && !canalIndisponivel ? () => trocaFiltro(() => setStatus(k.status as string)) : undefined}
                 />
               </div>
             ))}
           </div>
+          </>
         )}
       </section>
 
