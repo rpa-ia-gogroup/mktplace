@@ -17,7 +17,9 @@ import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { FaixaTotais, GrupoCanal, VISUAL_DETALHE } from "@/components/pedidos/PedidosCartoes";
 import PedidosDrilldownContent from "@/components/pedidos/PedidosDrilldownContent";
-import MarketplaceFilter from "@/components/MarketplaceFilter";
+import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
+import { PeriodChip } from "@/components/ui/Freshness";
+import { ShoppingBag } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import LiveStatusBadge from "@/components/LiveStatusBadge";
@@ -265,10 +267,13 @@ function PedidosPageInner() {
     <PageContainer>
       <PageHeader
         title="Pedidos"
-        scopeLine={
+        icon={ShoppingBag}
+        meta={
           <>
-            Período: {periodLabel}
-            {dataIsFresh && displayData?.refreshed_at && <> · Atualizado em {fmtRefreshedAt(displayData.refreshed_at)}</>}
+            <PeriodChip label={periodLabel} />
+            {dataIsFresh && displayData?.refreshed_at && (
+              <span className="text-xs text-ink-muted tabular-nums">Atualizado em {fmtRefreshedAt(displayData.refreshed_at)}</span>
+            )}
           </>
         }
         // FINDING 2 (rodada de correcao) — Shopee isolada nunca chama fetch
@@ -278,33 +283,14 @@ function PedidosPageInner() {
         // a identidade foi marcada como resolvida sem erro/loading).
         status={
           dataIsFresh && showShopeeOnly ? (
-            <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
+            <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
               Shopee sem cobertura nesta visão
             </span>
           ) : dataIsFresh ? (
             <LiveStatusBadge live={displayIsLive} offlineLabel="Sem dados · API offline" />
-          ) : isLoadingState ? (
-            <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
-              Atualizando dados...
-            </span>
           ) : null
         }
-        filters={
-          <>
-            <div className="flex items-start gap-3 flex-wrap min-w-0">
-              <MarketplaceFilter value={filters.channels} onChange={(channels) => setFilters({ channels })} />
-              <BrandFilter value={filters.brands} onChange={(brands) => setFilters({ brands })} />
-            </div>
-            <DateRangeFilter
-              dateFrom={filters.dateFrom}
-              dateTo={filters.dateTo}
-              compare={filters.compare}
-              onChange={(v) => setFilters(v)}
-              onCompareChange={(compare) => setFilters({ compare })}
-              hideCompare
-            />
-          </>
-        }
+        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />}
       />
 
         {/* Shopee isolada: o selo do cabecalho e o estado vazio abaixo ja dizem

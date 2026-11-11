@@ -13,7 +13,9 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import CartoesRegioes, { GRADE_REGIOES, TOTAL_DE_CARTOES_REGIOES, VISUAL_REGIOES } from "@/components/regioes/RegioesCartoes";
 import RegioesDrilldownContent from "@/components/regioes/RegioesDrilldownContent";
 import { TITULO_DETALHE, type ChaveRegioes } from "@/lib/regioes-cartoes";
-import MarketplaceFilter from "@/components/MarketplaceFilter";
+import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
+import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import { MapPinned } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import BrandFilter from "@/components/BrandFilter";
@@ -232,48 +234,35 @@ function RegioesPageInner() {
     <PageContainer>
       <PageHeader
         title="Regiões"
-        scopeLine={
+        icon={MapPinned}
+        meta={
           <>
-            Período: {periodLabel}
+            <PeriodChip label={periodLabel} />
             {linhaTemporal && (
-              <span data-testid="regioes-linha-atualizacao" className={canaisComAtraso.length > 0 ? "text-amber-700 font-medium" : undefined}>
-                {" · "}{linhaTemporal}
+              <span data-testid="regioes-linha-atualizacao" className={`text-xs ${canaisComAtraso.length > 0 ? "font-medium text-warn-ink" : "text-ink-muted"}`}>
+                {linhaTemporal}
               </span>
             )}
           </>
         }
         filters={
-          <>
-            <div className="flex items-start gap-3 flex-wrap min-w-0">
-              <MarketplaceFilter value={filters.channels} onChange={(channels) => setFilters({ channels })} />
-              <BrandFilter value={filters.brands} onChange={(brands) => setFilters({ brands })} />
-              {/* A UF e' filtro/acao DESTA pagina: fica na barra, entra na
-                  identidade da requisicao local e nao vira filtro global. */}
-              <div className="flex items-center gap-1.5 bg-white border border-violet-100 rounded-xl px-3 py-1.5 shadow-sm">
-                <label htmlFor="uf-filter" className="text-xs text-slate-500 font-medium">UF</label>
-                <select
-                  id="uf-filter"
-                  value={ufFilter}
-                  onChange={(e) => setUfFilter(e.target.value)}
-                  className="text-sm font-semibold text-violet-700 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
-                >
-                  <option value="">Todas</option>
-                  {ALL_UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-                </select>
-              </div>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />
+            {/* A UF e' filtro/acao DESTA pagina: fica na barra, entra na
+                identidade da requisicao local e nao vira filtro global. */}
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm">
+              <label htmlFor="uf-filter" className="text-ink-muted">UF</label>
+              <select
+                id="uf-filter"
+                value={ufFilter}
+                onChange={(e) => setUfFilter(e.target.value)}
+                className="rounded bg-transparent font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <option value="">Todas</option>
+                {ALL_UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+              </select>
             </div>
-            <div className="flex items-center gap-3 min-w-0 flex-wrap">
-              {isLoadingState && <span className="text-xs text-violet-400 animate-pulse shrink-0">Atualizando...</span>}
-              <DateRangeFilter
-                dateFrom={filters.dateFrom}
-                dateTo={filters.dateTo}
-                compare={false}
-                onChange={(v) => setFilters(v)}
-                onCompareChange={() => {}}
-                hideCompare
-              />
-            </div>
-          </>
+          </div>
         }
       />
 
