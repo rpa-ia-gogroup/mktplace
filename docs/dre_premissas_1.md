@@ -166,8 +166,18 @@ sai `PREVIA`, com `margem_contribuicao_conhecida` e `fecha_em` (`docs/dre_contra
   com o valor como está. Sem valor → linha ausente, estado `parcial`. A decomposição TikTok afiliado × taxa não
   mudou.
 - **Mídia Online:** `realizado` ou `parcial` conforme o status do Ads realizado.
-- **Devoluções e impostos:** `premissa`, como antes. **Fora do escopo da T-0090:** usar o imposto realizado
+- **Impostos:** `premissa`, como antes. **Fora do escopo da T-0090:** usar o imposto realizado
   (webgex) no cenário.
+- **Devoluções e Reembolsos (T-0093, 11/11/2026):** a devolução realizada substitui a premissa onde existe
+  (`docs/dre_contrato_0.md` §4.3.1):
+  - Shopee das lojas com API com devolução `disponivel` → `realizado`, com o valor real;
+  - `parcial` com cobertura em dias conhecida (0 < c < 1) → **`extrapolado`** = valor ÷ c, com motivo
+    "extrapolado: devoluções medidas em N% dos dias do mês estendidas ao mês inteiro";
+  - kokeshi (devolução informativa, `somavel = false`) → `status = nao_aplicavel`, valor nulo, fora da soma, com o
+    motivo "receita já líquida de devoluções (shop-stats): premissa não aplicada". A premissa **não** é aplicada,
+    porque a receita do shop-stats já desconta as devoluções;
+  - sem realizado utilizável (ML, TikTok, devolução não publicada, vencida ou com cobertura desconhecida) → a
+    premissa, como antes.
 
 A extrapolação existe **só no cenário estimado**. A DRE realizada (`margem_contribuicao_conhecida`) nunca
 extrapola: lá o parcial entra pelo valor medido, com aviso.

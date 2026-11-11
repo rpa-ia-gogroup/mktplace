@@ -168,6 +168,24 @@ da DRE (§4.8) é o `shipping_cost_amount` do repasse, que já vem **líquido** 
 | Responsável | Conciliação/Repasse + Fiscal/CMV (devolução fiscal) |
 | Decisão pendente | Qual é a fonte de autoridade (perguntas C6, F5) |
 
+#### 4.3.1 Devoluções Shopee (T-0093, 11/11/2026)
+
+A Shopee passou a ter devolução em valor. ML e TikTok continuam sem fonte (`indisponivel`, como na tabela acima).
+
+| Campo | Regra |
+|---|---|
+| Fórmula | `devolucoes = SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED')` das devoluções criadas no mês, com o mês dado por `(create_time AT TIME ZONE 'America/Sao_Paulo')::date`. É a mesma regra do /cx (`cx_atendimento_service`) |
+| Fontes por loja | **apice, barbours, lescent, rituaria** (lojas com API): `raw.shopee_returns` no Data Mart, publicada pelo `insumo_publisher` em `marts.fact_dre_insumo_mensal`. A API da DRE nunca lê o Data Mart. **kokeshi**: `marts.shopee_returns_export` no Neon (migration 036, export do Seller Centre), lida direto pela API |
+| Início do dado | 07/10/2026. Out/26 cobre 25 de 31 dias |
+| D1: competência | Conta o **dia de criação da devolução**, igual ao /cx. Por isso a margem de um mês pode levar devolução de uma venda de mês anterior: a devolução não é casada com o mês da venda |
+| D2: kokeshi informativa | O GMV da kokeshi vem do shop-stats (vendas − canceladas − devolvidas/reembolsadas), então a receita **já é líquida** de devoluções. Descontar de novo seria dupla dedução. Por isso a devolução da kokeshi aparece com `somavel = false` e `entra_na_margem = false`, com o motivo "já descontada da receita: GMV do shop-stats é líquido de devoluções". A receita não muda. Nas 4 lojas com API o GMV é a soma de `item_total` dos não cancelados, **sem** descontar reembolso, então a devolução real é deduzida |
+| Componente publicado | `componente = 'shopee_devolucao_reembolso'`, `canal = 'shopee'`, marca entre as 4 lojas com API, `competencia` = 1º dia do mês. `valor` = reembolsado do mês (positivo), `sinal_origem = 1`. `cobertura` = dias cobertos ÷ dias do mês (0..1). `status_reconciliacao = 'nao_avaliado'`, ou `'ausente_na_origem'` com `valor` NULL. `data_max_origem` = `max(update_time)`. `publicado_em` e `lote_id` seguem o padrão das outras linhas. A migration 045 abre o CHECK para esse componente |
+| Status (4 lojas) | sem linha publicada → `indisponivel` ("devolução Shopee não publicada (migration 045 ou insumo pendente)"), nunca zero. Lote não concluído → `snapshot_ausente`. Lote publicado há mais de `INSUMO_IDADE_MAXIMA` (54 h) → `snapshot_vencido`. `ausente_na_origem` → `indisponivel`. Sinal ≠ 1 ou valor negativo → `sinal_inesperado`. `cobertura ≥ 0,999` → `disponivel`. `cobertura < 0,999` → `parcial`, com `cobertura_rotulo` "desde 07/10 (25 de 31 dias)" no mês de início ("N de M dias" nos demais) |
+| Margem conhecida | Segue a regra da T-0090. `disponivel` e `parcial` entram pelo valor **medido**, e o parcial aparece em `componentes_parciais`. Nada é extrapolado no realizado |
+| Status (kokeshi) | Pela cobertura desde 07/10 (`disponivel` com o mês inteiro, `parcial` em out/26), sempre `somavel = false`. Fica `indisponivel` em três casos: sem a tabela (to_regclass nulo), mês anterior a 07/10, ou mês sem nenhuma devolução no export. Aqui a DRE é mais conservadora que o /cx, que trata "sem linha" como zero. Mês com devoluções mas nenhuma aceita → zero medido |
+| Agregados | Num agregado que mistura células que deduzem com a kokeshi informativa, o `valor` de `devolucoes` soma **só** as células que deduzem, e o motivo diz quantas ficaram fora. A margem do agregado continua sendo a soma das margens das células, e a informativa não está em nenhuma delas. Componente só informativo não conta em `completude.aplicaveis` nem em `faltam`, e não rebaixa a classificação |
+| Fonte (campo `fonte`) | `marts.fact_dre_insumo_mensal.shopee_devolucao_reembolso` nas 4 lojas e `marts.shopee_returns_export (...)` na kokeshi |
+
 ### 4.4 L4 — Receita líquida conhecida
 
 `L4 = L1 − L3`. **[FATO]** Com L3 ausente nos três canais, hoje `L4 = L1` e a célula carrega
