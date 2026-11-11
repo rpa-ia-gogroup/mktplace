@@ -514,6 +514,75 @@ podem ser cobradas **fora** do repasse e, nesse caso, seriam custos adicionais l
 - **[FATO] Hoje nenhuma célula é "Completa"**, porque L11 não está ratificado em nenhum canal e L3 está ausente
   em todos.
 
+> **Substituído em parte pela §8.1 (T-0090, 11/11/2026).** A linha "Indisponível" da tabela acima deixou de
+> valer: mês imaturo virou **PREVIA** com números, e custo não reconciliado ou parcial entra na margem como
+> parcial. Só a receita nula deixa a célula sem número.
+
+### 8.1 PREVIA e margem conhecida com parciais — T-0090 (decisão do Mário, 11/11/2026)
+
+**[DECISÃO]** A DRE mostra números sempre. Antes, `GET /api/v1/dre?ref_month=2026-10` devolvia
+`NAO_CALCULAVEL`, "0 de 6 custos" e margem nula em todas as 14 células de out/26, porque a maturação M+2, a
+receita incompleta e qualquer taxa/CMV fora de `disponivel` tiravam a margem. O contrato mudou de forma
+**aditiva** (campos novos opcionais; `PREVIA` acrescentado ao enum).
+
+**Classificação da célula** (`classificacao`):
+
+| Valor | Quando |
+|---|---|
+| `NAO_CALCULAVEL` | só quando a receita (`componentes.receita.valor`) é nula |
+| `PREVIA` | mês imaturo pela regra M+2 (`mes_maduro` falso), com receita |
+| `PARCIAL` | mês maduro com algum custo aplicável fora de `disponivel`, receita com dias faltando, ou a regra "afiliado maior que a taxa do repasse" acionada (o motivo continua; não derruba mais a célula) |
+| `COMPLETA` | como antes |
+
+`motivos_classificacao` continua listando tudo (imaturidade, parciais, afiliado), como texto informativo.
+
+**Campos novos na célula e no agregado:**
+
+- `previa: bool` — `true` quando `PREVIA`.
+- `fecha_em: "YYYY-MM-DD" | null` — na célula, o último dia de M+2 quando `PREVIA`; no agregado, o maior entre
+  as células.
+
+**Campos novos em cada componente (célula e agregado):**
+
+- `origem` ∈ `realizado` (status `disponivel` com valor), `parcial` (valor e status em `parcial`,
+  `nao_confirmado`, `provisorio` ou `nao_reconciliado`), `nao_aplicavel`, `indisponivel` (o resto: sem valor,
+  `snapshot_ausente`/`snapshot_vencido`, `sinal_inesperado`, `indisponivel`).
+- `entra_na_margem: bool` — custo somável (`devolucoes`, `taxas`, `ads`, `frete`, `cmv`, `impostos`) com
+  origem `realizado` ou `parcial`. Receita e afiliados (`somavel=false`) ficam `false`. No agregado: entrou em
+  pelo menos uma célula.
+- `cobertura_rotulo: str | null` — rótulo curto em PT-BR, da base estruturada: taxa da Shopee
+  "escrow em 93,0% dos pedidos"; CMV "NF cobre 25% do GMV" (receita fiscal ÷ GMV fora de 0,95–1,05) e/ou
+  "custo em 94,7% da receita fiscal" (cobertura abaixo de 98%); receita e custos do mart "presente em 20 de 31
+  dias" (ou "linhas diárias", com mais de uma loja); imposto "imposto em 65,0% da receita fiscal". No agregado
+  parcial com várias células: "X% da receita com dado realizado, Y% com dado parcial"; com uma célula, o rótulo
+  dela.
+
+**Margem de contribuição conhecida:**
+
+- Sempre que a receita ≠ null: `valor = receita − Σ(componentes com entra_na_margem)`, célula a célula. No
+  agregado, a soma das margens das células que têm margem.
+- `componentes_usados` = os que entraram; novo `componentes_parciais` = os que entraram com origem `parcial`;
+  `faltam` = custos aplicáveis que não entraram.
+- Novo `aviso: str | null`, quando há parciais: "Margem conhecida inclui custos parciais (<lista>); custo não
+  medido não entra, então a margem tende a estar acima da real."
+- `rotulo`, `formula` e `pct_receita` continuam.
+- **[LIMITAÇÃO]** Custo parcial entra pelo valor medido, sem extrapolar (ex.: CMV da Shopee de out/26, com NF
+  cobrindo 16–52% do GMV). A margem conhecida tende a ficar acima da real; o `aviso` diz isso. A extrapolação
+  existe só no cenário estimado (`docs/dre_premissas_1.md` §6.1).
+
+**Completude:** `usados` conta os que entraram (no agregado, os que entraram em todas as células); novo
+`parciais` conta, entre eles, os parciais; `texto` = "N de M custos (K parciais)" quando K > 0 ("1 parcial" no
+singular).
+
+**Agregado:** `NAO_CALCULAVEL` só se TODAS as células forem; senão a pior entre as que têm receita, na ordem
+`PREVIA` < `PARCIAL` < `COMPLETA`. Célula sem receita aparece em `motivos_classificacao` como
+"<mês> <canal> <marca>: sem receita"; os motivos das demais células vêm prefixados do mesmo jeito.
+
+**`regras` da resposta:** `impostos` passou a dizer que o parcial entra na margem como parcial; novos
+`previa` ("mes imaturo (M+2) sai como PREVIA com valores e fecha_em") e `margem_conhecida`.
+
+Testes: `apps/api/tests/test_dre_previa.py`.
+
 ---
 
 ## 9. DRE demonstrativa — jul/2026 (NÃO publicar)
