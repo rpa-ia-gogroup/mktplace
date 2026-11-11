@@ -24,6 +24,8 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, XAxis, YAxis } fro
 import { temaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { janelaDaUrl, urlComJanela } from "@/lib/full-janela-url";
 
 import { Ban, CircleDollarSign, Clock, Package, ShoppingBag, Timer } from "lucide-react";
 import KpiTile from "@/components/ui/KpiTile";
@@ -92,7 +94,12 @@ function Aviso({ children }: { children: React.ReactNode }) {
 
 function FullShopeeInner() {
   const hoje = useMemo(hojeIsoBrt, []);
-  const inicial = useMemo(() => presetRange(30, hoje), [hoje]);
+  // B2-02: a janela vem da URL (`date_from`/`date_to`); sem ela, ou invalida, 30 dias.
+  const busca = useSearchParams();
+  const inicial = useMemo(
+    () => janelaDaUrl(busca.toString(), presetRange(30, hoje), (f, t) => validateRange(f, t, hoje)),
+    [hoje], // eslint-disable-line react-hooks/exhaustive-deps -- so' no mount; depois a tela escreve na URL
+  );
 
   const [from, setFrom] = useState(inicial.from);
   const [to, setTo] = useState(inicial.to);
@@ -156,6 +163,13 @@ function FullShopeeInner() {
       });
     return () => ctrl.abort();
   }, [from, to, marca, conta, erroJanela]);
+
+  // B2-02: a janela valida vai para a URL (replaceState: preserva `?aba=` e nao
+  // re-renderiza a rota do servidor), para o reload e o link manterem o recorte.
+  useEffect(() => {
+    if (erroJanela) return;
+    window.history.replaceState(null, "", urlComJanela(window.location.href, { from, to }));
+  }, [from, to, erroJanela]);
 
   const aplicarPreset = useCallback((dias: number) => {
     const r = presetRange(dias, hoje);
