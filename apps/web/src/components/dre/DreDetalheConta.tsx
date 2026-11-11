@@ -5,6 +5,7 @@ import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import InfoDica from "@/components/ui/InfoDica";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import {
   ROTULO_COMPONENTE,
@@ -64,7 +65,12 @@ export default function DreDetalheConta({
             <ClassificacaoChip classificacao={total.classificacao} completude={completude} />
           </span>
         )}
-        <DrilldownContextLine leading="Conhecida" periodLabel={`Competência ${competencia}`} refreshedAt={total.data_maxima.mart_carregado_em ?? null} />
+        <DrilldownContextLine
+          leading="Conhecida"
+          periodLabel={`Competência ${competencia}`}
+          refreshedAt={total.data_maxima.mart_carregado_em ?? null}
+          dica={chave === "margem" ? <InfoDica texto="Não é lucro nem margem líquida. Impostos e devoluções ainda não têm fonte." /> : undefined}
+        />
       </div>
 
       {bloqueadores.length > 0 && <DataQualityNote note={`Total não calculável: ${juntarNomes(bloqueadores)}.`} />}

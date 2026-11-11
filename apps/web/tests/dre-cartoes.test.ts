@@ -41,9 +41,12 @@ test("ResumoEstimado: mesmo visual, sem clique; premissas e estado do cenario pr
 test("detalhe: so' dados que a resposta ja' traz; ausencia mostra o status; sem 'lucro'; a DRE vertical nao e' repetida", () => {
   for (const t of ["total.componentes_ausentes", "total.motivos_classificacao", "total.avisos_qualidade", "STATUS_CHIP[a.status]?.rotulo", "ROTULO_COMPONENTE["]) assert.ok(DETALHE.includes(t), t);
   assert.ok(!/linhasDre|DreVertical|fmtCusto/.test(DETALHE), "a conta linha a linha segue na DRE vertical");
-  const codigo = DETALHE.replace(/\/\*[\s\S]*?\*\//g, ""); // o comentario do arquivo cita "R$ 0" e "lucro" justamente para negá-los
+  // O comentario do arquivo cita "R$ 0" e "lucro" justamente para negá-los, e o ⓘ do modal de Margem traz a frase
+  // NEGADA da pagina ("Não é lucro nem margem líquida"): so' essa frase e' permitida.
+  const codigo = DETALHE.replace(/\/\*[\s\S]*?\*\//g, "").replace("Não é lucro nem margem líquida.", "");
   assert.ok(!/R\$ 0/.test(codigo) && !/lucro|margem l[ií]quida/i.test(codigo), "nunca R$ 0, nunca lucro");
   assert.ok(DETALHE.includes("DrilldownContextLine") && DETALHE.includes("DataQualityNote") && DETALHE.includes("EvidenceRow"));
+  assert.ok(DETALHE.includes("Não é lucro nem margem líquida. Impostos e devoluções ainda não têm fonte."), "o modal de Margem repete a ressalva da pagina no ⓘ");
 });
 
 test("pagina da DRE: dialogo unico, gated pelo total, icone e cor do cartao; sem title nativo", () => {
