@@ -8,6 +8,8 @@ Le, no Data Mart e em transacao READ ONLY, somente AGREGADOS MENSAIS por
   * CMV fiscal e a receita fiscal que o acompanha, somados do grao de ITEM
     (`gold.nf_vendas_unificada_v2`, a base da query de custos do FP&A), com
     contraprova contra o agregado `gold.nf_vendas_plataforma_sku_mensal`;
+    nas linhas sem `custo`, o custo e' ESTIMADO pelo custo unitario do mesmo
+    SKU no mesmo mes (T-0091, paliativo do Full Shopee) -- ver `CUSTO_ESTIMADO`;
   * taxa, frete, afiliado, receita e residuo da identidade do repasse TikTok
     por coorte de pedido (`silver.stg_tiktok_payments_by_order`);
   * taxa da Shopee do escrow (comissao + servico + transacao) por coorte de
@@ -187,6 +189,25 @@ IMPOSTO_PARCIAL_BASE = IMPOSTO_PARCIAL + "base do ICMS mudou em out/26 (desconto
 #: Folga da janela de `data` do webgex em torno das competencias lidas.
 WEBGEX_FOLGA = timedelta(days=7)
 
+#: T-0091 — PALIATIVO do custo NULL na gold. As NFs Full/FBS da Shopee entraram
+#: em `gold.nf_vendas_unificada_v2` (out/26, `origem = 'webgex_full'`) sem
+#: `custo`; a cobertura de custo da Shopee caiu para 17,7-93,2% e o CMV ficou
+#: subestimado (kokeshi 3,9% em vez de ~22%). Nas linhas com `custo IS NULL`, o
+#: custo e' ESTIMADO = quantidade x custo unitario medio ponderado
+#: (`SUM(custo) / SUM(quantidade_item)`) do MESMO SKU, MESMA marca (emissor) e
+#: MESMO mes, tirado das linhas COM custo da propria gold -- casando por
+#: `codigo_produto` e, na falta, por `sku_canonico`. SKU sem custo no mes fica
+#: descoberto (nunca vira zero). Nenhuma migration: o componente continua `cmv`;
+#: o estado viaja no `motivo` com o rotulo abaixo (como `BURACO_NF_MARCA`), sem
+#: `; ` dentro do trecho.
+CUSTO_ESTIMADO = "custo_unitario_estimado: "
+#: Mesmo limiar do serving (`app.services.dre_service.COBERTURA_CMV_MINIMA`).
+#: Celula com parte estimada e cobertura REAL abaixo dele sai `nao_reconciliado`:
+#: antes da estimativa ela ja' ficava fora da margem (cobertura parcial), e a
+#: estimativa nao pode coloca'-la dentro sem o serving saber que ha' estimativa.
+CMV_COBERTURA_MINIMA = Decimal("0.98")
+PROC_CMV_ESTIMADO = PROC_CMV + " + custo unitario do mesmo SKU no mes nas linhas sem custo @T-0091"
+
 EXIT_OK = 0
 EXIT_RECONCILIACAO = 65
 EXIT_FONTE = 69
@@ -318,6 +339,59 @@ SQL_CMV = text("""
       AND marca = ANY(:marcas)
       AND intercompany IS NOT TRUE
     GROUP BY data_mes, marca, plataforma
+""")
+
+#: T-0091: insumo do custo estimado, num UNICO statement (uma fotografia da
+#: gold para as tres partes). Devolve agregados por SKU, nunca item de NF:
+#:   * `sem_custo`: as MESMAS linhas do `SQL_CMV` (mesmos filtros de celula) com
+#:     `custo IS NULL`, por celula x `codigo_produto` x `sku_canonico`. Linha sem
+#:     quantidade positiva entra na receita, mas nao e' estimavel;
+#:   * `codigo_produto` / `sku_canonico`: custo e quantidade das linhas COM
+#:     custo da mesma gold, por mes x marca x chave, so' das chaves que aparecem
+#:     em `sem_custo`. QUALQUER canal da marca, sem intercompany: o `custo` da
+#:     gold e' o custo do produto no emissor, nao depende do canal de venda, e o
+#:     codigo de anuncio do Full (rituaria) so' casa via `sku_canonico` com
+#:     linha de outro canal. Intercompany fica fora (preco de transferencia).
+#: O casamento (codigo, senao sku) e a conta sao feitos em `estimar_cmv`, pura.
+SQL_CMV_ESTIMADO = text("""
+    WITH sem_custo AS (
+        SELECT data_mes, marca, plataforma, codigo_produto, sku_canonico,
+               SUM(receita_produto)                                    AS receita,
+               SUM(receita_produto) FILTER (WHERE quantidade_item > 0) AS receita_estimavel,
+               SUM(quantidade_item) FILTER (WHERE quantidade_item > 0) AS quantidade,
+               COUNT(*)                                                AS linhas
+        FROM gold.nf_vendas_unificada_v2
+        WHERE data_mes = ANY(:competencias)
+          AND canal = 'marketplace'
+          AND plataforma = ANY(:plataformas)
+          AND marca = ANY(:marcas)
+          AND intercompany IS NOT TRUE
+          AND custo IS NULL
+        GROUP BY data_mes, marca, plataforma, codigo_produto, sku_canonico
+    ), com_custo AS (
+        SELECT data_mes, marca, codigo_produto, sku_canonico, custo, quantidade_item
+        FROM gold.nf_vendas_unificada_v2
+        WHERE data_mes = ANY(:competencias)
+          AND marca = ANY(:marcas)
+          AND intercompany IS NOT TRUE
+          AND custo IS NOT NULL
+          AND quantidade_item > 0
+    )
+    SELECT 'sem_custo'::text AS tipo, data_mes AS competencia, marca, plataforma, codigo_produto, sku_canonico,
+           receita, receita_estimavel, quantidade, NULL::numeric AS custo, linhas
+    FROM sem_custo
+    UNION ALL
+    SELECT 'codigo_produto'::text, data_mes, marca, NULL::text, codigo_produto, NULL::text,
+           NULL::numeric, NULL::numeric, SUM(quantidade_item), SUM(custo), COUNT(*)
+    FROM com_custo
+    WHERE codigo_produto IN (SELECT codigo_produto FROM sem_custo)
+    GROUP BY data_mes, marca, codigo_produto
+    UNION ALL
+    SELECT 'sku_canonico'::text, data_mes, marca, NULL::text, NULL::text, sku_canonico,
+           NULL::numeric, NULL::numeric, SUM(quantidade_item), SUM(custo), COUNT(*)
+    FROM com_custo
+    WHERE sku_canonico IN (SELECT sku_canonico FROM sem_custo)
+    GROUP BY data_mes, marca, sku_canonico
 """)
 
 #: Contraprova: o agregado que o Data Mart materializa a partir da base de
@@ -628,6 +702,12 @@ class Lote:
     impostos_estado: Optional[str] = None
     #: Motivos da validacao dos impostos que reprovou. NAO entram em `recusas`.
     impostos_recusas: list = field(default_factory=list)
+    #: T-0091: celulas cujo `cmv` levou custo estimado, para o resumo JSON.
+    cmv_estimado: list = field(default_factory=list)
+    #: `publicado` ou `recusado: ...`; None = nao houve leitura.
+    cmv_estimado_estado: Optional[str] = None
+    #: Motivos da validacao da estimativa que reprovou. NAO entram em `recusas`.
+    cmv_estimado_recusas: list = field(default_factory=list)
 
 
 def _linha(competencia, canal, marca, componente, valor, *, status, procedencia, sinal=None,
@@ -769,6 +849,99 @@ def contraprova_cmv(cmv_idx: dict, cp_idx: dict) -> tuple[list[str], dict]:
     return recusas, obs
 
 
+_CHAVES_CUSTO_UNITARIO = ("codigo_produto", "sku_canonico")
+
+
+def estimar_cmv(linhas: list[dict]) -> tuple[dict, list[str]]:
+    """Custo estimado das linhas sem custo, por celula (T-0091). PURA.
+
+    Entrada: linhas de `SQL_CMV_ESTIMADO`. Para cada SKU sem custo da celula, o
+    custo unitario e' o medio ponderado do mesmo mes x marca pelo
+    `codigo_produto`; se o codigo nao casar (ou for nulo), pelo `sku_canonico`.
+    Sem custo unitario, ou sem quantidade positiva, a receita fica DESCOBERTA:
+    nao entra no custo nem na cobertura, e nada vira zero.
+
+    Devolve `({(competencia, canal, marca): estimativa}, recusas)`. Custo
+    unitario negativo ou repetido recusa a ESTIMATIVA (nunca o lote).
+    """
+    recusas: list[str] = []
+    unitario: dict[tuple, Decimal] = {}
+    sem_custo: list[dict] = []
+    for r in linhas:
+        tipo = r["tipo"]
+        if tipo == "sem_custo":
+            sem_custo.append(r)
+            continue
+        if tipo not in _CHAVES_CUSTO_UNITARIO:
+            recusas.append(f"cmv_estimado: tipo de linha desconhecido {tipo!r}")
+            continue
+        m, marca = _mes_de(r["competencia"]), r["marca"]
+        k = (tipo, m, marca, r[tipo])
+        custo, qtd = _dec(r["custo"]), _dec(r["quantidade"])
+        if k in unitario:
+            recusas.append(f"cmv_estimado: custo unitario repetido {k}")
+        if custo is None or qtd is None or qtd <= 0:
+            continue  # inalcancavel: o SQL so' agrega linha com custo e quantidade > 0
+        if custo < 0:
+            recusas.append(f"cmv_estimado: custo negativo para {tipo} {r[tipo]!r} em {(m, marca)}: {custo}")
+        unitario[k] = custo / qtd
+
+    plat_para_canal = {v: k for k, v in PLATAFORMA_FISCAL.items()}
+    celulas: dict[tuple, dict] = {}
+    zero = Decimal(0)
+    for r in sem_custo:
+        m, marca = _mes_de(r["competencia"]), r["marca"]
+        k = (m, plat_para_canal.get(r["plataforma"]), marca)
+        c = celulas.setdefault(k, {"receita_sem_custo": zero, "receita_estimada": zero, "receita_estimada_sku": zero,
+                                   "custo_estimado": zero, "skus_sem_custo": 0, "skus_estimados": 0})
+        c["receita_sem_custo"] += _dec(r["receita"]) or zero
+        c["skus_sem_custo"] += 1
+        cu, via = None, None
+        for chave in _CHAVES_CUSTO_UNITARIO:
+            if r[chave] is not None:
+                cu = unitario.get((chave, m, marca, r[chave]))
+                if cu is not None:
+                    via = chave
+                    break
+        qtd = _dec(r["quantidade"])
+        if cu is None or qtd is None or qtd <= 0:
+            continue
+        receita_estimavel = _dec(r["receita_estimavel"]) or zero
+        c["custo_estimado"] += qtd * cu
+        c["receita_estimada"] += receita_estimavel
+        if via == "sku_canonico":
+            c["receita_estimada_sku"] += receita_estimavel
+        c["skus_estimados"] += 1
+    for c in celulas.values():
+        c["custo_estimado"] = c["custo_estimado"].quantize(Decimal("0.01"))
+    return celulas, recusas
+
+
+def recusas_cmv_estimado(est_idx: dict, cmv_idx: dict) -> list[str]:
+    """A receita sem custo lida para a estimativa tem de ser a que o `SQL_CMV`
+    deixou descoberta (`receita_fiscal - receita_com_custo`), celula a celula,
+    nos dois sentidos. Divergiu: as duas leituras viram instantes diferentes da
+    gold, e a estimativa e' descartada inteira (o lote sai como antes)."""
+    recusas: list[str] = []
+    for k in sorted(set(est_idx) | set(cmv_idx), key=lambda x: (x[0], str(x[1]), x[2])):
+        c, e = cmv_idx.get(k), est_idx.get(k)
+        if c is None:
+            recusas.append(f"cmv_estimado: celula {k} so' na leitura do custo estimado")
+            continue
+        descoberta = (_dec(c["receita_fiscal"]) or Decimal(0)) - (_dec(c["receita_com_custo"]) or Decimal(0))
+        lida = e["receita_sem_custo"] if e is not None else Decimal(0)
+        if abs(descoberta - lida) > CONTRAPROVA_MAX:
+            recusas.append(f"cmv_estimado: receita sem custo {k} diverge da do CMV ({lida} x {descoberta}); "
+                           "leituras em instantes diferentes")
+        elif e is not None and not (Decimal(0) <= e["receita_estimada"] <= lida + CONTRAPROVA_MAX):
+            recusas.append(f"cmv_estimado: receita estimada fora de [0, receita sem custo] em {k}")
+    return recusas
+
+
+def _fmt_cob(v: Optional[Decimal]) -> str:
+    return "desconhecida" if v is None else f"{v:.4f}"
+
+
 def _milhar(n: int) -> str:
     return f"{n:,}".replace(",", ".")
 
@@ -828,7 +1001,8 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
                 repasse: list[dict], canais: list[str], comps: list[date],
                 sem_vendas: frozenset = frozenset(), publicadas: frozenset = frozenset(),
                 remover: frozenset = frozenset(), taxa_shopee: Optional[list[dict]] = None,
-                numeracao_nf: Optional[list[dict]] = None, impostos: Optional[list[dict]] = None) -> Lote:
+                numeracao_nf: Optional[list[dict]] = None, impostos: Optional[list[dict]] = None,
+                cmv_estimado: Optional[list[dict]] = None) -> Lote:
     """Transforma a leitura em linhas da fato e lista as recusas.
 
     Recusa (a publicacao inteira aborta) quando:
@@ -868,8 +1042,22 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
     `impostos_estado = "recusado: ..."`. Motivo: CMV e impostos sao lidos em
     statements separados (READ COMMITTED numa replica); uma recarga da gold
     entre os dois nao pode derrubar a DRE do dia.
+
+    `cmv_estimado` (T-0091): linhas de `SQL_CMV_ESTIMADO`. `None` = sem
+    estimativa (lote como antes). Celula com SKU sem custo estimado
+    (`estimar_cmv`) publica `cmv` = custo real + custo estimado, `cobertura` =
+    a COM a estimativa (coerente com o valor, que e' o que o serving usa para o
+    CMV % da receita coberta), procedencia `PROC_CMV_ESTIMADO` e o trecho
+    `custo_unitario_estimado: ...` no motivo, com a cobertura real e a com a
+    estimativa. `provisorio_share` continua sendo o do custo REAL. Se a
+    cobertura REAL fica abaixo de `CMV_COBERTURA_MINIMA`, o status vira
+    `nao_reconciliado` (a celula ja' ficava fora da margem). Celula sem linha
+    estimada sai identica. A contraprova compara so' a parte real (a leitura do
+    `SQL_CMV` nao muda). Validacao reprovada (`recusas_cmv_estimado`) NUNCA
+    recusa o lote: descarta a estimativa inteira, como os impostos.
     """
-    lote = Lote(extraidas=len(cmv) + len(repasse) + len(taxa_shopee or []) + len(impostos or []))
+    lote = Lote(extraidas=len(cmv) + len(repasse) + len(taxa_shopee or []) + len(impostos or [])
+                + len(cmv_estimado or []))
     plat_para_canal = {v: k for k, v in PLATAFORMA_FISCAL.items()}
 
     def indexar(rows, chave_fn, nome):
@@ -923,6 +1111,17 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
                 f" (e mais {len(imp_recusas) - 5})" if len(imp_recusas) > 5 else "")
         else:
             lote.impostos_estado = "publicado"
+    est_idx: dict = {}
+    if cmv_estimado is not None:
+        est_idx, est_recusas = estimar_cmv(cmv_estimado)
+        est_recusas.extend(recusas_cmv_estimado(est_idx, cmv_idx))
+        if est_recusas:
+            est_idx = {}
+            lote.cmv_estimado_recusas = est_recusas
+            lote.cmv_estimado_estado = "recusado: " + "; ".join(est_recusas[:5]) + (
+                f" (e mais {len(est_recusas) - 5})" if len(est_recusas) > 5 else "")
+        else:
+            lote.cmv_estimado_estado = "publicado"
     for (m, marca) in set(rep_idx):
         if "tiktok" in canais and (m, "tiktok", marca) not in esp:
             lote.fora_do_escopo.append(("repasse", m, "tiktok", marca))
@@ -950,6 +1149,26 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
                 status = "nao_reconciliado"
                 motivo = ("sem GMV para comparar" if razao is None
                           else f"receita fiscal / GMV = {razao:.4f}; aceito entre {CMV_RAZAO_MIN} e {CMV_RAZAO_MAX}")
+            valor, cobertura_pub, procedencia = custo, cobertura, PROC_CMV
+            e = est_idx.get((m, canal, marca))
+            if e is not None and e["skus_estimados"]:
+                valor, cobertura_pub, trecho, abaixo = _cmv_com_estimativa(c, e, custo, receita_fiscal)
+                if cobertura_pub is not None and not (Decimal(0) <= cobertura_pub <= Decimal(1)):
+                    lote.recusas.append(f"cmv: cobertura com estimativa fora de [0,1] em {(m, canal, marca)}: "
+                                        f"{cobertura_pub}")
+                if abaixo:
+                    status = "nao_reconciliado"
+                motivo = f"{motivo}; {trecho}"
+                procedencia = PROC_CMV_ESTIMADO
+                lote.cmv_estimado.append({
+                    "competencia": m.isoformat()[:7], "canal": canal, "marca": marca,
+                    "custo_real": None if custo is None else str(custo), "custo_estimado": str(e["custo_estimado"]),
+                    "cobertura_real": None if cobertura is None else f"{cobertura:.6f}",
+                    "cobertura_com_estimativa": None if cobertura_pub is None else f"{cobertura_pub:.6f}",
+                    "receita_sem_custo_nenhum": str(e["receita_sem_custo"] - e["receita_estimada"]),
+                    "receita_estimada_via_sku_canonico": str(e["receita_estimada_sku"]),
+                    "skus_estimados": e["skus_estimados"], "skus_sem_custo": e["skus_sem_custo"],
+                    "status": status})
             if m in obs_por_mes:
                 motivo = f"{motivo}; {obs_por_mes[m]}"
             motivo_rf = "base da razao com o GMV"
@@ -957,8 +1176,8 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
                 motivo = f"{motivo}; {buraco_nf[(m, marca)]}"
                 motivo_rf = f"{motivo_rf}; {buraco_nf[(m, marca)]}"
             data_max = _ts(c["ultima_emissao"])
-            lote.linhas.append(_linha(m, canal, marca, "cmv", custo, status=status, procedencia=PROC_CMV, sinal=1,
-                                      cobertura=cobertura, provisorio=share, motivo=motivo, data_max=data_max))
+            lote.linhas.append(_linha(m, canal, marca, "cmv", valor, status=status, procedencia=procedencia, sinal=1,
+                                      cobertura=cobertura_pub, provisorio=share, motivo=motivo, data_max=data_max))
             lote.linhas.append(_linha(m, canal, marca, "cmv_receita_fiscal", receita_fiscal, status="nao_avaliado",
                                       procedencia=PROC_CMV, motivo=motivo_rf, data_max=data_max))
 
@@ -1001,6 +1220,29 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
             lote.linhas.append(_linha(m, canal, marca, comp, v, status="reconciliado", procedencia=PROC_REPASSE,
                                       sinal=sinal, motivo=motivo, data_max=data_max))
     return lote
+
+
+def _cmv_com_estimativa(c: dict, e: dict, custo: Optional[Decimal],
+                        receita_fiscal: Optional[Decimal]) -> tuple[Decimal, Optional[Decimal], str, bool]:
+    """`(valor, cobertura com estimativa, trecho do motivo, cobertura real abaixo do minimo)`.
+
+    O trecho comeca com `CUSTO_ESTIMADO` e nao tem `; ` dentro, para o serving
+    separa'-lo do resto do motivo.
+    """
+    rcc = _dec(c["receita_com_custo"]) or Decimal(0)
+    cob_real = _razao(rcc, receita_fiscal)
+    cob_com = _razao(rcc + e["receita_estimada"], receita_fiscal)
+    valor = (custo or Decimal(0)) + e["custo_estimado"]
+    abaixo = cob_real is None or cob_real < CMV_COBERTURA_MINIMA
+    trecho = (f"{CUSTO_ESTIMADO}{e['custo_estimado']:.2f} de {valor:.2f} do CMV estimados por custo unitario "
+              f"medio ponderado do mesmo SKU no mes (codigo_produto, senao sku_canonico) sobre "
+              f"{e['receita_estimada']:.2f} de receita sem custo, cobertura real {_fmt_cob(cob_real)} e com a "
+              f"estimativa {_fmt_cob(cob_com)}, receita sem custo nenhum "
+              f"{e['receita_sem_custo'] - e['receita_estimada']:.2f}")
+    if abaixo:
+        trecho += (f", cobertura real abaixo de {CMV_COBERTURA_MINIMA}: CMV com estimativa nao entra como "
+                   "reconciliado ate' o custo vir na fonte")
+    return valor, cob_com, trecho, abaixo
 
 
 def _linha_taxa_shopee(m: date, marca: str, r: Optional[dict], lote: Lote) -> dict:
@@ -1208,6 +1450,34 @@ def ler_impostos(fonte_engine, comps: list[date], canais: list[str], marcas: lis
     return linhas, "lido"
 
 
+def ler_cmv_estimado(fonte_engine, comps: list[date], canais: list[str],
+                     marcas: list[str]) -> tuple[Optional[list], str]:
+    """Insumo do custo estimado (T-0091): leitura PROPRIA, READ ONLY, com timeout.
+
+    Fase 2 do `publicar` (sem conexao do Neon aberta). Como os impostos, nunca
+    derruba a publicacao: erro de SQL vira `(None, "indisponivel: <classe>")` e
+    o lote sai como antes (CMV so' com o custo real, cobertura real). So'
+    `SQLAlchemyError` e' engolido; qualquer outra excecao sobe.
+    """
+    if fonte_engine is None or not marcas:
+        return None, "nao avaliado: sem Data Mart ou sem marca no escopo"
+    params = {"competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas}
+    try:
+        with fonte_engine.connect() as conn:
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            conn.execute(text("SET LOCAL statement_timeout = '600s'"))
+            linhas = _rows(conn, SQL_CMV_ESTIMADO, params)
+            conn.rollback()
+    except SQLAlchemyError as exc:
+        return None, f"indisponivel: {type(exc).__name__}"
+    return linhas, "lido"
+
+
+def _resumo_cmv_estimado(lote: Lote, estado_leitura: str) -> dict:
+    return {"estado": lote.cmv_estimado_estado or estado_leitura, "celulas": lote.cmv_estimado,
+            "recusas": lote.cmv_estimado_recusas}
+
+
 def ler_numeracao_nf(fonte_engine, comps: list[date], marcas: list[str]) -> tuple[Optional[list], str]:
     """Gate de numeracao de NF (T-0064): leitura PROPRIA, READ ONLY, com timeout.
 
@@ -1361,14 +1631,16 @@ def diagnosticar(alvo_engine, fonte_engine, comps: list[date], canais: list[str]
         aceita_imp = bool(existe) and check_aceita_impostos(conn)
         conn.rollback()
     cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado), aceita_tx)
+    cmv_est, estado_est = ler_cmv_estimado(fonte_engine, comps, canais, _marcas(esperado))
     impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado), aceita_imp)
     numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
     publicadas = frozenset((_mes_de(r["competencia"]), r["canal"], r["marca"]) for r in atual)
     lote = montar_lote(esperado=esperado, cmv=cmv, contraprova=contraprova, repasse=repasse, canais=canais,
                        comps=comps, sem_vendas=sem_vendas, publicadas=publicadas, remover=remover,
-                       taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos)
+                       taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos, cmv_estimado=cmv_est)
     return _resumo(lote, comps, canais, modo="dry-run", aplicado=False, tabela_existe=bool(existe),
                    taxa_shopee=estado_taxa_shopee(taxa_shopee, canais),
+                   cmv_estimado=_resumo_cmv_estimado(lote, estado_est),
                    impostos=_resumo_impostos(lote, estado_imp),
                    numeracao_nf=_resumo_numeracao(lote, estado_nf),
                    sem_vendas=sorted(f"{m.isoformat()[:7]}:{c}" for m, c in sem_vendas),
@@ -1407,6 +1679,7 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
             conn.rollback()
         # Fase 2: leituras longas da origem, SEM conexao do Neon aberta.
         cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado), aceita_tx)
+        cmv_est, estado_est = ler_cmv_estimado(fonte_engine, comps, canais, _marcas(esperado))
         impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado), aceita_imp)
         numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
         # Fase 3: escrita, transacao unica e conexao nova.
@@ -1430,7 +1703,8 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
             esperado = esperado_lock
             lote = montar_lote(esperado=esperado, cmv=cmv, contraprova=contraprova, repasse=repasse, canais=canais,
                                comps=comps, sem_vendas=sem_vendas, publicadas=publicadas, remover=remover,
-                               taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos)
+                               taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos,
+                               cmv_estimado=cmv_est)
             if lote.recusas:  # ANTES do DELETE: recusa nunca apaga a fotografia
                 raise PublicacaoRecusada(lote.recusas)
             apagadas = conn.execute(SQL_APAGA_ESCOPO, {"competencias": comps, "canais": canais}).rowcount
@@ -1448,6 +1722,7 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
         raise
     return _resumo(lote, comps, canais, modo="apply", aplicado=True, lote_id=lote_id, apagadas=apagadas,
                    taxa_shopee=estado_taxa_shopee(taxa_shopee, canais),
+                   cmv_estimado=_resumo_cmv_estimado(lote, estado_est),
                    impostos=_resumo_impostos(lote, estado_imp),
                    numeracao_nf=_resumo_numeracao(lote, estado_nf),
                    sem_vendas=sorted(f"{m.isoformat()[:7]}:{c}" for m, c in sem_vendas),
