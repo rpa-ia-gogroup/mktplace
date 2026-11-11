@@ -65,9 +65,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 COMPLETA = "COMPLETA"
 PARCIAL = "PARCIAL"
+#: T-0090: mes imaturo (regra M+2) COM receita. Sai com valores e `fecha_em`.
+PREVIA = "PREVIA"
+#: T-0090: so' quando a receita e' nula.
 NAO_CALCULAVEL = "NAO_CALCULAVEL"
 
-#: Status de componente. So' `disponivel` entra na margem.
+#: Status de componente. `disponivel` entra como realizado; os de
+#: `STATUS_PARCIAIS`, com valor, entram como parciais (T-0090).
 DISPONIVEL = "disponivel"
 COBERTURA_PARCIAL = "parcial"
 INDISPONIVEL = "indisponivel"
@@ -78,6 +82,28 @@ NAO_CONFIRMADO = "nao_confirmado"
 PROVISORIO = "provisorio"
 SINAL_INESPERADO = "sinal_inesperado"
 NAO_APLICAVEL = "nao_aplicavel"
+#: T-0090: status com valor medido mas incompleto ou nao confirmado. Com valor,
+#: o componente entra na margem conhecida como PARCIAL (decisao do Mario, 11/11).
+STATUS_PARCIAIS = (COBERTURA_PARCIAL, NAO_CONFIRMADO, PROVISORIO, NAO_RECONCILIADO)
+
+#: T-0090: `origem` de cada componente (celula e agregado).
+ORIGEM_REALIZADO = "realizado"
+ORIGEM_PARCIAL = "parcial"
+ORIGEM_INDISPONIVEL = "indisponivel"
+ORIGEM_NAO_APLICAVEL = "nao_aplicavel"
+#: T-0090 (supervisor, 11/11): CMV que nao cobre a receita inteira entra na
+#: margem conhecida estendido pela razao CMV / receita com custo.
+ORIGEM_EXTRAPOLADO = "extrapolado"
+ORIGENS_NA_MARGEM = (ORIGEM_REALIZADO, ORIGEM_PARCIAL, ORIGEM_EXTRAPOLADO)
+#: Origens que contam em `componentes_parciais` da margem.
+ORIGENS_PARCIAIS = (ORIGEM_PARCIAL, ORIGEM_EXTRAPOLADO)
+AVISO_MARGEM_PARCIAL = ("Margem conhecida inclui custos parciais ({}); custo não medido não entra, "
+                        "então a margem tende a estar acima da real.")
+AVISO_CMV_EXTRAPOLADO = (" O CMV foi estendido proporcionalmente à receita onde a NF ou o custo "
+                         "não cobre o mês inteiro.")
+#: Status do CMV com valor medido que nao cobre a receita inteira (mesma lista
+#: de `dre_premissas.CMV_EXTRAPOLAVEL`).
+CMV_EXTRAPOLAVEL = (NAO_RECONCILIADO, COBERTURA_PARCIAL, PROVISORIO)
 
 CANAIS = ("tiktok", "ml", "shopee")
 CANAL_LABEL = {"tiktok": "TikTok Shop", "ml": "Mercado Livre", "shopee": "Shopee"}
@@ -101,8 +127,9 @@ CMV_RAZAO_MAX = 1.05
 #: CMV integralmente provisorio = mes nao fechado na fonte fiscal (contrato §4.9).
 CMV_PROVISORIO_INTEGRAL = 0.995
 #: Cobertura minima do CMV (T-0055 C3): `cobertura` = receita com custo /
-#: receita fiscal, como o publisher grava. Abaixo dela o CMV sai `parcial`
-#: (fora da margem conhecida); o custo da parte descoberta NUNCA e' extrapolado.
+#: receita fiscal, como o publisher grava. Abaixo dela o CMV sai `parcial`;
+#: desde a T-0090 entra na margem extrapolado (`_extrapolar_cmv`), com o
+#: medido em `valor_medido`.
 #: 0,98 e' RECOMENDACAO PENDENTE DE DECISAO DO MARIO (FASE1, decisao E1).
 COBERTURA_CMV_MINIMA = 0.98
 #: T-0064: rotulo do trecho do `motivo` que o publisher de insumos grava no
@@ -184,6 +211,29 @@ def _pct(valor: float | None, receita: float | None) -> float | None:
     if valor is None or not receita:
         return None
     return round(valor / receita * 100, 2)
+
+
+def pct_br(fracao: float, casas: int = 1) -> str:
+    """Fracao (0..1) -> "93,0%" (virgula decimal, para rotulo da tela)."""
+    return f"{fracao * 100:.{casas}f}".replace(".", ",") + "%"
+
+
+def origem_componente(valor: float | None, status: str) -> str:
+    """T-0090: de onde vem o numero do componente.
+
+    `realizado` = `disponivel` com valor; `parcial` = valor e status em
+    `STATUS_PARCIAIS`; `nao_aplicavel`; o resto (sem valor, snapshot ausente ou
+    vencido, sinal inesperado, indisponivel) e' `indisponivel`.
+    """
+    if status == NAO_APLICAVEL:
+        return ORIGEM_NAO_APLICAVEL
+    if valor is None:
+        return ORIGEM_INDISPONIVEL
+    if status == DISPONIVEL:
+        return ORIGEM_REALIZADO
+    if status in STATUS_PARCIAIS:
+        return ORIGEM_PARCIAL
+    return ORIGEM_INDISPONIVEL
 
 
 def ultimo_dia(mes: date) -> date:
@@ -275,11 +325,19 @@ class InsumosCelula:
 
 def _comp(valor=None, status=INDISPONIVEL, motivo=None, fonte=None, somavel=True, partes=None,
           data_as_of=None, publicado_em=None) -> dict:
+    origem = origem_componente(valor, status)
     return {
         "valor": valor, "status": status, "motivo": motivo, "fonte": fonte,
         "somavel": somavel, "partes": partes, "data_as_of": data_as_of, "publicado_em": publicado_em,
         # So' o CMV preenche (T-0055 C3); nos demais componentes ficam nulos.
         "cobertura": None, "cmv_pct_receita_coberta": None,
+        # T-0090. `_finalizar` recalcula `origem` e `entra_na_margem` depois que
+        # o status final e' decidido (ex.: taxa da Shopee vira nao_confirmado).
+        "origem": origem, "entra_na_margem": somavel and origem in ORIGENS_NA_MARGEM,
+        "cobertura_rotulo": None,
+        # T-0090: so' o CMV preenche — o custo medido cru, sempre que ha valor.
+        # Difere de `valor` quando o CMV foi extrapolado.
+        "valor_medido": None,
     }
 
 
@@ -330,12 +388,13 @@ def _cobertura_diaria(n_valores: int, dias: int) -> str:
 
 
 def _custo_do_mart(componente: str, canal: str, soma, n_valores: int, n_negativos: int,
-                   linhas: int, fonte: str, motivo_ausente: str) -> dict:
+                   linhas: int, fonte: str, motivo_ausente: str, dias: int | None = None) -> dict:
     """Componente de custo lido de uma coluna diaria do mart.
 
     A cobertura e' medida contra o numero de LINHAS da celula (dia x loja), nao
     contra dias distintos: uma marca com duas lojas no canal tem duas linhas
     por dia, e comparar com dias faria uma coluna meio vazia parecer completa.
+    `dias` (dias distintos da celula) so' escolhe a palavra do rotulo (T-0090).
     """
     status = _cobertura_diaria(int(n_valores or 0), linhas)
     if status == INDISPONIVEL:
@@ -350,8 +409,11 @@ def _custo_do_mart(componente: str, canal: str, soma, n_valores: int, n_negativo
     if not ok:
         return _comp(status=SINAL_INESPERADO, motivo="soma com sinal contrario ao da fonte", fonte=fonte)
     if status == COBERTURA_PARCIAL:
-        return _comp(valor=magnitude, status=COBERTURA_PARCIAL,
+        comp = _comp(valor=magnitude, status=COBERTURA_PARCIAL,
                      motivo=f"valor presente em {n_valores} de {linhas} linhas diarias", fonte=fonte)
+        unidade = "dias" if dias == linhas else "linhas diárias"
+        comp["cobertura_rotulo"] = f"presente em {n_valores} de {linhas} {unidade}"
+        return comp
     return _comp(valor=magnitude, status=DISPONIVEL, fonte=fonte)
 
 
@@ -378,13 +440,18 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
     motivo_receita = None
     if canal == "tiktok":
         receita, fonte_receita, motivo_receita = _receita_tiktok_sem_frete(ins, gmv, fonte_receita, avisos)
-    if dias >= dias_mes:
+    if receita is None:
+        # T-0090: receita nula e' o UNICO caso NAO_CALCULAVEL; o status diz isso.
+        comps["receita"] = _comp(status=INDISPONIVEL, fonte=fonte_receita, somavel=False,
+                                 motivo="GMV nulo no mart: receita nao observada")
+    elif dias >= dias_mes:
         comps["receita"] = _comp(valor=receita, status=DISPONIVEL, fonte=fonte_receita, somavel=False,
                                  motivo=motivo_receita)
     else:
         parcial = f"receita presente em {dias} de {dias_mes} dias do mes"
         comps["receita"] = _comp(valor=receita, status=COBERTURA_PARCIAL, fonte=fonte_receita, somavel=False,
                                  motivo=f"{parcial}; {motivo_receita}" if motivo_receita else parcial)
+        comps["receita"]["cobertura_rotulo"] = f"presente em {dias} de {dias_mes} dias"
 
     # --- devolucoes: sem fonte servivel em nenhum canal ----------------------
     comps["devolucoes"] = _comp(motivo="sem fonte de devolucao/reembolso em valor (perguntas C6, F5)")
@@ -397,7 +464,7 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         motivo_aus = ("comissao do ML nao carregada neste periodo" if canal == "ml"
                       else "taxa da Shopee ausente no mart")
         tx = _custo_do_mart("taxas", canal, mart.get("fees"), mart.get("fees_n"),
-                            mart.get("fees_neg_n"), linhas, fonte, motivo_aus)
+                            mart.get("fees_neg_n"), linhas, fonte, motivo_aus, dias=dias)
         if canal == "shopee" and tx["status"] == DISPONIVEL:
             tx["status"] = NAO_CONFIRMADO
             tx["motivo"] = "sem contraprova independente do repasse (pergunta C4)"
@@ -420,7 +487,7 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
     if canal in ("ml", "shopee"):
         comps["ads"] = _custo_do_mart("ads", canal, mart.get("ads"), mart.get("ads_n"), mart.get("ads_neg_n"),
                                       linhas, "marts.fact_marketplace_daily_performance.ad_spend",
-                                      "Ads ausente no mart")
+                                      "Ads ausente no mart", dias=dias)
     else:
         comps["ads"] = _comp(motivo="sem fonte de Ads do TikTok no mart")
 
@@ -429,11 +496,11 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         comps["frete"] = _custo_do_mart("frete", canal, mart.get("frete"), mart.get("frete_n"),
                                         mart.get("frete_neg_n"), linhas,
                                         "marts.fact_marketplace_daily_performance.seller_shipping_cost",
-                                        "frete do vendedor ausente no mart")
+                                        "frete do vendedor ausente no mart", dias=dias)
     elif canal == "shopee":
         fr = _custo_do_mart("frete", canal, mart.get("frete"), mart.get("frete_n"), mart.get("frete_neg_n"),
                             linhas, "marts.fact_marketplace_daily_performance.seller_shipping_cost",
-                            "frete ausente no mart")
+                            "frete ausente no mart", dias=dias)
         if fr["status"] in (DISPONIVEL, COBERTURA_PARCIAL):
             fr["status"] = NAO_CONFIRMADO
             fr["motivo"] = "'Valor estimado do frete' nao provado como custo do vendedor (pergunta C4)"
@@ -442,7 +509,7 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         comps["frete"] = _frete_tiktok(ins)
 
     # --- cmv -------------------------------------------------------------------
-    comps["cmv"] = _cmv(ins, gmv, avisos)
+    comps["cmv"] = _extrapolar_cmv(_cmv(ins, gmv, avisos), comps["receita"]["valor"])
 
     # --- guardrails de dupla contagem e classificacao -------------------------
     tx, af = comps["taxas"], comps["afiliados"]
@@ -458,18 +525,24 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         c = comps[req]
         if c["status"] != DISPONIVEL:
             motivos.append(f"{req} {c['status']}: {c['motivo']}")
-    if not mes_maduro(ins.mes, hoje):
+    maduro = mes_maduro(ins.mes, hoje)
+    fecha_em = ultimo_dia(somar_meses(ins.mes, MESES_MATURACAO))
+    if not maduro:
         motivos.append(
-            f"mes imaturo: fecha apos {ultimo_dia(somar_meses(ins.mes, MESES_MATURACAO)).isoformat()} "
+            f"mes imaturo: fecha apos {fecha_em.isoformat()} "
             f"(regra M+{MESES_MATURACAO}, decisao D5)"
         )
 
-    if motivos:
+    # T-0090 (decisao do Mario, 11/11): a DRE sempre mostra numeros. Os motivos
+    # continuam todos listados, como texto; so' a receita nula tira a margem.
+    if comps["receita"]["valor"] is None:
         classificacao = NAO_CALCULAVEL
-    elif all(comps[c]["status"] in (DISPONIVEL, NAO_APLICAVEL) for c in CUSTOS_SOMAVEIS):
-        classificacao = COMPLETA
-    else:
+    elif not maduro:
+        classificacao = PREVIA
+    elif motivos or not all(comps[c]["status"] in (DISPONIVEL, NAO_APLICAVEL) for c in CUSTOS_SOMAVEIS):
         classificacao = PARCIAL
+    else:
+        classificacao = COMPLETA
 
     datas = {
         "receita_ultimo_dia": mart.get("max_date"),
@@ -482,6 +555,8 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
     celula = {
         "mes": ins.mes.isoformat()[:7], "canal": canal, "marca": ins.marca,
         "componentes": comps, "classificacao": classificacao,
+        "previa": classificacao == PREVIA,
+        "fecha_em": fecha_em.isoformat() if classificacao == PREVIA else None,
         "motivos_classificacao": motivos, "avisos_qualidade": avisos, "data_maxima": datas,
     }
     return _finalizar(celula)
@@ -526,9 +601,15 @@ def _taxa_shopee_escrow(esc: dict | None, do_mart: dict) -> dict:
     cobertura = _num(esc.get("cobertura"))
     if cobertura is None or cobertura < 1:
         pct = "desconhecida" if cobertura is None else f"{cobertura * 100:.1f}%"
-        return _comp(valor=magnitude, status=COBERTURA_PARCIAL,
+        comp = _comp(valor=magnitude, status=COBERTURA_PARCIAL,
                      motivo=f"escrow cobre {pct} dos pedidos nao cancelados ({esc.get('motivo')}); "
                             "a parte sem escrow nao e' estimada", **meta)
+        # T-0090: fracao estruturada, para o rotulo e para o cenario estimado
+        # extrapolar (so' la'; o realizado nunca extrapola). Interna: o contrato a descarta.
+        comp["_cobertura_pedidos"] = cobertura
+        if cobertura is not None:
+            comp["cobertura_rotulo"] = f"escrow em {pct_br(cobertura)} dos pedidos"
+        return comp
     return _comp(valor=magnitude, status=NAO_CONFIRMADO,
                  motivo="escrow da Shopee; sem contraprova independente do repasse (pergunta C4)", **meta)
 
@@ -593,6 +674,8 @@ def _impostos(ins: InsumosCelula) -> dict:
     if motivos:
         comp = _comp(valor=valor, status=COBERTURA_PARCIAL,
                      motivo="; ".join(motivos) + "; nada e' extrapolado", **meta)
+        if cobertura is not None and cobertura < COBERTURA_IMPOSTO_MINIMA:
+            comp["cobertura_rotulo"] = f"imposto em {pct_br(cobertura)} da receita fiscal"
     else:
         comp = _comp(valor=valor, status=DISPONIVEL,
                      motivo=f"imposto realizado (webgex): NFs casadas cobrem {cob_txt} da receita fiscal", **meta)
@@ -754,11 +837,23 @@ def _cmv(ins: InsumosCelula, receita: float | None, avisos: list[str]) -> dict:
         return _comp(status=SINAL_INESPERADO, motivo="CMV negativo", **meta)
     receita_fiscal = _num(c.get("receita_fiscal"))
     cobertura = _num(c.get("cobertura"))
+    razao_nf = (receita_fiscal / receita) if receita and receita_fiscal is not None else None
 
     def comp(status, motivo=None) -> dict:
         # Cobertura e CMV % coberto acompanham TODO estado com custo conhecido.
-        return _com_cobertura(_comp(valor=custo, status=status, motivo=motivo, **meta),
-                              custo, receita_fiscal, cobertura)
+        out = _com_cobertura(_comp(valor=custo, status=status, motivo=motivo, **meta),
+                             custo, receita_fiscal, cobertura)
+        # T-0090: base estruturada do rotulo e do "NF cobre Y%" do cenario. Interna.
+        out["_razao_nf_gmv"] = razao_nf
+        out["valor_medido"] = custo
+        if status != DISPONIVEL:
+            partes = []
+            if razao_nf is not None and not (CMV_RAZAO_MIN <= razao_nf <= CMV_RAZAO_MAX):
+                partes.append(f"NF cobre {razao_nf * 100:.0f}% do GMV")
+            if cobertura is not None and cobertura < COBERTURA_CMV_MINIMA:
+                partes.append(f"custo em {pct_br(cobertura)} da receita fiscal")
+            out["cobertura_rotulo"] = "; ".join(partes) or None
+        return out
 
     # T-0064: buraco de numeracao de NF no mes = base fiscal incompleta (notas
     # nao ingeridas ou rejeitadas). Vem ANTES da razao com o GMV: o buraco e' a
@@ -767,12 +862,12 @@ def _cmv(ins: InsumosCelula, receita: float | None, avisos: list[str]) -> dict:
     if buraco:
         return comp(COBERTURA_PARCIAL,
                     f"{buraco}: notas ausentes da base fiscal (nao ingeridas ou rejeitadas); CMV e receita fiscal "
-                    f"do mes incompletos, nada e' extrapolado (publicacao: {c['status']})")
+                    f"do mes incompletos (publicacao: {c['status']})")
     if c["status"] != "reconciliado":
         return comp(NAO_RECONCILIADO, f"publicacao: {c['motivo']} (pergunta F1/F7)")
     # A publicacao reconciliou contra o GMV DAQUELE instante. O GMV pode ter
     # mudado desde entao: a razao e' conferida de novo com o valor de agora.
-    razao = (receita_fiscal / receita) if receita and receita_fiscal is not None else None
+    razao = razao_nf
     if razao is None or not (CMV_RAZAO_MIN <= razao <= CMV_RAZAO_MAX):
         txt = "sem receita para comparar" if razao is None else f"razao receita fiscal / GMV atual = {razao:.3f}"
         return comp(NAO_RECONCILIADO, f"{txt}; aceito entre {CMV_RAZAO_MIN} e {CMV_RAZAO_MAX} (pergunta F1/F7)")
@@ -783,16 +878,44 @@ def _cmv(ins: InsumosCelula, receita: float | None, avisos: list[str]) -> dict:
         avisos.append(f"{share * 100:.0f}% do CMV ainda e' provisorio na fonte fiscal.")
     avisos.append(f"CMV fiscal reconciliado: receita fiscal / GMV = {razao:.3f}.")
     # Cobertura (T-0055 C3): receita sem custo NAO tem custo zero. Abaixo do
-    # minimo o CMV fica fora da margem conhecida, sem extrapolar a parte
-    # descoberta. Cobertura nao publicada mantem o estado de antes (nao e'
-    # tratada como 100%): o campo sai nulo e um aviso diz por que.
+    # minimo o CMV sai `parcial`; desde a T-0090 entra na margem conhecida
+    # extrapolado pela razao coberta (`_extrapolar_cmv`). Cobertura nao publicada
+    # mantem o estado de antes (nao e' tratada como 100%): o campo sai nulo e um
+    # aviso diz por que.
     if cobertura is None:
         avisos.append("Cobertura do CMV nao publicada: CMV % sobre a receita com custo indisponivel.")
     elif cobertura < COBERTURA_CMV_MINIMA:
         return comp(COBERTURA_PARCIAL,
                     f"CMV cobre {cobertura * 100:.2f}% da receita fiscal (minimo {COBERTURA_CMV_MINIMA * 100:.0f}%); "
-                    "custo ausente nao e' zero nem e' extrapolado")
+                    "custo ausente nao e' zero")
     return comp(DISPONIVEL)
+
+
+def _extrapolar_cmv(cmv: dict, receita: float | None) -> dict:
+    """CMV que nao cobre a receita inteira entra EXTRAPOLADO na margem (T-0090).
+
+    Decisao do supervisor (11/11), apos o alerta do orq-1: o CMV medido cru de
+    um CMV `nao_reconciliado` (NF cobre so' parte do GMV) ou `parcial` (NFs
+    Full da Shopee com custo NULL) inflava a margem conhecida em ~18 p.p. Com a
+    razao coberta calculavel (CMV medido / receita com custo > 0), o valor que
+    entra na margem e' `razao x receita da celula`. `valor_medido` guarda o
+    cru; `status` nao muda (MCP e consumidores antigos); `cobertura` e
+    `cmv_pct_receita_coberta` continuam calculados com o medido. Sem razao
+    calculavel o CMV segue `parcial` com o valor cru.
+    """
+    medido, rcc = cmv.get("valor_medido"), cmv.get("_receita_com_custo")
+    if cmv["status"] not in CMV_EXTRAPOLAVEL or medido is None or not receita or not rcc or rcc <= 0:
+        return cmv
+    razao = medido / rcc
+    cmv["valor"] = round(razao * receita, 2)
+    cmv["_extrapolado"] = True
+    coberto = pct_br(min(rcc / receita, 1.0))
+    texto = (f"extrapolado: CMV de {pct_br(razao)} da receita com custo aplicado à receita inteira "
+             f"(custo medido em {coberto} da receita)")
+    cmv["motivo"] = f"{cmv['motivo']}; {texto}" if cmv.get("motivo") else texto
+    extra = f"extrapolado de {coberto} coberto"
+    cmv["cobertura_rotulo"] = f"{cmv['cobertura_rotulo']}; {extra}" if cmv.get("cobertura_rotulo") else extra
+    return cmv
 
 
 # ---------------------------------------------------------------------------
@@ -800,57 +923,82 @@ def _cmv(ins: InsumosCelula, receita: float | None, avisos: list[str]) -> dict:
 # ---------------------------------------------------------------------------
 
 def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
-    """Calcula percentuais, listas de disponivel/ausente, completude e margem.
+    """Calcula percentuais, origem, listas de disponivel/ausente, completude e margem.
 
     `agregado` (so' para agregacoes) traz a margem ja somada celula a celula e
-    as listas de custos usados em TODAS / em ALGUMA celula.
+    as listas de custos usados em TODAS / em ALGUMA celula (e os parciais).
+
+    T-0090: entra na margem conhecida todo custo somavel com origem `realizado`
+    ou `parcial`; a margem existe sempre que ha receita. Custo nao medido nao
+    entra, entao com parciais a margem tende a estar ACIMA da real (`aviso`).
     """
     comps = celula["componentes"]
     receita = comps["receita"]["valor"]
-    for c in comps.values():
+    for nome, c in comps.items():
         c["pct_receita"] = _pct(c["valor"], receita)
+        c["origem"] = origem_componente(c["valor"], c["status"])
+        if c.get("_extrapolado") and c["origem"] == ORIGEM_PARCIAL:
+            c["origem"] = ORIGEM_EXTRAPOLADO
+        if agregado is None:
+            c["entra_na_margem"] = (receita is not None and nome in CUSTOS_SOMAVEIS and bool(c["somavel"])
+                                    and c["origem"] in ORIGENS_NA_MARGEM)
+        else:
+            c["entra_na_margem"] = nome in agregado["usados_em_alguma"]
 
     aplicaveis = [c for c in CUSTOS_SOMAVEIS if comps[c]["status"] != NAO_APLICAVEL]
     if agregado is None:
-        usados = [c for c in CUSTOS_SOMAVEIS if comps[c]["status"] == DISPONIVEL]
+        usados = [c for c in CUSTOS_SOMAVEIS if comps[c]["entra_na_margem"]]
+        usados_algum = list(usados)
+        parciais = [c for c in usados if comps[c]["origem"] in ORIGENS_PARCIAIS]
+        valor = None if receita is None else receita - sum(comps[c]["valor"] for c in usados)
     else:
         usados = agregado["usados_em_todas"]
+        usados_algum = agregado["usados_em_alguma"]
+        parciais = agregado["parciais_em_alguma"]
+        valor = agregado["margem"]
     celula["componentes_disponiveis"] = [c for c in COMPONENTES if comps[c]["status"] == DISPONIVEL]
     celula["componentes_ausentes"] = [
         {"componente": c, "status": comps[c]["status"], "motivo": comps[c]["motivo"]}
         for c in COMPONENTES
         if comps[c]["status"] not in (DISPONIVEL, NAO_APLICAVEL)
     ]
+    # No agregado, `usados` conta os custos que entraram em TODAS as celulas;
+    # `parciais` conta, entre eles, os que foram parciais em alguma.
+    n_parciais = len([c for c in usados if c in parciais])
+    texto = f"{len(usados)} de {len(aplicaveis)} custos"
+    if n_parciais:
+        texto += f" ({n_parciais} {'parcial' if n_parciais == 1 else 'parciais'})"
     celula["completude"] = {
-        "usados": len(usados), "aplicaveis": len(aplicaveis),
-        "texto": f"{len(usados)} de {len(aplicaveis)} custos",
+        "usados": len(usados), "aplicaveis": len(aplicaveis), "parciais": n_parciais, "texto": texto,
     }
 
-    if celula["classificacao"] == NAO_CALCULAVEL or receita is None:
+    faltam = [c for c in aplicaveis if c not in usados]
+    if valor is None or receita is None:
         celula["margem_contribuicao_conhecida"] = {
             "valor": None, "pct_receita": None, "rotulo": ROTULO_MARGEM,
-            "formula": None, "componentes_usados": [],
-            "faltam": [c for c in aplicaveis if c not in usados],
+            "formula": None, "componentes_usados": [], "componentes_parciais": [],
+            "faltam": faltam, "aviso": None,
         }
         return celula
-    if agregado is None:
-        valor = receita - sum(comps[c]["valor"] for c in usados)
-        formula = " − ".join(["receita"] + list(usados))
-        usados_algum = list(usados)
+    if agregado is not None and usados_algum != usados:
+        formula = ("soma, celula a celula (mes x canal x marca), de: receita − custos que entram na margem "
+                   "na celula (realizados e parciais)")
     else:
-        valor = agregado["margem"]
-        usados_algum = agregado["usados_em_alguma"]
-        formula = (
-            "soma, celula a celula (mes x canal x marca), de: receita − custos disponiveis na celula"
-            if usados_algum != usados else " − ".join(["receita"] + list(usados))
-        )
+        formula = " − ".join(["receita"] + list(usados))
+    aviso = None
+    if parciais:
+        aviso = AVISO_MARGEM_PARCIAL.format(", ".join(parciais))
+        if "cmv" in parciais and comps["cmv"]["origem"] == ORIGEM_EXTRAPOLADO:
+            aviso += AVISO_CMV_EXTRAPOLADO
     celula["margem_contribuicao_conhecida"] = {
         "valor": round(valor, 2),
         "pct_receita": _pct(valor, receita),
         "rotulo": ROTULO_MARGEM,
         "formula": formula,
         "componentes_usados": usados_algum,
-        "faltam": [c for c in aplicaveis if c not in usados],
+        "componentes_parciais": list(parciais),
+        "faltam": faltam,
+        "aviso": aviso,
     }
     return celula
 
@@ -867,10 +1015,41 @@ def _cobertura_agregada(destino: dict, partes: list[dict]) -> None:
     receita_fiscal = sum(p["_receita_fiscal"] for p in partes)
     receita_com_custo = sum(p["_receita_com_custo"] for p in partes)
     destino["cobertura"] = round(receita_com_custo / receita_fiscal, 6) if receita_fiscal else None
-    destino["cmv_pct_receita_coberta"] = _pct_coberto(sum(p["valor"] for p in partes), receita_com_custo)
+    # T-0090: numerador = CMV MEDIDO, nunca o extrapolado (que ja' cobre a receita inteira).
+    medido = sum(p["valor"] if p.get("valor_medido") is None else p["valor_medido"] for p in partes)
+    destino["cmv_pct_receita_coberta"] = _pct_coberto(medido, receita_com_custo)
 
 
-_ORDEM_PIOR = {NAO_CALCULAVEL: 0, PARCIAL: 1, COMPLETA: 2}
+#: Ordem de pior entre celulas COM receita (T-0090). NAO_CALCULAVEL fica fora:
+#: o agregado so' e' NAO_CALCULAVEL quando TODAS as celulas o sao.
+_ORDEM_PIOR = {PREVIA: 0, PARCIAL: 1, COMPLETA: 2}
+
+
+def _rotulo_agregado(nome: str, aplic: list[tuple[dict, dict]], receita_total: float | None) -> str | None:
+    """`cobertura_rotulo` de um componente agregado com origem parcial (T-0090).
+
+    Uma celula so': o rotulo dela. Varias: a fatia da receita (das celulas com
+    receita) em que o componente e' realizado e, se houver, a fatia parcial.
+    """
+    if len(aplic) == 1:
+        return aplic[0][0].get("cobertura_rotulo")
+    if nome == "receita":
+        completas = sum(1 for p, _ in aplic if p["status"] == DISPONIVEL)
+        return f"{completas} de {len(aplic)} células com receita do mês inteiro"
+    if not receita_total:
+        return None
+
+    def fatia(origem: str) -> float:
+        return sum(c["componentes"]["receita"]["valor"] or 0.0 for p, c in aplic if p.get("origem") == origem)
+
+    rotulo = f"{pct_br(fatia(ORIGEM_REALIZADO) / receita_total)} da receita com dado realizado"
+    parcial = fatia(ORIGEM_PARCIAL)
+    if parcial:
+        rotulo += f", {pct_br(parcial / receita_total)} com dado parcial"
+    extrapolado = fatia(ORIGEM_EXTRAPOLADO)
+    if extrapolado:
+        rotulo += f", {pct_br(extrapolado / receita_total)} com dado extrapolado"
+    return rotulo
 
 
 def agregar(celulas: list[dict], **chave) -> dict | None:
@@ -880,15 +1059,18 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
     - componente `disponivel` no agregado so' se `disponivel` em TODAS as
       celulas onde e' aplicavel; senao `parcial` (com o valor conhecido e a
       cobertura sobre a receita) ou o status comum quando nenhuma tem valor;
-    - margem so' existe se nenhuma celula for NAO_CALCULAVEL, e e' a SOMA das
-      margens das celulas. Usar so' os custos presentes em todas as celulas
-      descartaria custo conhecido (ex.: Ads do ML ao agregar com o TikTok, que
-      nao tem Ads) e superestimaria a margem. `faltam` lista o que faltou em
-      pelo menos uma celula.
+    - classificacao (T-0090): NAO_CALCULAVEL so' se TODAS as celulas o forem;
+      senao a pior entre as que tem receita (PREVIA < PARCIAL < COMPLETA).
+      Celula sem receita aparece em `motivos_classificacao`;
+    - margem e' a SOMA das margens das celulas que tem margem. Usar so' os
+      custos presentes em todas as celulas descartaria custo conhecido (ex.:
+      Ads do ML ao agregar com o TikTok, que nao tem Ads) e superestimaria a
+      margem. `faltam` lista o que faltou em pelo menos uma celula.
     """
     if not celulas:
         return None
-    receita_total = sum(c["componentes"]["receita"]["valor"] or 0.0 for c in celulas)
+    com_receita = [c for c in celulas if c["componentes"]["receita"]["valor"] is not None]
+    receita_total = sum(c["componentes"]["receita"]["valor"] for c in com_receita) if com_receita else None
     comps: dict[str, dict] = {}
     for nome in COMPONENTES:
         parts = [c["componentes"][nome] for c in celulas]
@@ -913,6 +1095,13 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
                 valor=valor, status=COBERTURA_PARCIAL, somavel=somavel,
                 motivo=f"disponivel em celulas que somam {cob}% da receita; status: {', '.join(sorted(status_set))}",
             )
+        if nome == "cmv" and com_valor:
+            # T-0090: `valor` soma os extrapolados; `valor_medido`, o custo medido cru.
+            comps[nome]["valor_medido"] = sum(
+                p["valor"] if p.get("valor_medido") is None else p["valor_medido"] for p, _ in com_valor)
+            comps[nome]["_extrapolado"] = any(p.get("_extrapolado") for p, _ in com_valor)
+        if origem_componente(comps[nome]["valor"], comps[nome]["status"]) == ORIGEM_PARCIAL:
+            comps[nome]["cobertura_rotulo"] = _rotulo_agregado(nome, aplic, receita_total)
         # Datas do insumo publicado: a MAIS ANTIGA entre as celulas. Um agregado
         # nunca pode parecer mais fresco que a sua parcela mais velha.
         for chave_data in ("data_as_of", "publicado_em"):
@@ -923,15 +1112,25 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         if nome == "impostos":
             _impostos_agregados(comps[nome], [p for p, _ in aplic])
     rec_status = {c["componentes"]["receita"]["status"] for c in celulas}
-    comps["receita"] = _comp(valor=receita_total, status=DISPONIVEL if rec_status == {DISPONIVEL} else COBERTURA_PARCIAL,
-                             somavel=False)
+    if receita_total is None:
+        comps["receita"] = _comp(status=INDISPONIVEL, somavel=False, motivo="nenhuma celula com receita")
+    else:
+        rec_ok = rec_status == {DISPONIVEL}
+        comps["receita"] = _comp(valor=receita_total, status=DISPONIVEL if rec_ok else COBERTURA_PARCIAL,
+                                 somavel=False)
+        if not rec_ok:
+            comps["receita"]["cobertura_rotulo"] = _rotulo_agregado(
+                "receita", [(c["componentes"]["receita"], c) for c in celulas], receita_total)
 
-    classificacao = min((c["classificacao"] for c in celulas), key=_ORDEM_PIOR.get)
+    com_classe = [c["classificacao"] for c in celulas if c["classificacao"] != NAO_CALCULAVEL]
+    classificacao = min(com_classe, key=_ORDEM_PIOR.get) if com_classe else NAO_CALCULAVEL
     motivos = []
     for c in celulas:
+        prefixo = f"{c['mes']} {c['canal']} {c['marca']}"
         if c["classificacao"] == NAO_CALCULAVEL:
-            for m in c["motivos_classificacao"]:
-                motivos.append(f"{c['mes']} {c['canal']} {c['marca']}: {m}")
+            motivos.append(f"{prefixo}: sem receita")
+        for m in c["motivos_classificacao"]:
+            motivos.append(f"{prefixo}: {m}")
     avisos = []
     for c in celulas:
         for a in c["avisos_qualidade"]:
@@ -945,16 +1144,20 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         for k in c["data_maxima"]:
             datas.setdefault(k, None)
 
-    usados_cel = [c["margem_contribuicao_conhecida"]["componentes_usados"] for c in celulas]
+    com_margem = [c["margem_contribuicao_conhecida"] for c in celulas
+                  if c["margem_contribuicao_conhecida"]["valor"] is not None]
+    usados_cel = [m["componentes_usados"] for m in com_margem]
+    parciais_cel = [m["componentes_parciais"] for m in com_margem]
     agregado = {
-        "usados_em_todas": [n for n in CUSTOS_SOMAVEIS if all(n in u for u in usados_cel)],
+        "usados_em_todas": [n for n in CUSTOS_SOMAVEIS if usados_cel and all(n in u for u in usados_cel)],
         "usados_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in u for u in usados_cel)],
-        "margem": None,
+        "parciais_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in p for p in parciais_cel)],
+        "margem": sum(m["valor"] for m in com_margem) if com_margem else None,
     }
-    if classificacao != NAO_CALCULAVEL:
-        agregado["margem"] = sum(c["margem_contribuicao_conhecida"]["valor"] for c in celulas)
+    fechas = [c["fecha_em"] for c in celulas if c.get("fecha_em")]
     out = {
         **chave, "componentes": comps, "classificacao": classificacao,
+        "previa": classificacao == PREVIA, "fecha_em": max(fechas) if fechas else None,
         "motivos_classificacao": motivos, "avisos_qualidade": avisos, "data_maxima": datas,
         "celulas": len(celulas),
     }
@@ -1356,8 +1559,13 @@ def montar_dre(
             "insumo_idade_maxima_horas": int(INSUMO_IDADE_MAXIMA.total_seconds() // 3600),
             "cmv_razao_aceita": [CMV_RAZAO_MIN, CMV_RAZAO_MAX],
             "cmv_cobertura_minima": COBERTURA_CMV_MINIMA,
-            "impostos": "realizado do webgex (ICMS + DIFAL + PIS/COFINS) onde publicado; parcial fica fora da "
-                        "margem; sem publicacao, indisponivel. Premissa so' no cenario estimado",
+            "impostos": "realizado do webgex (ICMS + DIFAL + PIS/COFINS) onde publicado; parcial entra na "
+                        "margem conhecida como parcial; sem publicacao, indisponivel. Premissa so' no cenario estimado",
+            "previa": "mes imaturo (M+2) sai como PREVIA com valores e fecha_em",
+            "margem_conhecida": "receita − custos com origem realizado, parcial ou extrapolado (entra_na_margem); "
+                                "CMV que nao cobre a receita entra extrapolado pela razao coberta (valor_medido = "
+                                "o cru); custo nao medido nao entra, entao com parciais a margem tende a estar "
+                                "acima da real",
             "cmv_pct_receita_coberta": "CMV / receita com custo; cobertura = receita com custo / receita fiscal "
                                        "(NF fiscal, base de item). pct_receita do CMV segue CMV / receita (GMV)",
             "afiliado_tiktok": "decomposicao de taxas; nunca somado",

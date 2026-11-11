@@ -24,7 +24,9 @@ export default function CmvCobertura({ celula, rotulo }: { celula: CelulaDRE; ro
       </Chip>
       {r.parcial && (
         <span className="text-xs text-ink-muted">
-          CMV parcial: cobertura abaixo do mínimo, fora da margem; custo ausente não é zero.
+          {r.naMargem
+            ? "CMV parcial: cobertura abaixo do mínimo; entra na margem como custo parcial."
+            : "CMV parcial: cobertura abaixo do mínimo, fora da margem; custo ausente não é zero."}
         </span>
       )}
       <InfoDica texto={FORMULA_CMV_COBERTO} />

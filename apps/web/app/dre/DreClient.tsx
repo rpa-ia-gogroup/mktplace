@@ -43,7 +43,6 @@ import DreResumo from "@/components/dre/DreResumo";
 import DreVertical, { type OpcaoRecorte } from "@/components/dre/DreVertical";
 import DreCanais from "@/components/dre/DreCanais";
 import { DreMarcaCanalMatriz, DreMarcasTabela } from "@/components/dre/DreMarcas";
-import BotaoRecorteCalculavel from "@/components/dre/BotaoRecorteCalculavel";
 import CmvCobertura from "./CmvCobertura";
 import Segmented from "@/components/ui/Segmented";
 import {
@@ -61,15 +60,15 @@ import {
   ROTULO_CANAL,
   avisoFotografia,
   canaisBloqueadores,
-  canaisCalculaveisOcultos,
   classificarFalha,
   dreUrlQuery,
   fmtInstanteBrt,
-  juntarNomes,
+  margemPrincipal,
   parseDreFiltros,
   queryCanonica,
   rotuloPeriodo,
   selecaoVazia,
+  textoPrevia,
   type Cenario,
   type DreFiltros as Filtros,
   type DreResponse,
@@ -134,7 +133,11 @@ export default function DreClient() {
   const mesPadrao = resp && resp.periodo.origem === "padrao_competencia_madura" ? resp.periodo.meses[0] ?? null : null;
   const competencia = resp ? rotuloPeriodo(resp.periodo.meses) : null;
   const aviso = resp ? avisoFotografia(resp.fontes.insumos_dre, fmtInstanteBrt) : null;
-  const ocultos = resp ? canaisCalculaveisOcultos(resp) : [];
+  // T-0090: competencia imatura (PREVIA) ganha o selo ao lado da competencia.
+  const seloPrevia = resp?.total ? textoPrevia(resp.total) : null;
+  // T-0090 (supervisor, 11/11): na PREVIA com cenario, a estimada e' o destaque.
+  const destaque = resp?.total ? margemPrincipal(resp.total) : null;
+  const estimadaEmDestaque = destaque?.tipo === "estimada" ? destaque : null;
   const bloqueadores = resp ? canaisBloqueadores(resp) : [];
   const vazio = resp ? selecaoVazia(resp) : false;
 
@@ -168,13 +171,25 @@ export default function DreClient() {
         subtitle={
           cenario === "estimada"
             ? "Margem de contribuição estimada com premissas."
-            : "Margem de contribuição conhecida por canal e marca."
+            : estimadaEmDestaque
+              ? "Prévia: margem de contribuição estimada com premissas em destaque; a conhecida fica como detalhe."
+              : "Margem de contribuição conhecida por canal e marca."
         }
         icon={Calculator}
         meta={
           resp ? (
             <>
               <PeriodChip label={`Competência ${competencia}${mesPadrao ? " · madura" : ""}`} />
+              {seloPrevia && (
+                <Chip tom="atencao" ponto>
+                  {seloPrevia}
+                </Chip>
+              )}
+              {estimadaEmDestaque && (
+                <Chip tom="atencao">
+                  Margem estimada: {estimadaEmDestaque.valor} ({estimadaEmDestaque.pct})
+                </Chip>
+              )}
               {atualizadoEm && (
                 <Chip>Carga do mart: {fmtInstanteBrt(atualizadoEm)}</Chip>
               )}
@@ -276,17 +291,6 @@ export default function DreClient() {
               <Chip tom="atencao">Não é lucro nem margem líquida</Chip>
               <InfoDica texto="Impostos e devoluções ainda não têm fonte." />
             </div>
-            {ocultos.length > 0 && (
-              <Note
-                tom="neutro"
-                acao={<BotaoRecorteCalculavel canais={ocultos} aoAplicar={(canais) => aplicar({ canais })} />}
-              >
-                {/* DRE-UX-2: o canal que bloqueia vem NOMEADO (de `por_canal`). */}
-                Total não calculável: {juntarNomes(bloqueadores)}{" "}
-                {bloqueadores.length > 1 ? "não são calculáveis" : "não é calculável"}.{" "}
-                {juntarNomes(ocultos.map((c) => ROTULO_CANAL[c]))} {ocultos.length > 1 ? "têm" : "tem"} margem conhecida.
-              </Note>
-            )}
           </section>
 
           <DreCanais canais={resp.por_canal} total={resp.total} />
@@ -299,8 +303,6 @@ export default function DreClient() {
             marcas={resp.por_marca}
             total={resp.total}
             bloqueadores={bloqueadores}
-            calculaveis={ocultos}
-            aoFiltrar={(canais) => aplicar({ canais })}
           />
           <DreMarcaCanalMatriz
             celulas={resp.por_canal_marca}
