@@ -34,7 +34,8 @@ class Componente(BaseModel):
     status: StatusComponente
     motivo: str | None = None
     fonte: str | None = None
-    #: `False` para receita e para afiliados TikTok (ja dentro de taxas).
+    #: `False` para receita, para afiliados TikTok (ja dentro de taxas) e para a
+    #: devolucao da Kokeshi (T-0093: GMV do shop-stats ja' liquido; informativa).
     somavel: bool
     #: Decomposicao (so' afiliados TikTok: creator, partner, ads).
     partes: dict[str, float | None] | None = None
@@ -44,7 +45,9 @@ class Componente(BaseModel):
     publicado_em: datetime | None = None
     #: So' CMV (T-0055 C3), opcionais e retrocompativeis. `cobertura` (0..1) =
     #: receita com custo / receita fiscal, como publicada (NF fiscal, base de
-    #: item); `None` = nao publicada — nunca assumida 100%.
+    #: item); `None` = nao publicada — nunca assumida 100%. Impostos (T-0069):
+    #: receita fiscal casada / receita fiscal. Devolucoes Shopee (T-0093): dias
+    #: do mes com devolucao capturada / dias do mes.
     cobertura: float | None = None
     #: CMV / receita COM custo x 100. Denominador diferente de `pct_receita`
     #: (CMV / receita da DRE = GMV). `None` sem custo ou sem receita com custo.
