@@ -9,7 +9,13 @@ import {
 } from "@/lib/api-client";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import KpiCard from "@/components/KpiCard";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
+import GrupoQualidade, { GRADE_QUALIDADE, VISUAL_QUALIDADE, totalDeCartoes } from "@/components/qualidade/QualidadeCartoes";
+import QualidadeDrilldownContent from "@/components/qualidade/QualidadeDrilldownContent";
+import { fmtDias, tituloDoDetalhe, type ChaveQualidade } from "@/lib/qualidade-cartoes";
+import { fmtPctBr, fmtPctSimples } from "@/lib/formatters";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -33,13 +39,10 @@ import {
 
 function fmtRate(v: number | null): string {
   if (v == null) return "—";
-  return v.toFixed(1) + "%";
+  return fmtPctSimples(v);
 }
 
-function fmtDays(v: number | null): string {
-  if (v == null) return "—";
-  return v.toFixed(1) + "d";
-}
+const fmtDays = fmtDias;
 
 function fmtCount(v: number | null): string {
   if (v == null) return "—";
@@ -69,6 +72,8 @@ function QualityPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  // Cartao aberto no detalhe (dialogo unico da pagina).
+  const [detalhe, setDetalhe] = useState<ChaveQualidade | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   // Chave da ultima requisicao resolvida com sucesso ou falha — comparada
   // com a chave atual para decidir se o estado em memoria reflete de fato
@@ -263,21 +268,6 @@ function QualityPageInner() {
           );
         })()}
 
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider mb-1">Erro de carregamento</p>
-              <p className="text-sm text-rose-800">{error}</p>
-            </div>
-            <button
-              onClick={() => { setError(null); setRetryKey((k) => k + 1); }}
-              className="text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg px-3 py-1.5 hover:bg-rose-100 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        )}
-
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState
             ? "Carregando dados de qualidade..."
@@ -287,11 +277,14 @@ function QualityPageInner() {
         </span>
 
       {isErrorState ? (
-        // FINDING 2: erro definitivo mostra so cabecalho/filtros/banner de
-        // erro (ja renderizado acima) — nunca skeleton, nunca dado antigo.
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-10 text-center">
-          <p className="text-slate-500 text-sm font-medium">Não foi possível carregar os dados de qualidade.</p>
-        </div>
+        // FINDING 2: erro definitivo mostra so cabecalho/filtros e este bloco —
+        // nunca skeleton, nunca dado antigo.
+        <StateBlock
+          tipo="erro"
+          titulo="Não foi possível carregar os dados de qualidade."
+          descricao={error}
+          acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+        />
       ) : (
       <>
         {/* Navegacao interna compacta (Task 1) */}
@@ -302,73 +295,18 @@ function QualityPageInner() {
           {hasShQuality && <a href="#qualidade-shopee" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Qualidade Shopee</a>}
         </nav>
 
-        {/* KPI Cards */}
-        <div
-          id="resumo"
-          className={`scroll-mt-24 grid grid-cols-2 md:grid-cols-4 gap-4 transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`}
-          aria-busy={isLoadingState}
-        >
-          {showTiktok && (
-            <KpiCard
-              label="Entrega TK"
-              value={fmtDays(displayKpis?.tiktok_avg_delivery_days ?? null)}
-              subvalue="Tempo medio · dados a partir de abr/26"
-              accent="bg-violet-500"
-            />
-          )}
-          {/* Gate DQ2: cancelamento e devolucao do TikTok NAO existem na fonte
-              servida (API devolve null). Antes, a tela simplesmente omitia as
-              duas metricas para o canal e a ausencia nunca era declarada.
-              Agora sao cards explicitos de indisponibilidade — valor "N/D"
-              (nunca "0%"/"—") e accent neutro (nunca verde de "saudavel"). */}
-          {showTiktok && TIKTOK_UNAVAILABLE_QUALITY_METRICS.map((m) => (
-            <KpiCard
-              key={m.label}
-              label={m.label}
-              value={m.value}
-              subvalue={m.subvalue}
-              accent="bg-slate-300"
-            />
-          ))}
-          {showMl && (
-            <KpiCard
-              label="Cancelamento ML"
-              value={fmtRate(displayKpis?.ml_cancel_rate_pct ?? null)}
-              subvalue="Taxa de cancelamento"
-              accent="bg-cyan-500"
-            />
-          )}
-          {showMl && (
-            <KpiCard
-              label="Nao Entregue ML"
-              value={fmtRate(displayKpis?.ml_not_delivered_rate_pct ?? null)}
-              subvalue="Proxy: pagos - entregues"
-              accent="bg-amber-500"
-            />
-          )}
-          {showMl && (
-            <KpiCard
-              label="Entrega ML"
-              value={fmtDays(displayKpis?.ml_avg_delivery_days ?? null)}
-              subvalue="Tempo medio em dias"
-              accent="bg-emerald-500"
-            />
-          )}
-          {showShopee && (
-            <KpiCard
-              label="Cancelamento Shopee"
-              value={fmtRate(displayKpis?.shopee_cancel_rate_pct ?? null)}
-              subvalue="Taxa de cancelamento"
-              accent="bg-orange-500"
-            />
-          )}
-          {showShopee && (
-            <KpiCard
-              label="Devolucao Shopee"
-              value={fmtRate(displayKpis?.shopee_return_rate_pct ?? null)}
-              subvalue="Taxa de devolucao"
-              accent="bg-rose-400"
-            />
+        {/* Cartoes no padrao da Gerencial: um grupo por canal. Gate DQ2: cancelamento
+            e devolucao do TikTok seguem como cartoes explicitos de indisponibilidade
+            ("N/D · Nao disponivel nesta fonte"), nunca 0%, nunca tom de sucesso. */}
+        <div id="resumo" className="scroll-mt-24 flex flex-col gap-4" aria-busy={isLoadingState}>
+          {isLoadingState ? (
+            <FaixaCarregando cartoes={totalDeCartoes({ tiktok: showTiktok, ml: showMl, shopee: showShopee })} className={GRADE_QUALIDADE} />
+          ) : (
+            <>
+              {showTiktok && <GrupoQualidade canal="tiktok" kpis={displayKpis} onAbrir={setDetalhe} />}
+              {showMl && <GrupoQualidade canal="ml" kpis={displayKpis} onAbrir={setDetalhe} />}
+              {showShopee && <GrupoQualidade canal="shopee" kpis={displayKpis} onAbrir={setDetalhe} />}
+            </>
           )}
         </div>
 
@@ -520,7 +458,7 @@ function QualityPageInner() {
                             {b.ml_new_buyers != null ? fmtCount(b.ml_new_buyers) : <span className="text-slate-300">—</span>}
                           </td>
                           <td className={`px-4 py-4 text-right tabular-nums ${recompraColor}`}>
-                            {recompra != null ? `${recompra.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                            {recompra != null ? fmtPctSimples(recompra) : <span className="text-slate-300">—</span>}
                           </td>
                           <td className="px-4 py-4 text-right tabular-nums text-slate-600">
                             {b.ml_gmv_per_buyer != null
@@ -529,11 +467,11 @@ function QualityPageInner() {
                           </td>
                           <td className={`px-4 py-4 text-right tabular-nums ${momColor}`}>
                             {b.ml_gmv_mom_pct != null
-                              ? `${b.ml_gmv_mom_pct >= 0 ? "+" : ""}${b.ml_gmv_mom_pct.toFixed(1)}%`
+                              ? fmtPctBr(b.ml_gmv_mom_pct)
                               : <span className="text-slate-300">—</span>}
                           </td>
                           <td className={`px-4 py-4 text-right tabular-nums ${freteColor}`}>
-                            {b.ml_shipping_pct_of_gmv != null ? `${b.ml_shipping_pct_of_gmv.toFixed(1)}%` : <span className="text-slate-300">—</span>}
+                            {b.ml_shipping_pct_of_gmv != null ? fmtPctSimples(b.ml_shipping_pct_of_gmv) : <span className="text-slate-300">—</span>}
                           </td>
                         </tr>
                       );
@@ -625,6 +563,17 @@ function QualityPageInner() {
         )}
       </>
       )}
+      <KpiDrilldownDialog
+        open={detalhe != null}
+        onClose={() => setDetalhe(null)}
+        title={detalhe ? tituloDoDetalhe(detalhe) : ""}
+        icone={detalhe ? VISUAL_QUALIDADE[detalhe].icone : undefined}
+        identidade={detalhe ? VISUAL_QUALIDADE[detalhe].identidade : undefined}
+      >
+        {detalhe && dataIsFresh && (
+          <QualidadeDrilldownContent chave={detalhe} kpis={displayKpis} marcas={displayBrands} periodLabel={periodLabel} refreshedAt={displayRefreshedAt} />
+        )}
+      </KpiDrilldownDialog>
     </PageContainer>
   );
 }

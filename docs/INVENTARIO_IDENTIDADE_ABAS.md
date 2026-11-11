@@ -339,3 +339,15 @@ Esforço P/M. Riscos: `CxMercadoLivre` importa peças de `CxConteudo` (`COR_DELT
 2. **Painéis por canal do Financeiro**: opção A (painel vira botão com modal) ou B (3 `KpiTile` de GMV + painel no modal).
 3. **Modal herda ícone e cor do cartão?** Hoje não (padrão, seção 12, item 1). Recomendação: sim, uma vez em `KpiDrilldownDialog`/`DrilldownSecao`, antes das abas, para o "modal no mesmo estilo" valer em todas. `KpiDrilldownDialog` está na lista de congelados da nota do canvas; precisa de aval do Revisor UX.
 4. **Rotas não tematizadas** (Pedidos, Qualidade, Regiões, Produtos, Inteligência, Monitoramento, Operações, Performance, Marca): migrar para o escuro é um PR à parte por aba; os PRs de cartão mantêm o claro fixo.
+
+## 5. Item próprio, depois das abas: o CABEÇALHO DE FILTROS varia por aba
+
+Registrado em 10/11/2026 a pedido do usuário (observação sobre Pedidos em produção). A identidade única pede o **mesmo cabeçalho em todas as abas**: título com ícone e os seletores "Marca" e "Período" da Gerencial. Hoje, pelo código de `origin/main` (contagem de usos em cada página):
+
+| Cabeçalho | Onde | Componentes |
+|---|---|---|
+| **Gerencial** (referência): título com ícone + seletores "Marca" e "Período" + canais em segmentado | `/`, `/canais`, `/financeiro`, `/cx` (via `FiltrosCx`) | `PageHeader`/`GerencialHeader` + `layout/GlobalFilterControls` |
+| **Fileira de abas** (Todas/ÁPICE/BARBOURS…, Hoje/7 dias/…, datas De/Até) | `/pedidos`, `/qualidade`, `/regioes`, `/brand/[brand]` (sem marca) | `PageHeader` + `MarketplaceFilter` + `BrandFilter` + `DateRangeFilter` (variante "faixa") |
+| Outros (a levantar no PR de cabeçalho): `/produtos`, `/dre`, `/inteligencia`, `/monitoramento-preco`, `/operacoes`, `/metas`, `/full`, `/expedicao`, `/marcas-menores`, `/performance-contas` | — | filtros próprios ou nenhum; não usam `GlobalFilterControls` |
+
+**Proposta:** um PR de cabeçalho **depois** das abas de cartões, uma aba por commit (ou um PR por grupo): trocar a fileira de abas por `GlobalFilterControls` em Pedidos, Qualidade, Regiões e Marca (o hook `useGlobalFilters` já é o mesmo), e decidir, aba a aba, o que as demais mostram. Cuidados: a fonte de Pedidos não cobre Shopee (o seletor de canais precisa continuar sinalizando isso), Regiões tem filtro local de UF, e Marca fixa a marca pela rota. O escuro de cada aba é um PR à parte; o do cabeçalho pode andar junto com ele, já que a fileira legada usa a paleta antiga.
