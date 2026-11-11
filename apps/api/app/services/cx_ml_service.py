@@ -19,8 +19,15 @@ DEFINICOES
     abertura. Cancelamento = `cancel_purchase`/`cancel_sale`. Mediacao = etapa
     `dispute`. Taxa = contagem / pedidos do mesmo periodo (cohort diferente: o
     pedido pode ser de antes). NAO e' a taxa de reputacao do ML.
-  * Devolucoes: a view marca 0 em todos os dias porque a coleta ainda nao le o
-    endpoint de devolucoes. Isso e' falta de leitura, nao zero: o campo nao sai.
+  * Cancelamento (cartao) = `pedidos_cancelados` ÷ pedidos, e Reembolso = `reembolsos` ÷
+    pedidos (as mesmas contas de `pct_cancelados`/`pct_reembolsos` da view, somando
+    contagens para a taxa fechar entre dias e marcas). Vem da view, nao das claims: cobrem
+    os 90 dias de pedidos, sem o limite da coleta de reclamacoes. Os motivos de
+    cancelamento (Pareto) seguem nas claims `cancel_*`.
+  * Perguntas sem resposta ha' mais de 24 h: `perguntas_sem_resposta_24h` da view esta'
+    distribuida pelo dia de CRIACAO da pergunta; o numero de agora e' a soma de todos os dias.
+  * Devolucoes: a coluna `devolucoes` da view vem nula/0 em todos os dias (a coleta ainda
+    nao le o endpoint). Isso e' falta de leitura, nao zero: o campo nao sai.
   * "Respondida em": a 1a acao do vendedor (papel `respondent`) so' existe para
     as ~300 reclamacoes mais recentes de cada conta. Mediana PARCIAL, com a
     cobertura (`reclamacoes_com_historico`) ao lado.
@@ -49,15 +56,16 @@ DIAS_PEDIDOS_NA_VIEW = 90
 LIMITE_FRESCOR_HORAS = 30.0
 
 SQL_DIARIO = """
-SELECT brand AS marca, dia, pedidos, reclamacoes, cancelamentos, mediacoes,
-       perguntas, perguntas_respondidas, tempo_resposta_min, mensagens_pendentes
+SELECT brand AS marca, dia, pedidos, reclamacoes, pedidos_cancelados, mediacoes,
+       perguntas, perguntas_respondidas, tempo_resposta_min, mensagens_pendentes,
+       reembolsos, valor_reembolsado, perguntas_sem_resposta_24h
   FROM raw.vw_ml_cx_diario
  WHERE brand = ANY(:marcas)
-   AND dia >= :desde
+   AND (dia >= :desde OR perguntas_sem_resposta_24h > 0)
 """
 
 #: UMA consulta para cinco blocos (`bloco`): motivo (janela), fila (agora), resposta
-#: (janela, parcial), perguntas (agora, de `raw.ml_cx_perguntas`) e fonte (frescor).
+#: (janela, parcial), perguntas sem resposta (agora, de `raw.ml_cx_perguntas`) e fonte (frescor).
 #: Colunas comuns: k1/k2 = chaves, n1..n3 = contagens, x = numero, instante_em = data.
 SQL_RECLAMACOES = """
 WITH r AS (
@@ -100,8 +108,7 @@ SELECT 'resposta', r.brand, NULL, NULL,
 UNION ALL
 SELECT 'perguntas', brand, NULL, NULL,
        COUNT(*) FILTER (WHERE status = 'UNANSWERED'),
-       COUNT(*) FILTER (WHERE status = 'UNANSWERED' AND criada_em < now() - interval '24 hours'),
-       NULL, NULL, MIN(criada_em) FILTER (WHERE status = 'UNANSWERED')
+       NULL, NULL, NULL, MIN(criada_em) FILTER (WHERE status = 'UNANSWERED')
   FROM raw.ml_cx_perguntas WHERE brand = ANY(:marcas) GROUP BY 1, 2
 UNION ALL
 SELECT 'fonte', brand, NULL, NULL, NULL, NULL, NULL, NULL, MAX(captured_at) FROM r GROUP BY 1, 2
@@ -175,10 +182,8 @@ def rotular_ml_cx(motivo: Any) -> tuple[str, str, str, bool]:
 
 
 PENDENCIAS = [
-    Pendencia(codigo="ml_reembolso", titulo="Reembolso",
-              motivo="O Mercado Livre ainda não tem reembolso coletado (a coleta não lê devoluções): sem fonte, não é zero."),
     Pendencia(codigo="ml_devolucoes", titulo="Devoluções",
-              motivo="A coleta do Mercado Livre ainda não lê o endpoint de devoluções: não é zero, é falta de leitura."),
+              motivo="A coleta do Mercado Livre ainda não lê o endpoint de devoluções (a coluna vem vazia em todos os dias): não é zero, é falta de leitura."),
 ]
 
 
@@ -190,23 +195,32 @@ def _soma(linhas: list[dict], campo: str, ini: date, fim: date) -> Optional[int]
     return sum(vals) if vals else None
 
 
+def _soma_valor(linhas: list[dict], campo: str, ini: date, fim: date) -> Optional[float]:
+    vals = [float(r[campo]) for r in linhas if r.get(campo) is not None and (d := base._dia(r.get("dia"))) and ini <= d <= fim]
+    return round(sum(vals), 2) if vals else None
+
+
 def _cobre(janela: Janela) -> bool:
     return janela.inicio >= COLETA_DESDE
 
 
-def sem_anterior_ml(janela: Janela, anterior: Janela, hoje: date) -> Optional[SemComparacao]:
-    """None = a janela anterior esta' coberta (pedidos e reclamacoes)."""
+def sem_anterior_ml(janela: Janela, anterior: Janela, hoje: date) -> dict[str, SemComparacao]:
+    """Por indicador: ausente = a janela anterior esta' coberta. Pedidos, cancelamento e
+    reembolso so' dependem da base de pedidos de 90 dias; resposta, reclamacao e mediacao
+    dependem tambem da coleta de reclamacoes."""
     if 2 * janela.dias > DIAS_PEDIDOS_NA_VIEW:
-        return SemComparacao(
+        sem = SemComparacao(
             motivo="base de pedidos de 90 dias", a_partir_de=None,
             detalhe=f"A base de pedidos guarda {DIAS_PEDIDOS_NA_VIEW} dias: os {janela.dias} anteriores não cabem nela.")
+        return {i: sem for i in ("resposta", "reclamacao", "cancelamento", "mediacao", "reembolso")}
     if anterior.inicio < COLETA_DESDE:
         quando = COLETA_DESDE + timedelta(days=2 * janela.dias)
-        return SemComparacao(
+        sem = SemComparacao(
             motivo=f"coleta desde {COLETA_DESDE:%d/%m}", a_partir_de=quando,
             detalhe=f"A coleta de reclamações começou em {COLETA_DESDE:%d/%m/%Y} (carga de 90 dias); "
                     f"os {janela.dias} dias anteriores só ficam completos em {quando:%d/%m/%Y}.")
-    return None
+        return {i: sem for i in ("resposta", "reclamacao", "mediacao")}
+    return {}
 
 
 def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_PADRAO_DIAS,
@@ -253,9 +267,10 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
             resp["aviso_frescor"] = f"Coleta sem atualização há {horas:.0f} h (esperado até {LIMITE_FRESCOR_HORAS:.0f} h)."
 
     sem = sem_anterior_ml(janela, anterior, hoje)
-    com_anterior = sem is None and diario is not None and recl is not None
-    if sem:
-        resp["sem_anterior"] = {i: sem for i in ("resposta", "reclamacao", "cancelamento", "mediacao")}
+    resp["sem_anterior"] = sem
+    # pedidos, cancelamento e reembolso: so' a base de pedidos; o resto tambem a coleta de reclamacoes
+    base_anterior = diario is not None and "cancelamento" not in sem
+    com_anterior = base_anterior and recl is not None and not sem
 
     fila = {r["marca"]: r for r in por_bloco.get("fila", [])}
     resposta = {r["marca"]: r for r in por_bloco.get("resposta", [])}
@@ -277,20 +292,28 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
                          mensagens_pendentes=base._int(u.get("mensagens_pendentes")), conta_dia=base._dia(u.get("dia")))
             c["perguntas"] = _soma(rows, "perguntas", janela.inicio, janela.fim)
             c["perguntas_respondidas"] = _soma(rows, "perguntas_respondidas", janela.inicio, janela.fim)
+            # backlog de agora: soma de todos os dias (cada pergunta conta no dia em que foi criada)
+            c["perguntas_sem_resposta_24h"] = _soma(rows, "perguntas_sem_resposta_24h", date.min, date.max)
+            # a view traz cancelados e reembolsos em todo dia com pedido: ausente = sem leitura, nunca 0
+            for campo, col in (("cancelamentos", "pedidos_cancelados"), ("reembolsos", "reembolsos")):
+                c[campo] = _soma(rows, col, janela.inicio, janela.fim)
+            c["valor_reembolsado"] = _soma_valor(rows, "valor_reembolsado", janela.inicio, janela.fim)
             if claims_ok and tem:
-                for campo in ("reclamacoes", "cancelamentos", "mediacoes"):
+                for campo in ("reclamacoes", "mediacoes"):
                     c[campo] = _soma(rows, campo, janela.inicio, janela.fim) or 0
-            if com_anterior:
+            if base_anterior:
                 c["pedidos_anterior"] = _soma(rows, "pedidos", anterior.inicio, anterior.fim)
+                for campo, col in (("cancelamentos", "pedidos_cancelados"), ("reembolsos", "reembolsos")):
+                    c[campo + "_anterior"] = _soma(rows, col, anterior.inicio, anterior.fim)
+            if com_anterior:
                 c["perguntas_anterior"] = _soma(rows, "perguntas", anterior.inicio, anterior.fim)
                 c["perguntas_respondidas_anterior"] = _soma(rows, "perguntas_respondidas", anterior.inicio, anterior.fim)
                 if tem:
-                    for campo in ("reclamacoes", "cancelamentos", "mediacoes"):
+                    for campo in ("reclamacoes", "mediacoes"):
                         c[campo + "_anterior"] = _soma(rows, campo, anterior.inicio, anterior.fim) or 0
         if recl is not None and tem:
             q = perguntas.get(m)
             c.update(perguntas_sem_resposta=base._int(q["n1"]) if q else 0,
-                     perguntas_sem_resposta_24h=base._int(q["n2"]) if q else 0,
                      pergunta_mais_antiga=q.get("instante_em") if q else None)
             f = fila.get(m)
             c.update(aguardando_nos=base._int(f["n1"]) if f else 0,
@@ -348,8 +371,11 @@ def _serie(diario: list[dict], marcas: list[str], janela: Janela, claims_ok: boo
             r = por.get((m, d))
             ped = base._int(r.get("pedidos")) if r else None
             p: dict[str, Any] = {"dia": d, "marca": m, "pedidos": ped}
-            if ped is not None and claims_ok:
-                for campo in ("reclamacoes", "cancelamentos", "mediacoes"):
-                    p[campo] = base._int(r.get(campo)) or 0
+            if ped is not None:
+                p["cancelamentos"] = base._int(r.get("pedidos_cancelados"))
+                p["reembolsos"] = base._int(r.get("reembolsos"))
+                if claims_ok:
+                    for campo in ("reclamacoes", "mediacoes"):
+                        p[campo] = base._int(r.get(campo)) or 0
             pontos.append(PontoDiaMl(**p))
     return pontos

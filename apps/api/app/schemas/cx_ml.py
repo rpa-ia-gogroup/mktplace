@@ -18,7 +18,7 @@ from app.schemas.performance_oficial import ContaOficial, ContaSemFoto, EstadoCa
 
 #: Fonte: `dado` ou `erro` (a fonte falhou nesta carga; os campos dela ficam None).
 EstadoFonte = Literal["dado", "erro"]
-IndicadorMl = Literal["resposta", "reclamacao", "cancelamento", "mediacao"]
+IndicadorMl = Literal["resposta", "reclamacao", "cancelamento", "mediacao", "reembolso"]
 
 
 class LinhaMl(BaseModel):
@@ -27,8 +27,11 @@ class LinhaMl(BaseModel):
     pedidos: Optional[int] = None
     #: Reclamacoes (tipo mediations, sem cancelamento) abertas na janela, por data de abertura.
     reclamacoes: Optional[int] = None
-    #: Pedidos de cancelamento (cancel_purchase/cancel_sale) abertos na janela.
+    #: Pedidos cancelados na janela (`pedidos_cancelados` da view); taxa = cancelamentos / pedidos.
     cancelamentos: Optional[int] = None
+    #: Reembolsos na janela (`reembolsos` da view) e o valor reembolsado (R$).
+    reembolsos: Optional[int] = None
+    valor_reembolsado: Optional[float] = None
     #: Reclamacoes que chegaram a mediacao (etapa `dispute`).
     mediacoes: Optional[int] = None
     perguntas: Optional[int] = None
@@ -40,6 +43,7 @@ class LinhaMl(BaseModel):
     pedidos_anterior: Optional[int] = None
     reclamacoes_anterior: Optional[int] = None
     cancelamentos_anterior: Optional[int] = None
+    reembolsos_anterior: Optional[int] = None
     mediacoes_anterior: Optional[int] = None
     #: AGORA (nao segue a janela): reclamacoes abertas com acao pendente do vendedor.
     aguardando_nos: Optional[int] = None
@@ -48,7 +52,8 @@ class LinhaMl(BaseModel):
     vencem_24h: Optional[int] = None
     #: Prazo mais antigo entre as que aguardam (vencido = ha' quanto tempo).
     prazo_mais_antigo: Optional[datetime] = None
-    #: AGORA: perguntas sem resposta (todas as que a coleta guarda), as com mais de 24 h e a criacao da mais antiga.
+    #: AGORA: perguntas sem resposta (todas as que a coleta guarda), as com mais de 24 h (soma de
+    #: `perguntas_sem_resposta_24h` da view em todos os dias) e a criacao da mais antiga.
     perguntas_sem_resposta: Optional[int] = None
     perguntas_sem_resposta_24h: Optional[int] = None
     pergunta_mais_antiga: Optional[datetime] = None
@@ -72,6 +77,7 @@ class PontoDiaMl(BaseModel):
     pedidos: Optional[int] = None
     reclamacoes: Optional[int] = None
     cancelamentos: Optional[int] = None
+    reembolsos: Optional[int] = None
     mediacoes: Optional[int] = None
 
 
