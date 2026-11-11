@@ -1,4 +1,4 @@
-"""VENDAS-POR-HORA-1 — o "Hoje" padronizado: os canais cortados na MESMA hora cheia.
+"""VENDAS-POR-HORA-1 — o "Hoje" por hora: cada canal cortado na SUA ultima hora fechada.
 
 Le' `marts.fact_marketplace_hourly_sales` (vendas por hora, gravadas pela DAG
 `marketplace_tower_dia_corrente` via `pipelines.sync_vendas_por_hora`) e soma
@@ -6,10 +6,11 @@ de 00:00 ate' o corte, hoje, ontem e no mesmo dia da semana passada.
 
 🔑 O CORTE
 ----------
-`corte_hora = H` significa "vendas de 00:00 ate' H:00" (horas 0..H-1). E' a
-MENOR hora fechada entre os canais do filtro: se a Shopee so' chegou ate' 11h,
-ninguem passa de 11h. Assim os canais sao comparaveis entre si, e hoje e'
-comparavel com ontem.
+Corte H = "vendas de 00:00 ate' H:00" (horas 0..H-1). Cada canal tem o proprio
+corte (a ultima hora que a fonte dele fechou): a Shopee atrasada nao segura o
+ML e o TikTok. Hoje e ontem do MESMO canal somam ate' o mesmo corte, entao a
+comparacao continua justa; o total e' a soma dos canais, cada um no seu corte.
+`corte_hora` (topo) e' o do canal mais fresco, so' para dizer "ha' dado".
 
 A KOKESHI NA SHOPEE
 -------------------
@@ -18,6 +19,7 @@ inclui, a resposta diz isso em `limitacoes` — ausencia nao vira zero calado.
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -66,12 +68,11 @@ def hora_fechada_do_canal(fonte_ate: Optional[datetime], hoje: date) -> int:
     return local.hour
 
 
-def calcular_corte(fontes: dict[int, Optional[datetime]], mkt_ids: list[int],
-                   agora: datetime) -> int:
-    """Menor hora fechada entre os canais do filtro, nunca alem da hora atual."""
-    hoje = agora.astimezone(APP_TIMEZONE).date()
-    horas = [hora_fechada_do_canal(fontes.get(m), hoje) for m in mkt_ids]
-    return min(horas + [agora.astimezone(APP_TIMEZONE).hour])
+def calcular_cortes(fontes: dict[int, Optional[datetime]], mkt_ids: list[int],
+                    agora: datetime) -> dict[int, int]:
+    """Corte de cada canal: a ultima hora que ele fechou, nunca alem da hora atual."""
+    local = agora.astimezone(APP_TIMEZONE)
+    return {m: min(hora_fechada_do_canal(fontes.get(m), local.date()), local.hour) for m in mkt_ids}
 
 
 def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list[str]],
@@ -90,10 +91,13 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     fontes = {r[0]: r[1] for r in db.execute(
         text(f"SELECT marketplace_id, fonte_ate FROM {FONTES} WHERE marketplace_id = ANY(:m)"),
         {"m": mkt_ids})}
-    corte = calcular_corte(fontes, mkt_ids, agora)
+    cortes = calcular_cortes(fontes, mkt_ids, agora)
+    # Cada linha e' filtrada pelo corte do proprio canal (ids sao int: JSON seguro).
+    cortes_json = json.dumps({str(m): c for m, c in cortes.items()})
     canais = [{"channel": CANAL_POR_ID[m],
                "fonte_ate": fontes[m].isoformat() if fontes.get(m) else None,
-               "horas_fechadas_hoje": hora_fechada_do_canal(fontes.get(m), hoje)}
+               "horas_fechadas_hoje": hora_fechada_do_canal(fontes.get(m), hoje),
+               "corte_hora": cortes[m]}
               for m in mkt_ids]
     limitacoes = []
     if SHOPEE_ID in mkt_ids and (brand_keys is None or "kokeshi" in brand_keys):
@@ -104,11 +108,11 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
         WHERE h.dia = ANY(:dias)
-          AND h.hora < :corte
+          AND h.hora < (CAST(:cortes AS jsonb) ->> CAST(h.marketplace_id AS text))::int
           AND h.marketplace_id = ANY(:mkt_ids)
           AND (CAST(:brands AS text[]) IS NULL OR l.brand_key = ANY(CAST(:brands AS text[])))
         GROUP BY 1, 2
-    """), {"dias": list(dias.values()), "corte": corte, "mkt_ids": mkt_ids,
+    """), {"dias": list(dias.values()), "cortes": cortes_json, "mkt_ids": mkt_ids,
            "brands": brand_keys}).mappings().all()
 
     somas = {(r["dia"], r["marketplace_id"]): (r["gmv"], r["pedidos"]) for r in linhas}
@@ -117,7 +121,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     por_marca_linhas = db.execute(text(f"""
         -- por_marca
         SELECT l.brand_key AS brand, h.dia, h.marketplace_id,
-               SUM(h.gmv) FILTER (WHERE h.hora < :corte) AS gmv_corte,
+               SUM(h.gmv) FILTER (
+                   WHERE h.hora < (CAST(:cortes AS jsonb) ->> CAST(h.marketplace_id AS text))::int) AS gmv_corte,
                SUM(h.gmv) AS gmv_dia
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
@@ -125,8 +130,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
           AND h.marketplace_id = ANY(:mkt_ids)
           AND (CAST(:brands AS text[]) IS NULL OR l.brand_key = ANY(CAST(:brands AS text[])))
         GROUP BY 1, 2, 3
-    """), {"dias": [dias["hoje"], dias["ontem"]], "corte": corte, "mkt_ids": mkt_ids,
-           "brands": brand_keys}).mappings().all() if corte > 0 else []
+    """), {"dias": [dias["hoje"], dias["ontem"]], "cortes": cortes_json, "mkt_ids": mkt_ids,
+           "brands": brand_keys}).mappings().all() if any(cortes.values()) else []
     # Por marca E canal: quem mostra a tendencia soma so' os canais do valor
     # ao lado dela (ex.: so' os canais com meta), nunca um conjunto diferente.
     marcas: dict[str, dict[int, dict]] = {}
@@ -159,7 +164,7 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     return {
         **base,
         "disponivel": True,
-        "corte_hora": corte,
+        "corte_hora": max(cortes.values(), default=0),
         "canais": canais,
         "limitacoes": limitacoes,
         **{nome: total(d, mkt_ids) for nome, d in dias.items()},

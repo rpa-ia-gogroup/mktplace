@@ -24,6 +24,8 @@ class CanalFonte(BaseModel):
     fonte_ate: Optional[str] = None
     #: Horas de hoje ja' fechadas no canal (0 a 24).
     horas_fechadas_hoje: int
+    #: Corte do canal: hoje e ontem dele somam de 00:00 ate' H:00. 0 = nenhuma hora fechada.
+    corte_hora: int = 0
 
 
 class CanalVendas(BaseModel):
@@ -57,7 +59,7 @@ class HojePorHoraResponse(BaseModel):
     disponivel: bool
     motivo: Optional[str] = None
     dia: str
-    #: H = vendas de 00:00 ate' H:00, nos canais do filtro. `None` sem dado.
+    #: Corte do canal mais fresco (cada canal tem o seu em `canais`). `None` sem dado.
     corte_hora: Optional[int] = None
     canais: list[CanalFonte]
     limitacoes: list[str]

@@ -2,9 +2,9 @@
  * VENDAS-POR-HORA-1 — o "Hoje" padronizado da Gerencial.
  *
  * Contrato de `GET /api/v1/performance/hoje-por-hora` e a leitura pura dele.
- * O corte e' UM so' para todos os canais do filtro (a menor hora fechada entre
- * eles), e ontem e a semana passada sao somados ate' o MESMO corte — por isso
- * a comparacao e' justa. Ver `apps/api/app/services/hoje_por_hora_service.py`.
+ * Cada canal tem o PROPRIO corte (a ultima hora que a fonte dele fechou); hoje
+ * e ontem do mesmo canal somam ate' o mesmo corte — por isso a comparacao e'
+ * justa. O total e' a soma dos canais. Ver `hoje_por_hora_service.py` na API.
  */
 import type { Marketplace } from "../mock-data.ts";
 
@@ -18,6 +18,8 @@ export interface CanalFonte {
   channel: Marketplace;
   fonte_ate: string | null;
   horas_fechadas_hoje: number;
+  /** Corte do canal (hoje e ontem dele somam ate' H:00); ausente em respostas antigas. */
+  corte_hora?: number;
 }
 
 export interface CanalVendas {
@@ -79,6 +81,25 @@ export function rotuloDoCorte(corte: number | null): string | null {
   return `até ${corte}h`;
 }
 
+const NOME_CURTO: Record<Marketplace, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
+
+/**
+ * Corte de cada canal, curto: "ML e TikTok até 8h · Shopee até 6h" (mais fresco
+ * primeiro). Canais com o mesmo corte se juntam; com um corte so', "até 8h".
+ * Canal sem hora fechada fica de fora (ele soma 0 dos dois lados). Respostas
+ * antigas, sem corte por canal, caem no `corte_hora` do topo.
+ */
+export function rotuloDosCortes(d: Pick<HojePorHora, "canais" | "corte_hora">): string | null {
+  const grupos = new Map<number, string[]>();
+  for (const c of d.canais) {
+    if ((c.corte_hora ?? 0) > 0) grupos.set(c.corte_hora!, [...(grupos.get(c.corte_hora!) ?? []), NOME_CURTO[c.channel]]);
+  }
+  if (grupos.size === 0) return rotuloDoCorte(d.corte_hora);
+  const ordem = [...grupos].sort((a, b) => b[0] - a[0]);
+  if (ordem.length === 1) return rotuloDoCorte(ordem[0][0]);
+  return ordem.map(([h, nomes]) => `${nomes.sort().join(" e ")} ${rotuloDoCorte(h)}`).join(" · ");
+}
+
 /** Variacao percentual contra a base; `null` sem base (nao inventa 100%). */
 export function variacao(atual: number, base: number): number | null {
   if (!base) return null;
@@ -87,8 +108,12 @@ export function variacao(atual: number, base: number): number | null {
 
 /** A comparacao de "Hoje" que os cards de sempre mostram, no lugar do "vs anterior". */
 export interface ComparacaoDeHoje {
-  /** "vs ontem até 14h", com o aviso quando um recorte fica de fora. */
+  /** "vs ontem até 14h" (ou o corte de cada canal), com o aviso quando um recorte fica de fora. */
   rotulo: string;
+  /** Versao para cartoes estreitos: igual ao `rotulo`, ou "vs ontem, mesma hora" se os cortes diferem. */
+  rotuloCurto: string;
+  /** Explicacao para o (i), quando os canais cortam em horas diferentes ou algum ficou de fora. */
+  detalhe: string | null;
   gmvPct: number | null;
   pedidosPct: number | null;
   ticketPct: number | null;
@@ -97,16 +122,26 @@ export interface ComparacaoDeHoje {
 }
 
 /**
- * Hoje x ontem ATE' A MESMA HORA, dos dois lados com o mesmo corte. `null`
+ * Hoje x ontem ATE' A MESMA HORA, canal a canal: cada canal vai ate' a sua
+ * ultima hora fechada e e' comparado com ontem ate' essa mesma hora. `null`
  * sem a tabela por hora ou antes de fechar a primeira hora: sem comparacao,
  * nunca uma injusta (dia parcial contra dia inteiro).
  */
 export function comparacaoDeHoje(d: HojePorHora | null): ComparacaoDeHoje | null {
-  const rotulo = d ? rotuloDoCorte(d.corte_hora) : null;
+  const rotulo = d ? rotuloDosCortes(d) : null;
   if (!d?.disponivel || !rotulo || !d.hoje || !d.ontem) return null;
-  const fora = d.limitacoes.some((l) => l.startsWith("Kokeshi na Shopee")) ? " (sem Kokeshi Shopee)" : "";
+  // Canal sem hora fechada soma 0 dos dois lados: diz que ficou de fora, nunca some calado.
+  const semHora = d.canais.filter((c) => c.corte_hora === 0).map((c) => NOME_CURTO[c.channel]);
+  const kokeshi = d.limitacoes.some((l) => l.startsWith("Kokeshi na Shopee")) && !semHora.includes("Shopee");
+  const fora = [...(semHora.length ? [semHora.join(" e ")] : []), ...(kokeshi ? ["Kokeshi Shopee"] : [])];
+  const aviso = fora.length ? ` (sem ${fora.join(" e ")})` : "";
+  const cortesDiferem = rotulo.includes("·");
   return {
-    rotulo: `vs ontem ${rotulo}${fora}`,
+    rotulo: `vs ontem ${rotulo}${aviso}`,
+    rotuloCurto: `vs ontem ${cortesDiferem ? ", mesma hora" : rotulo}${aviso}`.replace("ontem ,", "ontem,"),
+    detalhe: cortesDiferem || semHora.length
+      ? "Cada canal conta até a última hora que já chegou e é comparado com ontem até essa mesma hora. Por isso a hora muda de um canal para outro."
+      : null,
     gmvPct: variacao(d.hoje.gmv, d.ontem.gmv),
     pedidosPct: variacao(d.hoje.pedidos, d.ontem.pedidos),
     ticketPct: d.hoje.ticket != null && d.ontem.ticket != null ? variacao(d.hoje.ticket, d.ontem.ticket) : null,

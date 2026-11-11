@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { comparacaoDeHoje, rotuloDoCorte, variacao } from "../src/lib/gerencial/hoje-por-hora.ts";
+import { comparacaoDeHoje, rotuloDoCorte, rotuloDosCortes, variacao } from "../src/lib/gerencial/hoje-por-hora.ts";
 
 test("rotulo do corte: 'até 13h'; sem hora fechada, nada", () => {
   assert.equal(rotuloDoCorte(13), "até 13h");
@@ -42,6 +42,27 @@ test("comparacao de hoje: sem tabela ou sem hora fechada, nada; Kokeshi fora vir
   assert.equal(comparacaoDeHoje({ ...resposta, corte_hora: 0 }), null);
   const k = comparacaoDeHoje({ ...resposta, limitacoes: ["Kokeshi na Shopee fica fora do corte por hora: ..."] })!;
   assert.equal(k.rotulo, "vs ontem até 14h (sem Kokeshi Shopee)");
+});
+
+test("corte por canal: cada canal na sua hora, curto; mesmo corte junta; sem corte por canal cai no do topo", () => {
+  const f = (channel: "tiktok" | "ml" | "shopee", corte_hora?: number) => ({ channel, fonte_ate: null, horas_fechadas_hoje: 0, corte_hora });
+  const d = { corte_hora: 8, canais: [f("tiktok", 8), f("ml", 8), f("shopee", 6)] };
+  assert.equal(rotuloDosCortes(d), "ML e TikTok até 8h · Shopee até 6h");
+  assert.equal(rotuloDosCortes({ ...d, canais: [f("ml", 8), f("shopee", 8)] }), "até 8h");
+  assert.equal(rotuloDosCortes({ ...d, canais: [f("ml", 8), f("shopee", 0)] }), "até 8h"); // Shopee sem hora fechada: fora
+  assert.equal(rotuloDosCortes({ corte_hora: 14, canais: [f("ml")] }), "até 14h");
+  assert.equal(rotuloDosCortes({ corte_hora: 0, canais: [f("ml", 0)] }), null);
+  const c = comparacaoDeHoje({ ...resposta, ...d })!;
+  assert.equal(c.rotulo, "vs ontem ML e TikTok até 8h · Shopee até 6h");
+  assert.equal(c.rotuloCurto, "vs ontem, mesma hora"); // cartao estreito
+  assert.match(c.detalhe!, /Por isso a hora muda/);
+  assert.equal(comparacaoDeHoje(resposta)!.detalhe, null);
+  assert.equal(comparacaoDeHoje(resposta)!.rotuloCurto, "vs ontem até 14h");
+  // Shopee sem hora fechada: fica de fora e diz isso (e o aviso da Kokeshi nao se repete).
+  const sem = comparacaoDeHoje({ ...resposta, corte_hora: 8, canais: [f("ml", 8), f("shopee", 0)],
+    limitacoes: ["Kokeshi na Shopee fica fora do corte por hora: ..."] })!;
+  assert.equal(sem.rotulo, "vs ontem até 8h (sem Shopee)");
+  assert.ok(sem.detalhe);
 });
 
 const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");

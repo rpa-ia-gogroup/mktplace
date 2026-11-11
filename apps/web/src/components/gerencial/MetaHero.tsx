@@ -67,6 +67,8 @@ interface Props {
   varGmvByChannel?: Partial<Record<Marketplace, number | null>> | null;
   /** Texto da referencia sem valor "antes" (ex.: "vs ontem até 14h"). */
   rotuloComparacao?: string | null;
+  /** (i) do rotulo quando os canais cortam em horas diferentes. */
+  detalheComparacao?: string | null;
   /** Mes comparavel com a meta; `null` = periodo nao e' um mes. */
   mesMeta: string | null;
   /** Dia comparavel com a meta do dia; `null` = periodo nao e' um dia so'. */
@@ -135,7 +137,7 @@ export default function MetaHero(props: Props) {
   );
 }
 
-function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, notaMenores, linhaMenores }: Props) {
+function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, detalheComparacao, notaMenores, linhaMenores }: Props) {
   const ate = ultimoDia ? ` · até ${ultimoDia.slice(8, 10)}/${ultimoDia.slice(5, 7)}` : "";
   return (
     <div className="min-w-0">
@@ -179,6 +181,7 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
                 {fmtPctBr(momPct)}
               </span>
               {prevGmv != null ? `antes ${fmtCompacto(prevGmv)}` : rotuloComparacao ?? "vs anterior"}
+              {prevGmv == null && detalheComparacao && <InfoDica texto={detalheComparacao} />}
             </p>
           )}
           {onOpenGmv && (
