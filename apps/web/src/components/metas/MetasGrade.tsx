@@ -109,7 +109,7 @@ function Celula({
   texto: string;
   erro?: string;
   alterada: boolean;
-  /** `undefined` = realizado indisponivel; `null` = sem venda registrada; `"futuro"` = mes nao comecou. */
+  /** `undefined` = realizado indisponivel; `null` = sem dado (nunca vira R$ 0); `"futuro"` = mes nao comecou. */
   realizado: number | null | undefined | "futuro";
   desabilitado: boolean;
   onChange: (texto: string) => void;
