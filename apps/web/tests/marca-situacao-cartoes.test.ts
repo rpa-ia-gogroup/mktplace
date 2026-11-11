@@ -50,7 +50,9 @@ test("formato da casa no cartao e valor exato no detalhe", () => {
   assert.equal(valorCurto("pedidos", 58600), "58,6 mil");
   assert.match(valorCurto("gmv", 4_900_000), /^R\$\s4,9 ?mi|R\$\s4,90 mi/);
   assert.equal(valorExato("pedidos", 58612), "58.612");
-  assert.match(valorExato("gmv", 4903211.5), /^R\$\s4\.903\.211,50$/);
+  assert.match(valorExato("gmv", 4903211.5), /^R\$\s4\.903\.212$/, "GMV exato sem centavos");
+  assert.match(valorExato("adspend", 77500), /^R\$\s77\.500$/);
+  assert.match(valorExato("ticket", 136.83), /^R\$\s136,83$/, "ticket leva centavos");
 });
 
 test("pagina: cartoes gerenciais, so' as identidades existentes, dialogo unico com icone e cor do cartao", () => {

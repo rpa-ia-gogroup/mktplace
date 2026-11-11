@@ -151,7 +151,7 @@ function CabecalhoDoDetalhe({
   valor, rotulo, contexto, selo, dica,
 }: {
   valor: string;
-  rotulo: string;
+  rotulo?: string;
   contexto: ReactNode;
   selo?: string | null;
   dica: string;
@@ -160,7 +160,7 @@ function CabecalhoDoDetalhe({
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
         <NumeroAnimado texto={valor} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
-        <span className="pb-0.5 text-xs text-ink-faint">{rotulo}</span>
+        {rotulo && <span className="pb-0.5 text-xs text-ink-faint">{rotulo}</span>}
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         {contexto}
@@ -807,7 +807,7 @@ function BrandPageInner() {
           dialog == null
             ? ""
             : dialog.kind === "kpi"
-              ? `${ROTULO_SITUACAO[dialog.chave]} · ${periodLabel}`
+              ? `${ROTULO_SITUACAO[dialog.chave]} · ${meta.label}`
               : dialog.kind === "channel"
                 ? `${dialog.row.label} · ${competenciaLabel}`
                 : `${dialog.produto.product_name} · ${competenciaLabel}`
@@ -820,7 +820,6 @@ function BrandPageInner() {
             <div className="flex flex-col gap-4 text-sm">
               <CabecalhoDoDetalhe
                 valor={valorExato(c.chave, c.valor)}
-                rotulo={ROTULO_SITUACAO[c.chave]}
                 contexto={<DrilldownContextLine leading={meta.label} periodLabel={`intervalo global ${periodLabel}`} refreshedAt={null} />}
                 dica={DICA_SITUACAO[c.chave]}
               />
@@ -840,11 +839,18 @@ function BrandPageInner() {
                   </ul>
                 </DrilldownSecao>
               )}
+              {c.chave === "adspend" && roasMarca != null && (
+                <DrilldownSecao titulo="Retorno">
+                  <ul className="flex flex-col list-none p-0 m-0">
+                    <EvidenceRow label="ROAS (aproximado)" value={roasMarca} />
+                  </ul>
+                </DrilldownSecao>
+              )}
               {c.antes != null && (
-                <DrilldownSecao titulo="Período anterior">
+                <DrilldownSecao titulo={`Período anterior · ${periodoAnteriorLabel}`}>
                   <ul className="flex flex-col list-none p-0 m-0">
                     <EvidenceRow
-                      label={periodoAnteriorLabel}
+                      label={ROTULO_SITUACAO[c.chave]}
                       value={valorExato(c.chave, c.antes)}
                       delta={c.deltaPct != null ? { pct: c.deltaPct, neutro: c.chave === "adspend" } : null}
                     />

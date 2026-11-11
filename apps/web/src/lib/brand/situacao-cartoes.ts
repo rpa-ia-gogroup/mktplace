@@ -77,15 +77,17 @@ export function cartoesSituacao(
 }
 
 const NUM = new Intl.NumberFormat("pt-BR");
+const BRL0 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 /** Valor do cartao no formato da casa ("R$ 4,90 mi", "58,6 mil"). */
 export function valorCurto(chave: ChaveSituacao, v: number): string {
   return chave === "pedidos" ? fmtNumCurto(v) : fmtBrlCurto(v);
 }
 
-/** Valor EXATO, para o topo do detalhe (o cartao mostra o curto). */
+/** Valor EXATO, para o topo do detalhe (o cartao mostra o curto). So' o ticket leva centavos, como nos outros detalhes. */
 export function valorExato(chave: ChaveSituacao, v: number): string {
-  return chave === "pedidos" ? NUM.format(v) : fmtBrlExato(v);
+  if (chave === "pedidos") return NUM.format(v);
+  return chave === "ticket" ? fmtBrlExato(v) : BRL0.format(v);
 }
 
 /** Metodologia do detalhe (vai no ⓘ, nao na tela). */
