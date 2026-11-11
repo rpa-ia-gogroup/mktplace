@@ -6,7 +6,7 @@ import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import InfoDica from "@/components/ui/InfoDica";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { tomDoCancelamento, type ChaveDetalhe, type Dados, type Series } from "@/lib/pedidos-cartoes";
+import { TITULO_DETALHE, tomDoCancelamento, type ChaveDetalhe, type Dados, type Series } from "@/lib/pedidos-cartoes";
 
 /**
  * Cartoes de Pedidos no padrao da Gerencial (`KpiTile` gerencial). Identidades
@@ -68,7 +68,16 @@ export function FaixaTotais({ dados, series, onAbrir }: Props) {
   const taxa = k?.cancel_rate_pct ?? null;
   return (
     <div className={GRADE}>
-      <Tile rotulo="Total de pedidos" icone={ShoppingBag} identidade="pedidos" valor={k ? fmtNumCurto(k.total_orders) : null} serie={series.pedidos} onAbrir={() => onAbrir("total_pedidos")} />
+      {/* B1-04: liquido (`dados` ja' vem de `paraPedidosLiquidos`); os cancelados ficam a parte, nunca somados. */}
+      <Tile
+        rotulo={TITULO_DETALHE.total_pedidos}
+        icone={ShoppingBag}
+        identidade="pedidos"
+        valor={k ? fmtNumCurto(k.total_orders) : null}
+        comparacao={k ? `${fmtNumCurto(canceladosTotal)} cancelados à parte` : undefined}
+        serie={series.pedidos}
+        onAbrir={() => onAbrir("total_pedidos")}
+      />
       <Tile
         rotulo="GMV total"
         icone={CircleDollarSign}

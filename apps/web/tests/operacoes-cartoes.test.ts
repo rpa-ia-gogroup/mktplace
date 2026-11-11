@@ -35,3 +35,19 @@ test("pagina: grupos gerenciais com as identidades existentes, estados no padrao
   assert.ok(!P.includes("Erro de carregamento"), "o banner duplicado do erro saiu");
   assert.ok(!/fmtBrl\(|fmtNumber\(|toFixed/.test(P), "formato da casa em toda a pagina (alertas, tabelas e eixo)");
 });
+
+test("C1-02: trend TikTok em ordem cronologica pela data ISO, mesmo cruzando o mes (nunca pelo rotulo dd/mm)", async () => {
+  const { buildChartData } = await import("../src/lib/operacoes-trend.ts");
+  const linha = (ref_date: string, brand: string, gmv: number) => ({ ref_date, brand, gmv, orders: 1 });
+  const dados = buildChartData([
+    linha("2026-11-01", "kokeshi", 10),
+    linha("2026-10-30", "kokeshi", 5),
+    linha("2026-11-09", "barbours", 7),
+    linha("2026-10-31", "barbours", 3),
+    linha("2026-10-30", "kokeshi", 2),
+  ]);
+  assert.deepEqual(dados.map((d) => d.date), ["30/10", "31/10", "01/11", "09/11"]);
+  assert.equal(dados[0].kokeshi, 7, "mesma data e marca somam");
+  const pag = ler("app/operacoes/page.tsx");
+  assert.ok(!pag.includes("localeCompare"), "o eixo nao ordena mais o rotulo");
+});
