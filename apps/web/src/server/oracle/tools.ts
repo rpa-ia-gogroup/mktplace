@@ -33,6 +33,7 @@ import {
 
 export type { OracleTool, ToolDeps, ToolResult } from "./tool-kit.ts";
 import { afiliadosSchema, descontosSchema, projectCanaisBlocos } from "./canais-blocos.ts";
+import { dreTool } from "./dre-contract.ts";
 import { estoqueTool } from "./tools-estoque.ts";
 import { expedicaoTool } from "./tools-expedicao.ts";
 import { precosTool } from "./tools-precos.ts";
@@ -1014,9 +1015,8 @@ export const regioesTool: OracleTool = {
 };
 
 /**
- * As oito tools registradas: cinco do MVP + tres operacionais (MCP-COVERAGE-2).
- * A DRE (`dre-contract.ts`) tem contrato e testes, mas NAO entra aqui enquanto
- * o endpoint nao estiver publicado e populado.
+ * As nove tools registradas: cinco do MVP + tres operacionais (MCP-COVERAGE-2)
+ * + a DRE (`dre-contract.ts`, ativada na T-0080 P2 em 11/11/2026).
  */
 export const ORACLE_TOOLS: readonly OracleTool[] = [
   desempenhoTool,
@@ -1027,4 +1027,5 @@ export const ORACLE_TOOLS: readonly OracleTool[] = [
   expedicaoTool,
   estoqueTool,
   precosTool,
+  dreTool,
 ];

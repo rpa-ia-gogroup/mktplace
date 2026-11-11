@@ -508,3 +508,486 @@ export function dreResponse(celulas: unknown[], estado = "ok", publicadoEm = "20
     celulas_base: [],
   };
 }
+
+/**
+ * T-0080 P2 — recorte REAL de `GET /api/v1/dre?ref_month=2026-10` (producao,
+ * 11/11/2026): duas celulas canal x marca como vieram (tiktok x apice com CMV
+ * nao_reconciliado; ml x barbours com CMV disponivel), impostos indisponiveis
+ * (migration 040 pendente). Reduzido: sem total/por_canal/por_marca/celulas_base
+ * e sem as linhas do cenario de premissas.
+ */
+export const DRE_REAL_2026_10 = {
+  "periodo": {
+    "date_from": "2026-10-01",
+    "date_to": "2026-10-31",
+    "meses": [
+      "2026-10"
+    ],
+    "origem": "informado"
+  },
+  "filtros": {
+    "canais": [
+      "tiktok",
+      "ml",
+      "shopee"
+    ],
+    "marcas": [
+      "apice",
+      "barbours",
+      "kokeshi",
+      "lescent",
+      "rituaria"
+    ]
+  },
+  "fontes": {
+    "neon": "ok",
+    "insumos_dre": {
+      "estado": "ok",
+      "publicado_em": "2026-11-09T13:00:13.753366Z",
+      "publicado_em_mais_antigo": "2026-11-09T13:00:13.753366Z",
+      "publicado_em_mais_recente": "2026-11-09T13:00:13.753366Z",
+      "motivo": null
+    },
+    "premissas_dre": {
+      "estado": "ok",
+      "competencias_publicadas": [
+        "2026-10"
+      ],
+      "source_sha256": "a645973ac7dedddb7a434471398ba29087c354915ac9bd71ebf114a2dc0db95c",
+      "rotulo": "Premissas de outubro/2026",
+      "data_fonte": "2026-10-13",
+      "carregado_em": "2026-11-09T17:13:37.143794Z",
+      "motivo": null
+    }
+  },
+  "regras": {
+    "maturacao_meses": 2,
+    "insumo_idade_maxima_horas": 54
+  },
+  "total": null,
+  "por_canal": [],
+  "por_marca": [],
+  "por_canal_marca": [
+    {
+      "escopo": null,
+      "mes": null,
+      "canal": "tiktok",
+      "canal_label": "TikTok Shop",
+      "marca": "apice",
+      "marca_label": "ÁPICE",
+      "celulas": 1,
+      "classificacao": "NAO_CALCULAVEL",
+      "motivos_classificacao": [
+        "2026-10 tiktok apice: cmv nao_reconciliado: publicacao: receita fiscal / GMV = 0.9117; aceito entre 0.95 e 1.05 (pergunta F1/F7)",
+        "2026-10 tiktok apice: mes imaturo: fecha apos 2026-12-31 (regra M+2, decisao D5)"
+      ],
+      "avisos_qualidade": [
+        "Receita do TikTok sem o frete pago pelo comprador (R$ 41654.11 no mes, marts.fact_tiktok_order_discounts_daily.buyer_shipping_fee); o frete liquido do repasse segue em frete.",
+        "total_fees do mart diverge +3.8% do repasse; a DRE usa o repasse.",
+        "Afiliados ja estao dentro das taxas do TikTok; exibidos so' como decomposicao."
+      ],
+      "componentes": {
+        "receita": {
+          "valor": 2546571.2,
+          "pct_receita": 100,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": false,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "devolucoes": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "indisponivel",
+          "motivo": "sem fonte de devolucao/reembolso em valor (perguntas C6, F5)",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "taxas": {
+          "valor": 788786.4,
+          "pct_receita": 30.97,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": "2026-11-09T00:13:05.631659Z",
+          "publicado_em": "2026-11-09T13:00:13.753366Z",
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "afiliados": {
+          "valor": 252399.08000000002,
+          "pct_receita": 9.91,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": false,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "ads": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "indisponivel",
+          "motivo": "sem fonte de Ads do TikTok no mart",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "frete": {
+          "valor": 32518.54,
+          "pct_receita": 1.28,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": "2026-11-09T00:13:05.631659Z",
+          "publicado_em": "2026-11-09T13:00:13.753366Z",
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "cmv": {
+          "valor": 666684.67,
+          "pct_receita": 26.18,
+          "status": "nao_reconciliado",
+          "motivo": "publicacao: receita fiscal / GMV = 0.9117; aceito entre 0.95 e 1.05 (pergunta F1/F7)",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": "2026-10-31T03:00:00Z",
+          "publicado_em": "2026-11-09T13:00:13.753366Z",
+          "cobertura": 0.992058,
+          "cmv_pct_receita_coberta": 28.2
+        },
+        "impostos": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "indisponivel",
+          "motivo": "imposto realizado (webgex) ainda nao publicado para a celula: migration 040 pendente, sem NF casada ou impostos recusados no lote",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        }
+      },
+      "componentes_disponiveis": [
+        "receita",
+        "taxas",
+        "afiliados",
+        "frete"
+      ],
+      "componentes_ausentes": [
+        {
+          "componente": "devolucoes",
+          "status": "indisponivel",
+          "motivo": "sem fonte de devolucao/reembolso em valor (perguntas C6, F5)"
+        },
+        {
+          "componente": "ads",
+          "status": "indisponivel",
+          "motivo": "sem fonte de Ads do TikTok no mart"
+        },
+        {
+          "componente": "cmv",
+          "status": "nao_reconciliado",
+          "motivo": "publicacao: receita fiscal / GMV = 0.9117; aceito entre 0.95 e 1.05 (pergunta F1/F7)"
+        },
+        {
+          "componente": "impostos",
+          "status": "indisponivel",
+          "motivo": "imposto realizado (webgex) ainda nao publicado para a celula: migration 040 pendente, sem NF casada ou impostos recusados no lote"
+        }
+      ],
+      "completude": {
+        "usados": 0,
+        "aplicaveis": 6,
+        "texto": "0 de 6 custos"
+      },
+      "margem_contribuicao_conhecida": {
+        "valor": null,
+        "pct_receita": null,
+        "rotulo": "Margem de contribuição conhecida",
+        "formula": null,
+        "componentes_usados": [],
+        "faltam": [
+          "devolucoes",
+          "taxas",
+          "ads",
+          "frete",
+          "cmv",
+          "impostos"
+        ]
+      },
+      "data_maxima": {
+        "receita_ultimo_dia": "2026-10-31",
+        "mart_carregado_em": "2026-11-11T16:41:38.229891Z",
+        "cmv_ultima_emissao": "2026-10-31",
+        "repasse_tiktok_atualizado_em": "2026-11-09T00:13:05.631659Z",
+        "insumo_publicado_em": "2026-11-09T13:00:13.753366Z"
+      },
+      "cenario_premissas": {
+        "competencia_premissas": "2026-10",
+        "natureza": "estimada",
+        "rotulo": "Margem de contribuição estimada com premissas",
+        "estado": "nao_calculavel",
+        "previa": false,
+        "competencia_madura": false,
+        "receita_base": 2546571.2,
+        "fonte_cmv": "dre_realizada",
+        "linhas": [],
+        "componentes_ausentes": [
+          {
+            "linha": "cmv",
+            "motivo": "nao_reconciliado"
+          },
+          {
+            "linha": "midia_online",
+            "motivo": "indisponivel"
+          }
+        ],
+        "motivos": [
+          "cmv nao_reconciliado: publicacao: receita fiscal / GMV = 0.9117; aceito entre 0.95 e 1.05 (pergunta F1/F7)",
+          "midia online indisponivel: sem fonte de Ads do TikTok no mart",
+          "competencia ainda imatura pela regra M+2 da DRE realizada"
+        ],
+        "avisos": [
+          "Comissoes fora da margem: sobreposicao com as taxas de marketplace nao ratificada.",
+          "Outras Receitas Operacionais fora da margem: sinal (receita x deducao) nao ratificado.",
+          "Logistica - Fretes vem da matriz; o frete realizado aparece so' como comparacao."
+        ],
+        "margem_contribuicao_estimada": null,
+        "margem_contribuicao_estimada_pct": null,
+        "fonte_premissas": {
+          "rotulo": "Premissas de outubro/2026",
+          "competencia": "2026-10",
+          "data_fonte": "2026-10-13",
+          "source_sha256": "a645973ac7dedddb7a434471398ba29087c354915ac9bd71ebf114a2dc0db95c",
+          "carregado_em": "2026-11-09T17:13:37.143794Z"
+        },
+        "celulas": 1
+      }
+    },
+    {
+      "escopo": null,
+      "mes": null,
+      "canal": "ml",
+      "canal_label": "Mercado Livre",
+      "marca": "barbours",
+      "marca_label": "BARBOURS",
+      "celulas": 1,
+      "classificacao": "NAO_CALCULAVEL",
+      "motivos_classificacao": [
+        "2026-10 ml barbours: mes imaturo: fecha apos 2026-12-31 (regra M+2, decisao D5)"
+      ],
+      "avisos_qualidade": [
+        "0% do CMV ainda e' provisorio na fonte fiscal.",
+        "CMV fiscal reconciliado: receita fiscal / GMV = 0.970."
+      ],
+      "componentes": {
+        "receita": {
+          "valor": 1494942.93,
+          "pct_receita": 100,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": false,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "devolucoes": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "indisponivel",
+          "motivo": "sem fonte de devolucao/reembolso em valor (perguntas C6, F5)",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "taxas": {
+          "valor": 246381.86,
+          "pct_receita": 16.48,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "afiliados": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "nao_aplicavel",
+          "motivo": "sem programa de afiliados medido no ML",
+          "fonte": null,
+          "somavel": false,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "ads": {
+          "valor": 86301.27,
+          "pct_receita": 5.77,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "frete": {
+          "valor": 210825.93,
+          "pct_receita": 14.1,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        },
+        "cmv": {
+          "valor": 357252.7,
+          "pct_receita": 23.9,
+          "status": "disponivel",
+          "motivo": null,
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": "2026-10-31T03:00:00Z",
+          "publicado_em": "2026-11-09T13:00:13.753366Z",
+          "cobertura": 0.999482,
+          "cmv_pct_receita_coberta": 24.65
+        },
+        "impostos": {
+          "valor": null,
+          "pct_receita": null,
+          "status": "indisponivel",
+          "motivo": "imposto realizado (webgex) ainda nao publicado para a celula: migration 040 pendente, sem NF casada ou impostos recusados no lote",
+          "fonte": null,
+          "somavel": true,
+          "partes": null,
+          "data_as_of": null,
+          "publicado_em": null,
+          "cobertura": null,
+          "cmv_pct_receita_coberta": null
+        }
+      },
+      "componentes_disponiveis": [
+        "receita",
+        "taxas",
+        "ads",
+        "frete",
+        "cmv"
+      ],
+      "componentes_ausentes": [
+        {
+          "componente": "devolucoes",
+          "status": "indisponivel",
+          "motivo": "sem fonte de devolucao/reembolso em valor (perguntas C6, F5)"
+        },
+        {
+          "componente": "impostos",
+          "status": "indisponivel",
+          "motivo": "imposto realizado (webgex) ainda nao publicado para a celula: migration 040 pendente, sem NF casada ou impostos recusados no lote"
+        }
+      ],
+      "completude": {
+        "usados": 0,
+        "aplicaveis": 6,
+        "texto": "0 de 6 custos"
+      },
+      "margem_contribuicao_conhecida": {
+        "valor": null,
+        "pct_receita": null,
+        "rotulo": "Margem de contribuição conhecida",
+        "formula": null,
+        "componentes_usados": [],
+        "faltam": [
+          "devolucoes",
+          "taxas",
+          "ads",
+          "frete",
+          "cmv",
+          "impostos"
+        ]
+      },
+      "data_maxima": {
+        "receita_ultimo_dia": "2026-10-31",
+        "mart_carregado_em": "2026-11-04T13:17:29.095805Z",
+        "cmv_ultima_emissao": "2026-10-31",
+        "repasse_tiktok_atualizado_em": null,
+        "insumo_publicado_em": "2026-11-09T13:00:13.753366Z"
+      },
+      "cenario_premissas": {
+        "competencia_premissas": "2026-10",
+        "natureza": "estimada",
+        "rotulo": "Margem de contribuição estimada com premissas",
+        "estado": "parcial",
+        "previa": false,
+        "competencia_madura": false,
+        "receita_base": 1494942.93,
+        "fonte_cmv": "dre_realizada",
+        "linhas": [],
+        "componentes_ausentes": [],
+        "motivos": [
+          "competencia ainda imatura pela regra M+2 da DRE realizada"
+        ],
+        "avisos": [
+          "Comissoes fora da margem: sobreposicao com as taxas de marketplace nao ratificada.",
+          "Outras Receitas Operacionais fora da margem: sinal (receita x deducao) nao ratificado.",
+          "Logistica - Fretes vem da matriz; o frete realizado aparece so' como comparacao."
+        ],
+        "margem_contribuicao_estimada": 243621.63,
+        "margem_contribuicao_estimada_pct": 16.3,
+        "fonte_premissas": {
+          "rotulo": "Premissas de outubro/2026",
+          "competencia": "2026-10",
+          "data_fonte": "2026-10-13",
+          "source_sha256": "a645973ac7dedddb7a434471398ba29087c354915ac9bd71ebf114a2dc0db95c",
+          "carregado_em": "2026-11-09T17:13:37.143794Z"
+        },
+        "celulas": 1
+      }
+    }
+  ],
+  "celulas_base": []
+};

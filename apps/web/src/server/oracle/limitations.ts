@@ -76,12 +76,17 @@ export const TIKTOK_ADS_SEM_FONTE: Limitation = {
     "Ads do TikTok e' APLICAVEL (ha midia paga, inclusive cobrada no repasse), mas a fonte de investimento em midia ainda nao esta integrada: ad_spend, ROAS e ACOS do TikTok vem nulos. Diga 'sem dado', nunca 'nao se aplica' nem zero. A comissao de afiliado (ads) em data.afiliados NAO e' investimento em midia e nao substitui este valor.",
 };
 
-/** Nao existe CMV: margem real e' impossivel nos tres marketplaces. */
+/**
+ * As superficies de desempenho/canais/produtos nao tem CMV. Desde a T-0080 P2
+ * (11/11/2026) CMV e margem de contribuicao conhecida existem SO' na
+ * `torre_dre`, com status por celula — o texto aponta para la em vez de
+ * afirmar que a base nao tem CMV.
+ */
 export const NO_MARGIN: Limitation = {
   topic: "margem",
-  scope: "Todas as superficies",
+  scope: "Desempenho, canais e produtos",
   description:
-    "Nao existe CMV nesta base, portanto nao ha margem nem lucro reais. Qualquer campo de margem estimada e' inadequado para decisao e nao e' exposto por este conector.",
+    "Esta superficie nao tem CMV, portanto nao calcula margem nem lucro. CMV e margem de contribuicao CONHECIDA (com status por celula) estao na torre_dre. Nenhuma tool expoe lucro; campo de margem estimada destas superficies continua fora do conector.",
 };
 
 /** Cobertura regional e' menor que a de canais — nao reconciliar a forca. */

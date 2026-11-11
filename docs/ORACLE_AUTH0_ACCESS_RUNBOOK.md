@@ -226,6 +226,10 @@ Passos do proprietário, **nesta ordem** (só nomes de variável aqui, nunca val
    uma API Auth0 **não é editável**, por isso é uma API nova e não uma edição da antiga. Repetir a configuração da
    API antiga: permission `oracle:read`, RBAC ligado, *Add Permissions in the Access Token*, e liberar nela os OAuth
    Clients do Oráculo.
+   **Feito em 11/11/2026:** a API nova, "ORÁCULO MCP (mktplace-ten)", foi criada com
+   `subject_type_authorization.user = allow_all`. A antiga usava `require_client_grant`, campo que o MCP do Auth0
+   não expõe e por isso não pôde ser repetido. O gate de quem entra continua sendo a Action "Oraculo — acesso
+   corporativo" (§1): é ela que adiciona `oracle:read` só a quem passa na regra corporativa.
 2. **Auth0, Action.** Na Action `oracle-corporate-access`, trocar o secret `ORACLE_API_AUDIENCE` para o URL acima e
    fazer **Deploy** da Action (secret alterado só vale após o redeploy).
 3. **Vercel, projeto novo** (time `rpa-gogroups-projects`, ambiente **Production**). Cadastrar as envs
@@ -242,4 +246,5 @@ Passos do proprietário, **nesta ordem** (só nomes de variável aqui, nunca val
   ao URL novo;
 - `POST https://mktplace-ten.vercel.app/api/mcp` sem bearer → **401**, com `WWW-Authenticate` contendo
   `resource_metadata` (no domínio novo) e `scope="oracle:read"`;
-- Vincular no Claude e `tools/list` com bearer → **8** tools.
+- Vincular no Claude e `tools/list` com bearer → **9** tools com o T-0080 P2 (`torre_dre`) no deploy; **8** se o
+  deploy ainda for só da P1.
