@@ -6,7 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { linhasPorMarca, linhasPorUf, tomDaCobertura, ufsForaDoTop, ROTULO_UF } from "../src/lib/regioes-cartoes.ts";
+import { linhasPorMarca, linhasPorUf, tomDaCobertura, ufsForaDoTop, valorExato, ROTULO_UF } from "../src/lib/regioes-cartoes.ts";
 import { fmtPctOrNA } from "../src/lib/regioes-format.ts";
 import type { RegiaoBrandRow, RegiaoUfRow } from "../src/lib/api-client.ts";
 
@@ -70,4 +70,22 @@ test("pagina de Regioes: sem KpiCard legado, dialogo unico, estados via StateBlo
   assert.ok(pag.includes("<FaixaCarregando cartoes={TOTAL_DE_CARTOES_REGIOES}"));
   const mapa = ler("src/components/RegioesBrazilMap.tsx");
   assert.ok(!/toFixed\(|\bfmtBrl\(|\bfmtNumber\(/.test(mapa), "o mapa tambem no formato da casa");
+});
+
+test("topo do detalhe: valor EXATO em pt-BR (o cartao mostra o curto); sem resumo, nada", () => {
+  assert.equal(valorExato("gmv", { gmv: 13_110_234.4, orders: 140_412 })?.split(String.fromCharCode(160)).join(" "), "R$ 13.110.234");
+  assert.equal(valorExato("pedidos", { gmv: 1, orders: 140_412 }), "140.412");
+  assert.equal(valorExato("gmv", null), null);
+  const c = ler("src/components/regioes/RegioesDrilldownContent.tsx");
+  assert.ok(c.includes("const exato = valorExato(chave, resumo);") && !c.includes("fmtBrlCurto(resumo"));
+});
+
+test("ⓘ do detalhe colado no ultimo selo (DrilldownContextLine dica); o ⓘ do cartao de GMV so' para canal com atraso", () => {
+  const linha = ler("src/components/drilldown/DrilldownContextLine.tsx");
+  assert.ok(linha.includes("dica?: ReactNode;") && linha.includes("inline-flex items-center gap-1.5"));
+  for (const f of ["src/components/regioes/RegioesDrilldownContent.tsx", "src/components/canais/KpiCanalDrilldownContent.tsx", "src/components/qualidade/QualidadeDrilldownContent.tsx"]) {
+    assert.ok(/<DrilldownContextLine[^>]*dica={/.test(ler(f)), f);
+  }
+  const pag = ler("app/regioes/page.tsx");
+  assert.ok(pag.includes("regionalScope && canaisComAtraso.length > 0") && !pag.includes("Escopo: ${regionalScope"), "escopo ja' esta no selo; o ⓘ do cartao so' diz o que e' novo");
 });

@@ -1,8 +1,7 @@
 "use client";
 
 import type { RegiaoBrandRow, RegiaoUfRow, RegioesSummaryData } from "@/lib/api-client";
-import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
-import { linhasPorMarca, linhasPorUf, ufsForaDoTop, type ChaveRegioes } from "@/lib/regioes-cartoes";
+import { linhasPorMarca, linhasPorUf, ufsForaDoTop, valorExato, type ChaveRegioes } from "@/lib/regioes-cartoes";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
@@ -27,7 +26,7 @@ export default function RegioesDrilldownContent({
   notaDoEscopo?: string;
 }) {
   const total = resumo ? (chave === "gmv" ? resumo.gmv : resumo.orders) : 0;
-  const exato = resumo ? (chave === "gmv" ? fmtBrlCurto(resumo.gmv) : fmtNumCurto(resumo.orders)) : null;
+  const exato = valorExato(chave, resumo);
   const porUf = ufs ? linhasPorUf(chave, ufs, total) : null;
   const porMarca = marcas ? linhasPorMarca(chave, marcas, total) : null;
   const fora = ufs ? ufsForaDoTop(ufs, chave) : 0;
@@ -39,10 +38,7 @@ export default function RegioesDrilldownContent({
         ) : (
           <NumeroAnimado texto={exato} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
         )}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} />
-          {notaDoEscopo && <InfoDica texto={notaDoEscopo} />}
-        </div>
+        <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} dica={notaDoEscopo ? <InfoDica texto={notaDoEscopo} /> : undefined} />
       </div>
 
       <DrilldownSecao titulo="Por UF" acao={<span className="tabular-nums">{fora > 0 ? `10 maiores · +${fora}` : porUf ? porUf.length : ""}</span>}>

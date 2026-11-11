@@ -186,13 +186,14 @@ function RegioesPageInner() {
   const regionalScope = dataIsFresh
     ? buildRegionalScope(filters.channels, displaySemCobertura, displaySummary?.uf_fill_pct ?? null)
     : null;
-  const notaDoGmv = regionalScope
-    ? canaisComAtraso.length > 0
+  // So' a ressalva NOVA (canal com carga atrasada). O escopo ("Mercado Livre + Shopee · nao comparavel ao GMV
+  // total") ja' esta no selo logo acima dos cartoes e nao se repete no ⓘ.
+  const notaDoGmv =
+    regionalScope && canaisComAtraso.length > 0
       ? cobertura.dadosCompletosAte
         ? `Completo só até ${fmtDataBr(cobertura.dadosCompletosAte)} — ver aviso`
         : "Incompleto no período — ver aviso"
-      : `Escopo: ${regionalScope.channelsInScope.join(" + ") || "nenhum canal com regional"}`
-    : undefined;
+      : undefined;
 
   const ufColumnTypes = useMemo(() => ({
     uf: "text" as const, gmv: "numeric" as const, orders: "numeric" as const,
