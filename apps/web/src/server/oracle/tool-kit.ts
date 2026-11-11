@@ -65,6 +65,8 @@ export const limitationSchema = z.object({
   topic: z.string(),
   scope: z.string(),
   description: z.string(),
+  /** Classe estavel do motivo, quando houver (ex.: SOURCE_TIMEOUT). */
+  motivo: z.string().optional(),
 });
 
 export const windowSchema = z.object({

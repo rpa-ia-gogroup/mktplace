@@ -56,6 +56,17 @@ export const overviewContract = z.object({
   refreshed_at: optStamp,
 });
 
+/**
+ * T-0080 — rotulo de maturacao do GMV (T-0074 TikTok, T-0077 ML). Aditivo e
+ * `nullish`: ausente = backend anterior; `null` = canal fora do escopo. Quando
+ * VEM, e' validado: data ISO e janela inteira positiva.
+ */
+const maturacaoContract = z.object({
+  em_maturacao_desde: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  janela_dias: z.number().int().positive(),
+  motivo: z.string(),
+});
+
 export const brandsContract = z.object({
   brands: z.array(
     z.object({
@@ -67,6 +78,8 @@ export const brandsContract = z.object({
     }),
   ),
   refreshed_at: optStamp,
+  tiktok_maturacao: maturacaoContract.nullish(),
+  ml_maturacao: maturacaoContract.nullish(),
 });
 
 export const trendContract = z.object({

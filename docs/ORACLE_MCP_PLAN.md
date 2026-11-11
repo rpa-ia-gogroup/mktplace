@@ -8,7 +8,7 @@
 >
 > **Issuer escolhido: Auth0** (`https://gobeaute-oraculo.us.auth0.com/`), com
 > **Google apenas como provedor de identidade**. Audience =
-> `https://mktplace-gobeaute.vercel.app/api/mcp`; permission = `oracle:read`;
+> `https://mktplace-ten.vercel.app/api/mcp`; permission = `oracle:read`;
 > **DCR não habilitado** (Client ID/Secret pré-registrados no Claude.ai).
 >
 > **Produção da Vercel é elegível SOMENTE com todos os guardrails** (OAuth
@@ -164,7 +164,7 @@ Oráculo / Claude.ai
         │  (OM2-P0/§29: bearer estático não é configurável no Claude.ai;
         │   o caminho é OAuth, hoje sem issuer — a rota segue 404)
         ▼
-https://mktplace-gobeaute.vercel.app/api/mcp        ← Next.js Route Handler
+https://mktplace-ten.vercel.app/api/mcp        ← Next.js Route Handler
         │                                             runtime = "nodejs" (obrigatório)
         │  ├─ withMcpAuth (obrigatório, required: true)
         │  ├─ validação Zod do input (allowlists estritas)
@@ -1425,7 +1425,7 @@ jul/2026 GMV total = **R$ 22.544.297,31**; 01–18/08/2026 = **R$ 11.512.531,49*
 **Registrar somente após deploy + smoke autenticado.**
 
 1. **Nome do conector:** `Torre Marketplace`
-2. **URL:** `https://mktplace-gobeaute.vercel.app/api/mcp`
+2. **URL:** `https://mktplace-ten.vercel.app/api/mcp`
 3. **Roteamento intenção → tool:**
 
 | Intenção do usuário | Tool |
@@ -2916,7 +2916,7 @@ Todas **server-side**. Nenhuma com `NEXT_PUBLIC_`.
 | `ORACLE_MCP_ENABLED` | `1` | habilitação explícita (já existia) |
 | `MCP_BACKEND_API_URL` | `https://mktplace-api.onrender.com` | backend allowlisted (já existia) |
 | `ORACLE_AUTH_ISSUER` | `https://gobeaute-oraculo.us.auth0.com/` | issuer do Auth0 |
-| `ORACLE_AUTH_AUDIENCE` | `https://mktplace-gobeaute.vercel.app/api/mcp` | audience exigida no `aud` |
+| `ORACLE_AUTH_AUDIENCE` | `https://mktplace-ten.vercel.app/api/mcp` | audience exigida no `aud` |
 | `ORACLE_AUTH_REQUIRED_SCOPE` | `oracle:read` | permission exigida |
 
 **Nenhum Client ID ou Client Secret entra no ambiente do MCP.** A validação de
@@ -2957,7 +2957,7 @@ Documento, com **exatamente** quatro campos — nenhuma capability inventada:
 
 ```json
 {
-  "resource": "https://mktplace-gobeaute.vercel.app/api/mcp",
+  "resource": "https://mktplace-ten.vercel.app/api/mcp",
   "authorization_servers": ["https://gobeaute-oraculo.us.auth0.com/"],
   "scopes_supported": ["oracle:read"],
   "bearer_methods_supported": ["header"]
@@ -3265,3 +3265,30 @@ canônica (5), mais metadata alinhada (2 casos compostos cobrindo 12 situações
 Cinco testes anteriores foram corrigidos para reproduzir Preview e produção de
 forma **realista** — `NODE_ENV=development` não é mais aceito como contraprova
 de Preview.
+
+---
+
+## Nota T-0080 P1 (11/11/2026)
+
+Validação contra a produção em 11/11/2026: as 8 tools respondem com contrato ok, mas o conector estava fora do ar
+(402 no domínio antigo) e duas tools ignoravam dado novo. Três mudanças:
+
+1. **Domínio canônico.** `CANONICAL_MCP_RESOURCE` passa a ser `https://mktplace-ten.vercel.app/api/mcp` (o projeto
+   Vercel migrou; `mktplace-gobeaute.vercel.app` responde 402 `DEPLOYMENT_DISABLED`). O guardrail de audience exata
+   continua, e a audience antiga agora é recusada (teste explícito). As linhas de medição histórica deste plano que
+   citam o domínio antigo (Apêndice A, checklist da Vercel, §2) ficam como estavam, porque registram o que foi
+   medido na época. Os passos do proprietário (Auth0 API nova, Action, envs da Vercel, URL do conector) e o smoke
+   estão no `docs/ORACLE_AUTH0_ACCESS_RUNBOOK.md` §8.
+2. **Maturação no `torre_desempenho_marketplaces`.** O contrato do `/performance/brands` lê `tiktok_maturacao` e
+   `ml_maturacao`. Se o período pedido cruza `em_maturacao_desde` de um canal pedido, a tool emite a limitação
+   `gmv_em_maturacao` (canal e intervalo) e um aviso em `warnings`. Campo ausente ou `null` não gera limitação.
+3. **`torre_estoque_full` lê o estoque Full real do ML.** Novo bloco `ml_estoque` sobre
+   `/performance/ml-full-estoque` (allowlist: `brands`, `limite`; `limite` sempre enviado). Por inventário: SKU,
+   título, curva ABC, disponível, cobertura e classificação. Ausência continua ausência: inventário sem leitura e
+   marca sem fotografia ficam `null` com a limitação `estoque_ml_ausente`; só `sem_estoque_full` é zero medido. O
+   bloco `ml_full` deixa de dizer "fonte não integrada" e continua sendo só modalidade de envio.
+
+**Ficou para P2:** tool de DRE (payload de 415 KB acima do teto de 256 KB, e a decisão de expor CMV/margem é do
+Mário), marcas menores via Bling (`performance/marcas-menores`, enum próprio), curva ABC e situação na Shopee, e LDR
+Shopee/ML na expedição. Também fica pendente o timeout por endpoint: a 1ª chamada a frio do `ml-full-estoque` levou
+~6,5 s, contra 8 s de timeout único no adapter, e hoje não há timeout por endpoint.

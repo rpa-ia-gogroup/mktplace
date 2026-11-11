@@ -12,6 +12,8 @@ export type Limitation = {
   readonly topic: string;
   readonly scope: string;
   readonly description: string;
+  /** Classe estavel do motivo (ex.: codigo do toolError). Nunca texto livre. */
+  readonly motivo?: string;
 };
 
 /**
@@ -146,6 +148,39 @@ export function scopeWarningToLimitation(
   };
 }
 
+/**
+ * T-0080 — GMV em maturacao (T-0074 TikTok, T-0077 ML). O gatilho e' o bloco
+ * `*_maturacao` do backend; o intervalo e' a intersecao do periodo pedido com
+ * `[em_maturacao_desde, ...]`. Sem bloco, nenhuma limitacao e' inventada.
+ */
+export function gmvMaturing(
+  channelLabel: string,
+  window: { start: string; end: string },
+  janelaDias: number,
+  motivo: string,
+): Limitation {
+  return {
+    topic: "gmv_em_maturacao",
+    scope: `Desempenho — ${channelLabel} (${window.start} a ${window.end})`,
+    description: `O GMV de ${channelLabel} de ${window.start} a ${window.end} ainda esta em maturacao (janela de ${janelaDias} dias; ${motivo}): o valor desses dias ainda pode mudar, normalmente para baixo. Nao trate como numero fechado nem compare com meses maduros sem essa ressalva.`,
+  };
+}
+
+/**
+ * R146 — a fonte de estoque Full do ML FALHOU nesta consulta (timeout, 5xx,
+ * contrato quebrado). O bloco `ml_estoque` sai sem dado e o resto da tool
+ * responde. `motivo` e' so' a CLASSE do erro — nunca mensagem de excecao.
+ */
+export function mlStockSourceFailed(categoria: string): Limitation {
+  return {
+    topic: "estoque_ml_indisponivel",
+    scope: "Estoque Full — Mercado Livre",
+    description:
+      "A fonte de estoque Full do Mercado Livre falhou nesta consulta: ml_estoque vem sem dado. Ausencia de medicao, nunca estoque zero; tente de novo em instantes. Os demais blocos (Shopee, modalidade ML) nao dependem dela.",
+    motivo: categoria,
+  };
+}
+
 /** O dia corrente e' sempre parcial. */
 export const CURRENT_DAY_PARTIAL: Limitation = {
   topic: "dia_corrente",
@@ -209,8 +244,32 @@ export const STOCK_ML_NOT_STOCK: Limitation = {
   topic: "full_ml_nao_e_estoque",
   scope: "Full — Mercado Livre",
   description:
-    "Estoque Full do Mercado Livre e' APLICAVEL, mas a fonte (estoque Fulfillment da API do ML) ainda nao esta integrada: nao ha disponibilidade, cobertura em dias nem ruptura do ML. O estoque ML vem 'sem_dado' — ausente, nunca zero. Os shares de ml_full medem a MODALIDADE do envio (participacao das vendas Full), nao estoque.",
+    "Os shares de ml_full medem a MODALIDADE do envio (participacao das vendas Full), nao estoque. O estoque Full do Mercado Livre esta em ml_estoque: fotografia fisica do CD por INVENTARIO (um inventario pode servir a varios anuncios e o estoque conta uma vez so').",
 };
+
+/** T-0080 — a classificacao do estoque ML e' calculo da Torre. */
+export const STOCK_ML_TOWER_COVERAGE: Limitation = {
+  topic: "estoque_ml_cobertura_torre",
+  scope: "Estoque Full — Mercado Livre",
+  description:
+    "Cobertura em dias e classificacoes do estoque ML (ruptura, baixo, excesso) sao calculo da Torre com limiares PROVISORIOS herdados da Shopee e nao ratificados para o ML, sobre a venda de 28 dias. Curva ABC vem da planilha de sortimento; item sem curva fica nulo (ver curva_motivo), nunca 'C'.",
+};
+
+/**
+ * T-0080 — estoque ML AUSENTE: fonte indisponivel (`brands` nulo) ou marcas
+ * sem fotografia no dia. O texto nomeia o alcance; o numero fica nulo.
+ */
+export function mlStockMissing(brands: readonly string[] | null): Limitation {
+  const alcance = brands === null ? "fonte indisponivel" : [...brands].sort().join(", ");
+  return {
+    topic: "estoque_ml_ausente",
+    scope: `Estoque Full — Mercado Livre (${alcance})`,
+    description:
+      brands === null
+        ? "A fotografia de estoque Full do Mercado Livre nao esta disponivel nesta consulta: disponibilidade, cobertura e itens vem nulos — ausencia de medicao, nunca estoque zero."
+        : "Estas marcas nao tem fotografia de estoque Full do Mercado Livre no dia: os numeros delas vem nulos e o total do escopo e' PARCIAL. Ausencia de fotografia nunca e' estoque zero; so' estado 'sem_estoque_full' e' zero medido.",
+  };
+}
 
 export const STOCK_TOWER_COVERAGE: Limitation = {
   topic: "estoque_cobertura_torre",

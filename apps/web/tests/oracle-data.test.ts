@@ -14,6 +14,10 @@ import {
   BRANDS, CANAIS, FIXED_NOW, HEALTH, jsonFetch, OVERVIEW, PRODUTOS_ML,
   QUALITY, REFRESHED_AT, REGIOES_BY_UF, REGIOES_SUMMARY, TREND, type CallLog,
 } from "./oracle-fixtures.ts";
+import {
+  ML_FULL, ML_FULL_ESTOQUE, ML_FULL_ESTOQUE_INDISPONIVEL, SHOPEE_ESTOQUE, SHOPEE_FBS,
+} from "./oracle-fixtures-operacional.ts";
+import { mlFullEstoqueContract } from "../src/server/oracle/upstream-operacional.ts";
 
 const ROUTES = {
   "/api/v1/performance/overview": OVERVIEW,
@@ -508,4 +512,250 @@ test("a chave de servico nunca aparece nos erros do TorreClient", async () => {
       return true;
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// T-0080 — torre_estoque_full le o estoque Full REAL do Mercado Livre
+// ---------------------------------------------------------------------------
+
+const ML_STOCK_ROUTES = {
+  "/api/v1/performance/ml-fulfillment": ML_FULL,
+  "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE,
+};
+
+test("T-0080 estoque ML: marca com itens projeta SKU, titulo e curva; zero medido continua 0", async () => {
+  const env = await call(await connect(ML_STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"] });
+  const est = env.data.ml_estoque;
+  assert.equal(est.disponibilidade, "available");
+  assert.equal(est.fotografia.ref_date, "2026-08-18");
+  const [ruptura, suficiente, semLeitura] = est.itens;
+  assert.equal(suficiente.sku, "40125");
+  assert.equal(suficiente.titulo, "Kit Skincare Kokeshi");
+  assert.equal(suficiente.curva, "A");
+  assert.equal(suficiente.disponivel, 12);
+  assert.equal(suficiente.cobertura_dias, 12);
+  assert.equal(suficiente.estado_estoque, "medido");
+  // Sem curva: null com motivo, nunca "C".
+  assert.equal(ruptura.curva, null);
+  assert.equal(ruptura.curva_motivo, "sem_ponte");
+  assert.equal(ruptura.disponivel, 0, "ruptura medida e' zero real");
+  assert.equal(ruptura.estado_estoque, "zero_real");
+  assert.equal(ruptura.cobertura_dias, 0);
+  // Inventario sem leitura: nulo, nunca 0.
+  assert.equal(semLeitura.disponivel, null);
+  assert.equal(semLeitura.estado_estoque, "sem_dado");
+  assert.equal(semLeitura.cobertura_dias, null);
+  assert.equal(semLeitura.sku, null);
+  assert.equal(env.meta.total_count, 3);
+  assert.ok(env.data.limitations.some((l: any) => l.topic === "estoque_ml_cobertura_torre"));
+});
+
+test("T-0080 estoque ML: marca sem fotografia vem NULA com limitacao; sem_estoque_full e' zero medido", async () => {
+  const env = await call(await connect(ML_STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"] });
+  const est = env.data.ml_estoque;
+  const marca = Object.fromEntries(est.marcas.map((m: any) => [m.brand, m]));
+  assert.equal(marca.barbours.estado, "sem_fotografia");
+  assert.equal(marca.barbours.disponivel_full, null);
+  assert.notEqual(marca.barbours.disponivel_full, 0);
+  assert.equal(marca.barbours.estado_estoque, "sem_dado");
+  assert.equal(marca.rituaria.estado, "sem_estoque_full");
+  assert.equal(marca.rituaria.disponivel_full, 0);
+  assert.equal(marca.rituaria.estado_estoque, "zero_real");
+  assert.equal(est.total_parcial, true);
+  const lim = env.data.limitations.find((l: any) => l.topic === "estoque_ml_ausente");
+  assert.ok(lim, "limitacao de ausencia presente");
+  assert.match(lim.scope, /barbours/);
+  assert.doesNotMatch(lim.scope, /rituaria/, "sem_estoque_full nao e' ausencia");
+  assert.ok(env.meta.warnings.some((w: string) => /sem fotografia no dia para barbours/.test(w)));
+});
+
+test("T-0080 estoque ML: fonte indisponivel vira sem_dado + limitacao, nunca estoque zero", async () => {
+  const env = await call(
+    await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE_INDISPONIVEL }),
+    "torre_estoque_full",
+    { canais: ["ml"] },
+  );
+  const est = env.data.ml_estoque;
+  assert.equal(est.disponibilidade, "unavailable");
+  assert.equal(est.estado, "sem_dado");
+  assert.equal(est.indicadores, null);
+  assert.deepEqual(est.itens, []);
+  assert.ok(env.data.limitations.some((l: any) => l.topic === "estoque_ml_ausente" && /fonte indisponivel/.test(l.scope)));
+});
+
+test("T-0080 estoque ML: contrato rejeita formato quebrado (vira erro, nao sucesso vazio)", async () => {
+  assert.equal(mlFullEstoqueContract.safeParse(ML_FULL_ESTOQUE).success, true);
+  const inv = ML_FULL_ESTOQUE.inventarios[1];
+  const quebrados = [
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, disponivel: "12" }] },
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, curva: "D" }] },
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, classificacao_torre: "PROVAVELMENTE_OK" }] },
+    // Marca "sem fotografia" com estado: ausencia x zero ficaria ambigua.
+    { ...ML_FULL_ESTOQUE, marcas: [{ ...ML_FULL_ESTOQUE.marcas[0], estado: "sem_estoque_full" }] },
+    { ...ML_FULL_ESTOQUE, indicadores: undefined },
+    { status: "unavailable", scope_label: "x" },
+  ];
+  for (const q of quebrados) assert.equal(mlFullEstoqueContract.safeParse(q).success, false, JSON.stringify(q).slice(0, 80));
+  // R146: contrato quebrado na fonte ML degrada o bloco (nunca "sucesso vazio"
+  // com numero inventado): ml_estoque sem dado + motivo = classe do erro.
+  const env = await call(
+    await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": quebrados[0] }),
+    "torre_estoque_full",
+    { canais: ["ml"] },
+  );
+  assert.equal(env.data.ml_estoque.estado, "sem_dado");
+  assert.deepEqual(env.data.ml_estoque.itens, []);
+  const lim = env.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel");
+  assert.equal(lim.motivo, "INVALID_UPSTREAM_RESPONSE");
+});
+
+test("T-0080 estoque ML: limite sempre enviado; ref_date/incluir_fora_do_full nunca; marca fora da fonte nao vai ao GET", async () => {
+  const log: CallLog = [];
+  const env = await call(await connect(ML_STOCK_ROUTES, log), "torre_estoque_full", {
+    canais: ["ml"], marcas: ["kokeshi", "apice"], limite: 5,
+  });
+  const est = log.filter((c) => c.url.includes("/ml-full-estoque")).map((c) => new URL(c.url));
+  assert.equal(est.length, 2, "preflight + chamada filtrada");
+  assert.equal(est[0].searchParams.get("limite"), "1");
+  assert.deepEqual(est[1].searchParams.getAll("brands"), ["kokeshi"]);
+  assert.equal(est[1].searchParams.get("limite"), "5");
+  for (const u of est) {
+    assert.equal(u.searchParams.has("ref_date"), false);
+    assert.equal(u.searchParams.has("incluir_fora_do_full"), false);
+  }
+  assert.deepEqual(env.data.ml_estoque.marcas_nao_cobertas, ["apice"]);
+});
+
+// ---------------------------------------------------------------------------
+// T-0080 — GMV em maturacao (TikTok/ML) vira limitacao explicita
+// ---------------------------------------------------------------------------
+
+const MATURACAO = (desde: string, dias = 35) => ({
+  em_maturacao_desde: desde, janela_dias: dias, motivo: "cancelamentos ate ~D+30; valor pode cair",
+});
+
+test("T-0080 desempenho: periodo em maturacao traz limitacao com canal e intervalo", async () => {
+  const env = await call(
+    await connect({
+      ...ROUTES,
+      "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-07-14"), ml_maturacao: MATURACAO("2026-07-14") },
+    }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior" },
+  );
+  const lims = env.data.limitations.filter((l: any) => l.topic === "gmv_em_maturacao");
+  assert.equal(lims.length, 2);
+  assert.ok(lims.some((l: any) => /TikTok/.test(l.scope) && /2026-07-14 a 2026-07-31/.test(l.scope)));
+  assert.ok(lims.some((l: any) => /Mercado Livre/.test(l.scope)));
+  assert.match(lims[0].description, /ainda pode mudar/);
+  assert.ok(env.meta.warnings.some((w: string) => /em maturacao de 2026-07-14 a 2026-07-31/.test(w)));
+  // So' rotulo: nenhum numero muda.
+  assert.equal(env.data.total.gmv, 1000);
+});
+
+test("T-0080 desempenho: sem campo de maturacao, periodo maduro ou canal fora do pedido -> sem limitacao", async () => {
+  const semCampo = await call(await connect(), "torre_desempenho_marketplaces", { periodo: "mes_anterior" });
+  assert.deepEqual(semCampo.data.limitations, [], "campo ausente: nada inventado");
+
+  const maduro = await call(
+    await connect({ ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-08-05"), ml_maturacao: null } }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior" },
+  );
+  assert.deepEqual(maduro.data.limitations, []);
+  assert.ok(!maduro.meta.warnings.some((w: string) => /maturacao/.test(w)));
+
+  const foraDoPedido = await call(
+    await connect({ ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: MATURACAO("2026-07-14") } }),
+    "torre_desempenho_marketplaces",
+    { periodo: "mes_anterior", canais: ["shopee"] },
+  );
+  assert.deepEqual(foraDoPedido.data.limitations, []);
+});
+
+test("T-0080 desempenho: bloco de maturacao malformado e' contrato quebrado", async () => {
+  const res = await (await connect({
+    ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: { em_maturacao_desde: "ontem", janela_dias: 35, motivo: "x" } },
+  })).callTool({ name: "torre_desempenho_marketplaces", arguments: { periodo: "mes_anterior" } });
+  assert.equal(res.isError, true);
+});
+
+// ---------------------------------------------------------------------------
+// R146 — falha da fonte ML Full (timeout, 5xx) NAO derruba a Shopee
+// ---------------------------------------------------------------------------
+
+/** Rotas por path; o ML Full estoque pendura ate o abort ou devolve 503. */
+function mlFalhaFetch(modo: "timeout" | "5xx", log: string[] = []): typeof fetch {
+  const rotas: Record<string, unknown> = {
+    "/api/v1/performance/ml-fulfillment": ML_FULL,
+    "/api/v1/performance/shopee-fbs": SHOPEE_FBS,
+    "/api/v1/performance/shopee-fbs-estoque": SHOPEE_ESTOQUE,
+  };
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(typeof input === "string" ? input : input.toString()).pathname;
+    log.push(path);
+    if (path === "/api/v1/performance/ml-full-estoque") {
+      if (modo === "5xx") {
+        return new Response(JSON.stringify({ detail: "contrato" }), {
+          status: 503, headers: { "content-type": "application/json" },
+        });
+      }
+      return new Promise((_res, rej) => {
+        const fail = () => { const e = new Error("aborted"); e.name = "AbortError"; rej(e); };
+        if (init?.signal?.aborted) return fail();
+        init?.signal?.addEventListener("abort", fail, { once: true });
+      });
+    }
+    return new Response(JSON.stringify(rotas[path]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+}
+
+async function connectMlFalha(modo: "timeout" | "5xx", log?: string[]) {
+  const server = buildOracleServer({
+    backendBaseUrl: "https://mktplace-api.onrender.com",
+    fetchImpl: mlFalhaFetch(modo, log),
+    now: () => FIXED_NOW,
+    timeoutMs: 50,
+    rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
+  });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "r146", version: "0.0.0" });
+  await Promise.all([client.connect(ct), server.connect(st)]);
+  return client;
+}
+
+for (const [modo, motivo] of [["timeout", "SOURCE_TIMEOUT"], ["5xx", "SOURCE_UNAVAILABLE"]] as const) {
+  test(`R146 estoque: ML Full em ${modo} com Shopee ok -> resposta ok, Shopee preenchida, ml_estoque sem dado (motivo ${motivo})`, async () => {
+    const out = await call(await connectMlFalha(modo), "torre_estoque_full", {});
+    // Shopee intacta.
+    assert.equal(out.data.shopee_estoque.disponibilidade, "available");
+    assert.ok(out.data.shopee_estoque.itens.length > 0);
+    assert.notEqual(out.data.shopee_fbs, null);
+    // Modalidade ML (outra fonte) intacta.
+    assert.equal(typeof out.data.ml_full.share_full_gmv, "number");
+    // Estoque ML sem dado — nunca zero.
+    const est = out.data.ml_estoque;
+    assert.equal(est.disponibilidade, "unavailable");
+    assert.equal(est.estado, "sem_dado");
+    assert.equal(est.indicadores, null);
+    assert.deepEqual(est.itens, []);
+    const lim = out.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel");
+    assert.ok(lim, "limitacao presente");
+    assert.equal(lim.motivo, motivo, "motivo = classe do erro, sem texto livre");
+    assert.ok(!out.data.limitations.some((l: any) => l.topic === "estoque_ml_ausente"), "falha nao e' 'sem fotografia'");
+    const texto = JSON.stringify(out);
+    assert.ok(!/onrender|aborted|503|"contrato"/.test(texto), "nada da excecao ou da URL vaza");
+  });
+}
+
+test("R146 estoque: falha no PREFLIGHT de marcas tambem degrada; pedido so' ML segue ok com a modalidade", async () => {
+  const log: string[] = [];
+  const out = await call(await connectMlFalha("timeout", log), "torre_estoque_full", {
+    canais: ["ml"], marcas: ["kokeshi"],
+  });
+  assert.equal(log.filter((p) => p.endsWith("/ml-full-estoque")).length, 1, "parou no preflight");
+  assert.equal(out.data.shopee_estoque, null);
+  assert.equal(out.data.ml_estoque.estado, "sem_dado");
+  assert.equal(out.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel").motivo, "SOURCE_TIMEOUT");
+  assert.equal(typeof out.data.ml_full.share_full_gmv, "number");
 });

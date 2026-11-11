@@ -160,6 +160,89 @@ export const ML_FULL = {
   freshness: { freshness_status: "fresh", refreshed_at: "2026-08-18T09:00:00Z", source_max_date: "2026-08-17", age_hours: 3, load_mode: "manual_snapshot" },
 };
 
+/**
+ * T-0080 — estoque Full do ML por inventario (formato de /ml-full-estoque em
+ * 11/11/2026, reduzido; numeros ficticios). kokeshi com itens, barbours SEM
+ * fotografia no dia (numeros nulos), rituaria `sem_estoque_full` (zero medido).
+ */
+const ML_INV_BASE = {
+  posicao: 1, brand: "kokeshi", read_status: "OK", eh_full: true,
+  disponivel: 12, nao_disponivel: 1, transfer: 0, total_coerente: true, detalhe_coerente: true,
+  anuncios: 2, anuncios_ativos: 2, anuncios_full: 2, compartilhado: true,
+  unidades_28d: 28, media_diaria_28d: "1.00", cobertura_torre_dias: "12.0",
+  classificacao_torre: "SUFICIENTE", vinculo_vendas: "COM_VENDA", ref_date: "2026-08-18",
+  sku: "40125", titulo: "Kit Skincare Kokeshi", anuncios_extras: 1, ancora_e_variacao: false,
+  curva: "A", curva_motivo: null, situacao: null,
+};
+
+export const ML_FULL_ESTOQUE = {
+  status: "ok", marketplace: "ml", scope_label: "Estoque Full Mercado Livre — por inventário",
+  frescor: {
+    ref_date: "2026-08-18", ultima_fotografia_disponivel: "2026-08-18",
+    published_at: "2026-08-18T10:00:00Z", dias_desde_a_fotografia: 0,
+    horas_desde_a_publicacao: 2, publicacao_agendada: false,
+  },
+  cobertura: {
+    marcas_esperadas: ["barbours", "kokeshi", "rituaria"],
+    marcas_com_fotografia: ["kokeshi", "rituaria"],
+    marcas_sem_fotografia: ["barbours"],
+    leitura: { inventarios: 3, inventarios_lidos: 2, inventarios_sem_leitura: 1 },
+  },
+  indicadores: {
+    disponivel_full: 12, nao_disponivel_full: 1, transfer_full: 0,
+    total_parcial: true, motivos_total_parcial: ["Sem fotografia no dia: BARBOURS."],
+    inventarios: 3, inventarios_full: 3, inventarios_full_lidos: 2, inventarios_fora_do_full: 0,
+    inventarios_compartilhados: 1, inventarios_lidos: 2, inventarios_sem_leitura: 1,
+    inventarios_ruptura: 1, inventarios_baixo: 0, inventarios_excesso: 0, inventarios_sem_giro: 0,
+    inventarios_suficientes: 1, inventarios_sem_demanda_medida: 0, inventarios_exigem_acao: 1,
+    situacao_aplicada: false, brindes_fora: 0, descontinuados_fora: 0,
+  },
+  marcas: [
+    {
+      brand: "barbours", tem_fotografia_no_dia: false, estado: null,
+      ultima_fotografia: "2026-08-17", published_at: "2026-08-17T08:00:00Z",
+      inventarios: null, inventarios_full_lidos: null, inventarios_compartilhados: null, leitura: null,
+      disponivel_full: null, nao_disponivel_full: null, transfer_full: null,
+      por_classificacao: {}, nao_disponivel_por_status: [],
+    },
+    {
+      brand: "kokeshi", tem_fotografia_no_dia: true, estado: "com_inventario",
+      ultima_fotografia: "2026-08-18", published_at: "2026-08-18T10:00:00Z",
+      inventarios: 3, inventarios_full_lidos: 2, inventarios_compartilhados: 1,
+      leitura: { inventarios: 3, inventarios_lidos: 2, inventarios_sem_leitura: 1 },
+      disponivel_full: 12, nao_disponivel_full: 1, transfer_full: 0,
+      por_classificacao: { RUPTURA_CANDIDATA: 1, SUFICIENTE: 1, SEM_LEITURA: 1 }, nao_disponivel_por_status: [],
+    },
+    {
+      brand: "rituaria", tem_fotografia_no_dia: true, estado: "sem_estoque_full",
+      ultima_fotografia: "2026-08-18", published_at: "2026-08-18T10:00:00Z",
+      inventarios: 0, inventarios_full_lidos: 0, inventarios_compartilhados: 0,
+      leitura: { inventarios: 0, inventarios_lidos: 0, inventarios_sem_leitura: 0 },
+      disponivel_full: 0, nao_disponivel_full: 0, transfer_full: 0,
+      por_classificacao: {}, nao_disponivel_por_status: [],
+    },
+  ],
+  inventarios: [
+    // Ruptura MEDIDA: disponivel 0 e cobertura 0 sao zero real.
+    { ...ML_INV_BASE, posicao: 1, disponivel: 0, cobertura_torre_dias: "0.0", classificacao_torre: "RUPTURA_CANDIDATA", sku: "40121", titulo: "Kit Olhos Kokeshi", curva: null, curva_motivo: "sem_ponte", compartilhado: false },
+    { ...ML_INV_BASE, posicao: 2 },
+    // Sem leitura: quantidades NULAS na fonte, sem SKU identificado.
+    { ...ML_INV_BASE, posicao: 3, read_status: "SEM_LEITURA", disponivel: null, nao_disponivel: null, transfer: null, cobertura_torre_dias: null, classificacao_torre: "SEM_LEITURA", sku: null, titulo: null, curva: null, curva_motivo: "kit" },
+  ],
+  total_no_filtro: 3, truncado: false, incluiu_fora_do_full: false,
+  limites: { cobertura_baixa_dias: 7, cobertura_excesso_dias: 90, provisorio: true, observacao: "Limiares PROVISÓRIOS." },
+  limitacoes: ["Estoque contado UMA vez por inventário."],
+  curva_meta: { disponivel: true, motivo: null, lida_em: "2026-08-18T11:00:00Z", itens_com_curva: 1, itens_total: 3, bd_lida: true, brindes: 0, descontinuados: 0 },
+};
+
+export const ML_FULL_ESTOQUE_INDISPONIVEL = {
+  status: "unavailable", marketplace: "ml",
+  unavailable_reason: "Nenhuma fotografia de estoque Full do ML publicada ainda.",
+  motivo_tecnico: "sem_fotografia_publicada",
+  scope_label: "Estoque Full Mercado Livre — por inventário",
+  limitacoes: ["Publicador sem agendamento."],
+};
+
 /** Marca sem loja no ML: a fonte devolve GMV "0" com zero pedidos. */
 export const ML_FULL_SEM_PEDIDO = {
   ...ML_FULL,
