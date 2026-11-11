@@ -16,13 +16,15 @@ import GrupoQualidade, { GRADE_QUALIDADE, VISUAL_QUALIDADE, totalDeCartoes } fro
 import QualidadeDrilldownContent from "@/components/qualidade/QualidadeDrilldownContent";
 import { fmtDias, tituloDoDetalhe, type ChaveQualidade } from "@/lib/qualidade-cartoes";
 import { fmtPctBr, fmtPctSimples } from "@/lib/formatters";
-import MarketplaceFilter from "@/components/MarketplaceFilter";
+import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
+import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import { ShieldCheck } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import { fmtPeriodo, fmtRefreshedAt, mockLimitationNote } from "@/lib/filters/format";
+import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
 import { detectPreset } from "@/lib/filters/presets";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -223,38 +225,19 @@ function QualityPageInner() {
     <PageContainer>
       <PageHeader
         title="Qualidade"
-        scopeLine={
+        icon={ShieldCheck}
+        meta={
           <>
-            Período: {periodLabel}
-            {dataIsFresh && displayRefreshedAt && <> · Atualizado em {fmtRefreshedAt(displayRefreshedAt)}</>}
-          </>
-        }
-        // Badge live/mock só aparece quando os dados sao frescos — nunca o
-        // estado da requisicao ANTERIOR durante a transicao de filtro.
-        status={
-          dataIsFresh ? (
-            <LiveStatusBadge live={displayIsLive} />
-          ) : isLoadingState ? (
-            <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
-              Atualizando dados...
-            </span>
-          ) : null
-        }
-        filters={
-          <>
-            <div className="flex items-start gap-3 flex-wrap min-w-0">
-              <MarketplaceFilter value={filters.channels} onChange={(channels) => setFilters({ channels })} />
-              <BrandFilter value={filters.brands} onChange={(brands) => setFilters({ brands })} />
-            </div>
-            <DateRangeFilter
-              dateFrom={filters.dateFrom}
-              dateTo={filters.dateTo}
-              compare={filters.compare}
-              onChange={(v) => setFilters(v)}
-              onCompareChange={(compare) => setFilters({ compare })}
+            <PeriodChip label={periodLabel} />
+            {/* Live/mock so' com dado fresco, nunca o da requisicao anterior. */}
+            <Freshness
+              live={dataIsFresh ? displayIsLive : null}
+              refreshedAt={dataIsFresh ? (displayRefreshedAt ?? null) : null}
+              loading={isLoadingState}
             />
           </>
         }
+        filters={<GlobalFilterControls filters={filters} onChange={setFilters} loading={isLoadingState} />}
       />
 
         {dataIsFresh && (() => {
