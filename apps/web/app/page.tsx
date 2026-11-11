@@ -713,6 +713,7 @@ function GerencialComGrandes() {
         linhaMenores={linhaMenores}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}
+        detalheComparacao={compHoje?.detalhe ?? null}
         channels={filters.channels}
         gmvByChannel={{
           tiktok: canaisComMenores.tiktok.gmv,

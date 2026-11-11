@@ -1,10 +1,11 @@
 """VENDAS-POR-HORA-1 — o "Hoje" padronizado por hora (sem banco).
 
-O corte e' a menor hora fechada entre os canais do filtro; hoje, ontem e a
-semana passada somam ate' o MESMO corte; Kokeshi na Shopee vira limitacao.
+Cada canal corta na sua ultima hora fechada; hoje, ontem e a semana passada
+do MESMO canal somam ate' o mesmo corte; Kokeshi na Shopee vira limitacao.
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timedelta, timezone
 
 from app.services import hoje_por_hora_service as S
@@ -65,15 +66,15 @@ def test_hora_fechada_do_canal():
     assert S.hora_fechada_do_canal(utc, HOJE) == 13
 
 
-def test_corte_e_a_menor_hora_entre_os_canais_do_filtro():
+def test_cada_canal_tem_o_proprio_corte():
     fontes = {1: brt(13, 35), 2: brt(13, 10), 3: brt(11, 5)}
-    assert S.calcular_corte(fontes, [1, 2, 3], AGORA) == 11
-    assert S.calcular_corte(fontes, [1, 2], AGORA) == 13
-    assert S.calcular_corte({1: brt(13, 35)}, [1, 3], AGORA) == 0  # Shopee sem fonte
+    assert S.calcular_cortes(fontes, [1, 2, 3], AGORA) == {1: 13, 2: 13, 3: 11}
+    assert S.calcular_cortes(fontes, [2], AGORA) == {2: 13}
+    assert S.calcular_cortes({1: brt(13, 35)}, [1, 3], AGORA) == {1: 13, 3: 0}  # Shopee sem fonte
 
 
 def test_corte_nunca_passa_da_hora_atual():
-    assert S.calcular_corte({1: brt(23, 59)}, [1], brt(9, 30)) == 9
+    assert S.calcular_cortes({1: brt(23, 59)}, [1], brt(9, 30)) == {1: 9}
 
 
 def test_soma_hoje_ontem_e_semana_passada_no_mesmo_corte():
@@ -84,7 +85,7 @@ def test_soma_hoje_ontem_e_semana_passada_no_mesmo_corte():
     )
     res = S.get_hoje_por_hora(db, [1, 2, 3], None, agora=AGORA)
     assert res["disponivel"] and res["corte_hora"] == 13
-    assert db.params["corte"] == 13
+    assert json.loads(db.params["cortes"]) == {"1": 13, "2": 13, "3": 13}
     assert db.params["dias"] == [HOJE, HOJE - timedelta(days=1), HOJE - timedelta(days=7)]
     assert res["hoje"] == {"gmv": 1500.0, "pedidos": 25, "ticket": 60.0}
     assert res["ontem"] == {"gmv": 800.0, "pedidos": 16, "ticket": 50.0}
@@ -93,6 +94,26 @@ def test_soma_hoje_ontem_e_semana_passada_no_mesmo_corte():
     assert tiktok["hoje"]["gmv"] == 1000.0 and tiktok["ontem"]["pedidos"] == 16
     shopee = next(c for c in res["por_canal"] if c["channel"] == "shopee")
     assert shopee["hoje"] == {"gmv": 0.0, "pedidos": 0, "ticket": None}
+
+
+def test_shopee_atrasada_nao_segura_ml_e_tiktok():
+    ontem = HOJE - timedelta(days=1)
+    agora = brt(8, 41)
+    db = SessaoFalsa(
+        fontes={1: brt(8, 30), 2: brt(8, 30), 3: brt(6, 52)},
+        # O SQL ja' devolve cada canal ate' o proprio corte (ML/TikTok 8h, Shopee 6h).
+        vendas=[venda(HOJE, 1, 100, 2), venda(HOJE, 2, 300, 6), venda(HOJE, 3, 50, 1),
+                venda(ontem, 1, 80, 2), venda(ontem, 2, 200, 4), venda(ontem, 3, 70, 2)],
+    )
+    res = S.get_hoje_por_hora(db, [1, 2, 3], None, agora=agora)
+    assert json.loads(db.params["cortes"]) == {"1": 8, "2": 8, "3": 6}
+    assert {c["channel"]: c["corte_hora"] for c in res["canais"]} == {"tiktok": 8, "ml": 8, "shopee": 6}
+    assert res["corte_hora"] == 8  # o canal mais fresco
+    # Total = soma dos canais, cada um no seu corte; ontem idem (mesmas horas de cada canal).
+    assert res["hoje"] == {"gmv": 450.0, "pedidos": 9, "ticket": 50.0}
+    assert res["ontem"] == {"gmv": 350.0, "pedidos": 8, "ticket": 43.75}
+    ml = next(c for c in res["por_canal"] if c["channel"] == "ml")
+    assert (ml["hoje"]["gmv"], ml["ontem"]["gmv"]) == (300.0, 200.0)
 
 
 def test_kokeshi_na_shopee_vira_limitacao():
@@ -146,6 +167,9 @@ def test_tendencia_por_marca_usa_hoje_e_ontem_no_mesmo_corte():
     assert (apice["hoje"], apice["ontem_mesma_hora"], apice["ontem_dia"], apice["projecao"]) == (800.0, 500.0, 1200.0, 1920.0)
     por_canal = {c["channel"]: c["projecao"] for c in apice["por_canal"]}
     assert por_canal == {"tiktok": 600.0, "ml": 1250.0}
+    # Sem nenhuma hora fechada em canal nenhum, nao ha' tendencia a consultar.
+    sem_hora = SessaoFalsa(fontes={}, vendas=[], marcas=db.marcas)
+    assert S.get_hoje_por_hora(sem_hora, [1, 2], None, agora=AGORA)["por_marca"] == []
     assert lescent["projecao"] is None  # ontem sem venda: sem projecao
 
 
