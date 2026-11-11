@@ -33,6 +33,11 @@ import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
+import AvisoCanaisSemDado from "@/components/ui/AvisoCanaisSemDado";
+import type { Marketplace } from "@/lib/mock-data";
+
+/** A fonte de Pedidos cobre TikTok Shop e Mercado Livre; Shopee nao. */
+const PEDIDOS_CANAIS_COBERTOS: readonly Marketplace[] = ["tiktok", "ml"];
 
 function fmtNum(v: number | null): string {
   if (v == null) return "—";
@@ -295,11 +300,9 @@ function PedidosPageInner() {
 
         {/* Shopee isolada: o selo do cabecalho e o estado vazio abaixo ja dizem
             que nao ha cobertura. Selecao mista: os numeros nunca incluem Shopee. */}
-        {showShopeeMixed && (
-          <p className="w-fit rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
-            Shopee fora: só TikTok Shop e Mercado Livre
-          </p>
-        )}
+        {/* T-0089/B1-05: o texto sai da selecao atual (com ML + Shopee diz
+            "mostrando só Mercado Livre", nao cita o TikTok fora do filtro). */}
+        {showShopeeMixed && <AvisoCanaisSemDado selecao={filters.channels} cobertos={PEDIDOS_CANAIS_COBERTOS} />}
 
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState

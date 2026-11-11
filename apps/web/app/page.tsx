@@ -822,6 +822,7 @@ function GerencialComGrandes() {
       {isMarketplaceSelected(filters.channels, "shopee") && (
         <CxResumo
           brands={filters.brands}
+          canais={filters.channels}
           // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
           dateFrom={filters.dateFrom}
           dateTo={filters.dateTo}
