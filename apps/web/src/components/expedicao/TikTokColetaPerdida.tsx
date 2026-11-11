@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import InfoDica from "@/components/ui/InfoDica";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -253,20 +254,20 @@ export function PopupColetaPerdida({
       <div className="flex flex-col gap-4 text-sm" data-testid="exp-tiktok-coleta-perdida-popup">
         {opcoes.marcas.length || dados ? filtros : null}
         {carga.tipo === "carregando" && !dados ? (
-          <p role="status" className="text-ink-muted">Carregando pedidos…</p>
+          <StateBlock compacto tipo="carregando" titulo="Carregando pedidos…" />
         ) : carga.tipo === "erro" ? (
-          <p role="status" className="text-crit-ink">
-            Não foi possível carregar os pedidos.{" "}
-            <button type="button" onClick={() => setTentativa((n) => n + 1)} className="font-semibold underline underline-offset-4">
-              Tentar de novo
-            </button>
-          </p>
+          <StateBlock
+            compacto
+            tipo="erro"
+            titulo="Não foi possível carregar os pedidos."
+            acao={<RetryButton onClick={() => setTentativa((n) => n + 1)} />}
+          />
         ) : dados && total === 0 ? (
-          <p role="status" className="text-ink-muted">
-            {filtrado
-              ? "Nenhum pedido com esses filtros."
-              : `Nenhum pedido ficou sem coleta no prazo de ${diaCurto(vencimento)}.`}
-          </p>
+          <StateBlock
+            compacto
+            tipo="vazio"
+            titulo={filtrado ? "Nenhum pedido com esses filtros." : `Nenhum pedido ficou sem coleta no prazo de ${diaCurto(vencimento)}.`}
+          />
         ) : dados ? (
           <>
             <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">

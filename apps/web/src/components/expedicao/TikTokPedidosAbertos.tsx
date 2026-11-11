@@ -28,6 +28,7 @@ import InfoDica from "@/components/ui/InfoDica";
 import ConsolidadoEtapas from "./ConsolidadoEtapas";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { formatarHoras } from "@/lib/expedicao-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { formatarInteiro } from "@/lib/expedicao-formato";
@@ -62,6 +63,13 @@ function pct(n: number, base: number): string {
 // ---------------------------------------------------------------------------
 // Popup com a lista
 // ---------------------------------------------------------------------------
+/** IDENTIDADE-GERENCIAL: o popup herda o ladrilho e a cor do cartao que o abriu. */
+const VISUAL_DA_LISTA: Partial<Record<ListaAbertos, { icone: typeof Clock; identidade: IdentidadeKpi }>> = {
+  due_today: { icone: Clock, identidade: "prazo" },
+  due_next_day: { icone: CalendarClock, identidade: "prazo" },
+  over_48h: { icone: Hourglass, identidade: "pedidos" },
+};
+
 function PopupAbertos({
   api,
   marca,
@@ -115,7 +123,10 @@ function PopupAbertos({
   const temMaisDeUmaPagina = Boolean(dados && (dados.has_more || pagina > 1));
 
   return (
-    <KpiDrilldownDialog open={Boolean(lista)} onClose={aoFechar} title={cfg?.titulo ?? ""} largura="larga" focusResetKey={lista ?? ""}>
+    <KpiDrilldownDialog open={Boolean(lista)} onClose={aoFechar} title={cfg?.titulo ?? ""} largura="larga" focusResetKey={lista ?? ""}
+      icone={lista ? VISUAL_DA_LISTA[lista]?.icone : undefined}
+      identidade={lista ? VISUAL_DA_LISTA[lista]?.identidade : undefined}
+    >
       {lista && cfg ? (
         <div className="flex flex-col gap-4 text-sm" data-testid="exp-tiktok-abertos-popup">
           <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
@@ -129,16 +140,16 @@ function PopupAbertos({
           <ConsolidadoEtapas itens={porEtapa} total={totalLista} />
 
           {carga.tipo === "carregando" ? (
-            <p role="status" className="text-sm text-ink-muted">Carregando pedidos…</p>
+            <StateBlock compacto tipo="carregando" titulo="Carregando pedidos…" />
           ) : carga.tipo === "erro" ? (
-            <p role="status" className="text-sm text-crit-ink">
-              Não foi possível carregar os pedidos.{" "}
-              <button type="button" onClick={() => setTentativa((n) => n + 1)} className="font-semibold underline underline-offset-4">
-                Tentar de novo
-              </button>
-            </p>
+            <StateBlock
+              compacto
+              tipo="erro"
+              titulo="Não foi possível carregar os pedidos."
+              acao={<RetryButton onClick={() => setTentativa((n) => n + 1)} />}
+            />
           ) : pedidos.length === 0 ? (
-            <p role="status" className="text-sm text-ink-muted">{cfg.vazio}</p>
+            <StateBlock compacto tipo="vazio" titulo={cfg.vazio} />
           ) : (
             <>
               {porMarca.length > 1 ? (
