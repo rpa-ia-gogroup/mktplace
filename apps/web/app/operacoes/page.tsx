@@ -11,9 +11,11 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import LiveStatusBadge from "@/components/LiveStatusBadge";
+import { GrupoSemDados, GrupoVelocidade } from "@/components/operacoes/VelocidadeMl";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import InfoDica from "@/components/ui/InfoDica";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
   fetchOperacoes,
   type OperacoesData,
@@ -21,7 +23,7 @@ import {
   type CreatorRow,
   type LiveRow,
 } from "@/lib/api-client";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -86,7 +88,7 @@ function GpmBadge({ v }: { v: number | null }) {
       : "bg-rose-100 text-rose-700";
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
-      {fmtBrl(v)}
+      {fmtBrlCurto(v)}
     </span>
   );
 }
@@ -99,7 +101,7 @@ function PctLiveColor({ v }: { v: number | null }) {
       : v >= 5
       ? "text-amber-700 font-semibold"
       : "text-rose-600 font-semibold";
-  return <span className={`tabular-nums ${cls}`}>{v.toFixed(1)}%</span>;
+  return <span className={`tabular-nums ${cls}`}>{fmtPctSimples(v)}</span>;
 }
 
 // Build a pivot table for the trend chart: date → { brand: gmv }
@@ -301,26 +303,6 @@ export default function OperacoesPage() {
         }
       />
 
-      {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider mb-1">
-                Erro de carregamento
-              </p>
-              <p className="text-sm text-rose-800">{error}</p>
-            </div>
-            <button
-              onClick={() => {
-                setError(null);
-                setRetryKey((k) => k + 1);
-              }}
-              className="text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg px-3 py-1.5 hover:bg-rose-100 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        )}
-
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState
             ? "Carregando dados de operações..."
@@ -330,19 +312,18 @@ export default function OperacoesPage() {
         </span>
 
       {isErrorState ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-10 text-center">
-          <p className="text-slate-500 text-sm font-medium">Não foi possível carregar os dados de operações.</p>
-        </div>
+        <StateBlock
+          tipo="erro"
+          titulo="Não foi possível carregar os dados de operações."
+          descricao={error ?? undefined}
+          acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+        />
       ) : dataIsFresh && !hasAnyData ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-12 text-center">
-          <p className="text-slate-500 text-sm font-medium">Dados de operações indisponíveis no momento.</p>
-          <button
-            onClick={() => setRetryKey((k) => k + 1)}
-            className="mt-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-3 py-1.5 hover:bg-violet-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          >
-            Tentar novamente
-          </button>
-        </div>
+        <StateBlock
+          tipo="indisponivel"
+          titulo="Dados de operações indisponíveis no momento."
+          acao={<RetryButton onClick={() => setRetryKey((k) => k + 1)} />}
+        />
       ) : (
       <>
         {/* Navegacao interna compacta */}
@@ -395,7 +376,7 @@ export default function OperacoesPage() {
                     <div className="text-right shrink-0">
                       <p className="text-xs text-rose-500 font-medium">Ad Spend</p>
                       <p className="text-sm font-bold text-rose-800 tabular-nums">
-                        {fmtBrl(a.ad_spend)}
+                        {fmtBrlCurto(a.ad_spend)}
                       </p>
                     </div>
                   )}
@@ -424,7 +405,7 @@ export default function OperacoesPage() {
                     <div className="text-right shrink-0">
                       <p className="text-xs text-amber-500 font-medium">ROAS</p>
                       <p className="text-sm font-bold text-amber-800 tabular-nums">
-                        {a.roas.toFixed(1)}x
+                        {fmtVezes(a.roas)}
                       </p>
                     </div>
                   )}
@@ -530,16 +511,16 @@ export default function OperacoesPage() {
                     {r.creator}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
-                    {fmtBrl(r.gmv)}
+                    {fmtBrlCurto(r.gmv)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.videos > 0 ? fmtBrl(r.gmv_video) : <span className="text-slate-300">—</span>}
+                    {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.lives > 0 ? fmtBrl(r.gmv_live) : <span className="text-slate-300">—</span>}
+                    {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.views > 0 ? fmtNumber(r.views) : <span className="text-slate-300">—</span>}
+                    {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
                     {r.videos > 0 ? r.videos : <span className="text-slate-300">—</span>}
@@ -649,20 +630,20 @@ export default function OperacoesPage() {
                     {r.total_lives}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {(r.total_minutes / 60).toFixed(1)}h
+                    {(r.total_minutes / 60).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
-                    {fmtBrl(r.live_gmv)}
+                    {fmtBrlCurto(r.live_gmv)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <PctLiveColor v={r.pct_live} />
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.gmv_per_live != null ? fmtBrl(r.gmv_per_live) : "—"}
+                    {r.gmv_per_live != null ? fmtBrlCurto(r.gmv_per_live) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
                     {r.gmv_per_minute != null
-                      ? `R$ ${r.gmv_per_minute.toFixed(2)}`
+                      ? fmtBrlCurto(r.gmv_per_minute)
                       : "—"}
                   </td>
                 </tr>
@@ -702,75 +683,14 @@ export default function OperacoesPage() {
           <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
             Velocidade ML — Últimos 7 dias
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {(displayData?.ml_velocity ?? []).map((r) => {
-              const lowRoas = r.roas_7d != null && r.roas_7d < 3 && r.ad_spend_7d > 0;
-              return (
-                <div
-                  key={r.brand}
-                  className={`bg-white rounded-2xl shadow-sm border p-5 flex flex-col gap-3 ${
-                    lowRoas ? "border-rose-300" : "border-violet-100"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                      {BRAND_LABELS[r.brand] ?? r.brand}
-                    </span>
-                    {lowRoas && (
-                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-2 py-0.5">
-                        ROAS baixo
-                      </span>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">GMV 7d</p>
-                      <p className="text-xl font-bold text-slate-900 tabular-nums leading-none">
-                        {fmtBrl(r.gmv_7d)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Ad Spend</p>
-                      <p className="text-xl font-bold text-slate-700 tabular-nums leading-none">
-                        {fmtBrl(r.ad_spend_7d)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">ROAS</p>
-                      <p
-                        className={`text-xl font-bold tabular-nums leading-none ${
-                          lowRoas
-                            ? "text-rose-600"
-                            : r.roas_7d != null && r.roas_7d >= 8
-                            ? "text-emerald-700"
-                            : "text-amber-700"
-                        }`}
-                      >
-                        {r.roas_7d != null ? r.roas_7d.toFixed(1) + "x" : "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-0.5">Pedidos</p>
-                      <p className="text-xl font-bold text-slate-900 tabular-nums leading-none">
-                        {fmtNumber(r.orders_7d)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+            {(displayData?.ml_velocity ?? []).map((r) => (
+              <GrupoVelocidade key={r.brand} r={r} rotulo={BRAND_LABELS[r.brand] ?? r.brand} />
+            ))}
             {ML_BRANDS.filter(
               (b) => !(displayData?.ml_velocity ?? []).some((r) => r.brand === b)
             ).map((b) => (
-              <div
-                key={b}
-                className="bg-white rounded-2xl shadow-sm border border-violet-100 p-5 flex flex-col gap-3"
-              >
-                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                  {BRAND_LABELS[b]}
-                </span>
-                <p className="text-sm text-slate-300">Sem dados no período.</p>
-              </div>
+              <GrupoSemDados key={b} rotulo={BRAND_LABELS[b]} />
             ))}
           </div>
         </div>
@@ -798,7 +718,7 @@ export default function OperacoesPage() {
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(v) => fmtBrl(v as number)}
+                    tickFormatter={(v) => fmtBrlCurto(v as number)}
                     tick={{ fontSize: 11, fill: "#94a3b8" }}
                     axisLine={false}
                     tickLine={false}
@@ -806,7 +726,7 @@ export default function OperacoesPage() {
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [
-                      fmtBrl(value),
+                      fmtBrlCurto(value),
                       BRAND_LABELS[name] ?? name,
                     ]}
                     contentStyle={{
