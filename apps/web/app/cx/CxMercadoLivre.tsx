@@ -259,7 +259,7 @@ function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r:
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <NumeroAnimado texto={pctCx(r.taxa[i])} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
-          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{n == null ? "" : `${inteiro(n)} de ${inteiro(r.pedidos)} pedidos${valor}`}</span>
+          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{n == null ? "" : `${inteiro(n)} de ${inteiro(r.pedidosBase[i])} pedidos${valor}`}</span>
         </div>
         <DrilldownContextLine leading="Mercado Livre" periodLabel={periodo} refreshedAt={geradoEm} dica={<InfoDica texto={AJUDA_ML[i]} />} />
       </div>
@@ -312,8 +312,12 @@ function Faixa({ r, dias, semNoHeroi, abrir }: { r: ResumoMl; dias: number; semN
       />
     );
   };
-  const n = (i: IndicadorTaxa, um: string, varios: string) =>
-    r.contagem[i] == null ? null : `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}`;
+  const n = (i: IndicadorTaxa, um: string, varios: string) => {
+    if (r.contagem[i] == null) return i === "devolucao" ? "Coleta incompleta no período" : null;
+    const { lidas, total } = r.marcasNaTaxa[i];
+    // cobertura parcial aparece no card, nunca so' no ⓘ
+    return `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}${lidas < total ? ` · ${lidas} de ${total} marcas` : ""}`;
+  };
   return (
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="cx-faixa">

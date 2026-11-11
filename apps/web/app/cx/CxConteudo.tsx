@@ -481,7 +481,11 @@ function Faixa({ r, dias, pareto, heroiMostraSemComparacao, abrir, abrirDevoluca
           rotulo="Devolução"
           valor={pareto.total.devolucoesPct}
           tom={pareto.total.devolucoesPct === "—" ? "ausente" : "neutro"}
-          comparacao={pareto.total.devolucoes === "—" ? null : `${pareto.total.devolucoes} devoluções`}
+          comparacao={
+            pareto.total.devolucoes === "—"
+              ? "Sem leitura de devoluções"
+              : `${pareto.total.devolucoes} devoluções${pareto.total.marcasDevolucao.lidas < pareto.total.marcasDevolucao.total ? ` · ${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas` : ""}`
+          }
           ajuda={<InfoDica emControle texto={AJUDA_DEVOLUCAO} />}
           onAbrir={pareto.total.devolucoesPct === "—" ? undefined : abrirDevolucao}
         />
@@ -492,7 +496,8 @@ function Faixa({ r, dias, pareto, heroiMostraSemComparacao, abrir, abrirDevoluca
   );
 }
 
-const AJUDA_DEVOLUCAO = `${AJUDA_CX.devolucoes} Devoluções ÷ pedidos do período, somando as lojas.`;
+const AJUDA_DEVOLUCAO =
+  "Pedidos que o comprador pediu para devolver no período ÷ pedidos do período, somando as marcas. Os que o próprio comprador cancelou ficam de fora. Cálculo da Torre.";
 
 /** Detalhe do card Devolução: o valor exato e a taxa de cada loja (so' o que o payload ja' traz). */
 function DetalheDevolucao({ v, periodo, geradoEm }: { v: VisaoPareto; periodo: string; geradoEm: string }) {
@@ -501,7 +506,7 @@ function DetalheDevolucao({ v, periodo, geradoEm }: { v: VisaoPareto; periodo: s
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <NumeroAnimado texto={v.total.devolucoesPct} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
-          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{v.total.devolucoes === "—" ? "" : `${v.total.devolucoes} de ${v.total.pedidos} pedidos`}</span>
+          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{v.total.devolucoes === "—" ? "" : `${v.total.devolucoes} de ${v.total.pedidosDevolucao} pedidos`}</span>
         </div>
         <DrilldownContextLine leading="Shopee" periodLabel={periodo} refreshedAt={geradoEm} dica={<InfoDica texto={AJUDA_DEVOLUCAO} />} />
       </div>

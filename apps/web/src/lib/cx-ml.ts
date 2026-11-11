@@ -220,6 +220,9 @@ export interface ResumoMl {
   /** Taxa (% dos pedidos) e contagem de cada indicador no periodo. */
   taxa: Record<IndicadorTaxa, number | null>;
   contagem: Record<IndicadorTaxa, number | null>;
+  /** Pedidos das marcas que entraram na taxa (o denominador real) e quantas marcas entraram, de quantas. */
+  pedidosBase: Record<IndicadorTaxa, number | null>;
+  marcasNaTaxa: Record<IndicadorTaxa, { lidas: number; total: number }>;
   /** Valor reembolsado (R$); null se alguma marca com reembolso medido veio sem valor. */
   valorReembolsado: number | null;
   comparacao: Record<IndicadorTaxa, ComparacaoCard | null>;
@@ -244,6 +247,8 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
   const ms = d.marcas;
   const taxa = {} as ResumoMl["taxa"];
   const contagem = {} as ResumoMl["contagem"];
+  const pedidosBase = {} as ResumoMl["pedidosBase"];
+  const marcasNaTaxa = {} as ResumoMl["marcasNaTaxa"];
   const comparacao = {} as ResumoMl["comparacao"];
   const semAnterior: ResumoMl["semAnterior"] = {};
   for (const i of INDICADORES_ML) {
@@ -253,6 +258,8 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
     const com = ms.filter((m) => num(m[c]) != null && num(m.pedidos) != null);
     taxa[i] = razaoPct(com.map((m) => [m[c], m.pedidos]));
     contagem[i] = somar(com.map((m) => m[c]));
+    pedidosBase[i] = somar(com.map((m) => m.pedidos));
+    marcasNaTaxa[i] = { lidas: com.length, total: ms.length };
     const comAnt = com.filter((m) => num(m[ant]) != null && num(m.pedidos_anterior) != null);
     const antes = comAnt.length === com.length ? razaoPct(comAnt.map((m) => [m[ant], m.pedidos_anterior])) : null;
     const delta = taxa[i] != null && antes != null ? taxa[i]! - antes : null;
@@ -287,6 +294,8 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
     pedidos: somar(ms.map((m) => m.pedidos)),
     taxa,
     contagem,
+    pedidosBase,
+    marcasNaTaxa,
     valorReembolsado: valorReembolsado(ms),
     comparacao,
     semAnterior,
@@ -543,7 +552,7 @@ export const AJUDA_ML = {
   reembolso:
     "Pedidos com reembolso no período ÷ pedidos do período, somando as marcas; o valor reembolsado fica no detalhe. Cálculo da Torre.",
   devolucao:
-    "Devoluções abertas no período ÷ pedidos do período, somando as marcas (o mesmo conceito da Shopee). Cálculo da Torre. A marca só entra com todos os dias do período lidos pela coleta; sem isso fica de fora, nunca como zero, e o card mostra — enquanto nenhuma marca tiver leitura completa.",
+    "Devoluções abertas no período ÷ pedidos do período, somando as marcas. Cálculo da Torre. A marca só entra com todos os dias do período lidos pela coleta; sem isso fica de fora, nunca como zero.",
   reclamacao:
     "Contact rate: de cada 100 pedidos, quantos viraram reclamação. Reclamações abertas no período (tipo mediação, sem os cancelamentos) ÷ pedidos criados no período, somando as marcas. Cálculo da Torre: não é a taxa de reputação do Mercado Livre, que tem regras e exclusões próprias. Sem faixa de cor porque não há meta definida.",
   cancelamento:

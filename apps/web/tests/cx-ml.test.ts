@@ -170,6 +170,9 @@ test("devolucao: soma so' as marcas lidas; null nao vira zero; zero lido e' zero
   const nada = resumoMl(resp({ marcas: [linha("kokeshi")] }));
   assert.deepEqual([nada.taxa.devolucao, nada.contagem.devolucao, nada.comparacao.devolucao], [null, null, null]);
   assert.equal(ROTULO_ML.devolucao, "Devolução");
+  // o denominador e a cobertura sao os da taxa: so' as marcas lidas (2 de 3), nao todos os pedidos
+  assert.deepEqual([r.pedidosBase.devolucao, r.marcasNaTaxa.devolucao], [2000, { lidas: 2, total: 3 }]);
+  assert.deepEqual(nada.marcasNaTaxa.devolucao, { lidas: 0, total: 1 });
 });
 
 test("sem anterior de cancelamento/reembolso: so' a base de pedidos; reclamacao tem o seu proprio motivo", () => {

@@ -787,7 +787,8 @@ test("pareto: linha de total da tabela por marca", () => {
     { ...v.total, reembolsado: v.total.reembolsado.replace(/\s/g, " ") },
     {
       pedidos: "1.300", cancelamentosPct: "1,8%", cancelamentoDelta: { texto: "▲ 1,0 p.p.", sentido: "piorou" },
-      cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
+      cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", pedidosDevolucao: "1.000", marcasDevolucao: { lidas: 1, total: 2 },
+      reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
     },
   );
 });
