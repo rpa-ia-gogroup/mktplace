@@ -30,6 +30,9 @@ const ICONE_INDISPONIVEL: LucideIcon[] = [PackageX, Undo2];
 
 export const GRADE_QUALIDADE = "grid grid-cols-2 md:grid-cols-4 gap-3";
 
+/** Em 2 colunas (celular), o ultimo cartao de um grupo impar ocupa a linha inteira em vez de ficar sozinho em meia linha. */
+const ultimoImpar = (indice: number, total: number) => total % 2 === 1 && indice === total - 1;
+
 /** Quantos cartoes (incluindo os "N/D" do TikTok) a selecao mostra: para o esqueleto. */
 export function totalDeCartoes(sel: Record<CanalQualidade, boolean>): number {
   return (
@@ -53,37 +56,39 @@ export default function GrupoQualidade({
         {NOME_DO_CANAL[canal]}
       </h3>
       <div className={GRADE_QUALIDADE}>
-        {CARTOES_DO_CANAL[canal].map((chave) => {
+        {CARTOES_DO_CANAL[canal].map((chave, i, todos) => {
           const def = DEF_QUALIDADE[chave];
           const { icone, identidade } = VISUAL_QUALIDADE[chave];
           const t = textoDoCartao(chave, kpis);
           return (
-            <KpiTile
-              key={chave}
-              variante="gerencial"
-              identidade={identidade}
-              icone={icone}
-              rotulo={def.rotulo}
-              ajuda={def.dica ? <InfoDica emControle texto={def.dica} /> : undefined}
-              valor={t.valor}
-              comparacao={t.ausente ? "Sem dado no período" : undefined}
-              tom={t.ausente ? "ausente" : "neutro"}
-              onAbrir={t.ausente ? undefined : () => onAbrir(chave)}
-            />
+            <div key={chave} className={ultimoImpar(i, todos.length + (canal === "tiktok" ? TIKTOK_UNAVAILABLE_QUALITY_METRICS.length : 0)) ? "col-span-2 md:col-span-1" : undefined}>
+              <KpiTile
+                variante="gerencial"
+                identidade={identidade}
+                icone={icone}
+                rotulo={def.rotulo}
+                ajuda={def.dica ? <InfoDica emControle texto={def.dica} /> : undefined}
+                valor={t.valor}
+                comparacao={t.ausente ? "Sem dado no período" : undefined}
+                tom={t.ausente ? "ausente" : "neutro"}
+                onAbrir={t.ausente ? undefined : () => onAbrir(chave)}
+              />
+            </div>
           );
         })}
         {canal === "tiktok" &&
           TIKTOK_UNAVAILABLE_QUALITY_METRICS.map((m, i) => (
-            <KpiTile
-              key={m.label}
-              variante="gerencial"
-              identidade="atendimento"
-              icone={ICONE_INDISPONIVEL[i] ?? PackageX}
-              rotulo={m.label.replace(/ TK$/, "")}
-              valor={m.value}
-              comparacao={m.subvalue}
-              tom="ausente"
-            />
+            <div key={m.label} className={ultimoImpar(CARTOES_DO_CANAL.tiktok.length + i, CARTOES_DO_CANAL.tiktok.length + TIKTOK_UNAVAILABLE_QUALITY_METRICS.length) ? "col-span-2 md:col-span-1" : undefined}>
+              <KpiTile
+                variante="gerencial"
+                identidade="atendimento"
+                icone={ICONE_INDISPONIVEL[i] ?? PackageX}
+                rotulo={m.label.replace(/ TK$/, "")}
+                valor={m.value}
+                comparacao={m.subvalue}
+                tom="ausente"
+              />
+            </div>
           ))}
       </div>
     </section>

@@ -97,3 +97,12 @@ test("cartoes de Qualidade: so' as 7 identidades; cartoes N/D do TikTok sem cliq
   assert.ok(nd.includes("valor={m.value}") && nd.includes("comparacao={m.subvalue}") && nd.includes('tom="ausente"') && !nd.includes("onAbrir"));
   assert.ok(src.includes("onAbrir={t.ausente ? undefined : () => onAbrir(chave)}"), "sem valor, sem clique");
 });
+
+test("ⓘ so' onde a ressalva muda a leitura (Entrega ML nao repete o valor); cartao impar nao fica sozinho em meia linha no celular", () => {
+  assert.equal(DEF_QUALIDADE.ml_entrega.dica, undefined);
+  assert.ok(DEF_QUALIDADE.ml_nao_entregue.dica && DEF_QUALIDADE.tk_entrega.dica);
+  const src = ler("src/components/qualidade/QualidadeCartoes.tsx");
+  assert.ok(src.includes('"col-span-2 md:col-span-1"') && src.includes("total % 2 === 1 && indice === total - 1"));
+  // o TikTok tem 1 + 2 cartoes (impar): o ultimo (Devolucao N/D) fecha a linha
+  assert.ok(src.includes("CARTOES_DO_CANAL.tiktok.length + i, CARTOES_DO_CANAL.tiktok.length + TIKTOK_UNAVAILABLE_QUALITY_METRICS.length"));
+});

@@ -61,7 +61,7 @@ export const DEF_QUALIDADE: Record<ChaveQualidade, Definicao> = {
     apoio: (r) => (r.ml_not_delivered_shipments != null ? `${fmtNumCurto(r.ml_not_delivered_shipments)} envios` : undefined),
     dica: "Proxy: pagos − entregues",
   },
-  ml_entrega: { rotulo: "Entrega", canal: "ml", tipo: "dias", valor: (f) => f.ml_avg_delivery_days, dica: "Tempo médio em dias" },
+  ml_entrega: { rotulo: "Entrega", canal: "ml", tipo: "dias", valor: (f) => f.ml_avg_delivery_days },
   sh_cancelamento: {
     rotulo: "Cancelamento", canal: "shopee", tipo: "pct", valor: (f) => f.shopee_cancel_rate_pct,
     apoio: (r) => de(r.shopee_canceled_orders, r.shopee_orders, "pedidos"),
