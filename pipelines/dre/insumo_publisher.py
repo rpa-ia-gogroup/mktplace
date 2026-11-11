@@ -28,7 +28,8 @@ CONTRATO
     espera, sem retry. O lock NAO e' mais tomado antes de ler a fonte (T-0087):
     a leitura da origem leva minutos e o Neon derrubava a conexao ociosa. O
     universo esperado e o CHECK sao lidos numa conexao curta antes da origem e
-    relidos sob o lock; se mudaram, a publicacao e' recusada antes do DELETE;
+    relidos sob o lock; se as marcas ou o CHECK mudaram, a publicacao e'
+    recusada antes do DELETE (o GMV relido sob o lock e' o que vale);
   * reconciliacao ANTES de qualquer escrita; se ela recusar, nada e' escrito;
   * a publicacao SUBSTITUI o escopo `competencias x canais` inteiro: chave que
     sumiu da fonte some da tabela, e chave esperada sem dado na fonte e'
@@ -1284,17 +1285,17 @@ def _marcas(esperado: list[dict]) -> list[str]:
     return sorted({r["marca"] for r in esperado})
 
 
-def _assinatura_esperado(esperado: list[dict]) -> list[tuple]:
-    """Forma canonica de `_esperado`: SQL_ESPERADO nao tem ORDER BY."""
-    return sorted((tuple(sorted(r.items())) for r in esperado), key=repr)
-
-
 def _deriva(esperado_antes: list[dict], esperado_lock: list[dict],
             aceita_antes: tuple[bool, bool], aceita_lock: tuple[bool, bool]) -> list[str]:
-    """T-0087: motivos de recusa quando o Neon mudou entre a pre-leitura e o lock."""
+    """T-0087: motivos de recusa quando o Neon mudou entre a pre-leitura e o lock.
+
+    So' compara o que a leitura da origem usou: as marcas e os `aceita_*`. O
+    GMV e as linhas do esperado vem da releitura sob o lock (`montar_lote`), entao
+    um sync que reescreva o GMV no meio nao recusa a publicacao.
+    """
     motivos = []
-    if _assinatura_esperado(esperado_antes) != _assinatura_esperado(esperado_lock):
-        motivos.append("o universo esperado no Neon mudou durante a leitura da origem; rode de novo")
+    if _marcas(esperado_antes) != _marcas(esperado_lock):
+        motivos.append("o conjunto de marcas esperado no Neon mudou durante a leitura da origem; rode de novo")
     if tuple(aceita_antes) != tuple(aceita_lock):
         motivos.append("o contrato do Neon (CHECK ck_fdim_componente) mudou durante a leitura da origem; "
                        "rode de novo")
@@ -1386,8 +1387,9 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
     T-0087: a leitura da origem leva ~6-7 min; com a transacao do Neon aberta
     durante ela, o Neon derrubava a conexao ociosa (SSL closed). Por isso o lock
     so' cobre a escrita: sob ele, o universo esperado e o contrato (CHECK) sao
-    relidos e, se mudaram desde a fase 1, a publicacao e' RECUSADA antes do
-    DELETE; a fotografia publicada (`publicadas`) e' lida sob o lock.
+    relidos e, se as marcas ou o CHECK mudaram desde a fase 1, a publicacao e'
+    RECUSADA antes do DELETE; o lote usa o esperado relido (GMV atual) e a
+    fotografia publicada (`publicadas`) lida sob o lock.
 
     `antes_do_commit` existe so' para teste: injeta falha DEPOIS da escrita e
     ANTES do commit, para provar que o rollback desfaz tudo.

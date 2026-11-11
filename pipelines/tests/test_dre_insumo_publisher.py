@@ -869,6 +869,7 @@ class _ConnAlvo:
             return _Res(rowcount=len(e.fotografia))
         if sql is P.SQL_INSERE:
             e.inserts += 1
+            e.inseridas.append(dict(params))
             self.pendente.append(("insere", (params["competencia"], params["canal"], params["marca"])))
             return _Res(rowcount=1)
         assert str(sql).startswith("SET TRANSACTION READ ONLY"), str(sql)
@@ -880,6 +881,7 @@ class _AlvoFake:
         self.esperado, self.fotografia, self.check = list(esperado_rows), set(fotografia), check
         self.lock_livre, self.abertas, self.sqls, self.auditoria = True, [], [], []
         self.deletes = self.inserts = 0
+        self.inseridas = []
 
     def connect(self):
         return _ConnAlvo(self, transacional=False)
@@ -978,8 +980,21 @@ def test_t0087_lock_so_e_tomado_depois_da_origem_e_antes_de_qualquer_escrita():
     assert ordem[:3] == [P.SQL_LOCK, P.SQL_AUDIT_ABRE, P.SQL_APAGA_ESCOPO]
 
 
-def _gmv_mudou(a):
-    a.esperado = [esperado("ml", "kokeshi", gmv=1_000_001)]
+def test_t0087_gmv_reescrito_durante_a_leitura_publica_com_o_gmv_relido_sob_o_lock():
+    """Sync da fato no meio da leitura (DAG 10:00, cadeia diaria 10:15): as marcas
+    nao mudam, entao publica; a razao com o GMV usa o valor relido sob o lock."""
+    def gmv_dobrou(a):
+        a.esperado = [esperado("ml", "kokeshi", gmv=2_000_000)]
+
+    alvo = _AlvoFake([esperado("ml", "kokeshi", gmv=1_000_000)], fotografia={KOK})
+    fonte = _FonteFake(alvo, [cmv("ml", "kokeshi", receita=1_000_000)], depois_da_leitura=gmv_dobrou)
+    res = _publicar_fake(alvo, fonte)
+    assert res["aplicado"] is True and res["recusas"] == []
+    assert alvo.deletes == 1 and alvo.auditoria == ["running", "success"]
+    (c,) = [r for r in alvo.inseridas if r["componente"] == "cmv"]
+    # 1.000.000 / 2.000.000: com o GMV da pre-leitura seria 1.0000 e reconciliado
+    assert c["motivo"].startswith("receita fiscal / GMV = 0.5000")
+    assert c["status_reconciliacao"] == "nao_reconciliado"
 
 
 def _marca_nova(a):
@@ -992,8 +1007,7 @@ def _check_mudou(a):
 
 
 @pytest.mark.parametrize("mudanca,trecho", [
-    (_gmv_mudou, "universo esperado no Neon mudou"),
-    (_marca_nova, "universo esperado no Neon mudou"),
+    (_marca_nova, "conjunto de marcas esperado no Neon mudou"),
     (_check_mudou, "contrato do Neon (CHECK ck_fdim_componente) mudou"),
 ])
 def test_t0087_deriva_entre_pre_leitura_e_lock_recusa_antes_do_delete(mudanca, trecho):
@@ -1007,9 +1021,13 @@ def test_t0087_deriva_entre_pre_leitura_e_lock_recusa_antes_do_delete(mudanca, t
     assert alvo.auditoria == ["failed"]  # o `running` foi desfeito; a falha ficou registrada
 
 
-def test_t0087_sem_deriva_a_ordem_dos_registros_nao_importa():
+def test_t0087_sem_deriva_a_ordem_dos_registros_e_o_gmv_nao_importam():
     a, b = esperado("ml", "kokeshi"), esperado("ml", "barbours")
     assert P._deriva([a, b], [dict(b), dict(a)], (False, True), (False, True)) == []
+    assert P._deriva([a], [esperado("ml", "kokeshi", gmv=1)], (False, True), (False, True)) == []
+    # mesma marca em outro canal/mes nao muda o conjunto de marcas lido na origem
+    assert P._deriva([a], [a, esperado("shopee", "kokeshi")], (False, False), (False, False)) == []
+    assert P._deriva([a], [a, b], (False, False), (False, False)) != []
 
 
 def test_t0087_lock_ocupado_aborta_sem_escrever_nem_auditar():
