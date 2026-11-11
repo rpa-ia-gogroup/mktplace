@@ -536,7 +536,8 @@ function RegioesPageInner() {
             marcas={dataIsFresh ? byBrand : null}
             periodLabel={periodLabel}
             refreshedAt={displayRefreshedAt}
-            notaDoEscopo={notaDoGmv}
+            // No detalhe o selo da pagina fica atras do veu: a nota de escopo completa vai no ⓘ do proprio modal.
+            notaDoEscopo={[regionalScope?.scopeNote, notaDoGmv].filter(Boolean).join(" ") || undefined}
           />
         )}
       </KpiDrilldownDialog>
