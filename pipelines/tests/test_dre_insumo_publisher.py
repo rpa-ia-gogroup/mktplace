@@ -918,6 +918,8 @@ class _ConnFonte:
             return _Res(linhas=self.eng.cmv)
         if sql is P.SQL_CMV_CONTRAPROVA:
             return _Res(linhas=[cp(c) for c in self.eng.cmv])
+        if sql is P.SQL_CMV_ESTIMADO:
+            return _Res(linhas=self.eng.estimado)
         return _Res(linhas=[])
 
 
@@ -926,8 +928,9 @@ class _FonteFake:
     e (como o Neon) mata as que estiverem; `depois_da_leitura` simula outro
     processo mexendo no Neon enquanto a origem e' lida."""
 
-    def __init__(self, alvo, cmv_rows, depois_da_leitura=None):
+    def __init__(self, alvo, cmv_rows, depois_da_leitura=None, estimado=()):
         self.alvo, self.cmv, self.depois = alvo, list(cmv_rows), depois_da_leitura
+        self.estimado = list(estimado)
         self.abertas_na_leitura = []
 
     def connect(self):
@@ -949,7 +952,7 @@ def test_t0087_nenhuma_conexao_do_neon_aberta_durante_as_leituras_da_origem(monk
     alvo = _AlvoFake([esperado("ml", "kokeshi")])
     fonte = _FonteFake(alvo, [cmv("ml", "kokeshi")])
     vistas = {}
-    for nome in ("ler_fonte", "ler_impostos", "ler_numeracao_nf"):
+    for nome in ("ler_fonte", "ler_cmv_estimado", "ler_impostos", "ler_numeracao_nf"):
         real = getattr(P, nome)
 
         def espiao(*a, _nome=nome, _real=real, **k):
@@ -958,7 +961,7 @@ def test_t0087_nenhuma_conexao_do_neon_aberta_durante_as_leituras_da_origem(monk
 
         monkeypatch.setattr(P, nome, espiao)
     res = _publicar_fake(alvo, fonte)
-    assert vistas == {"ler_fonte": 0, "ler_impostos": 0, "ler_numeracao_nf": 0}
+    assert vistas == {"ler_fonte": 0, "ler_cmv_estimado": 0, "ler_impostos": 0, "ler_numeracao_nf": 0}
     assert fonte.abertas_na_leitura and set(fonte.abertas_na_leitura) == {0}
     assert res["aplicado"] is True and alvo.auditoria == ["running", "success"]
     assert alvo.abertas == []
@@ -1036,3 +1039,282 @@ def test_t0087_lock_ocupado_aborta_sem_escrever_nem_auditar():
     with pytest.raises(P.LockOcupado):
         _publicar_fake(alvo, _FonteFake(alvo, [cmv("ml", "kokeshi")]))
     assert alvo.deletes == 0 and alvo.inserts == 0 and alvo.fotografia == {KOK} and alvo.auditoria == []
+
+
+# ---------------------------------------------------------------------------
+# T-0091 — custo estimado nas linhas sem custo (paliativo do Full Shopee)
+# ---------------------------------------------------------------------------
+
+def sem_custo(codigo="K1", sku=None, receita=600, qtd=10, canal="shopee", marca="kokeshi", mes=OUT):
+    """Linha `sem_custo` de `SQL_CMV_ESTIMADO`: SKU sem custo da celula."""
+    return {"tipo": "sem_custo", "competencia": mes, "marca": marca, "plataforma": P.PLATAFORMA_FISCAL[canal],
+            "codigo_produto": codigo, "sku_canonico": sku, "receita": Decimal(receita),
+            "receita_estimavel": None if qtd is None else Decimal(receita),
+            "quantidade": None if qtd is None else Decimal(qtd), "custo": None, "linhas": 3}
+
+
+def unitario(chave, custo, qtd, tipo="codigo_produto", marca="kokeshi", mes=OUT):
+    """Linha de custo unitario (`codigo_produto` ou `sku_canonico`) de `SQL_CMV_ESTIMADO`."""
+    return {"tipo": tipo, "competencia": mes, "marca": marca, "plataforma": None,
+            "codigo_produto": chave if tipo == "codigo_produto" else None,
+            "sku_canonico": chave if tipo == "sku_canonico" else None, "receita": None,
+            "receita_estimavel": None, "quantidade": Decimal(qtd), "custo": Decimal(str(custo)), "linhas": 2}
+
+
+def lote_est(esp, cmvs, estimado, contraprova=None, numeracao_nf=None):
+    canais = [c for c in P.CANAIS if P.MKT_ID[c] in {r["marketplace_id"] for r in esp}]
+    return P.montar_lote(esperado=list(esp), cmv=list(cmvs),
+                         contraprova=list(contraprova if contraprova is not None else [cp(c) for c in cmvs]),
+                         repasse=[], canais=canais, comps=[OUT], numeracao_nf=numeracao_nf,
+                         cmv_estimado=None if estimado is None else list(estimado))
+
+
+def _shopee(receita=1000, custo=100, rcc=400, marca="kokeshi"):
+    return cmv("shopee", marca, receita=receita, custo=custo, rcc=rcc, mes=OUT, emissao=date(2026, 10, 31))
+
+
+def _esp_shopee(marca="kokeshi", gmv=1000):
+    return [esperado("shopee", marca, gmv=gmv, mes=OUT)]
+
+
+def test_t0091_sku_sem_custo_com_custo_no_mes_e_estimado_e_a_cobertura_sobe():
+    c = _shopee()  # 1000 de receita, 400 com custo (100), 600 sem custo
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5)])
+    assert lt.recusas == [] and lt.cmv_estimado_estado == "publicado"
+    r = linha(lt, "shopee", "kokeshi", "cmv")
+    assert r["valor"] == Decimal("200.00")  # 100 real + 10 un x 10/un
+    assert r["cobertura"] == Decimal(1)  # com a estimativa
+    assert r["provisorio_share"] == Decimal(0)  # do custo REAL, como antes
+    assert r["procedencia"] == P.PROC_CMV_ESTIMADO
+    # razao com o GMV na faixa, mas cobertura REAL 0,40 < 0,98: fica fora da margem, como ja' ficava
+    assert r["status_reconciliacao"] == "nao_reconciliado"
+    partes = r["motivo"].split("; ")
+    assert partes[0] == "receita fiscal / GMV = 1.0000"
+    assert partes[1].startswith(P.CUSTO_ESTIMADO + "100.00 de 200.00 do CMV")
+    assert "cobertura real 0.4000 e com a estimativa 1.0000" in partes[1]
+    assert "receita sem custo nenhum 0.00" in partes[1] and "abaixo de 0.98" in partes[1]
+    # a receita fiscal nao muda
+    assert linha(lt, "shopee", "kokeshi", "cmv_receita_fiscal")["valor"] == Decimal(1000)
+    (cel,) = lt.cmv_estimado
+    assert cel["cobertura_real"] == "0.400000" and cel["cobertura_com_estimativa"] == "1.000000"
+
+
+def test_t0091_sku_sem_custo_no_mes_fica_descoberto_e_nao_vira_zero():
+    lt = lote_est(_esp_shopee(), [_shopee()],
+                  [sem_custo("K1", receita=300, qtd=10), sem_custo("K9", receita=300, qtd=4),
+                   unitario("K1", custo=50, qtd=5)])
+    r = linha(lt, "shopee", "kokeshi", "cmv")
+    assert r["valor"] == Decimal("200.00")  # K9 nao entrou com custo nenhum (nem zero)
+    assert r["cobertura"] == Decimal("0.7")  # (400 + 300) / 1000
+    assert "receita sem custo nenhum 300.00" in r["motivo"]
+    assert lt.cmv_estimado[0]["skus_estimados"] == 1 and lt.cmv_estimado[0]["skus_sem_custo"] == 2
+
+
+def test_t0091_celula_sem_custo_e_sem_sku_estimavel_continua_nula_e_identica():
+    c = _shopee(custo=None)  # nenhuma linha com custo
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K9", receita=1000, qtd=4)])
+    r = linha(lt, "shopee", "kokeshi", "cmv")
+    assert r["valor"] is None and r["status_reconciliacao"] == "ausente_na_origem" and r["cobertura"] is None
+    assert lt.linhas == lote_est(_esp_shopee(), [c], None).linhas and lt.cmv_estimado == []
+
+
+def test_t0091_celula_so_com_custo_estimado_publica_o_estimado():
+    c = _shopee(custo=None)
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K1", receita=1000, qtd=10), unitario("K1", custo=50, qtd=5)])
+    r = linha(lt, "shopee", "kokeshi", "cmv")
+    assert r["valor"] == Decimal("100.00") and r["status_reconciliacao"] == "nao_reconciliado"
+    assert r["provisorio_share"] is None and "cobertura real 0.0000 e com a estimativa 1.0000" in r["motivo"]
+
+
+def test_t0091_quantidade_nao_positiva_nao_e_estimada():
+    lt = lote_est(_esp_shopee(), [_shopee()],
+                  [sem_custo("K1", receita=600, qtd=None), unitario("K1", custo=50, qtd=5)])
+    assert linha(lt, "shopee", "kokeshi", "cmv")["valor"] == Decimal(100)  # como antes
+    assert lt.cmv_estimado == []
+
+
+def test_t0091_cai_no_sku_canonico_quando_o_codigo_nao_casa():
+    """Rituaria out/26: o Full usa codigo de anuncio (MLPREBIOTICA); o `sku_canonico` resolve."""
+    lt = lote_est(_esp_shopee("rituaria"), [_shopee(marca="rituaria")],
+                  [sem_custo("MLPREBIOTICA", sku="PREB-01", receita=600, qtd=10, marca="rituaria"),
+                   unitario("PREB-01", custo=80, qtd=10, tipo="sku_canonico", marca="rituaria"),
+                   unitario("OUTRO", custo=999, qtd=1, marca="rituaria")])
+    assert linha(lt, "shopee", "rituaria", "cmv")["valor"] == Decimal("180.00")  # 100 + 10 un x 8/un
+    assert lt.cmv_estimado[0]["receita_estimada_via_sku_canonico"] == "600"
+
+
+def test_t0091_codigo_casado_tem_precedencia_sobre_o_sku_canonico():
+    est = [sem_custo("K1", sku="S1", receita=600, qtd=10),
+           unitario("K1", custo=20, qtd=10), unitario("S1", custo=500, qtd=10, tipo="sku_canonico")]
+    r = linha(lote_est(_esp_shopee(), [_shopee()], est), "shopee", "kokeshi", "cmv")
+    assert r["valor"] == Decimal("120.00")  # 2/un pelo codigo, nao 50/un pelo sku
+
+
+def test_t0091_codigo_nulo_cai_no_sku_canonico():
+    est = [sem_custo(None, sku="S1", receita=600, qtd=10), unitario("S1", custo=30, qtd=10, tipo="sku_canonico")]
+    assert linha(lote_est(_esp_shopee(), [_shopee()], est), "shopee", "kokeshi", "cmv")["valor"] == Decimal("130.00")
+
+
+def test_t0091_custo_unitario_de_outro_mes_ou_outra_marca_nao_serve():
+    est = [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5, marca="apice"),
+           unitario("K1", custo=50, qtd=5, mes=date(2026, 9, 1))]
+    lt = lote_est(_esp_shopee(), [_shopee()], est)
+    assert linha(lt, "shopee", "kokeshi", "cmv")["valor"] == Decimal(100) and lt.cmv_estimado == []
+
+
+def test_t0091_celulas_sem_custo_nulo_saem_identicas():
+    """TikTok, ML e Shopee com custo em toda linha: nada muda; so' a celula com linha sem custo."""
+    esp = [esperado(c, m, gmv=1_000_000, mes=OUT) for c in ("tiktok", "ml") for m in ("kokeshi", "apice")]
+    esp += _esp_shopee("apice") + _esp_shopee("kokeshi")
+    cmvs = [cmv(c, m, mes=OUT, emissao=date(2026, 10, 31)) for c in ("tiktok", "ml") for m in ("kokeshi", "apice")]
+    cmvs += [_shopee(marca="apice", rcc=1000), _shopee()]
+    est = [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5)]
+    antes, depois = lote_est(esp, cmvs, None), lote_est(esp, cmvs, est)
+    assert depois.recusas == antes.recusas == [] and len(antes.linhas) == len(depois.linhas)
+    mudou = [(a["canal"], a["marca"], a["componente"]) for a, d in zip(antes.linhas, depois.linhas) if a != d]
+    assert mudou == [("shopee", "kokeshi", "cmv")]
+    # leitura vazia (nenhuma linha sem custo) = lote identico ao sem a leitura
+    assert lote_est(esp[:-1], cmvs[:-1], []).linhas == lote_est(esp[:-1], cmvs[:-1], None).linhas
+
+
+def test_t0091_cobertura_real_acima_do_minimo_mantem_o_status_da_razao():
+    c = _shopee(receita=100_000, custo=30_000, rcc=99_000)  # 1% sem custo
+    lt = lote_est(_esp_shopee(gmv=100_000), [c],
+                  [sem_custo("K1", receita=1000, qtd=10), unitario("K1", custo=300, qtd=10)])
+    r = linha(lt, "shopee", "kokeshi", "cmv")
+    assert r["status_reconciliacao"] == "reconciliado" and r["valor"] == Decimal("30300.00")
+    assert r["cobertura"] == Decimal(1) and "abaixo de" not in r["motivo"]
+
+
+def test_t0091_contraprova_compara_so_a_parte_real_e_nao_recusa():
+    """O agregado gold tem so' o custo REAL (Q23: kokeshi 139 mil); o publicado tem real + estimado."""
+    c = _shopee()
+    est = [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5)]
+    lt = lote_est(_esp_shopee(), [c], est, contraprova=[cp(c)])
+    assert lt.recusas == [] and lt.observacoes == []
+    assert linha(lt, "shopee", "kokeshi", "cmv")["valor"] == Decimal("200.00")
+    # a contraprova continua recusando divergencia da parte real
+    lt2 = lote_est(_esp_shopee(), [c], est, contraprova=[cp(c, custo=Decimal(150))])
+    assert any("diverge do agregado mensal" in m for m in lt2.recusas)
+
+
+def test_t0091_receita_sem_custo_divergente_descarta_a_estimativa_sem_recusar_o_lote():
+    """Recarga da gold entre o `SQL_CMV` e a leitura da estimativa: o lote sai como antes."""
+    c = _shopee()
+    sem_est = lote_est(_esp_shopee(), [c], None).linhas
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K1", receita=900, qtd=10), unitario("K1", custo=50, qtd=5)])
+    assert lt.recusas == [] and lt.linhas == sem_est
+    assert lt.cmv_estimado_estado.startswith("recusado: cmv_estimado: receita sem custo")
+    # celula com receita descoberta que a leitura da estimativa nao trouxe tambem descarta
+    lt2 = lote_est(_esp_shopee(), [c], [])
+    assert lt2.cmv_estimado_estado.startswith("recusado:") and lt2.linhas == sem_est
+
+
+def test_t0091_custo_unitario_negativo_descarta_a_estimativa():
+    c = _shopee()
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=-50, qtd=5)])
+    assert lt.recusas == [] and "custo negativo" in lt.cmv_estimado_estado
+    assert lt.linhas == lote_est(_esp_shopee(), [c], None).linhas
+
+
+def test_t0091_estimativa_convive_com_contraprova_defasada_e_buraco_de_nf():
+    c = _shopee()
+    lt = lote_est(_esp_shopee(), [c], [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5)],
+                  contraprova=[cp(c, ultima_emissao=date(2026, 10, 27))], numeracao_nf=[nf("kokeshi")])
+    partes = linha(lt, "shopee", "kokeshi", "cmv")["motivo"].split("; ")
+    assert len(partes) == 4 and partes[1].startswith(P.CUSTO_ESTIMADO)
+    assert partes[2].startswith("contraprova nao bloqueante")
+    assert partes[3] == "buraco de numeracao de NF em 03/10 (1.914 numeros)"
+
+
+def test_t0091_estimativa_e_deterministica_na_ordem_da_leitura():
+    est = [sem_custo("K1", receita=300, qtd=10), sem_custo(None, sku="S1", receita=300, qtd=3),
+           unitario("K1", custo=50, qtd=5), unitario("S1", custo="33.33", qtd=7, tipo="sku_canonico")]
+    assert lote_est(_esp_shopee(), [_shopee()], est).linhas == \
+        lote_est(_esp_shopee(), [_shopee()], list(reversed(est))).linhas
+
+
+def test_t0091_kokeshi_shopee_out26_cmv_sobe_de_3_9_para_22_por_cento():
+    """Numeros do DIAGNOSTICO_NF_SHOPEE (T-0091 Fase 1): receita fiscal 3.594.806 = Bling 635.595
+    (custo ~139 mil) + Full webgex 2.959.211 sem custo; CMV Full estimado 656,1 mil (99,99% da
+    receita Full coberta); GMV 3.850.275."""
+    c = _shopee(receita=3_594_806, custo=139_000, rcc=635_595)
+    est = [sem_custo("K1", receita=2_000_000, qtd=40_000), sem_custo("K2", receita=958_911, qtd=25_610),
+           sem_custo("K3", receita=300, qtd=10),  # sem custo no mes: fica descoberto
+           unitario("K1", custo=200_000, qtd=20_000), unitario("K2", custo=256_100, qtd=25_610)]
+    esp = _esp_shopee(gmv=3_850_275)
+    antes = linha(lote_est(esp, [c], None), "shopee", "kokeshi", "cmv")
+    lt = lote_est(esp, [c], est)
+    depois = linha(lt, "shopee", "kokeshi", "cmv")
+    rf = Decimal(3_594_806)
+    assert round(antes["valor"] / rf, 3) == Decimal("0.039") and round(antes["cobertura"], 3) == Decimal("0.177")
+    assert depois["valor"] == Decimal("795100.00")  # 139.000 + 400.000 + 256.100
+    assert round(depois["valor"] / rf, 3) == Decimal("0.221")
+    assert round(depois["cobertura"], 4) == Decimal("0.9999")
+    assert "cobertura real 0.1768 e com a estimativa 0.9999" in depois["motivo"]
+    assert "receita sem custo nenhum 300.00" in depois["motivo"]
+    # a razao com o GMV (0,934) ja' deixava a celula nao reconciliada; continua
+    assert depois["status_reconciliacao"] == antes["status_reconciliacao"] == "nao_reconciliado"
+    assert depois["motivo"].startswith("receita fiscal / GMV = 0.9336")
+    assert lt.recusas == []
+
+
+def test_t0091_trecho_do_motivo_comeca_com_o_rotulo_e_nao_tem_separador_interno():
+    lt = lote_est(_esp_shopee(), [_shopee()],
+                  [sem_custo("K1", receita=300, qtd=10), sem_custo("K9", receita=300, qtd=1),
+                   unitario("K1", custo=50, qtd=5)])
+    (trecho,) = [p for p in linha(lt, "shopee", "kokeshi", "cmv")["motivo"].split("; ")
+                 if p.startswith(P.CUSTO_ESTIMADO)]
+    assert trecho.endswith("ate' o custo vir na fonte")  # o trecho inteiro sobreviveu ao split
+
+
+def test_t0091_minimo_de_cobertura_e_o_mesmo_do_serving():
+    fonte = (REPO / "apps" / "api" / "app" / "services" / "dre_service.py").read_text(encoding="utf-8")
+    assert "COBERTURA_CMV_MINIMA = 0.98" in fonte and P.CMV_COBERTURA_MINIMA == Decimal("0.98")
+
+
+def test_t0091_sql_da_estimativa_le_as_mesmas_celulas_do_cmv_e_custo_de_qualquer_canal():
+    sql = _sql(P.SQL_CMV_ESTIMADO)
+    sem = sql[sql.index("sem_custo AS"):sql.index("com_custo AS")]
+    for filtro in ("data_mes = ANY(:competencias)", "canal = 'marketplace'", "plataforma = ANY(:plataformas)",
+                   "marca = ANY(:marcas)", "intercompany IS NOT TRUE", "custo IS NULL"):
+        assert filtro in sem
+    assert "GROUP BY data_mes, marca, plataforma, codigo_produto, sku_canonico" in sem
+    com = sql[sql.index("com_custo AS"):sql.index("SELECT 'sem_custo'")]
+    assert "custo IS NOT NULL" in com and "quantidade_item > 0" in com and "intercompany IS NOT TRUE" in com
+    assert "canal" not in com  # qualquer canal da marca
+    assert "GROUP BY data_mes, marca, codigo_produto" in sql and "GROUP BY data_mes, marca, sku_canonico" in sql
+    assert "COALESCE" not in sql.upper() and " JOIN " not in sql.upper()  # casamento e conta ficam no Python
+    assert sql.count("FROM gold.nf_vendas_unificada_v2") == 2 and "{{" not in sql and "[[" not in sql
+
+
+def test_t0091_leitura_da_estimativa_e_read_only_com_timeout_e_nao_derruba_o_lote():
+    fonte = (REPO / "pipelines" / "dre" / "insumo_publisher.py").read_text(encoding="utf-8")
+    trecho = fonte[fonte.index("def ler_cmv_estimado"):fonte.index("def _resumo_cmv_estimado")]
+    assert trecho.index("SET TRANSACTION READ ONLY") < trecho.index("statement_timeout = '600s'") \
+        < trecho.index("SQL_CMV_ESTIMADO")
+    assert "except SQLAlchemyError" in trecho and "except Exception" not in trecho
+    linhas, estado = P.ler_cmv_estimado(_EngQuebra(), [OUT], ["shopee"], ["kokeshi"])
+    assert linhas is None and estado == "indisponivel: ProgrammingError"  # so' a classe, nada de host
+    assert P.ler_cmv_estimado(None, [OUT], ["shopee"], ["kokeshi"])[0] is None
+    assert P.ler_cmv_estimado(_EngQuebra(), [OUT], ["shopee"], [])[0] is None
+
+
+def test_t0091_publicar_le_a_estimativa_sem_conexao_do_neon_e_grava_o_cmv_estimado(monkeypatch):
+    alvo = _AlvoFake(_esp_shopee())
+    fonte = _FonteFake(alvo, [_shopee()], estimado=[sem_custo("K1", receita=600, qtd=10),
+                                                    unitario("K1", custo=50, qtd=5)])
+    vistas = []
+    real = P.ler_cmv_estimado
+
+    def espiao(*a, **k):
+        vistas.append(len(alvo.abertas))
+        return real(*a, **k)
+
+    monkeypatch.setattr(P, "ler_cmv_estimado", espiao)
+    res = P.publicar(alvo, fonte, [OUT], ["shopee"], agora=datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc))
+    assert vistas == [0] and set(fonte.abertas_na_leitura) == {0}
+    assert res["aplicado"] is True and res["recusas"] == [] and res["cmv_estimado"]["estado"] == "publicado"
+    (c,) = [r for r in alvo.inseridas if r["componente"] == "cmv"]
+    assert c["valor"] == Decimal("200.00") and c["procedencia"] == P.PROC_CMV_ESTIMADO
+    assert alvo.auditoria == ["running", "success"] and alvo.abertas == []
