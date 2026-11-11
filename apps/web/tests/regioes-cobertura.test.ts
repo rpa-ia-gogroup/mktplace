@@ -9,7 +9,9 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildAvisoCobertura, linhaAtualizacao, marcaPontoAusente, fmtDataBr, nomeCanal, normalizarCobertura,
+  nivelFrescor, nivelUf,
 } from "../src/lib/regioes-cobertura.ts";
+import { coverageLabel } from "../src/lib/regioes-format.ts";
 import type { CoberturaCanal } from "../src/lib/api-client.ts";
 
 const DETALHE_SHOPEE =
@@ -200,4 +202,75 @@ test("API da RECOVERY-2 (sem canais_com_atraso): atraso derivado da lista por ca
     cobertura_por_canal: [ML_ATUAL, SHOPEE_DEFASADA], canais_defasados: ["shopee"], dados_completos_ate: "2026-08-24",
   });
   assert.deepEqual(n.canaisComAtraso, ["shopee"]);
+});
+
+// ---------------------------------------------------------------------------
+// T-0088 — medido em producao em 11/11/2026 (out/2026, ml+shopee): a tela dizia
+// "UF preenchida 100% · Cobertura OK" com o ML so' ate 25/10 e a Shopee ate
+// 24/08. O quadro ambar mostrava so' o titulo; o resto ficava no ⓘ.
+// ---------------------------------------------------------------------------
+const ML_OUT_DEFASADO: CoberturaCanal = {
+  channel: "ml", marketplace_id: 2, status: "defasada", dados_ate: "2026-10-25",
+  esperado_ate: "2026-10-31", motivo: "carga_defasada", motivo_detalhe: null,
+};
+const SHOPEE_OUT_DEFASADA: CoberturaCanal = { ...SHOPEE_DEFASADA, esperado_ate: "2026-10-31" };
+
+test("T-0088: o resumo VISIVEL lista os canais defasados e ate quando tem dado", () => {
+  const aviso = buildAvisoCobertura([ML_OUT_DEFASADO, SHOPEE_OUT_DEFASADA]);
+  assert.ok(aviso);
+  assert.equal(aviso.resumo, "Cobertura baixa: Mercado Livre até 25/10/2026; Shopee até 24/08/2026");
+  assert.deepEqual(aviso.detalhes, [DETALHE_SHOPEE]); // "descontinuada" tambem fica visivel
+  const visivel = [aviso.titulo, aviso.resumo, ...aviso.detalhes].join(" ");
+  assert.doesNotMatch(visivel, /Cobertura OK/);
+});
+
+test("T-0088: um canal defasado e outro em dia = cobertura parcial, so' o defasado no resumo", () => {
+  const aviso = buildAvisoCobertura([TIKTOK, ML_ATUAL, SHOPEE_DEFASADA]);
+  assert.ok(aviso);
+  assert.equal(aviso.resumo, "Cobertura parcial: Shopee até 24/08/2026");
+});
+
+test("T-0088: canal sem carga aparece no resumo sem data inventada", () => {
+  const aviso = buildAvisoCobertura([ML_ATUAL, { ...SHOPEE_DEFASADA, status: "sem_carga", dados_ate: null, motivo: "sem_carga" }]);
+  assert.ok(aviso);
+  assert.equal(aviso.resumo, "Cobertura parcial: Shopee sem dado carregado");
+});
+
+test("T-0088: D-2 nao vira 'cobertura parcial' no resumo", () => {
+  const aviso = buildAvisoCobertura([ML_D2]);
+  assert.ok(aviso);
+  assert.equal(aviso.resumo, "Atraso de 1 dia: Mercado Livre até 14/10/2026");
+});
+
+test("T-0088: nivel de frescor segue a regra da API (TikTok fora, D-2 nao rebaixa)", () => {
+  assert.equal(nivelFrescor([ML_ATUAL, SHOPEE_DEFASADA]), "partial");
+  assert.equal(nivelFrescor([ML_OUT_DEFASADO, SHOPEE_OUT_DEFASADA]), "low");
+  assert.equal(nivelFrescor([TIKTOK, ML_OUT_DEFASADO]), "low");
+  assert.equal(nivelFrescor([ML_D2]), "ok");
+  assert.equal(nivelFrescor([TIKTOK]), "ok");
+});
+
+test("T-0088: com canal defasado o selo do cartao nunca diz 'Cobertura OK'", () => {
+  // O cartao "UF preenchida" escreve coverageLabel(coverage_level). A API
+  // T-0088 manda o pior entre UF e frescor: os dois defasados -> "low".
+  const nivelDaApi = nivelFrescor([ML_OUT_DEFASADO, SHOPEE_OUT_DEFASADA]);
+  assert.equal(coverageLabel(nivelDaApi), "Cobertura baixa");
+  assert.notEqual(coverageLabel(nivelDaApi), "Cobertura OK");
+  assert.equal(coverageLabel(nivelFrescor([ML_ATUAL, SHOPEE_DEFASADA])), "Cobertura parcial");
+});
+
+test("T-0088: o aviso de UF le' o nivel SO' de UF (uf_coverage_level, ou o antigo coverage_level)", () => {
+  assert.equal(nivelUf({ coverage_level: "low", uf_coverage_level: "ok" }), "ok");
+  assert.equal(nivelUf({ coverage_level: "partial" }), "partial"); // API antiga
+});
+
+test("T-0088: page.tsx mostra o resumo em texto visivel, mantem o ⓘ e o aviso de UF le' so' a UF", () => {
+  assert.match(PAGE, /data-testid="aviso-cobertura-resumo"/);
+  assert.match(PAGE, /\{avisoCobertura\.resumo\}/);
+  assert.match(PAGE, /avisoCobertura\.detalhes\.map\(/);
+  // o ⓘ (aria-label) continua no titulo do quadro
+  assert.match(PAGE, /<InfoDica texto=\{\[avisoCobertura\.mensagem, \.\.\.avisoCobertura\.detalhes\]\.join\(" "\)\} \/>/);
+  assert.match(PAGE, /nivelUf\(displaySummary\)/);
+  // o quadro "Cobertura de UF ..." nao e' mais ligado pelo coverage_level (que agora inclui frescor)
+  assert.doesNotMatch(PAGE, /displaySummary\?\.coverage_warning &&/);
 });

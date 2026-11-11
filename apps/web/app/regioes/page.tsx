@@ -28,6 +28,7 @@ import {
 import { buildRegionalScope } from "@/lib/regioes-scope";
 import {
   buildAvisoCobertura, linhaAtualizacao, marcaPontoAusente, fmtDataBr, normalizarCobertura,
+  nivelUf,
 } from "@/lib/regioes-cobertura";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -165,6 +166,10 @@ function RegioesPageInner() {
   const cobertura = normalizarCobertura(dataIsFresh ? summary : null);
   const canaisComAtraso = cobertura.canaisComAtraso;
   const avisoCobertura = buildAvisoCobertura(cobertura.canais);
+  // T-0088: o selo "UF preenchida" dos cartoes le' o `coverage_level` da API,
+  // que ja' e' o pior entre UF e frescor por canal. O aviso de UF baixa/parcial fala SO' do preenchimento de UF; o frescor ja'
+  // tem o quadro proprio (aviso-cobertura-canal).
+  const nivelSoUf = displaySummary ? nivelUf(displaySummary) : null;
   const linhaTemporal = dataIsFresh
     ? linhaAtualizacao(
         cobertura.dadosCompletosAte,
@@ -298,12 +303,19 @@ function RegioesPageInner() {
               {avisoCobertura.titulo}
               <InfoDica texto={[avisoCobertura.mensagem, ...avisoCobertura.detalhes].join(" ")} />
             </p>
+            {/* T-0088: quais canais e ate quando, em TEXTO VISIVEL — antes so' no ⓘ. */}
+            <p data-testid="aviso-cobertura-resumo" className={`mt-1 text-sm ${avisoCobertura.severidade === "critico" ? "text-rose-800" : "text-amber-900"}`}>
+              {avisoCobertura.resumo}
+            </p>
+            {avisoCobertura.detalhes.map((d) => (
+              <p key={d} className={`mt-1 text-xs ${avisoCobertura.severidade === "critico" ? "text-rose-700" : "text-amber-800"}`}>{d}</p>
+            ))}
           </div>
         )}
 
-        {dataIsFresh && displaySummary?.coverage_warning && (
-          <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs ${displaySummary.coverage_level === "low" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
-            <span className="font-semibold">{displaySummary.coverage_level === "low" ? "Cobertura de UF baixa" : "Cobertura de UF parcial"}</span>
+        {dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial") && (
+          <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs ${nivelSoUf === "low" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+            <span className="font-semibold">{nivelSoUf === "low" ? "Cobertura de UF baixa" : "Cobertura de UF parcial"}</span>
             <span className="tabular-nums">· {fmtPctOrNA(displaySummary.uf_fill_pct)} com UF ({fmtNumCurto(displaySummary.uf_known_orders)} de {fmtNumCurto(displaySummary.uf_eligible_orders)})</span>
             <InfoDica texto="Os números por UF refletem só os pedidos elegíveis com UF conhecida — limitação da fonte, não erro." />
           </p>

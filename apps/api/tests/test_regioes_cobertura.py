@@ -260,3 +260,163 @@ def test_http_trend_serializa_canais_ausentes(client_com_carga_atual):
     body = resp.json()
     assert body["canais_defasados"] == ["shopee"]
     assert all(p["canais_ausentes"] == ["shopee"] for p in body["data"])
+
+
+# ---------------------------------------------------------------------------
+# T-0088 — `coverage_level` segue o frescor por canal
+#
+# Medido em producao em 11/11/2026, out/2026, ml+shopee: UF 100% preenchida
+# nos pedidos CARREGADOS, mas o ML so' tem dado ate 25/10 e a Shopee ate 24/08.
+# A API devolvia `coverage_level "ok"` com os dois canais `defasada`.
+# ---------------------------------------------------------------------------
+HOJE_T0088 = date(2026, 11, 11)
+OUTUBRO = EffectivePeriod(start=date(2026, 10, 1), end=date(2026, 10, 31))
+DADOS_ATE_PROD = [
+    {"marketplace_id": ML_ID, "dados_ate": date(2026, 10, 25)},
+    {"marketplace_id": SHOPEE_ID, "dados_ate": date(2026, 8, 24)},
+]
+SUMMARY_UF_CHEIA = [{
+    "gmv": 5000.0, "orders": 50, "units_sold": 60, "ufs_com_venda": 20,
+    "uf_known_orders": 50, "uf_eligible_orders": 50,
+    "shipping_cost_covered_orders": 50, "shipping_cost_eligible_orders": 50,
+    "seller_shipping_cost": 300.0,
+}]
+
+
+def _canal(channel, status):
+    return {"channel": channel, "status": status}
+
+
+@pytest.mark.parametrize("statuses, esperado", [
+    ([("ml", "atualizada"), ("shopee", "atualizada")], "ok"),
+    ([("ml", "atraso_leve"), ("shopee", "atualizada")], "ok"),     # D-2 nao rebaixa
+    ([("ml", "atualizada"), ("shopee", "defasada")], "partial"),
+    ([("ml", "atualizada"), ("shopee", "sem_carga")], "partial"),
+    ([("ml", "atraso_leve"), ("shopee", "defasada")], "partial"),
+    ([("ml", "defasada"), ("shopee", "defasada")], "low"),
+    ([("ml", "defasada"), ("shopee", "sem_carga")], "low"),
+    ([("tiktok", "sem_cobertura"), ("ml", "defasada")], "low"),   # TikTok nao conta
+    ([("tiktok", "sem_cobertura")], "ok"),                        # sem frescor a cobrar
+])
+def test_coverage_level_frescor(statuses, esperado):
+    assert svc.coverage_level_frescor([_canal(c, s) for c, s in statuses]) == esperado
+
+
+@pytest.mark.parametrize("uf, frescor, esperado", [
+    ("ok", "ok", "ok"),
+    ("partial", "ok", "partial"),
+    ("not_applicable", "ok", "not_applicable"),
+    ("ok", "partial", "partial"),
+    ("ok", "low", "low"),
+    ("low", "partial", "low"),            # o pior vence, nunca melhora a UF
+    ("not_applicable", "partial", "partial"),
+    ("not_applicable", "low", "low"),
+])
+def test_pior_coverage_level(uf, frescor, esperado):
+    assert svc.pior_coverage_level(uf, frescor) == esperado
+
+
+def test_t0088_summary_out_2026_com_os_dois_canais_defasados_nao_e_ok():
+    db = _Session(SUMMARY_UF_CHEIA, DADOS_ATE_PROD, CARGA_RECENTE_ML)
+    r = svc.get_summary(db, [ML_ID, SHOPEE_ID], None, OUTUBRO, channels="ml,shopee", hoje=HOJE_T0088)
+
+    assert r["uf_fill_pct"] == 100.0           # significado de uf_fill_pct intacto
+    assert r["uf_coverage_level"] == "ok"      # o nivel so' de UF continua exposto
+    assert r["coverage_level"] != "ok"
+    assert r["coverage_level"] == "low"        # todos os canais com fonte defasados
+    assert r["coverage_warning"] is True
+    assert r["canais_defasados"] == ["ml", "shopee"]
+    assert {c["channel"]: c["dados_ate"] for c in r["cobertura_por_canal"]} == {
+        "ml": date(2026, 10, 25), "shopee": date(2026, 8, 24),
+    }
+    # Estrutural continua so' TikTok — e TikTok nao foi pedido.
+    assert r["channels_sem_cobertura_regional"] == []
+
+
+def test_t0088_so_um_canal_defasado_e_parcial_e_tiktok_segue_estrutural():
+    db = _Session(SUMMARY_UF_CHEIA, DADOS_ATE_ROWS, CARGA_RECENTE_ML)
+    r = svc.get_summary(db, [TIKTOK_ID, ML_ID, SHOPEE_ID], None, SET_OUT, channels="all", hoje=HOJE)
+
+    assert r["coverage_level"] == "partial"
+    assert r["uf_coverage_level"] == "ok"
+    assert r["canais_defasados"] == ["shopee"]
+    assert r["channels_sem_cobertura_regional"] == ["tiktok"]
+
+
+def test_t0088_sem_defasagem_continua_ok():
+    em_dia = [{"marketplace_id": m, "dados_ate": date(2026, 10, 15)} for m in (ML_ID, SHOPEE_ID)]
+    db = _Session(SUMMARY_UF_CHEIA, em_dia, CARGA_RECENTE_ML)
+    r = svc.get_summary(db, [ML_ID, SHOPEE_ID], None, SET_OUT, hoje=HOJE)
+
+    assert r["coverage_level"] == "ok"
+    assert r["uf_coverage_level"] == "ok"
+    assert r["coverage_warning"] is False
+    assert r["canais_defasados"] == []
+
+
+def test_t0088_atraso_leve_nao_rebaixa_o_nivel():
+    d2 = [{"marketplace_id": ML_ID, "dados_ate": date(2026, 10, 14)}]
+    db = _Session(SUMMARY_UF_CHEIA, d2, CARGA_RECENTE_ML)
+    r = svc.get_summary(db, [ML_ID], None, SET_OUT, hoje=HOJE)
+    assert r["canais_com_atraso"] == ["ml"]
+    assert r["coverage_level"] == "ok"
+
+
+def test_t0088_uf_baixa_continua_baixa_mesmo_com_canal_em_dia():
+    linha = [{**SUMMARY_UF_CHEIA[0], "uf_known_orders": 10, "uf_eligible_orders": 50}]
+    em_dia = [{"marketplace_id": ML_ID, "dados_ate": date(2026, 10, 15)}]
+    r = svc.get_summary(_Session(linha, em_dia, None), [ML_ID], None, SET_OUT, hoje=HOJE)
+    assert r["coverage_level"] == "low"
+    assert r["uf_coverage_level"] == "low"
+
+
+def test_t0088_by_uf_rebaixa_toda_uf_com_o_frescor_do_pedido():
+    rows = [{"uf": "SP", "gmv": 100.0, "orders": 5, "units_sold": 5, "canceled_orders": 0,
+             "returned_orders": 0, "seller_shipping_cost": None, "uf_known_orders": 5,
+             "uf_eligible_orders": 5, "shipping_cost_covered_orders": 0, "shipping_cost_eligible_orders": 0}]
+    db = _Session(rows, DADOS_ATE_PROD, CARGA_RECENTE_ML)
+    r = svc.get_by_uf(db, [ML_ID, SHOPEE_ID], None, OUTUBRO, hoje=HOJE_T0088)
+    sp = r["data"][0]
+    assert sp["uf_fill_pct"] == 100.0
+    assert sp["uf_coverage_level"] == "ok"
+    assert sp["coverage_level"] == "low"
+    assert sp["coverage_warning"] is True
+
+
+def test_t0088_by_brand_usa_o_frescor_do_canal_da_linha():
+    rows = [
+        {"brand_key": "barbours", "marketplace_id": m, "gmv": 100.0, "orders": 5, "units_sold": 5,
+         "uf_known_orders": 5, "uf_eligible_orders": 5,
+         "shipping_cost_covered_orders": 5, "shipping_cost_eligible_orders": 5}
+        for m in (ML_ID, SHOPEE_ID)
+    ]
+    # ML em dia, Shopee congelada: so' a linha da Shopee cai.
+    db = _Session(rows, DADOS_ATE_ROWS, None)
+    r = svc.get_by_brand(db, [ML_ID, SHOPEE_ID], None, SET_OUT, hoje=HOJE)
+    nivel = {row["marketplace"]: row["coverage_level"] for row in r["data"]}
+    assert nivel == {"ml": "ok", "shopee": "low"}
+    assert all(row["uf_coverage_level"] == "ok" for row in r["data"])
+
+
+@pytest.fixture
+def client_out_2026(monkeypatch):
+    monkeypatch.setattr(svc, "today_brt", lambda: HOJE_T0088)
+    app.dependency_overrides[get_db] = lambda: _Session(SUMMARY_UF_CHEIA, DADOS_ATE_PROD, CARGA_RECENTE_ML)
+    try:
+        yield TestClient(app)
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+def test_http_t0088_summary_nao_devolve_ok_com_canal_defasado(client_out_2026):
+    resp = client_out_2026.get(
+        "/api/v1/regioes/summary",
+        params={"channels": "ml,shopee", "date_from": "2026-10-01", "date_to": "2026-10-31"},
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["coverage_level"] == "low"
+    assert body["uf_coverage_level"] == "ok"
+    assert body["coverage_warning"] is True
+    assert body["canais_defasados"] == ["ml", "shopee"]
+    assert body["channels_sem_cobertura_regional"] == []
