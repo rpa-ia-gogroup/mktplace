@@ -19,7 +19,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BarChart3, CircleSlash, Megaphone, Percent, Receipt, Wallet } from "lucide-react";
+import { BarChart3, CircleDollarSign, CircleSlash, Megaphone, Percent, Receipt, Wallet } from "lucide-react";
 import {
   fetchFinanceiro,
   type FinanceiroKpis,
@@ -36,11 +36,14 @@ import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import InfoDica from "@/components/ui/InfoDica";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import ChannelCostPanel from "@/components/financeiro/ChannelCostPanel";
+import FaixaGmvCanais, { GRADE_FINANCEIRO, type PainelCanal } from "@/components/financeiro/FinanceiroCartoes";
+import FinanceiroDrilldownContent from "@/components/financeiro/FinanceiroDrilldownContent";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import dynamic from "next/dynamic";
 import type { LinhaTaxa } from "@/components/financeiro/FeeByBrandChart";
 
-import { fmtBrl } from "@/lib/formatters";
+import { fmtBrlCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
 import { detectPreset } from "@/lib/filters/presets";
 import { useSortableTable } from "@/lib/use-sortable-table";
@@ -57,14 +60,12 @@ const FeeByBrandChart = dynamic(() => import("@/components/financeiro/FeeByBrand
   loading: () => <div className="h-[220px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />,
 });
 
-function fmtPct(v: number | null, decimals = 1): string {
-  if (v == null) return "—";
-  return v.toFixed(decimals) + "%";
+function fmtPct(v: number | null): string {
+  return v == null ? "—" : fmtPctSimples(v);
 }
 
 function fmtRoas(v: number | null): string {
-  if (v == null) return "—";
-  return v.toFixed(1) + "x";
+  return v == null ? "—" : fmtVezes(v);
 }
 
 function roasColor(v: number | null): string {
@@ -110,7 +111,7 @@ function CostBar({ adPct, freteP }: { adPct: number | null; freteP: number | nul
         <div className="h-full bg-raised" style={{ width: `${rest}%` }} />
       </div>
       <span className={`text-xs tabular-nums w-11 text-right shrink-0 font-semibold ${totalCostColor(ad + frete)}`}>
-        {(ad + frete).toFixed(1)}%
+        {fmtPctSimples(ad + frete)}
       </span>
     </div>
   );
@@ -143,6 +144,8 @@ function FinanceiroPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  // Canal aberto no detalhe (dialogo unico da pagina).
+  const [detalhe, setDetalhe] = useState<PainelCanal["canal"] | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   // Chave da ultima requisicao resolvida com sucesso — comparada com a
   // chave atual para decidir se o estado em memoria reflete de fato os
@@ -293,6 +296,96 @@ function FinanceiroPageInner() {
   const k = displayKpis;
   // Marcas com venda no ML no recorte mas sem tarifa carregada.
   const mlSemTarifa = displayBrands.filter((b) => b.ml_gmv != null && b.ml_gmv > 0 && b.ml_fees == null).length;
+  // Um painel por canal selecionado: o cartao de GMV mostra o numero e o detalhe (clique) traz os
+  // componentes de custo CONHECIDOS. Nada e' somado: fontes e denominadores diferentes.
+  const paineis: PainelCanal[] = [];
+  if (showTiktok) {
+    paineis.push({
+      canal: "tiktok", titulo: "TikTok Shop", ponto: "bg-canal-tiktok", gmv: k?.tiktok_gmv ?? null,
+      linhas: [
+        {
+          rotulo: "Taxas e encargos",
+          valor: k?.tiktok_fees != null ? fmtBrlCurto(k.tiktok_fees) : null,
+          pct: k?.tiktok_avg_fee_pct ?? null,
+          pctTexto: k?.tiktok_avg_fee_pct != null ? fmtPct(k.tiktok_avg_fee_pct) : "—",
+        },
+        {
+          rotulo: "Repasse recebido",
+          valor: k?.tiktok_settlement != null ? fmtBrlCurto(k.tiktok_settlement) : "—",
+          pct: k?.tiktok_avg_settlement_pct ?? null,
+          pctTexto: k?.tiktok_avg_settlement_pct != null ? `${fmtPct(k.tiktok_avg_settlement_pct)} do GMV` : null,
+          detalhe: "Competências podem divergir.",
+        },
+        { rotulo: "Ads (mídia)", ausente: "Sem fonte" },
+        { rotulo: "Frete do seller", ausente: "Sem fonte" },
+      ],
+    });
+  }
+  if (showMl) {
+    paineis.push({
+      canal: "ml", titulo: "Mercado Livre", ponto: "bg-canal-ml", gmv: k?.ml_gmv ?? null,
+      // O backend soma marca sem tarifa como zero: com carga parcial o total parece completo e sai baixo.
+      aviso: mlSemTarifa > 0 ? `Tarifa parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}.` : undefined,
+      linhas: [
+        k?.ml_fees != null
+          ? {
+              rotulo: "Tarifa ML",
+              valor: fmtBrlCurto(k.ml_fees),
+              pct: k.ml_avg_fee_pct ?? null,
+              pctTexto: fmtPct(k.ml_avg_fee_pct ?? null),
+              detalhe:
+                mlSemTarifa > 0
+                  ? `Parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Só a tarifa; sem Ads e frete.`
+                  : "Só a tarifa; sem Ads e frete.",
+            }
+          : { rotulo: "Tarifa ML", ausente: "Não carregada neste período" },
+        {
+          rotulo: "Ads (mídia)",
+          valor: k?.ml_ad_spend != null ? fmtBrlCurto(k.ml_ad_spend) : "—",
+          // Sem barra de proposito: Ads/GMV do canal nao e' campo da API, e uma barra sem numero seria uma razao nova muda.
+          detalhe: (
+            <>
+              ROAS <span className={`font-semibold ${roasColor(k?.ml_roas ?? null)}`}>{fmtRoas(k?.ml_roas ?? null)}</span>
+              {k?.ml_acos_pct != null && <> · ACOS {fmtPct(k.ml_acos_pct)}</>}
+            </>
+          ),
+        },
+        {
+          rotulo: "Ads + frete / GMV",
+          pct: k?.ml_total_cost_pct ?? null,
+          pctTexto: k?.ml_total_cost_pct != null ? fmtPct(k.ml_total_cost_pct) : "—",
+          detalhe: "Não inclui a tarifa ML.",
+        },
+      ],
+    });
+  }
+  if (showShopee) {
+    paineis.push({
+      canal: "shopee", titulo: "Shopee", ponto: "bg-canal-shopee", gmv: k?.shopee_gmv ?? null,
+      linhas: [
+        {
+          rotulo: "Taxas e encargos",
+          valor: k?.shopee_fees != null ? fmtBrlCurto(k.shopee_fees) : null,
+          pct: k?.shopee_avg_fee_pct ?? null,
+          pctTexto: k?.shopee_avg_fee_pct != null ? fmtPct(k.shopee_avg_fee_pct) : "—",
+        },
+        {
+          rotulo: "Ads (mídia)",
+          valor: k?.shopee_ad_spend != null ? fmtBrlCurto(k.shopee_ad_spend) : "—",
+          detalhe: (
+            <>
+              ROAS{" "}
+              <span className={`font-semibold ${roasColor(k?.shopee_roas ?? null)}`}>
+                {k?.shopee_roas != null ? fmtRoas(k.shopee_roas) : "—"}
+              </span>
+            </>
+          ),
+        },
+        { rotulo: "Frete do seller", ausente: "Só por marca" },
+      ],
+    });
+  }
+  const painelAberto = paineis.find((x) => x.canal === detalhe) ?? null;
   const vazio = dataIsFresh && displayBrands.length === 0;
 
   return (
@@ -345,108 +438,12 @@ function FinanceiroPageInner() {
       <>
         {/* ── 1. Receita e componentes conhecidos, por canal ── */}
         <section aria-labelledby="fin-canais" className="flex flex-col gap-3">
-          <h2 id="fin-canais" className="sr-only">Receita e componentes de custo por canal</h2>
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-            {showTiktok && (
-              <ChannelCostPanel
-                titulo="TikTok Shop"
-                ponto="bg-canal-tiktok"
-                barra="bg-canal-tiktok"
-                carregando={isLoadingState}
-                receita={k?.tiktok_gmv != null ? fmtBrl(k.tiktok_gmv) : "—"}
-                linhas={[
-                  {
-                    rotulo: "Taxas e encargos",
-                    valor: k?.tiktok_fees != null ? fmtBrl(k.tiktok_fees) : null,
-                    pct: k?.tiktok_avg_fee_pct ?? null,
-                    pctTexto: k?.tiktok_avg_fee_pct != null ? fmtPct(k.tiktok_avg_fee_pct) : "—",
-                  },
-                  {
-                    rotulo: "Repasse recebido",
-                    valor: k?.tiktok_settlement != null ? fmtBrl(k.tiktok_settlement) : "—",
-                    pct: k?.tiktok_avg_settlement_pct ?? null,
-                    pctTexto: k?.tiktok_avg_settlement_pct != null ? `${fmtPct(k.tiktok_avg_settlement_pct)} do GMV` : null,
-                    detalhe: "Competências podem divergir.",
-                  },
-                  { rotulo: "Ads (mídia)", ausente: "Sem fonte" },
-                  { rotulo: "Frete do seller", ausente: "Sem fonte" },
-                ]}
-              />
-            )}
-            {showMl && (
-              <ChannelCostPanel
-                titulo="Mercado Livre"
-                ponto="bg-canal-ml"
-                barra="bg-canal-ml"
-                carregando={isLoadingState}
-                receita={k?.ml_gmv != null ? fmtBrl(k.ml_gmv) : "—"}
-                linhas={[
-                  k?.ml_fees != null
-                    ? {
-                        rotulo: "Tarifa ML",
-                        valor: fmtBrl(k.ml_fees),
-                        pct: k.ml_avg_fee_pct ?? null,
-                        pctTexto: fmtPct(k.ml_avg_fee_pct ?? null),
-                        // O backend soma marca sem tarifa como zero: com
-                        // carga parcial o total parece completo e sai baixo.
-                        detalhe:
-                          mlSemTarifa > 0
-                            ? `Parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Só a tarifa; sem Ads e frete.`
-                            : "Só a tarifa; sem Ads e frete.",
-                      }
-                    : { rotulo: "Tarifa ML", ausente: "Não carregada neste período" },
-                  {
-                    rotulo: "Ads (mídia)",
-                    valor: k?.ml_ad_spend != null ? fmtBrl(k.ml_ad_spend) : "—",
-                    // Sem barra de proposito: Ads/GMV do canal nao e' campo da
-                    // API, e uma barra sem numero seria uma razao nova muda.
-                    detalhe: (
-                      <>
-                        ROAS <span className={`font-semibold ${roasColor(k?.ml_roas ?? null)}`}>{fmtRoas(k?.ml_roas ?? null)}</span>
-                        {k?.ml_acos_pct != null && <> · ACOS {fmtPct(k.ml_acos_pct)}</>}
-                      </>
-                    ),
-                  },
-                  {
-                    rotulo: "Ads + frete / GMV",
-                    pct: k?.ml_total_cost_pct ?? null,
-                    pctTexto: k?.ml_total_cost_pct != null ? fmtPct(k.ml_total_cost_pct) : "—",
-                    detalhe: "Não inclui a tarifa ML.",
-                  },
-                ]}
-              />
-            )}
-            {showShopee && (
-              <ChannelCostPanel
-                titulo="Shopee"
-                ponto="bg-canal-shopee"
-                barra="bg-canal-shopee"
-                carregando={isLoadingState}
-                receita={k?.shopee_gmv != null ? fmtBrl(k.shopee_gmv) : "—"}
-                linhas={[
-                  {
-                    rotulo: "Taxas e encargos",
-                    valor: k?.shopee_fees != null ? fmtBrl(k.shopee_fees) : null,
-                    pct: k?.shopee_avg_fee_pct ?? null,
-                    pctTexto: k?.shopee_avg_fee_pct != null ? fmtPct(k.shopee_avg_fee_pct) : "—",
-                  },
-                  {
-                    rotulo: "Ads (mídia)",
-                    valor: k?.shopee_ad_spend != null ? fmtBrl(k.shopee_ad_spend) : "—",
-                    detalhe: (
-                      <>
-                        ROAS{" "}
-                        <span className={`font-semibold ${roasColor(k?.shopee_roas ?? null)}`}>
-                          {k?.shopee_roas != null ? fmtRoas(k.shopee_roas) : "—"}
-                        </span>
-                      </>
-                    ),
-                  },
-                  { rotulo: "Frete do seller", ausente: "Só por marca" },
-                ]}
-              />
-            )}
-          </div>
+          <h2 id="fin-canais" className="text-sm font-semibold text-ink-muted">Receita (GMV) por canal</h2>
+          {isLoadingState ? (
+            <FaixaCarregando cartoes={paineis.length || 1} className={GRADE_FINANCEIRO} />
+          ) : (
+            <FaixaGmvCanais paineis={paineis} onAbrir={setDetalhe} />
+          )}
 
           {/* ── 2. Margem nao fechada: o que esta FORA desta tela ── */}
           <Note tom="neutro">
@@ -545,13 +542,13 @@ function FinanceiroPageInner() {
                           {b.label}
                         </Link>
                       </td>
-                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrl(b.tiktok_gmv!)}</td>
-                      <td className={`${TD} text-ink-muted`}>{fmtBrl(b.tiktok_fees!)}</td>
+                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.tiktok_gmv!)}</td>
+                      <td className={`${TD} text-ink-muted`}>{fmtBrlCurto(b.tiktok_fees!)}</td>
                       <td className={`${TD} font-semibold ${feePctColor(b.tiktok_avg_fee_pct)}`}>
                         {fmtPct(b.tiktok_avg_fee_pct)}
                       </td>
                       <td className={`${TD} text-ink-muted`}>{fmtPct(b.tiktok_avg_settlement_pct)}</td>
-                      <td className={`${TD} text-ink font-bold`}>{fmtBrl(b.tiktok_settlement!)}</td>
+                      <td className={`${TD} text-ink font-bold`}>{fmtBrlCurto(b.tiktok_settlement!)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -620,17 +617,17 @@ function FinanceiroPageInner() {
                             {b.label}
                           </Link>
                         </td>
-                        <td className={`${TD} text-ink-muted font-medium`}>{fmtBrl(b.ml_gmv!)}</td>
-                        <td className={`${TD} text-ink-muted`}>{b.ml_fees != null ? fmtBrl(b.ml_fees) : "—"}</td>
+                        <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.ml_gmv!)}</td>
+                        <td className={`${TD} text-ink-muted`}>{b.ml_fees != null ? fmtBrlCurto(b.ml_fees) : "—"}</td>
                         <td className={`${TD} text-ink-muted`}>{fmtPct(b.ml_avg_fee_pct ?? null)}</td>
-                        <td className={`${TD} text-ink-muted`}>{fmtBrl(b.ml_ad_spend!)}</td>
+                        <td className={`${TD} text-ink-muted`}>{fmtBrlCurto(b.ml_ad_spend!)}</td>
                         <td className={`${TD} text-ink-muted font-medium`}>
-                          {b.ml_ad_revenue != null ? fmtBrl(b.ml_ad_revenue) : "—"}
+                          {b.ml_ad_revenue != null ? fmtBrlCurto(b.ml_ad_revenue) : "—"}
                         </td>
                         <td className={`${TD} font-semibold ${roasColor(b.ml_roas)}`}>{fmtRoas(b.ml_roas)}</td>
                         <td className={`${TD} font-semibold ${acosColor(b.ml_acos_pct)}`}>{fmtPct(b.ml_acos_pct)}</td>
                         <td className={`${TD} text-ink-muted`}>
-                          {b.ml_seller_shipping_cost != null ? fmtBrl(b.ml_seller_shipping_cost) : "—"}
+                          {b.ml_seller_shipping_cost != null ? fmtBrlCurto(b.ml_seller_shipping_cost) : "—"}
                         </td>
                         <td className="px-4 py-2.5 min-w-[160px]">
                           <CostBar adPct={adPct} freteP={b.ml_shipping_pct_of_gmv} />
@@ -694,20 +691,20 @@ function FinanceiroPageInner() {
                           {b.label}
                         </Link>
                       </td>
-                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrl(b.shopee_gmv!)}</td>
-                      <td className={`${TD} text-ink-muted`}>{b.shopee_fees != null ? fmtBrl(b.shopee_fees) : "—"}</td>
+                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.shopee_gmv!)}</td>
+                      <td className={`${TD} text-ink-muted`}>{b.shopee_fees != null ? fmtBrlCurto(b.shopee_fees) : "—"}</td>
                       <td className={`${TD} font-semibold ${feePctColor(b.shopee_avg_fee_pct ?? null)}`}>
                         {fmtPct(b.shopee_avg_fee_pct ?? null)}
                       </td>
                       <td className={`${TD} text-ink font-bold`}>
-                        {b.shopee_settlement != null ? fmtBrl(b.shopee_settlement) : "—"}
+                        {b.shopee_settlement != null ? fmtBrlCurto(b.shopee_settlement) : "—"}
                       </td>
-                      <td className={`${TD} text-ink-muted`}>{b.shopee_ad_spend != null ? fmtBrl(b.shopee_ad_spend) : "—"}</td>
+                      <td className={`${TD} text-ink-muted`}>{b.shopee_ad_spend != null ? fmtBrlCurto(b.shopee_ad_spend) : "—"}</td>
                       <td className={`${TD} font-semibold ${roasColor(b.shopee_roas ?? null)}`}>
                         {fmtRoas(b.shopee_roas ?? null)}
                       </td>
                       <td className={`${TD} text-ink-muted`}>
-                        {b.shopee_shipping_cost != null ? fmtBrl(b.shopee_shipping_cost) : "—"}
+                        {b.shopee_shipping_cost != null ? fmtBrlCurto(b.shopee_shipping_cost) : "—"}
                       </td>
                     </tr>
                   ))}
@@ -718,6 +715,17 @@ function FinanceiroPageInner() {
         )}
       </>
       )}
+    <KpiDrilldownDialog
+      open={detalhe != null && painelAberto != null}
+      onClose={() => setDetalhe(null)}
+      title={painelAberto ? `GMV · ${painelAberto.titulo}` : ""}
+      icone={CircleDollarSign}
+      identidade="gmv"
+    >
+      {painelAberto && dataIsFresh && (
+        <FinanceiroDrilldownContent painel={painelAberto} periodLabel={periodLabel} refreshedAt={displayRefreshedAt} />
+      )}
+    </KpiDrilldownDialog>
     </PageContainer>
   );
 }

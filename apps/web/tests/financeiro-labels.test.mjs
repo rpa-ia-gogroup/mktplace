@@ -23,10 +23,12 @@ test("nao exibe mais rotulos de settlement/liquidacao da Shopee", () => {
 // As afirmacoes travadas sao as mesmas; o recorte abaixo garante que cada
 // rotulo esta no painel do canal certo.
 const painel = (titulo) => {
-  const i = source.indexOf(`titulo="${titulo}"`);
+  // Padronizacao das abas: cada canal e' um objeto `paineis.push({ titulo: "...", linhas: [...] })`
+  // (o cartao de GMV mostra o numero e o detalhe traz as linhas); o recorte vai ate' o proximo painel.
+  const i = source.indexOf(`titulo: "${titulo}"`);
   assert.ok(i > 0, `painel ${titulo} ausente`);
-  const fim = source.indexOf("<ChannelCostPanel", i + 1);
-  return source.slice(i, fim > 0 ? fim : source.indexOf("Margem ainda não fechada", i));
+  const fim = source.indexOf("paineis.push(", i + 1);
+  return source.slice(i, fim > 0 ? fim : source.indexOf("const painelAberto", i));
 };
 
 test("Shopee expõe o valor renomeado para Total Global (pedidos)", () => {
