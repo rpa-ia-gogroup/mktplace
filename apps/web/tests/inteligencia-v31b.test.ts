@@ -622,8 +622,10 @@ test("V3F o dialogo do quadrante usa contagem exata, nao K/M", () => {
 
   // e os OUTROS usos de fmtNumber na pagina seguem intactos
   for (const alvo of [
-    "fmtNumber(r.orders)", "nullable(r.total_buyers, fmtNumber)",
-    "nullable(r.at_risk_or_churned, fmtNumber)", "fmtNumber(dialog.share.n_products)",
+    // Padronizacao das abas (10/11/2026): a pagina passou do fmtNumber global ("1.7K") para o
+    // formatador da casa (fmtNumCurto, "1,7 mil"); o fmtNumber global segue inalterado (teste acima).
+    "fmtNumCurto(r.orders)", "nullable(r.total_buyers, fmtNumCurto)",
+    "nullable(r.at_risk_or_churned, fmtNumCurto)", "fmtNumCurto(dialog.share.n_products)",
   ]) assert.ok(PAGE_SRC.includes(alvo), alvo);
   // POPUPS-1: a faixa passou a contar EXATO tambem — o numero do topo conta
   // ate' o valor, e "1.6K" mostraria valores falsos no caminho.
