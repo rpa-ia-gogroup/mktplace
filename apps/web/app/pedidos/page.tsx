@@ -26,7 +26,7 @@ import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { fmtBrlCurto, fmtPctSimples, fmtNumCurto } from "@/lib/formatters";
-import { seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
+import { paraPedidosLiquidos, pedidosLiquidosDaMarca, seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
 import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -69,7 +69,7 @@ function getBrandSortValue(row: PedidosBrandRow, column: string): string | numbe
     case "ml_cancel":
       return row.ml_cancel_rate_pct;
     case "total_orders":
-      return row.total_orders;
+      return pedidosLiquidosDaMarca(row);
     case "total_gmv":
       return row.total_gmv;
     default:
@@ -148,7 +148,7 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
                   </>
                 )}
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-800">
-                  {fmtNum(row.total_orders)}
+                  {fmtNum(pedidosLiquidosDaMarca(row))}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums text-slate-700">{fmtBrlCurto(row.total_gmv)}</td>
               </tr>
@@ -261,7 +261,8 @@ function PedidosPageInner() {
 
   const selecao = { tiktok: showTiktokSel, ml: showMlSel };
   const series = useMemo(() => seriesDoPeriodo(daily, selecao), [daily, showTiktokSel, showMlSel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dadosCartoes = { kpis, tk, ml };
+  // B1-04: pedidos liquidos (sem cancelados) em toda a tela, como o grafico e o ticket.
+  const dadosCartoes = paraPedidosLiquidos({ kpis, tk, ml });
 
   return (
     <PageContainer>
