@@ -17,6 +17,10 @@ Estrutura do CSV:
   Linha 6: vazio
   Linha 7: header
   Linhas 8+: uma por anúncio
+
+Export com o dia corrente dentro é RECUSADO (T-0094): só entra o arquivo
+cuja `Data de Criação do Relatório` é de um dia ESTRITAMENTE posterior ao
+fim do período. Ver `_motivo_de_recusa_por_criacao`.
 """
 from __future__ import annotations
 
@@ -149,6 +153,56 @@ def _e_linha_de_periodo(line: str) -> bool:
     return limpo.startswith(_ROTULO_PERIODO + ",")
 
 
+#: Rótulo da data de criação do relatório, já normalizado (NFC).
+_ROTULO_CRIACAO = unicodedata.normalize("NFC", "Data de Criação do Relatório")
+
+#: Único formato observado nos exports reais (5 marcas, 19 arquivos cada,
+#: medido em 11/11/2026): "13/10/2026 10:49" — hora local do Seller Center
+#: (America/Sao_Paulo), sem fuso explícito. Outro formato = ilegível.
+_FORMATO_CRIACAO = "%d/%m/%Y %H:%M"
+
+RECUSA_D0_PARCIAL = "D0_PARCIAL"
+RECUSA_CRIACAO_AUSENTE = "CRIACAO_AUSENTE"
+RECUSA_CRIACAO_ILEGIVEL = "CRIACAO_ILEGIVEL"
+
+
+def _motivo_de_recusa_por_criacao(
+    lines: list[str], date_to: date,
+) -> tuple[Optional[str], Optional[date]]:
+    """Decide se o export pode ser rateado. Devolve `(motivo, data_de_criacao)`;
+    `motivo` None = aceito.
+
+    Regra: aceito só se o DIA de criação for ESTRITAMENTE posterior a
+    `date_to`. O arquivo não tem grão diário — o parser rateia o total do
+    período por igual. Um export gerado no próprio último dia (ou antes dele)
+    traz o dia corrente PARCIAL no total, e o rateio contamina TODOS os dias
+    fechados do período (medido: até -25%). Pior, pelo desempate
+    (`_chave_de_ordem`, maior `date_to` vence) esse arquivo ganharia de um
+    export limpo que termina antes. A recusa acontece antes do desempate,
+    então o contaminado nem concorre.
+
+    Sem data de criação, ou com ela ilegível, não há como provar que o
+    arquivo está fechado: recusa também (fail-closed). Recusa não é zero: o
+    dia fica sem linha de Ads, nunca com 0.
+
+    A data é comparada como está no cabeçalho (hora local do Seller Center,
+    America/Sao_Paulo) — o mesmo relógio do período, sem conversão.
+    """
+    for line in lines:
+        limpo = unicodedata.normalize("NFC", line).lstrip("﻿ \t")
+        if not limpo.startswith(_ROTULO_CRIACAO + ","):
+            continue
+        valor = limpo.partition(",")[2].strip()
+        try:
+            criacao = datetime.strptime(valor, _FORMATO_CRIACAO).date()
+        except ValueError:
+            return RECUSA_CRIACAO_ILEGIVEL, None
+        if criacao <= date_to:
+            return RECUSA_D0_PARCIAL, criacao
+        return None, criacao
+    return RECUSA_CRIACAO_AUSENTE, None
+
+
 def _parse_period(period_str: str) -> tuple[Optional[date], Optional[date]]:
     """'01/01/2026 - 31/03/2026' → (date(2026,1,1), date(2026,3,31))"""
     try:
@@ -179,16 +233,17 @@ def parse_brand_ads(data_path: Path, brand: str) -> list[dict]:
     for f in files:
         periodo, rows = _ler_arquivo_ads(f, brand)
         if periodo is None:
-            continue          # header/anúncios ausentes — já registrado em log
+            continue          # recusado (D0/criação) ou sem anúncios — já registrado em log
         lotes.append((periodo, f.name, rows))
         logger.info("Ads/%s %s: %d dias gerados", brand, f.name, len(rows))
 
     linhas_antes = sum(len(r) for _, _, r in lotes)
     all_rows = deduplicar_ads_por_data(lotes)
     logger.info(
-        "Ads/%s: %d dia(s) de %d arquivo(s) -> %d dia(s) apos desempate "
-        "(%d descartado(s) por snapshot perdedor)",
-        brand, linhas_antes, len(files), len(all_rows), linhas_antes - len(all_rows),
+        "Ads/%s: %d dia(s) de %d arquivo(s) (%d fora: recusado ou sem anuncios) "
+        "-> %d dia(s) apos desempate (%d descartado(s) por snapshot perdedor)",
+        brand, linhas_antes, len(files), len(files) - len(lotes),
+        len(all_rows), linhas_antes - len(all_rows),
     )
     return all_rows
 
@@ -224,6 +279,20 @@ def _ler_arquivo_ads(
             f"período invertido: brand={brand} arquivo={path.name} "
             f"{date_from:%Y-%m-%d}..{date_to:%Y-%m-%d}"
         ) from None
+
+    # T-0094: export com o dia corrente dentro não é rateado (ver docstring de
+    # `_motivo_de_recusa_por_criacao`). Recusa só ESTE arquivo — os demais da
+    # marca seguem — e os dias dele ficam sem Ads, não com 0.
+    motivo, criacao = _motivo_de_recusa_por_criacao(lines[:7], date_to)
+    if motivo is not None:
+        logger.warning(
+            "Ads/%s %s RECUSADO motivo=%s: periodo %s..%s, criacao=%s. "
+            "So entra export criado DEPOIS do fim do periodo; os dias dele "
+            "ficam sem Ads (nunca 0).",
+            brand, path.name, motivo, f"{date_from:%Y-%m-%d}", f"{date_to:%Y-%m-%d}",
+            f"{criacao:%Y-%m-%d}" if criacao else "-",
+        )
+        return None, []
 
     num_days = (date_to - date_from).days + 1
 

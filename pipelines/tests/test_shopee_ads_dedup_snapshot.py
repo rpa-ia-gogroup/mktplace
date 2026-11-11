@@ -36,7 +36,7 @@ def _escreve_csv(path, period, *, despesas="1000.00", gmv="10000.00",
         "Nome de Usuário,marca_teste\n",
         "Nome da loja,Marca Teste\n",
         "ID da Loja,123456\n",
-        "Data de Criação do Relatório,01/01/2026 00:00\n",
+        "Data de Criação do Relatório,23/09/2026 09:34\n",
         f"Período,{period}\n",
         "\n",
     ]
@@ -260,7 +260,7 @@ def test_quebras_de_linha_lf_crlf_e_cr_produzem_o_mesmo_resultado(tmp_path):
         linhas = [
             "Relatório de Todos os Anúncios CPC - Shopee Brasil",
             "Nome de Usuário,x", "Nome da loja,X", "ID da Loja,1",
-            "Data de Criação do Relatório,01/01/2026 00:00",
+            "Data de Criação do Relatório,23/09/2026 09:34",
             "Período,14/09/2026 - 22/09/2026", "",
             "#,Impressões,Cliques,Despesas,GMV",
             "1,90000,900,450.00,9000.00", "",
