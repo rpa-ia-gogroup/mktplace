@@ -67,13 +67,19 @@ test("aria-live comunica indisponibilidade quando TikTok está no escopo, não s
 
 test("wiring: página de Qualidade renderiza os cards e a nota só com TikTok no escopo", () => {
   const src = read("app/qualidade/page.tsx");
-  assert.match(src, /showTiktok && TIKTOK_UNAVAILABLE_QUALITY_METRICS\.map/);
+  // Os cartoes N/D do TikTok vivem no grupo de cartoes (padrao da Gerencial); a pagina so' o renderiza com o canal no escopo.
+  assert.match(src, /showTiktok && <GrupoQualidade canal="tiktok"/);
+  assert.match(read("src/components/qualidade/QualidadeCartoes.tsx"), /canal === "tiktok" &&\s*TIKTOK_UNAVAILABLE_QUALITY_METRICS\.map/);
   // A limitacao segue declarada junto da tabela: linha curta + ⓘ com o texto inteiro.
   assert.match(src, /showTiktok && \(\s*<p[^>]*>\s*TikTok: só entrega · cancelamento e devolução N\/D\s*<InfoDica texto=\{TIKTOK_QUALITY_UNAVAILABLE_NOTE\} \/>/);
   assert.match(src, /qualityLoadedAnnouncement\(showTiktok\)/);
   // ML e Shopee seguem lendo os valores reais da API (sem regressão)
-  assert.match(src, /fmtRate\(displayKpis\?\.ml_cancel_rate_pct \?\? null\)/);
-  assert.match(src, /fmtRate\(displayKpis\?\.shopee_cancel_rate_pct \?\? null\)/);
+  // (os cartoes leem `displayKpis` pela definicao em lib/qualidade-cartoes, a mesma do detalhe por marca)
+  assert.match(src, /<GrupoQualidade canal="ml" kpis=\{displayKpis\}/);
+  assert.match(src, /<GrupoQualidade canal="shopee" kpis=\{displayKpis\}/);
+  const defs = read("src/lib/qualidade-cartoes.ts");
+  assert.match(defs, /valor: \(f\) => f\.ml_cancel_rate_pct/);
+  assert.match(defs, /valor: \(f\) => f\.shopee_cancel_rate_pct/);
 });
 
 // ---------------------------------------------------------------------------
