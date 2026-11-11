@@ -67,7 +67,7 @@ ser requisito para usuários corporativos.
    | Chave | Valor | Obrigatório |
    |---|---|---|
    | `ORACLE_CLIENT_IDS` | Client IDs do Oráculo separados por vírgula, um por organização Claude | sim |
-   | `ORACLE_API_AUDIENCE` | `https://mktplace-gobeaute.vercel.app/api/mcp` | sim |
+   | `ORACLE_API_AUDIENCE` | `https://mktplace-ten.vercel.app/api/mcp` | sim |
    | `ORACLE_CONNECTIONS` | nome da conexão Google, se quiser restringir por nome | opcional |
 
    Sem `ORACLE_CLIENT_IDS`, nenhum cliente casa e a Action **não faz nada** — o
@@ -139,7 +139,7 @@ exatamente isso.
 3. Acrescente o novo Client ID ao secret `ORACLE_CLIENT_IDS` (vírgula) e
    **Deploy** a Action de novo — secret alterado só vale após redeploy.
 4. No Claude, um **Owner** da organização adiciona o custom connector apontando
-   para `https://mktplace-gobeaute.vercel.app/api/mcp`, informando Client ID e
+   para `https://mktplace-ten.vercel.app/api/mcp`, informando Client ID e
    Client Secret **nas configurações avançadas do conector**.
 5. Cada membro clica em **Vincular** e autentica com a própria conta Google.
 6. Distribua a skill `/oraculo` naquela organização — ela **não** se propaga
@@ -210,3 +210,36 @@ bearer nunca repassado ao FastAPI.
 A Action **soma** uma forma de conceder `oracle:read`. Ela não afrouxa nenhuma
 dessas verificações, e não tem como fazê-lo: `api.accessToken.addScope` só
 acrescenta scope, e o único scope no arquivo é `oracle:read`.
+
+## 8. Migração para mktplace-ten (11/11/2026)
+
+O projeto Vercel migrou. O front de produção agora é `https://mktplace-ten.vercel.app` (sem custom domain), e o
+antigo `mktplace-gobeaute.vercel.app` responde **402** `DEPLOYMENT_DISABLED`. No código (T-0080), o
+`CANONICAL_MCP_RESOURCE` (`apps/web/src/server/oracle/oauth.ts`) passou a ser
+`https://mktplace-ten.vercel.app/api/mcp`. O guardrail não mudou: a audience precisa ser **exatamente** esse URL
+(sem barra final, sem query). Qualquer outra, inclusive a do domínio antigo, deixa a configuração OAuth nula e a rota
+em 404.
+
+Passos do proprietário, **nesta ordem** (só nomes de variável aqui, nunca valores):
+
+1. **Auth0, API nova.** Criar uma API com *identifier* `https://mktplace-ten.vercel.app/api/mcp`. O identifier de
+   uma API Auth0 **não é editável**, por isso é uma API nova e não uma edição da antiga. Repetir a configuração da
+   API antiga: permission `oracle:read`, RBAC ligado, *Add Permissions in the Access Token*, e liberar nela os OAuth
+   Clients do Oráculo.
+2. **Auth0, Action.** Na Action `oracle-corporate-access`, trocar o secret `ORACLE_API_AUDIENCE` para o URL acima e
+   fazer **Deploy** da Action (secret alterado só vale após o redeploy).
+3. **Vercel, projeto novo** (time `rpa-gogroups-projects`, ambiente **Production**). Cadastrar as envs
+   `ORACLE_MCP_ENABLED=1`, `MCP_BACKEND_API_URL`, `ORACLE_AUTH_ISSUER`, `ORACLE_AUTH_AUDIENCE` (= o URL acima) e
+   `ORACLE_AUTH_REQUIRED_SCOPE`. `MCP_BACKEND_SERVICE_KEY` é opcional enquanto a API não estiver em
+   `TORRE_AUTH_MODE=enforce`. Depois, **redeploy** (env nova só vale num deployment novo). Este passo depende do
+   merge do T-0080 em `main`: com o código antigo, a audience nova é recusada.
+4. **claude.ai.** Um Owner troca o URL do custom connector para `https://mktplace-ten.vercel.app/api/mcp`. Client
+   ID e Client Secret continuam nas configurações avançadas, e os callbacks não mudam.
+
+**Smoke depois do passo 4:**
+
+- `GET https://mktplace-ten.vercel.app/.well-known/oauth-protected-resource/api/mcp` → **200**, com `resource` igual
+  ao URL novo;
+- `POST https://mktplace-ten.vercel.app/api/mcp` sem bearer → **401**, com `WWW-Authenticate` contendo
+  `resource_metadata` (no domínio novo) e `scope="oracle:read"`;
+- Vincular no Claude e `tools/list` com bearer → **8** tools.

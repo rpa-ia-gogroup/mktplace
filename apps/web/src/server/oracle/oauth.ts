@@ -41,7 +41,7 @@ export const ALLOWED_AUTH_ISSUER_HOSTNAME = "gobeaute-oraculo.us.auth0.com";
  * `resource` do documento RFC 9728. A audience do token precisa ser exatamente
  * esta string — apontar o resource para outro lugar e' erro de configuracao.
  */
-export const CANONICAL_MCP_RESOURCE = "https://mktplace-gobeaute.vercel.app/api/mcp";
+export const CANONICAL_MCP_RESOURCE = "https://mktplace-ten.vercel.app/api/mcp";
 
 /**
  * Permission CANONICA e unica desta rota.

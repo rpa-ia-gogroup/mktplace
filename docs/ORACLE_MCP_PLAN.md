@@ -8,7 +8,7 @@
 >
 > **Issuer escolhido: Auth0** (`https://gobeaute-oraculo.us.auth0.com/`), com
 > **Google apenas como provedor de identidade**. Audience =
-> `https://mktplace-gobeaute.vercel.app/api/mcp`; permission = `oracle:read`;
+> `https://mktplace-ten.vercel.app/api/mcp`; permission = `oracle:read`;
 > **DCR não habilitado** (Client ID/Secret pré-registrados no Claude.ai).
 >
 > **Produção da Vercel é elegível SOMENTE com todos os guardrails** (OAuth
@@ -164,7 +164,7 @@ Oráculo / Claude.ai
         │  (OM2-P0/§29: bearer estático não é configurável no Claude.ai;
         │   o caminho é OAuth, hoje sem issuer — a rota segue 404)
         ▼
-https://mktplace-gobeaute.vercel.app/api/mcp        ← Next.js Route Handler
+https://mktplace-ten.vercel.app/api/mcp        ← Next.js Route Handler
         │                                             runtime = "nodejs" (obrigatório)
         │  ├─ withMcpAuth (obrigatório, required: true)
         │  ├─ validação Zod do input (allowlists estritas)
@@ -1425,7 +1425,7 @@ jul/2026 GMV total = **R$ 22.544.297,31**; 01–18/08/2026 = **R$ 11.512.531,49*
 **Registrar somente após deploy + smoke autenticado.**
 
 1. **Nome do conector:** `Torre Marketplace`
-2. **URL:** `https://mktplace-gobeaute.vercel.app/api/mcp`
+2. **URL:** `https://mktplace-ten.vercel.app/api/mcp`
 3. **Roteamento intenção → tool:**
 
 | Intenção do usuário | Tool |
@@ -2916,7 +2916,7 @@ Todas **server-side**. Nenhuma com `NEXT_PUBLIC_`.
 | `ORACLE_MCP_ENABLED` | `1` | habilitação explícita (já existia) |
 | `MCP_BACKEND_API_URL` | `https://mktplace-api.onrender.com` | backend allowlisted (já existia) |
 | `ORACLE_AUTH_ISSUER` | `https://gobeaute-oraculo.us.auth0.com/` | issuer do Auth0 |
-| `ORACLE_AUTH_AUDIENCE` | `https://mktplace-gobeaute.vercel.app/api/mcp` | audience exigida no `aud` |
+| `ORACLE_AUTH_AUDIENCE` | `https://mktplace-ten.vercel.app/api/mcp` | audience exigida no `aud` |
 | `ORACLE_AUTH_REQUIRED_SCOPE` | `oracle:read` | permission exigida |
 
 **Nenhum Client ID ou Client Secret entra no ambiente do MCP.** A validação de
@@ -2957,7 +2957,7 @@ Documento, com **exatamente** quatro campos — nenhuma capability inventada:
 
 ```json
 {
-  "resource": "https://mktplace-gobeaute.vercel.app/api/mcp",
+  "resource": "https://mktplace-ten.vercel.app/api/mcp",
   "authorization_servers": ["https://gobeaute-oraculo.us.auth0.com/"],
   "scopes_supported": ["oracle:read"],
   "bearer_methods_supported": ["header"]

@@ -132,7 +132,7 @@ function mcpRequest(authorization?: string, method = "tools/list"): Request {
   };
   if (authorization !== undefined) headers.authorization = authorization;
 
-  return new Request("https://mktplace-gobeaute.vercel.app/api/mcp", {
+  return new Request("https://mktplace-ten.vercel.app/api/mcp", {
     method: "POST",
     headers,
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: { _meta: REQUEST_META } }),
@@ -164,7 +164,7 @@ test("metadata: documento tem exatamente os quatro campos do contrato", () => {
     "resource",
     "scopes_supported",
   ]);
-  assert.equal(doc.resource, "https://mktplace-gobeaute.vercel.app/api/mcp");
+  assert.equal(doc.resource, "https://mktplace-ten.vercel.app/api/mcp");
   assert.deepEqual(doc.authorization_servers, [ISSUER]);
   assert.deepEqual(doc.scopes_supported, [SCOPE]);
   assert.deepEqual(doc.bearer_methods_supported, ["header"]);
@@ -179,7 +179,7 @@ test("metadata: URL e' a forma path-specific do RFC 9728", () => {
   const cfg = parseOAuthConfig(OAUTH_ENV);
   assert.equal(
     protectedResourceMetadataUrl(cfg!),
-    "https://mktplace-gobeaute.vercel.app/.well-known/oauth-protected-resource/api/mcp",
+    "https://mktplace-ten.vercel.app/.well-known/oauth-protected-resource/api/mcp",
   );
 });
 
@@ -309,9 +309,9 @@ test("issuer: host arbitrario e variacoes maliciosas sao recusados", () => {
 test("config: audience precisa ser EXATAMENTE o resource canonico", () => {
   assert.ok(parseOAuthConfig(OAUTH_ENV));
   for (const aud of [
-    "https://mktplace-gobeaute.vercel.app/api/mcp/",
-    "https://mktplace-gobeaute.vercel.app/api/mcp?x=1",
-    "https://mktplace-gobeaute.vercel.app",
+    "https://mktplace-ten.vercel.app/api/mcp/",
+    "https://mktplace-ten.vercel.app/api/mcp?x=1",
+    "https://mktplace-ten.vercel.app",
     "https://outro.vercel.app/api/mcp",
     "",
     undefined,
@@ -322,6 +322,35 @@ test("config: audience precisa ser EXATAMENTE o resource canonico", () => {
       `deveria recusar audience: ${String(aud)}`,
     );
   }
+});
+
+test("config: dominio canonico e' mktplace-ten; a audience do dominio ANTIGO e' recusada", () => {
+  // T-0080 (11/11/2026): o projeto Vercel migrou. O dominio antigo responde
+  // 402 DEPLOYMENT_DISABLED; aceitar a audience dele manteria o PRM apontando
+  // para um host morto, e o cliente MCP recusaria a conexao do mesmo jeito.
+  assert.equal(CANONICAL_MCP_RESOURCE, "https://mktplace-ten.vercel.app/api/mcp");
+  const cfg = parseOAuthConfig({ ...OAUTH_ENV, ORACLE_AUTH_AUDIENCE: CANONICAL_MCP_RESOURCE });
+  assert.ok(cfg);
+  assert.equal(cfg.audience, "https://mktplace-ten.vercel.app/api/mcp");
+  for (const aud of [
+    "https://mktplace-gobeaute.vercel.app/api/mcp",
+    "https://mktplace-gobeaute.vercel.app/api/mcp/",
+    "https://MKTPLACE-TEN.vercel.app/api/mcp",
+    "http://mktplace-ten.vercel.app/api/mcp",
+  ]) {
+    assert.equal(
+      parseOAuthConfig({ ...OAUTH_ENV, ORACLE_AUTH_AUDIENCE: aud }),
+      null,
+      `deveria recusar audience: ${aud}`,
+    );
+  }
+});
+
+test("401: token emitido para a audience do dominio antigo e' recusado", async () => {
+  const token = await mintToken({ audience: "https://mktplace-gobeaute.vercel.app/api/mcp" });
+  const { res, calls } = await call(`Bearer ${token}`);
+  assert.equal(res.status, 401);
+  assert.equal(calls.length, 0);
 });
 
 test("config: scope invalido recusa a configuracao inteira", () => {
@@ -440,7 +469,7 @@ test("401: issuer divergente", async () => {
 });
 
 test("401: audience divergente", async () => {
-  for (const aud of ["https://outro.vercel.app/api/mcp", "https://mktplace-gobeaute.vercel.app"]) {
+  for (const aud of ["https://outro.vercel.app/api/mcp", "https://mktplace-ten.vercel.app"]) {
     const token = await mintToken({ audience: aud });
     const { res, calls } = await call(`Bearer ${token}`);
     assert.equal(res.status, 401, `audience recusada: ${aud}`);
@@ -519,7 +548,7 @@ test("401: WWW-Authenticate traz Bearer, resource_metadata e scope", async () =>
   assert.match(h, /^Bearer/, "esquema Bearer");
   assert.match(
     h,
-    /resource_metadata="https:\/\/mktplace-gobeaute\.vercel\.app\/\.well-known\/oauth-protected-resource\/api\/mcp"/,
+    /resource_metadata="https:\/\/mktplace-ten\.vercel\.app\/\.well-known\/oauth-protected-resource\/api\/mcp"/,
     "resource_metadata aponta para a forma path-specific",
   );
   assert.match(h, /scope="oracle:read"/, "scope guia o cliente");
@@ -534,7 +563,7 @@ test("403: WWW-Authenticate traz insufficient_scope, scope e resource_metadata",
   assert.match(h, /^Bearer/);
   assert.match(h, /error="insufficient_scope"/);
   assert.match(h, /scope="oracle:read"/);
-  assert.match(h, /resource_metadata="https:\/\/mktplace-gobeaute\.vercel\.app\//);
+  assert.match(h, /resource_metadata="https:\/\/mktplace-ten\.vercel\.app\//);
 });
 
 test("desafio nao duplica o parametro scope", async () => {
@@ -650,7 +679,7 @@ test("o bearer NAO e' repassado ao backend numa chamada de tool", async () => {
       _meta: REQUEST_META,
     },
   };
-  const req = new Request("https://mktplace-gobeaute.vercel.app/api/mcp", {
+  const req = new Request("https://mktplace-ten.vercel.app/api/mcp", {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -786,7 +815,7 @@ test("local COM OAuth configurado passa a exigir bearer", async () => {
 test("GET e DELETE seguem a MESMA fronteira", async () => {
   const keyResolver = await localKeyResolver();
   const mk = (method: string) =>
-    new Request("https://mktplace-gobeaute.vercel.app/api/mcp", { method });
+    new Request("https://mktplace-ten.vercel.app/api/mcp", { method });
 
   for (const method of ["GET", "DELETE"]) {
     // Sem token: 401 antes de qualquer coisa.
