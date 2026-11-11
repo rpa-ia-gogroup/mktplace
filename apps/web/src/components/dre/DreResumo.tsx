@@ -1,6 +1,9 @@
+import { CircleDollarSign, Percent, ShieldCheck, TrendingUp } from "lucide-react";
+
 import Chip from "@/components/ui/Chip";
 import KpiTile from "@/components/ui/KpiTile";
 import { ClassificacaoChip } from "@/components/dre/DreChips";
+import type { ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
 import {
   ROTULO_MARGEM,
   STATUS_CHIP,
@@ -34,11 +37,14 @@ export default function DreResumo({
   total,
   competencia,
   bloqueadores,
+  onAbrir,
 }: {
   total: CelulaDRE;
   competencia: string;
   /** Rotulos dos canais nao calculaveis que impedem o agregado. */
   bloqueadores: string[];
+  /** Margem e Classificacao abrem o detalhe (o que falta na conta e por que e' parcial). */
+  onAbrir?: (chave: ChaveDetalheDre) => void;
 }) {
   const receita = total.componentes.receita;
   const sem = semMargem(total);
@@ -69,6 +75,9 @@ export default function DreResumo({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <KpiTile
+        variante="gerencial"
+        identidade="gmv"
+        icone={CircleDollarSign}
         rotulo="Receita"
         valor={receita.valor !== null ? fmtReais(receita.valor) : STATUS_CHIP[receita.status]?.rotulo ?? "Sem valor"}
         tom={receita.valor === null ? "ausente" : "neutro"}
@@ -77,19 +86,29 @@ export default function DreResumo({
         }
       />
       <KpiTile
+        variante="gerencial"
+        identidade="roas"
+        icone={TrendingUp}
         rotulo={ROTULO_MARGEM}
         valor={textoMargem(total)}
         tom={sem ? "ausente" : "neutro"}
-        destaque={!sem}
         comparacao={leituraMargem}
+        onAbrir={onAbrir ? () => onAbrir("margem") : undefined}
       />
       <KpiTile
+        variante="gerencial"
+        identidade="ticket"
+        icone={Percent}
         rotulo="% da receita"
         valor={textoMargemPct(total)}
         tom={sem ? "ausente" : "neutro"}
         comparacao={sem ? "Depende da margem ao lado" : "Margem conhecida ÷ receita"}
       />
       <KpiTile
+        variante="gerencial"
+        identidade="atendimento"
+        icone={ShieldCheck}
+        onAbrir={onAbrir ? () => onAbrir("classificacao") : undefined}
         rotulo="Classificação"
         valor={
           <span className="flex flex-wrap items-center gap-2 text-base">
