@@ -18,10 +18,14 @@ import type { TemaResolvido } from "./theme";
 
 export type CanalDoGrafico = "tiktok" | "ml" | "shopee";
 
+export type MarcaDoGrafico = "barbours" | "kokeshi" | "apice" | "lescent" | "rituaria";
+
 export interface TemaGrafico {
   series: readonly string[];
   /** Espelha `--tc-canal-*`. */
   canais: Readonly<Record<CanalDoGrafico, string>>;
+  /** Marca e' identidade, como canal: a mesma cor em todo grafico de marca. */
+  marcas: Readonly<Record<MarcaDoGrafico, string>>;
   /** Linha de total/comparacao: mais forte que qualquer canal. */
   total: string;
   /** Serie de referencia apagada (periodo anterior). */
@@ -41,6 +45,7 @@ export interface TemaGrafico {
 const CLARO: TemaGrafico = {
   series: ["#6d28d9", "#0284c7", "#64748b", "#a855f7", "#0891b2", "#475569"],
   canais: { tiktok: "#8b5cf6", ml: "#06b6d4", shopee: "#f97316" },
+  marcas: { barbours: "#7c3aed", kokeshi: "#06b6d4", apice: "#f59e0b", lescent: "#ec4899", rituaria: "#10b981" },
   total: "#4c1d95",
   referencia: "#94a3b8",
   grade: "#e7e3f5",
@@ -56,6 +61,7 @@ const CLARO: TemaGrafico = {
 const ESCURO: TemaGrafico = {
   series: ["#a78bfa", "#38bdf8", "#94a3b8", "#d9b4ff", "#22d3ee", "#cbd5e1"],
   canais: { tiktok: "#a78bfa", ml: "#22d3ee", shopee: "#fb923c" },
+  marcas: { barbours: "#a78bfa", kokeshi: "#22d3ee", apice: "#fbbf24", lescent: "#f472b6", rituaria: "#34d399" },
   total: "#ddd2fe",
   referencia: "#7d7697",
   grade: "#2c2544",

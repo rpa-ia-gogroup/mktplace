@@ -28,7 +28,7 @@ import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table"
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
-import { corDaSerie, temaDoGrafico } from "@/lib/chart-theme";
+import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 
 const BRAND_LABELS: Record<string, string> = {
@@ -41,9 +41,6 @@ const BRAND_LABELS: Record<string, string> = {
 
 const ML_BRANDS = ["barbours", "kokeshi", "lescent"];
 const ALL_BRANDS = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
-// Posicao na paleta de series do tema (`chart-theme`): mantem Barbours violeta e
-// Kokeshi ciano, como eram, e deixa o cinza da paleta para a ultima marca.
-const SERIE_DA_MARCA: Record<string, number> = { barbours: 0, apice: 1, lescent: 3, kokeshi: 4, rituaria: 2 };
 
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -745,7 +742,7 @@ export default function OperacoesPage() {
                       key={brand}
                       type="monotone"
                       dataKey={brand}
-                      stroke={corDaSerie(tema, SERIE_DA_MARCA[brand] ?? 0)}
+                      stroke={tema.marcas[brand as MarcaDoGrafico] ?? tema.referencia}
                       strokeWidth={2}
                       dot={false}
                       activeDot={{ r: 4 }}
