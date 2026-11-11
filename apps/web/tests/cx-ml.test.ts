@@ -154,6 +154,27 @@ test("reembolso: taxa e valor somando as marcas; sem leitura nao vira zero; valo
   assert.deepEqual([parcial.valorReembolsado, parcial.taxa.reembolso], [null, 3]);
 });
 
+test("devolucao: soma so' as marcas lidas; null nao vira zero; zero lido e' zero", () => {
+  const d = resp({
+    marcas: [
+      linha("kokeshi", { devolucoes: 30, devolucoes_anterior: 20 }),
+      linha("barbours", { devolucoes: 0, devolucoes_anterior: 20 }),
+      linha("lescent", { devolucoes: null }), // algum dia sem leitura: fora da conta
+    ],
+  });
+  const r = resumoMl(d);
+  assert.deepEqual([r.contagem.devolucao, r.taxa.devolucao], [30, 1.5]); // 30 de 2.000 pedidos
+  const por = (m: string) => montarProblemasMl(d, (x) => x.toUpperCase()).linhas.find((l) => l.marca === m)!.celulas.devolucao;
+  assert.deepEqual([por("BARBOURS").pct, por("BARBOURS").n], ["0,0%", "0"]);
+  assert.deepEqual([por("LESCENT").pct, por("LESCENT").n], ["—", "—"]);
+  const nada = resumoMl(resp({ marcas: [linha("kokeshi")] }));
+  assert.deepEqual([nada.taxa.devolucao, nada.contagem.devolucao, nada.comparacao.devolucao], [null, null, null]);
+  assert.equal(ROTULO_ML.devolucao, "Devolução");
+  // o denominador e a cobertura sao os da taxa: so' as marcas lidas (2 de 3), nao todos os pedidos
+  assert.deepEqual([r.pedidosBase.devolucao, r.marcasNaTaxa.devolucao], [2000, { lidas: 2, total: 3 }]);
+  assert.deepEqual(nada.marcasNaTaxa.devolucao, { lidas: 0, total: 1 });
+});
+
 test("sem anterior de cancelamento/reembolso: so' a base de pedidos; reclamacao tem o seu proprio motivo", () => {
   const sem = { motivo: "base de pedidos de 90 dias", a_partir_de: null, detalhe: "A base guarda 90 dias." };
   const r = resumoMl(resp({
@@ -281,7 +302,7 @@ test("ⓘ: a metodologia diz que e' calculo Torre, que a 1a acao e' parcial e qu
   assert.match(AJUDA_ML.primeiraResposta, /300/);
   assert.match(AJUDA_ML.tempoResposta, /OFICIAL/);
   assert.doesNotMatch(AJUDA_ML.reembolso, /Sem fonte/);
-  assert.match(AJUDA_ML.reembolso, /devolução ainda não tem fonte/);
+  assert.match(AJUDA_ML.devolucao, /todos os dias do período lidos/);
   assert.match(AJUDA_ML.resposta, /As de mais de 24 h contam desde o dia da pergunta\./);
   assert.doesNotMatch(AJUDA_ML.resposta, /base diária/);
 });
@@ -305,11 +326,10 @@ test("telas: a pagina escolhe o corpo pelo canal; o filtro tem os dois canais; s
   assert.match(tela, /rotulo=\{ROTULO_ML\.resposta\}/);
   assert.match(tela, /<SaudePorMarca itens=\{status\}/);
   assert.match(tela, /selo=\{heroi\.selo/);
-  const ordem = ['taxa("reclamacao"', 'taxa("cancelamento"', 'taxa("reembolso"'].map((x) => tela.indexOf(x));
+  const ordem = ['taxa("reclamacao"', 'taxa("cancelamento"', 'taxa("devolucao"', 'taxa("reembolso"'].map((x) => tela.indexOf(x));
   assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "cartoes na ordem da Shopee");
   assert.doesNotMatch(tela, /MessageCircleQuestion|ShieldAlert/, "mediacoes e perguntas sairam da faixa");
-  assert.doesNotMatch(tela, /\.devolucoes\b/, "devolucao nao e' desenhada: e' pendencia, nunca zero");
-  assert.doesNotMatch(tela, /Sem fonte/, "reembolso tem fonte; so' devolucao segue como pendencia");
+  assert.doesNotMatch(tela, /Sem fonte/);
 });
 
 const conta = (marca: string, nivel: string, tom: "bom" | "atencao" | "critico", fora = false) => ({

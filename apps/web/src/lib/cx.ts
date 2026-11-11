@@ -727,6 +727,9 @@ export interface VisaoPareto {
     cancelamentoAntes: string | null;
     devolucoesPct: string;
     devolucoes: string;
+    /** Pedidos e marcas que entraram na taxa de devolucao (o denominador real) e o total de marcas. */
+    pedidosDevolucao: string;
+    marcasDevolucao: { lidas: number; total: number };
     reembolsado: string;
     reembolsoPct: string | null;
   };
@@ -794,7 +797,8 @@ export function montarPareto(
   const cancTotal = razaoPct(can.marcas.map((m) => [m.cancelamentos, m.pedidos]));
   const cancAntesTotal = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
   const cancAtualHist = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
-  const devTotal = somar(marcas.map((m) => liquidas(devMarca.get(m))));
+  const comDev = marcas.filter((m) => liquidas(devMarca.get(m)) != null && canMarca.get(m)?.pedidos != null);
+  const devTotal = somar(comDev.map((m) => liquidas(devMarca.get(m))));
   const linhaTotal = {
     pedidos: inteiro(somar(can.marcas.map((m) => m.pedidos))),
     cancelamentosPct: pct(cancTotal),
@@ -802,6 +806,8 @@ export function montarPareto(
     cancelamentoAntes: cancAntesTotal == null ? null : pct(cancAntesTotal),
     devolucoesPct: pct(razaoPct(marcas.map((m) => [liquidas(devMarca.get(m)), canMarca.get(m)?.pedidos]))),
     devolucoes: inteiro(devTotal),
+    pedidosDevolucao: inteiro(somar(comDev.map((m) => canMarca.get(m)?.pedidos))),
+    marcasDevolucao: { lidas: comDev.length, total: marcas.length },
     reembolsado: dev?.estado === "dado" ? reais(dev.reembolsado) : "—",
     reembolsoPct: (() => {
       const v = razaoPct(marcas.map((m) => [devMarca.get(m)?.aceitas, canMarca.get(m)?.pedidos]));
