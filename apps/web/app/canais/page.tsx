@@ -16,7 +16,7 @@ import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import { Store } from "lucide-react";
-import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import CartaoKpiCanal, { VISUAL_DO_KPI_CANAL } from "@/components/canais/CartaoKpiCanal";
 import KpiCanalDrilldownContent from "@/components/canais/KpiCanalDrilldownContent";
 import { KPI_CANAL, tituloDoDetalhe, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
@@ -64,18 +64,6 @@ import {
 const CHAVES_TIKTOK: KpiCanalChave[] = ["tiktok_video", "tiktok_live", "tiktok_card", "tiktok_conversao"];
 const CHAVES_ML: KpiCanalChave[] = ["ml_novos", "ml_recompra", "ml_gmv_comprador"];
 const CHAVES_SHOPEE: KpiCanalChave[] = ["shopee_novos", "shopee_recompra", "shopee_gmv_comprador", "shopee_visitantes", "shopee_conversao"];
-
-/** "Carregando" da faixa de cartoes: um aviso so' para o leitor de tela, cartoes mudos. */
-function FaixaCarregando({ cartoes, className }: { cartoes: number; className: string }) {
-  return (
-    <div role="status" aria-busy="true" className={className}>
-      <span className="sr-only">Carregando indicadores…</span>
-      {Array.from({ length: cartoes }, (_, i) => (
-        <KpiCardSkeleton key={i} anunciar={false} />
-      ))}
-    </div>
-  );
-}
 
 /** Percentual no formato da casa ("44,5%"); sem valor, "—" (nunca 0). */
 function fmtPct(v: number | null): string {

@@ -176,7 +176,9 @@ test("KpiTile com identidade: as classes do card da KpiBand e a cor do token", (
     "bg-surface border rounded-xl p-3.5 flex flex-col gap-1",
     "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
     "text-lg md:text-xl lg:text-2xl xl:text-lg min-[1440px]:text-2xl font-semibold tracking-tight tabular-nums leading-tight",
-    "mt-auto flex items-end justify-between gap-3 pt-1",
+    // flex-wrap + gap-x/gap-y (era flex items-end justify-between gap-3): no 390 o grafico quebra de linha em vez de vazar do cartao.
+    "mt-auto flex flex-wrap items-end justify-between gap-x-3 gap-y-1 self-stretch pt-1",
+    '<span className="ml-auto">',
     "text-xs text-ink-faint tabular-nums",
     "t.pontos.length >= 4",
   ]) assert.ok(c.includes(cls), cls);

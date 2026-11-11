@@ -53,6 +53,8 @@ Tokens `--tc-kpi-*` em `globals.css` (claro → escuro), expostos no Tailwind co
 | `atendimento` | 15 118 110 | 45 212 191 | (definido pelo consumidor) | `border-kpi-atendimento/35` |
 
 - **Identidade nas outras abas (sem cor nova, decisão de 10/11/2026):** só as 7 acima; o canal (TikTok/ML/Shopee) é um ponto `bg-canal-*` antes do rótulo, nunca cor de cartão. Em Canais (`components/canais/CartaoKpiCanal.tsx`): mix de GMV (vídeo, live, card) → `gmv`; novos compradores e recompra → `pedidos`; GMV por comprador → `ticket`; visitantes → `atendimento`; conversão → `roas`. Modais dos painéis de Canais (`AffiliateCostsPanel`, `TiktokOrderDiscountsPanel`): Afiliados → `Handshake` + `ads`; Descontos → `BadgePercent` + `ticket`. Esses dois blocos mostram valor contábil **por extenso** ("R$ 48.210,37"), de propósito: valor abreviado não reconcilia com relatório.
+- **Pedidos** (`components/pedidos/PedidosCartoes.tsx`): total de pedidos → `pedidos`; GMV → `gmv`; ticket → `ticket`; cancelamento e cancelados → `atendimento` (tom pela regra existente: <2% bom, <5% atenção, senão crítico); entregues → `prazo`. O canal é o ponto no título do grupo. Só pedidos e cancelados por canal abrem detalhe (só eles têm dado por marca); GMV e entregues por canal são cartões sem clique.
+- Rodapé do cartão com identidade (`KpiTile`): `flex-wrap`, para o gráfico passar para a linha de baixo em cartão estreito (390 px, 2 colunas) em vez de sair da caixa.
 - Mapa identidade → classes: `IDENTIDADE` em `KpiTile.tsx` (tipo `IdentidadeKpi`);
   mapa KPI → ícone + classes: `ICONE_KPI` em `KpiBand.tsx`. As classes são
   literais para o Tailwind enxergar.
