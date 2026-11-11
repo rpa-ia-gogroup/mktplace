@@ -53,6 +53,9 @@ def _congela_data(monkeypatch) -> None:
 def _classifica(sql: str) -> str:
     """Identifica qual das cinco consultas de `get_operacoes` esta sendo feita."""
     s = " ".join(sql.split()).lower()
+    # T-0097: a consulta de frescor cita as tres fontes; vem antes de tudo.
+    if "frescor_refreshed_at" in s:
+        return "frescor"
     if "marts.fact_ml_gestao_diaria" in s:
         return "velocity" if "group by brand" in s else "gestao"
     if "marts.fact_tiktok_creator_daily" in s:
@@ -68,6 +71,7 @@ def fixar(monkeypatch):
     fixtures para o teste ajustar."""
     dados: dict[str, list[dict]] = {
         "gestao": [], "velocity": [], "creators": [], "lives": [], "tk_daily": [],
+        "frescor": [],
     }
     vistas: list[str] = []
 
@@ -88,7 +92,9 @@ def fixar(monkeypatch):
 
 def test_c01_payload_tem_exatamente_cinco_blocos(fixar):
     out = gs.get_operacoes(db=None)
-    assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily"]
+    # T-0097: + `refreshed_at`, aditivo, depois dos cinco blocos.
+    assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily",
+                                "refreshed_at"]
 
 
 def test_c02_listas_vazias_sao_listas_e_nao_none(fixar):
@@ -99,7 +105,8 @@ def test_c02_listas_vazias_sao_listas_e_nao_none(fixar):
 
 def test_c03_as_cinco_consultas_sao_feitas(fixar):
     gs.get_operacoes(db=None)
-    assert set(fixar["_vistas"]) == {"gestao", "velocity", "creators", "lives", "tk_daily"}
+    assert set(fixar["_vistas"]) == {"gestao", "velocity", "creators", "lives", "tk_daily",
+                                     "frescor"}
 
 
 # ---------------------------------------------------------------------------
@@ -385,7 +392,7 @@ def test_c24_get_operacoes_le_exclusivamente_marts(monkeypatch):
     _congela_data(monkeypatch)
     monkeypatch.setattr(gs, "_query", lambda db, sql: vistos.append(" ".join(sql.split())) or [])
     gs.get_operacoes(db=None)
-    assert len(vistos) == 5
+    assert len(vistos) == 6  # T-0097: + a consulta de frescor
     for sql in vistos:
         assert "gold." not in sql, "nenhuma consulta pode citar gold."
         assert "raw." not in sql, "nenhuma consulta pode citar raw."
@@ -433,9 +440,11 @@ def test_c27_endpoint_funciona_com_datamart_engine_ausente(monkeypatch):
     monkeypatch.setattr(gs, "datamart_engine", None)
     sessao = SessaoFalsa()
     out = gs.get_operacoes(db=sessao)
-    assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily"]
-    assert all(v == [] for v in out.values())
-    assert len(sessao.consultas) == 5, "as cinco consultas passaram pela Session"
+    assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily",
+                                "refreshed_at"]
+    assert all(out[k] == [] for k in ("alertas", "ml_velocity", "creators", "lives", "tk_daily"))
+    assert out["refreshed_at"] is None, "sem linha em fonte alguma: frescor nulo, nunca now()"
+    assert len(sessao.consultas) == 6, "as seis consultas passaram pela Session"
     for sql in sessao.consultas:
         assert "marts." in sql and "gold." not in sql
 
@@ -521,6 +530,7 @@ def test_c25_payload_completo_congelado(fixar):
             {"brand": "apice", "ref_date": "2026-07-30", "gmv": 400.0, "orders": 4},
             {"brand": "barbours", "ref_date": "2026-07-30", "gmv": 500.0, "orders": 5},
         ],
+        "refreshed_at": None,
     }
 
 
@@ -629,3 +639,43 @@ def test_c33_teto_remove_linhas_sem_tocar_em_calculo(monkeypatch):
                        ("creators", "date"), ("lives", "date"), ("tk_daily", "date")):
         sql = capturado[chave]
         assert f"{col} >= " in sql and f"AND {col} <= " in sql
+
+
+# ---------------------------------------------------------------------------
+# T-0097 - `refreshed_at`: frescor das tres fontes da tela
+# ---------------------------------------------------------------------------
+
+def test_c34_refreshed_at_e_a_carga_mais_antiga_em_utc(fixar):
+    """O SQL devolve LEAST(MAX(synced_at) por fonte); a API so' normaliza em UTC."""
+    brt = timezone(timedelta(hours=-3))
+    fixar["frescor"] = [{"frescor_refreshed_at": datetime(2026, 8, 11, 6, 30, 15, tzinfo=brt)}]
+    assert gs.get_operacoes(db=None)["refreshed_at"] == "2026-08-11T09:30:15Z"
+
+
+def test_c35_timestamp_sem_fuso_e_tratado_como_utc(fixar):
+    fixar["frescor"] = [{"frescor_refreshed_at": datetime(2026, 8, 11, 9, 0, 0)}]
+    assert gs.get_operacoes(db=None)["refreshed_at"] == "2026-08-11T09:00:00Z"
+
+
+@pytest.mark.parametrize("linhas", [[], [{"frescor_refreshed_at": None}]])
+def test_c36_fonte_sem_carimbo_devolve_null(fixar, linhas):
+    """Nenhuma linha no escopo de fonte alguma: null, nunca `now()` nem data inventada."""
+    fixar["frescor"] = linhas
+    assert gs.get_operacoes(db=None)["refreshed_at"] is None
+
+
+def test_c37_frescor_le_synced_at_das_tres_fontes_no_escopo_da_tela(monkeypatch):
+    capturado = {}
+    _congela_data(monkeypatch)
+    monkeypatch.setattr(gs, "_query",
+                        lambda db, sql: capturado.setdefault(_classifica(sql), " ".join(sql.split())) and [])
+    gs.get_operacoes(db=None)
+    sql = capturado["frescor"]
+    assert sql.startswith("SELECT LEAST(")
+    assert sql.count("MAX(synced_at)") == 3
+    for rel in ("marts.fact_ml_gestao_diaria", "marts.fact_tiktok_creator_daily",
+                "marts.fact_tiktok_brand_content_daily"):
+        assert rel in sql
+    assert f"ref_date >= '{D7}'" in sql and f"date >= '{D30}'" in sql
+    assert sql.count(f"<= '{D_FECHADO}'") == 3
+    assert "now()" not in sql.lower() and f"'{HOJE}'" not in sql
