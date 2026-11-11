@@ -28,27 +28,19 @@ import type { Lens } from "./lens.ts";
 /** Origem da evidencia — espelha o `product_status` que a formou no SQL. */
 export type EvidenceKind = "parar" | "escalar" | "testar";
 
-/**
- * T-0096: forma REAL da linha de `urgent`/`scale`/`organic`. A API passou a
- * entregar `item_id` (MLB) e a gold entrega `title` nulo em parte dos itens
- * (31 de 36 no `urgent` medido). `ProductSignalRow` em `api-client.ts` ainda
- * declara `title: string` e nao tem `item_id`; ate' ele ser ajustado, este
- * tipo local e' o contrato que a Inteligencia usa.
- */
-export type ProductRow = Omit<ProductSignalRow, "title"> & {
-  title: string | null;
-  item_id?: string | null;
-};
-
-export interface EvidenceItem extends ProductRow {
+export interface EvidenceItem extends ProductSignalRow {
   kind: EvidenceKind;
 }
 
 /**
  * Rotulo do produto na tela: o titulo; sem titulo, o MLB (`item_id`); sem
- * nenhum dos dois, `null` (a UI decide o traco).
+ * nenhum dos dois, `null` (a UI decide o traco). A gold entrega `title` nulo
+ * em parte dos itens (T-0096: 31 de 36 no `urgent` medido). `item_id` e'
+ * opcional aqui para tolerar payload antigo, sem o campo.
  */
-export function productLabel(row: Pick<ProductRow, "title" | "item_id">): string | null {
+export function productLabel(
+  row: Pick<ProductSignalRow, "title"> & Partial<Pick<ProductSignalRow, "item_id">>,
+): string | null {
   if (row.title) return row.title;
   if (row.item_id) return row.item_id;
   return null;
