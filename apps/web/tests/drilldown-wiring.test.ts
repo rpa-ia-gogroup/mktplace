@@ -157,7 +157,7 @@ test("V3G focusResetKey e' prop opcional e nao muda os consumidores existentes",
     assert.match(read(p), /<KpiDrilldownDialog/, p + " usa o shell canônico");
     assert.doesNotMatch(read(p), /focusResetKey/, p + " não passa a prop nova");
   }
-  assert.ok(read(INTEL).includes("title={dialogTitle} focusResetKey={dialogFocusKey}>"),
+  assert.ok(/title=\{dialogTitle\}\s+focusResetKey=\{dialogFocusKey\}/.test(read(INTEL)),
     "só a Inteligência passa a chave");
 });
 

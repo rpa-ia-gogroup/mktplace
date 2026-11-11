@@ -16,10 +16,12 @@ import DrilldownCta from "@/components/drilldown/DrilldownCta";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import InfoDica from "@/components/ui/InfoDica";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
-import PriorityCards from "@/components/inteligencia/PriorityCards";
+import PriorityCards, { VISUAL_PRIORIDADE } from "@/components/inteligencia/PriorityCards";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import ConcentrationBars from "@/components/inteligencia/ConcentrationBars";
 import EvidenceQueue from "@/components/inteligencia/EvidenceQueue";
-import { SkeletonKpiCard, SkeletonTableRows } from "@/components/Skeleton";
+import { SkeletonTableRows } from "@/components/Skeleton";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import OpportunityMatrix from "@/components/inteligencia/OpportunityMatrix";
@@ -29,7 +31,7 @@ import {
   type BandKey, type QuadrantKey,
 } from "@/lib/inteligencia/opportunity";
 import { fetchInteligencia, type InteligenciaData, type LtvRow, type OpportunityHighlight } from "@/lib/api-client";
-import { fmtBrl, fmtBrlCurto, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
 import { decBr, pctBr, roasBr } from "@/lib/inteligencia/format";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 import { computeRequestStatus } from "@/lib/request-freshness";
@@ -162,10 +164,12 @@ function InteligenciaSkeleton() {
   return (
     <div role="status" aria-busy="true" aria-live="off" className="flex flex-col gap-6">
       <span className="sr-only">Carregando inteligência…</span>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        <SkeletonKpiCard />
-        <SkeletonKpiCard />
-        <SkeletonKpiCard />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <KpiCardSkeleton anunciar={false} />
+        <KpiCardSkeleton anunciar={false} />
+        <div className="col-span-2 lg:col-span-1">
+          <KpiCardSkeleton anunciar={false} />
+        </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         {[0, 1, 2].map((i) => (
@@ -421,22 +425,6 @@ function InteligenciaPageInner() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider mb-1">Erro de carregamento</p>
-            <p className="text-sm text-rose-800">{error}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => { setError(null); setRetryKey((k) => k + 1); }}
-            className="min-h-11 px-3 text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg hover:bg-rose-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-          >
-            Tentar novamente
-          </button>
-        </div>
-      )}
-
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {status.loading ? "Carregando inteligência..."
           : status.error ? "Falha ao carregar."
@@ -451,20 +439,18 @@ function InteligenciaPageInner() {
       {status.loading ? (
         <InteligenciaSkeleton />
       ) : status.error ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-10 text-center">
-          <p className="text-slate-500 text-sm font-medium">Não foi possível carregar os dados de inteligência.</p>
-        </div>
+        <StateBlock
+          tipo="erro"
+          titulo="Não foi possível carregar os dados de inteligência."
+          descricao={error}
+          acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+        />
       ) : status.fresh && !hasData ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-12 text-center">
-          <p className="text-slate-500 text-sm font-medium">Dados de inteligência indisponíveis no momento.</p>
-          <button
-            type="button"
-            onClick={() => setRetryKey((k) => k + 1)}
-            className="mt-3 min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          >
-            Tentar novamente
-          </button>
-        </div>
+        <StateBlock
+          tipo="indisponivel"
+          titulo="Dados de inteligência indisponíveis no momento."
+          acao={<RetryButton onClick={() => setRetryKey((k) => k + 1)} />}
+        />
       ) : (
         <>
           <nav aria-label="Navegação interna da página" className="flex flex-wrap gap-1 -mx-2.5">
@@ -495,9 +481,7 @@ function InteligenciaPageInner() {
             {priorities.length > 0 ? (
               <PriorityCards priorities={priorities} onOpen={(p) => setDialog({ kind: "priority", priority: p })} disabled={status.loading} />
             ) : (
-              <p className="text-sm text-slate-500 bg-white border border-violet-100 rounded-2xl px-6 py-8 text-center">
-                Nenhuma prioridade nas listas recebidas para {scope}.
-              </p>
+              <StateBlock tipo="vazio" titulo={`Nenhuma prioridade nas listas recebidas para ${scope}.`} />
             )}
           </section>
 
@@ -574,7 +558,7 @@ function InteligenciaPageInner() {
                               <p className="text-xs font-semibold text-slate-500">{brandLabel(r.brand)}</p>
                               <p className="text-sm font-semibold text-slate-900 tabular-nums">
                                 {panel.kind === "parar"
-                                  ? nullable(r.ad_spend, fmtBrl)
+                                  ? nullable(r.ad_spend, fmtBrlCurto)
                                   : (r.ad_roas == null
                                       ? <span className="text-slate-400" title="sem dado">—</span>
                                       : roasBr(r.ad_roas))}
@@ -637,13 +621,13 @@ function InteligenciaPageInner() {
                     <li key={`${r.brand}-tk-${i}`} className={`px-4 sm:px-6 py-3 ${i >= 3 ? "hidden sm:block" : ""}`}>
                       <div className="flex items-baseline justify-between gap-3">
                         <p className="text-xs font-semibold text-slate-500">{brandLabel(r.brand)}</p>
-                        <p className="text-sm font-semibold text-slate-900 tabular-nums">{fmtBrl(r.gmv)}</p>
+                        <p className="text-sm font-semibold text-slate-900 tabular-nums">{fmtBrlCurto(r.gmv)}</p>
                       </div>
                       <p className="text-sm text-slate-700 leading-snug" title={r.product_name}>
                         {r.product_name.length > 46 ? `${r.product_name.slice(0, 46)}…` : r.product_name}
                       </p>
                       <p className="text-xs text-slate-500 tabular-nums mt-0.5">
-                        {fmtNumber(r.orders)} pedidos · nota {r.avg_rating == null ? "—" : decBr(r.avg_rating)}
+                        {fmtNumCurto(r.orders)} pedidos · nota {r.avg_rating == null ? "—" : decBr(r.avg_rating)}
                       </p>
                     </li>
                   ))}
@@ -722,12 +706,12 @@ function InteligenciaPageInner() {
                         {ltvSort.sortedRows.map((r) => (
                           <tr key={r.brand}>
                             <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{brandLabel(r.brand)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.total_buyers, fmtNumber)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.total_buyers, fmtNumCurto)}</td>
                             <td className="px-4 py-3 text-right text-sm text-slate-600">
                               {r.repeat_rate_pct == null ? <span className="text-slate-400" title="sem dado">—</span> : <span className="tabular-nums">{pctBr(r.repeat_rate_pct)}</span>}
                             </td>
-                            <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{nullable(r.avg_customer_ltv, fmtBrl)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.at_risk_or_churned, fmtNumber)}</td>
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{nullable(r.avg_customer_ltv, fmtBrlCurto)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.at_risk_or_churned, fmtNumCurto)}</td>
                             <td className="px-4 py-3 text-right text-sm text-slate-600">
                               {r.overall_roas == null ? <span className="text-slate-400" title="sem dado">—</span> : <span className="tabular-nums">{roasBr(r.overall_roas)}</span>}
                             </td>
@@ -788,7 +772,14 @@ function InteligenciaPageInner() {
           POPUPS-1 — todo detalhe abre com o numero grande, selos de contexto e
           um "ⓘ" com a regra; depois as quebras e a saida. Regra, metodologia e
           "o que nao e'" moram no ⓘ, nunca em paragrafo. */}
-      <KpiDrilldownDialog open={dialog != null} onClose={() => setDialog(null)} title={dialogTitle} focusResetKey={dialogFocusKey}>
+      <KpiDrilldownDialog
+        open={dialog != null}
+        onClose={() => setDialog(null)}
+        title={dialogTitle}
+        focusResetKey={dialogFocusKey}
+        icone={dialog?.kind === "priority" ? VISUAL_PRIORIDADE[dialog.priority.kind].icone : undefined}
+        identidade={dialog?.kind === "priority" ? VISUAL_PRIORIDADE[dialog.priority.kind].identidade : undefined}
+      >
         {/* ---- V3-1B: quadrante. GMV do quadrante, criterio, universo x
              destaques e ad spend. A declaracao de amostra vai para o ⓘ. ---- */}
         {dialog?.kind === "quadrant" && oppMap && (() => {
@@ -809,7 +800,7 @@ function InteligenciaPageInner() {
                 dica={`${meta.leitura} Referências descritivas do portfólio, não metas.${isSample(oppMap) ? ` ${sampleDeclaration(oppMap)}` : ""}`}
               />
               {/* Contagem EXATA nas duas (V3F): o detalhe e' onde se confere
-                  que N destaques saem de M produtos; `fmtNumber` abreviava. */}
+                  que N destaques saem de M produtos; `fmtNumCurto` abreviava. */}
               <DrilldownSecao titulo="Universo do quadrante" acao={<span className="tabular-nums">de {contagemExata(oppMap.total_count)} produtos</span>}>
                 <ul className="flex flex-col">
                   <EvidenceRow
@@ -992,7 +983,7 @@ function InteligenciaPageInner() {
               <DrilldownSecao titulo="Este bucket">
                 <ul className="flex flex-col">
                   <EvidenceRow label="GMV do bucket" value={fmtBrlCurto(s.gmv)} />
-                  <EvidenceRow label="Produtos no bucket" value={fmtNumber(dialog.share.n_products)} />
+                  <EvidenceRow label="Produtos no bucket" value={fmtNumCurto(dialog.share.n_products)} />
                   <EvidenceRow label="Ad spend no bucket" value={fmtBrlCurto(s.ad_spend)} />
                 </ul>
               </DrilldownSecao>

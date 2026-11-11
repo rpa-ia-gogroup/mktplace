@@ -174,9 +174,15 @@ test("29b. todo acionamento e' button/link com nome acessivel", () => {
   assert.match(c, /<button/);
   assert.match(c, /aria-label=\{`Detalhe do bucket/);
   const p = read("src/components/inteligencia/PriorityCards.tsx");
-  assert.match(p, /<button/);
-  assert.match(p, /aria-label=\{`Abrir detalhe da prioridade/);
-  assert.match(p, /min-h-11/);
+  // O cartao e' o KpiTile gerencial: o <button> (min-h-11, aria-haspopup) tem como nome acessivel o
+  // rotulo + o valor + "(abrir detalhe)" (sr-only), em vez do aria-label escrito a mao de antes.
+  assert.match(p, /<KpiTile/);
+  assert.match(p, /rotulo=\{p\.title\}/);
+  assert.match(p, /onAbrir=\{disabled \? undefined : \(\) => onOpen\(p\)\}/);
+  const tile = read("src/components/ui/KpiTile.tsx");
+  assert.match(tile, /aria-haspopup=/);
+  assert.match(tile, /min-h-11/);
+  assert.match(tile, /sr-only/);
 });
 
 // ---------------------------------------------------------------------------
