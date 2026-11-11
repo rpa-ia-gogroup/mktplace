@@ -12,7 +12,9 @@ import { cartoesMetas } from "@/lib/metas-cartoes";
  * O canal e' so' o ponto no rotulo, nunca cor de cartao. Informativos: a tela e'
  * um formulario e o total acompanha o rascunho, como o rodape da grade.
  */
-export default function MetasTotais({ totais, rotuloMes }: { totais: Totais; rotuloMes: string }) {
+export default function MetasTotais({ totais }: { totais: Totais }) {
+  // Sem nenhuma meta no mes a faixa seria so' "—": a Note da pagina ja' diz isso.
+  if (totais.global == null) return null;
   const cartoes = cartoesMetas(totais);
   return (
     <section aria-label="Totais das metas" className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -36,7 +38,7 @@ export default function MetasTotais({ totais, rotuloMes }: { totais: Totais; rot
             }
             valor={c.ausente ? "—" : c.valor}
             tom={c.ausente ? "ausente" : "neutro"}
-            comparacao={c.chave === "global" && !c.ausente ? rotuloMes : c.comparacao ?? undefined}
+            comparacao={c.chave === "global" ? "Soma dos canais" : c.comparacao ?? undefined}
           />
         );
       })}

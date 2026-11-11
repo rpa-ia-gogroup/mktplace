@@ -293,7 +293,7 @@ export default function MetasClient() {
             <Note>Nenhuma meta definida para {rotuloMes(mes)}.</Note>
           )}
 
-          <MetasTotais totais={totaisDoRascunho} rotuloMes={capitalizar(rotuloMes(mes))} />
+          <MetasTotais totais={totaisDoRascunho} />
 
           <MetasGrade
             rascunho={rascunho}

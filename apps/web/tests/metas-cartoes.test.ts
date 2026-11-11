@@ -40,4 +40,7 @@ test("pagina: faixa gerencial antes da grade, rodape sem o destaque antigo", () 
   assert.ok(C.indexOf("<MetasTotais") > 0 && C.indexOf("<MetasTotais") < C.indexOf("<MetasGrade"));
   assert.ok(C.includes("totais(analise.efetivos)"), "o cartao acompanha o rascunho, como o rodape");
   assert.ok(!G.includes("text-lg font-bold text-accent"), "o destaque da Meta global saiu do rodape");
+  assert.ok(!G.includes("<tfoot") && !G.includes("Total do canal"), "o total do canal ficou so' nos cartoes");
+  assert.ok(G.includes("Total da marca"), "a soma por marca segue na grade");
+  assert.ok(T.includes("if (totais.global == null) return null"), "sem nenhuma meta a faixa nao aparece");
 });
