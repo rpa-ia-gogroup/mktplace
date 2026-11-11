@@ -136,7 +136,7 @@ export function sortByImpact(rows: readonly ChannelChange[]): ChannelChange[] {
   });
 }
 
-export type ChangesState = "ready" | "sem_comparacao" | "sem_periodo_anterior" | "demonstracao";
+export type ChangesState = "ready" | "carregando" | "sem_comparacao" | "sem_periodo_anterior" | "demonstracao";
 
 /**
  * Por que o bloco não pode ser exibido — ou `ready`.
@@ -145,12 +145,18 @@ export type ChangesState = "ready" | "sem_comparacao" | "sem_periodo_anterior" |
  * `compare` ativo, janela anterior realmente carregada e leitura AO VIVO. Em
  * modo demonstração a comparação seria entre duas séries geradas, o que
  * pareceria análise e não seria.
+ *
+ * A1-08 (QA 11/11): enquanto a série diária não resolveu, `isLive` ainda é o
+ * valor inicial (`false`) e NÃO significa demonstração. Sem `loading` primeiro,
+ * a carga aparecia como "modo demonstração" por vários segundos.
  */
 export function changesState(
   compare: boolean,
   isLive: boolean,
   previousRowCount: number,
+  loading = false,
 ): ChangesState {
+  if (loading) return "carregando";
   if (!compare) return "sem_comparacao";
   if (!isLive) return "demonstracao";
   if (previousRowCount === 0) return "sem_periodo_anterior";
@@ -160,6 +166,7 @@ export function changesState(
 /** Explicação de UMA linha para cada estado não-pronto. Nunca uma caixa vazia
  * gigante: o bloco some e sobra uma frase. */
 export const CHANGES_NOTE: Record<Exclude<ChangesState, "ready">, string> = {
+  carregando: "Carregando a comparação com o intervalo anterior…",
   sem_comparacao:
     "A decomposição por canal aparece com a comparação de períodos ativada no filtro de datas.",
   sem_periodo_anterior:

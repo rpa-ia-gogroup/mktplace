@@ -448,7 +448,7 @@ function BrandPageInner() {
   const periodoAnteriorLabel = filters.compare
     ? (() => { const r = previousEquivalentRange(filters.dateFrom, filters.dateTo); return fmtPeriodo(r.dateFrom, r.dateTo); })()
     : "";
-  const mudancas = changesState(filters.compare, isLive, prevDaily.length);
+  const mudancas = changesState(filters.compare, isLive, prevDaily.length, !dailyIsFresh);
   const linhasMudanca = mudancas === "ready"
     ? sortByImpact(decomposeByChannel(daily, prevDaily, filter))
     : [];
