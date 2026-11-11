@@ -795,7 +795,7 @@ test("H3-2. cada familia de falha tem redacao propria e acionavel", () => {
 
 test("H3-3. a pagina renderiza a mensagem amigavel, nao o erro cru", async () => {
   const codigo = await lerCodigo(PAGE);
-  const alerta = codigo.split('role="alert"')[1].split("</div>")[0];
+  const alerta = codigo.split('tipo="erro"')[1].split("/>")[0];
   assert.ok(alerta.includes("mensagemDeFalha(erroStatus)"),
     "o alerta precisa usar a traducao amigavel");
   assert.ok(!/\{erro\}/.test(alerta),

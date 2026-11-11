@@ -440,11 +440,11 @@ test("linhas so aparecem quando o estado esta fresco", async () => {
 test("loading, error e empty existem, com nome acessivel", async () => {
   const pagina = await ler(PAGE);
   assert.ok(pagina.includes("Carregando monitoramento de preços"));
-  assert.ok(pagina.includes('role="alert"'));
+  assert.ok(pagina.includes('tipo="erro"'), "o erro usa o StateBlock (role=alert)");
   assert.ok(pagina.includes("Monitoramento de preços indisponível"));
   assert.ok(pagina.includes("Nenhum anúncio para os filtros selecionados"));
   assert.ok(pagina.includes("aria-busy"));
-  assert.ok(pagina.includes("Tentar novamente"));
+  assert.ok(pagina.includes("<RetryButton"), "nova tentativa pelo botao padrao");
 });
 
 test("erro NAO cai em mock nem em dado fabricado", async () => {
