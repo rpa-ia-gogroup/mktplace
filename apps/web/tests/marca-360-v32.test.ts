@@ -1102,3 +1102,13 @@ test("V33 os formatadores pt-BR realmente produzem virgula", () => {
   // e zero continua zero, nao travessao
   assert.doesNotMatch(pctBr(0, 2), /—|N\/D|Sem dado/);
 });
+
+test("A1-08 carga da série diária não aparece como modo demonstração", () => {
+  // `isLive` nasce false: durante a carga, o estado é "carregando", nunca "demonstracao".
+  assert.equal(changesState(true, false, 0, true), "carregando");
+  assert.equal(changesState(false, false, 0, true), "carregando");
+  assert.equal(changesState(true, false, 10, false), "demonstracao", "demo real continua avisada");
+  assert.ok(!/demonstra/i.test(CHANGES_NOTE.carregando));
+  const pagina = read("app/brand/[brand]/page.tsx");
+  assert.match(pagina, /changesState\(filters\.compare, isLive, prevDaily\.length, !dailyIsFresh\)/);
+});

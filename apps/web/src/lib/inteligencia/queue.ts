@@ -58,6 +58,32 @@ export const KIND_LABELS: Record<EvidenceKind, string> = {
 /** Ordem deterministica das origens, usada tambem no desempate de `todos`. */
 export const KIND_ORDER: readonly EvidenceKind[] = ["parar", "escalar", "testar"];
 
+/**
+ * C1-01 (QA 11/11): linha com ROAS > 0 e GMV zero na MESMA fotografia.
+ *
+ * ROAS > 0 implica receita atribuida pelo relatorio de Ads, e GMV 0 com
+ * `units_sold` 0 diz que nao houve venda. As duas medidas vem da mesma linha
+ * de `marts.fact_ml_produto_ranking` (copia da gold `ml_produto_ranking`) e
+ * nao fecham; a causa e' de origem (API/gold), nao do front. O front nao corrige o dado: so' impede que o ROAS
+ * apareca como numero confiavel sem aviso. `gmv` nulo NAO conta (ausencia nao
+ * e' zero) e ROAS zero ou nulo tambem nao (nao ha contradicao).
+ */
+export function roasSemVendaNaFotografia(row: Pick<ProductSignalRow, "gmv" | "ad_roas">): boolean {
+  return row.gmv === 0 && row.ad_roas != null && row.ad_roas > 0;
+}
+
+export const ROAS_SEM_VENDA_TITLE =
+  "ROAS do relatório de Ads com GMV R$ 0 nesta fotografia: as fontes não fecham para este produto.";
+
+/** Aviso do bloco, ou `null` quando nenhuma linha recebida tem a contradicao. */
+export function roasSemVendaNote(rows: readonly Pick<ProductSignalRow, "gmv" | "ad_roas">[]): string | null {
+  const n = rows.filter(roasSemVendaNaFotografia).length;
+  if (n === 0) return null;
+  const sujeito = n === 1 ? "1 produto tem" : `${n} produtos têm`;
+  return `* ${sujeito} ROAS > 0 com GMV R$ 0 na fotografia ML. O ROAS vem do relatório de Ads e o GMV das vendas; `
+    + "as duas fontes não fecham para esses itens. Não use esse ROAS para decidir até a origem ser corrigida.";
+}
+
 function tag(rows: readonly ProductSignalRow[] | undefined, kind: EvidenceKind): EvidenceItem[] {
   return (rows ?? []).map((r) => ({ ...r, kind }));
 }
