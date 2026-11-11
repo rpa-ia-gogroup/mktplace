@@ -155,6 +155,7 @@ export default function DreVertical({
                   {!l.origem && l.cobertura && (
                     <span className="mt-0.5 block text-xs text-ink-muted">{l.cobertura}</span>
                   )}
+                  {l.medido && <span className="mt-0.5 block text-xs text-ink-muted">{l.medido}</span>}
                   {l.componente.motivo && l.componente.status !== "disponivel" && (
                     <span className="mt-0.5 block text-xs text-ink-muted">{l.componente.motivo}</span>
                   )}

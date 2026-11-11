@@ -49,7 +49,7 @@ import type { CenarioPremissas, ResumoPremissas } from "./dre-estimada";
 export type Classificacao = "COMPLETA" | "PARCIAL" | "PREVIA" | "NAO_CALCULAVEL";
 
 /** T-0090 — de onde veio o valor do componente na DRE realizada. */
-export type OrigemComponente = "realizado" | "parcial" | "indisponivel" | "nao_aplicavel";
+export type OrigemComponente = "realizado" | "parcial" | "extrapolado" | "indisponivel" | "nao_aplicavel";
 
 export type StatusComponente =
   | "disponivel"
@@ -101,6 +101,11 @@ export interface Componente {
   origem?: OrigemComponente | null;
   entra_na_margem?: boolean | null;
   cobertura_rotulo?: string | null;
+  /**
+   * T-0090 (11/11), so' CMV: custo medido cru. Com `origem = extrapolado`,
+   * `valor` e' o estendido a' receita inteira e este e' o medido.
+   */
+  valor_medido?: number | null;
 }
 
 export interface Margem {
@@ -248,6 +253,7 @@ export const CLASSIFICACAO_CHIP: Record<Classificacao, { rotulo: string; tom: To
 export const ORIGEM_CHIP: Record<OrigemComponente, { rotulo: string; tom: Tom } | null> = {
   realizado: { rotulo: "Realizado", tom: "bom" },
   parcial: { rotulo: "Parcial", tom: "atencao" },
+  extrapolado: { rotulo: "Extrapolado", tom: "atencao" },
   indisponivel: { rotulo: "Indisponível", tom: "ausente" },
   nao_aplicavel: null,
 };
@@ -730,6 +736,8 @@ export interface LinhaDre {
   origem: { rotulo: string; tom: Tom } | null;
   /** T-0090 — rotulo de cobertura, exibido ao lado do selo de origem. */
   cobertura: string | null;
+  /** T-0090 — CMV extrapolado: "medido: R$ …" (o custo cru). `null` nos demais. */
+  medido: string | null;
   /** Selo de status ao lado do rotulo (so' com valor e se nao repete a origem). */
   mostrarStatus: boolean;
   /** Texto para `valor === null`: status + motivo. Nunca "R$ 0". */
@@ -764,6 +772,10 @@ export function linhasDre(c: CelulaDRE): LinhaDre[] {
       chip,
       origem,
       cobertura: coberturaRotulo(comp),
+      medido:
+        comp.origem === "extrapolado" && typeof comp.valor_medido === "number" && Number.isFinite(comp.valor_medido)
+          ? `medido: ${fmtReais(comp.valor_medido)}`
+          : null,
       mostrarStatus: comp.valor !== null && chip !== null && chip.rotulo !== origem?.rotulo,
       ausencia:
         comp.valor === null
@@ -1012,6 +1024,33 @@ export function textoMargem(c: CelulaDRE): string {
 export function textoMargemPct(c: CelulaDRE): string {
   if (semMargem(c)) return "Não calculável";
   return fmtPctDre(c.margem_contribuicao_conhecida.pct_receita) ?? "Não calculável";
+}
+
+export const ROTULO_MARGEM_ESTIMADA_PREVIA = "Margem de contribuição estimada";
+
+/**
+ * T-0090 (supervisor, delegada pelo Mario) — qual margem e' o DESTAQUE.
+ *
+ * Na PREVIA com cenario estimado (premissa publicada e margem estimada com
+ * numero), a ESTIMADA e' o numero principal: a conhecida, sem impostos,
+ * devolucoes e parte do CMV, vira detalhe secundario. Mes maduro
+ * (COMPLETA/PARCIAL) e PREVIA sem cenario: o destaque continua a conhecida.
+ */
+export type MargemPrincipal =
+  | { tipo: "conhecida" }
+  | { tipo: "estimada"; rotulo: string; valor: string; pct: string; secundaria: string };
+
+export function margemPrincipal(c: CelulaDRE): MargemPrincipal {
+  const cen = c.cenario_premissas;
+  const v = cen?.margem_contribuicao_estimada;
+  if (!ehPrevia(c) || !cen || typeof v !== "number" || !Number.isFinite(v)) return { tipo: "conhecida" };
+  return {
+    tipo: "estimada",
+    rotulo: ROTULO_MARGEM_ESTIMADA_PREVIA,
+    valor: fmtReais(v),
+    pct: fmtPctDre(cen.margem_contribuicao_estimada_pct) ?? "Sem %",
+    secundaria: `Conhecida: ${textoMargemPct(c)} (sem impostos, devoluções e parte do CMV)`,
+  };
 }
 
 /** Share como texto. Sem receita (do recorte ou total): diz por que. */

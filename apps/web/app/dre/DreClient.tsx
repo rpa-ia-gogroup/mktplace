@@ -63,6 +63,7 @@ import {
   classificarFalha,
   dreUrlQuery,
   fmtInstanteBrt,
+  margemPrincipal,
   parseDreFiltros,
   queryCanonica,
   rotuloPeriodo,
@@ -134,6 +135,9 @@ export default function DreClient() {
   const aviso = resp ? avisoFotografia(resp.fontes.insumos_dre, fmtInstanteBrt) : null;
   // T-0090: competencia imatura (PREVIA) ganha o selo ao lado da competencia.
   const seloPrevia = resp?.total ? textoPrevia(resp.total) : null;
+  // T-0090 (supervisor, 11/11): na PREVIA com cenario, a estimada e' o destaque.
+  const destaque = resp?.total ? margemPrincipal(resp.total) : null;
+  const estimadaEmDestaque = destaque?.tipo === "estimada" ? destaque : null;
   const bloqueadores = resp ? canaisBloqueadores(resp) : [];
   const vazio = resp ? selecaoVazia(resp) : false;
 
@@ -167,7 +171,9 @@ export default function DreClient() {
         subtitle={
           cenario === "estimada"
             ? "Margem de contribuição estimada com premissas."
-            : "Margem de contribuição conhecida por canal e marca."
+            : estimadaEmDestaque
+              ? "Prévia: margem de contribuição estimada com premissas em destaque; a conhecida fica como detalhe."
+              : "Margem de contribuição conhecida por canal e marca."
         }
         icon={Calculator}
         meta={
@@ -177,6 +183,11 @@ export default function DreClient() {
               {seloPrevia && (
                 <Chip tom="atencao" ponto>
                   {seloPrevia}
+                </Chip>
+              )}
+              {estimadaEmDestaque && (
+                <Chip tom="atencao">
+                  Margem estimada: {estimadaEmDestaque.valor} ({estimadaEmDestaque.pct})
                 </Chip>
               )}
               {atualizadoEm && (

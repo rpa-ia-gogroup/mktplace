@@ -422,4 +422,61 @@ test("seletor de competencia exibe MM/AAAA, inclusive a madura padrao", () => {
     assert.match(canais, /R\$\s?42\.000/);
     assert.doesNotMatch(canais, /Prévia/);
   });
+
+  // T-0090 (supervisor, 11/11): na PREVIA com cenario, a margem ESTIMADA e' o destaque.
+  const fe = await import("./dre-fixtures-estimada.ts");
+  const { margemPrincipal, ROTULO_MARGEM, ROTULO_MARGEM_ESTIMADA_PREVIA } = await import("../src/lib/dre.ts");
+  const cenario = fe.cenarioFx({ estado: "parcial", previa: true, receita: 100_000, margem: 18_000 });
+  const resumoDe = (c: typeof TOTAL_PREVIA) =>
+    texto(render(h(DreResumo, { total: c, competencia: "10/2026", bloqueadores: [] })));
+
+  test("T-0090: PREVIA com cenario estimado -> destaque = estimada; conhecida secundaria com o aviso", () => {
+    const c = { ...TOTAL_PREVIA, cenario_premissas: cenario };
+    const p = margemPrincipal(c);
+    assert.equal(p.tipo, "estimada");
+    const t = resumoDe(c);
+    assert.match(t, new RegExp(`${ROTULO_MARGEM_ESTIMADA_PREVIA}\\s*R\\$\\s?18\\.000`), "numero grande = estimada");
+    assert.match(t, /18,0%/);
+    assert.match(t, /Margem estimada ÷ receita/);
+    assert.match(t, /Conhecida: \d+,\d% \(sem impostos, devoluções e parte do CMV\)/);
+    assert.match(t, /Margem inclui CMV parcial \(NF cobre 25% do GMV\)\./, "o aviso da conhecida continua");
+    assert.doesNotMatch(t, new RegExp(ROTULO_MARGEM), "a conhecida nao e' o rotulo do destaque");
+  });
+
+  test("T-0090: COMPLETA (mes maduro) -> destaque = conhecida, mesmo com cenario", () => {
+    const c = { ...fx.ML, classificacao: "COMPLETA" as const, previa: false, cenario_premissas: cenario };
+    assert.equal(margemPrincipal(c).tipo, "conhecida");
+    const t = resumoDe(c as typeof TOTAL_PREVIA);
+    assert.match(t, new RegExp(`${ROTULO_MARGEM}\\s*R\\$\\s?42\\.000`));
+    assert.doesNotMatch(t, /Conhecida: |Margem estimada/);
+  });
+
+  test("T-0090: PREVIA sem cenario estimado -> destaque = conhecida, com o aviso", () => {
+    for (const cen of [null, undefined]) {
+      const c = { ...TOTAL_PREVIA, cenario_premissas: cen };
+      assert.equal(margemPrincipal(c).tipo, "conhecida");
+      const t = resumoDe(c);
+      assert.match(t, new RegExp(ROTULO_MARGEM));
+      assert.match(t, /Margem inclui CMV parcial/);
+      assert.doesNotMatch(t, /Conhecida: |Margem estimada/);
+    }
+  });
+
+  test("T-0090: CMV extrapolado na DRE realizada tem chip proprio e mostra o medido", () => {
+    const c = {
+      ...TOTAL_PREVIA,
+      componentes: {
+        ...TOTAL_PREVIA.componentes,
+        cmv: {
+          ...TOTAL_PREVIA.componentes.cmv,
+          origem: "extrapolado" as const,
+          valor_medido: 7_500,
+          cobertura_rotulo: "NF cobre 25% do GMV; extrapolado de 25,0% coberto",
+        },
+      },
+    };
+    const t = texto(vertical(c));
+    assert.match(t, /CMV Extrapolado NF cobre 25% do GMV; extrapolado de 25,0% coberto/);
+    assert.match(t, /medido: R\$\s?7\.500/);
+  });
 }
