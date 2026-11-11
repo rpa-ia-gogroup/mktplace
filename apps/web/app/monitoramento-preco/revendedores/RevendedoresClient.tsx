@@ -24,7 +24,7 @@ import TableScrollHint from "@/components/TableScrollHint";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
-import StatCard from "@/components/ui/StatCard";
+import KpiTile from "@/components/ui/KpiTile";
 import StateBlock from "@/components/ui/StateBlock";
 import {
   AVISO_FIXTURE,
@@ -422,38 +422,61 @@ function FaixaKpis({ resumo }: { resumo: ResumoOk }) {
   const cobertura = textoCobertura(cob);
   return (
     <section aria-label="Indicadores" className={classesGradeKpis(buyBox ? 6 : 5)}>
-      <StatCard rotulo="Anúncios monitorados" valor={fmtInt(k.anuncios)} icone={Tag} contexto={`${fmtInt(k.skus_monitorados)} SKUs`} />
-      <StatCard
+      <KpiTile
+        variante="gerencial"
+        identidade="pedidos"
+        icone={Tag}
+        rotulo="Anúncios monitorados"
+        valor={fmtInt(k.anuncios)}
+        comparacao={`${fmtInt(k.skus_monitorados)} SKUs`}
+      />
+      <KpiTile
+        variante="gerencial"
+        identidade="atendimento"
+        icone={AlertTriangle}
         rotulo="Violação do PMA"
         valor={fmtPct(k.pct_violacao)}
-        icone={AlertTriangle}
         tom={k.anuncios_violando > 0 ? "critico" : "neutro"}
-        contexto={`${fmtInt(k.anuncios_violando)} anúncios abaixo do PMA`}
+        comparacao={`${fmtInt(k.anuncios_violando)} anúncios abaixo do PMA`}
       />
-      <StatCard rotulo="Sellers violando" valor={fmtInt(k.sellers_violando)} icone={Store} />
-      <StatCard
+      <KpiTile variante="gerencial" identidade="ticket" icone={Store} rotulo="Sellers violando" valor={fmtInt(k.sellers_violando)} />
+      <KpiTile
+        variante="gerencial"
+        identidade="prazo"
+        icone={TrendingDown}
         rotulo="Desvio médio"
         valor={fmtDesvio(k.desvio_medio_pma)}
-        icone={TrendingDown}
         tom={k.desvio_medio_pma ? "atencao" : "neutro"}
-        contexto="entre os anúncios que violam"
+        comparacao="entre os anúncios que violam"
       />
       {buyBox && (
-        <StatCard
+        <KpiTile
+          variante="gerencial"
+          identidade="gmv"
+          icone={Trophy}
           rotulo="Buy box abaixo do PMA"
           valor={fmtInt(k.buy_box.violando_com_buy_box)}
-          icone={Trophy}
           tom={k.buy_box.violando_com_buy_box > 0 ? "critico" : "neutro"}
-          contexto={`de ${fmtInt(k.buy_box.anuncios_com_buy_box)} anúncios com buy box`}
+          comparacao={`de ${fmtInt(k.buy_box.anuncios_com_buy_box)} anúncios com buy box`}
         />
       )}
-      <StatCard
+      <KpiTile
+        variante="gerencial"
+        identidade="ads"
+        icone={UserCheck}
         rotulo="Sellers identificados"
         valor={fmtPct(cob.pct_sellers)}
-        icone={UserCheck}
-        contexto={cobertura.contexto}
-        nota={cobertura.nota}
         tom={cob.consistente ? "neutro" : "atencao"}
+        comparacao={
+          // A divergencia de fonte e' alerta e fica a' vista; a nota normal vai no ⓘ.
+          cob.consistente ? cobertura.contexto : (
+            <>
+              {cobertura.contexto}
+              <span className="mt-0.5 block">{cobertura.nota}</span>
+            </>
+          )
+        }
+        ajuda={cob.consistente && cobertura.nota ? <InfoDica texto={cobertura.nota} /> : undefined}
       />
     </section>
   );

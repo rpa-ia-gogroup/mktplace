@@ -287,7 +287,7 @@ test("buy box: sem anuncio com informacao de buy box o cartao NAO existe; com da
   // O cartao so' e' desenhado dentro do condicional.
   const i = CLIENT.indexOf("{buyBox && (");
   const j = CLIENT.indexOf('rotulo="Buy box abaixo do PMA"');
-  assert.ok(i > 0 && j > i && j - i < 120, "cartao de buy box fora do condicional");
+  assert.ok(i > 0 && j > i && j - i < 250, "cartao de buy box fora do condicional");
 });
 
 test("nenhum 'X de Y' da aba sai com denominador zero", () => {
@@ -318,7 +318,7 @@ test("grade dos KPIs sem buraco com 5 ou 6 cartoes", () => {
   assert.doesNotMatch(seis, /col-span/);
   const cinco = classesGradeKpis(5);
   assert.match(cinco, /xl:grid-cols-5/);
-  assert.match(cinco, /sm:\[&>\*:last-child\]:col-span-2/, "com 2 colunas o 5o cartao ocupa a linha");
+  assert.match(cinco, / \[&>\*:last-child\]:col-span-2/, "com 2 colunas o 5o cartao ocupa a linha");
   assert.match(cinco, /xl:\[&>\*:last-child\]:col-span-1/);
   assert.doesNotMatch(cinco, /2xl:grid-cols-6/);
   assert.match(CLIENT, /className=\{classesGradeKpis\(buyBox \? 6 : 5\)\}/);
