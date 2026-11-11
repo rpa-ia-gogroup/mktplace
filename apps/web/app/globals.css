@@ -773,3 +773,19 @@ table.tc-tabela-linhas {
 .tc-tabela-linhas tbody > tr.tc-linha-total > :is(td, th) {
   background-color: rgb(var(--tc-accent) / 0.1);
 }
+
+/* Cartao de vidro clicavel: foco por teclado VISIVEL e estado ativo (aria-pressed).
+   O anel (`focus-visible:ring-2`, `ring-2`) e' box-shadow, e a regra de vidro acima (fora de
+   @layer) sobrescreve toda box-shadow; e o `outline-none` do Tailwind deixa o contorno
+   transparente. Resultado medido: o foco do teclado era invisivel nos cartoes (WCAG 2.4.7) e o
+   estado "ativo" dos cartoes que filtram nao aparecia. `outline` nao e' sobrescrito pelo vidro
+   nem pelo hover (`.card-hover:hover` troca so' transform e box-shadow). */
+button.rounded-xl.border.bg-surface[aria-pressed="true"] {
+  outline: 2px solid rgb(var(--tc-accent));
+  outline-offset: 0;
+}
+button.rounded-xl.border.bg-surface:focus-visible,
+a.rounded-xl.border.bg-surface:focus-visible {
+  outline: 2px solid rgb(var(--tc-accent));
+  outline-offset: 2px;
+}

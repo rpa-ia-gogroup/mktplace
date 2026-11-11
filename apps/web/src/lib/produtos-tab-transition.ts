@@ -1,4 +1,4 @@
-import { fmtBrlFull } from "./formatters.ts";
+import { fmtBrlExato } from "./formatters.ts";
 
 export type ProdutosTab = "ml" | "tiktok" | "shopee";
 
@@ -57,7 +57,7 @@ export function zeroGmvNote(excluded: number | undefined): string {
  */
 export function avgPriceNote(avgPriceWeighted: number | null | undefined): string {
   if (avgPriceWeighted == null) return "";
-  return ` Preço médio do escopo (ponderado por unidade): ${fmtBrlFull(avgPriceWeighted)}.`;
+  return ` Preço médio do escopo (ponderado por unidade): ${fmtBrlExato(avgPriceWeighted)}.`;
 }
 
 /**

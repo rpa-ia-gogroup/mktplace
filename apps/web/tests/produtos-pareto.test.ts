@@ -41,3 +41,31 @@ test("ausencia nunca vira venda zero; esqueleto no formato do cartao; piso de 12
   assert.ok(!SRC.includes("text-[11px]"), "piso tipografico de 12px");
   assert.ok(!SRC.includes("animate-pulse") && !SRC.includes("bg-slate"), "sem esqueleto/paleta legados");
 });
+
+test("regra de produto: o PERCENTUAL abre o cartao e o R$ vem depois", () => {
+  assert.ok(SRC.includes("valor={fmtPctSimples(b.gmv_pct)}"));
+  assert.ok(SRC.includes("comparacao={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}"));
+  assert.ok(!SRC.includes("valor={fmtBrlCurto(b.gmv)}"));
+});
+
+test("estado ativo e foco por teclado: outline (o vidro e o hover sobrescrevem box-shadow, entao o anel sumia)", () => {
+  const css = ler("app/globals.css");
+  assert.ok(css.includes('button.rounded-xl.border.bg-surface[aria-pressed="true"] {\n  outline: 2px solid rgb(var(--tc-accent));'));
+  assert.ok(css.includes("button.rounded-xl.border.bg-surface:focus-visible,\na.rounded-xl.border.bg-surface:focus-visible {\n  outline: 2px solid rgb(var(--tc-accent));\n  outline-offset: 2px;"));
+  // as regras ficam FORA de @layer, como a regra de vidro que elas precisam vencer
+  const fim = css.slice(css.indexOf('button.rounded-xl.border.bg-surface[aria-pressed="true"]'));
+  assert.ok(!fim.includes("@layer"));
+  // o hover so' troca transform e box-shadow (nao toca no outline)
+  const hover = css.slice(css.indexOf(".card-hover:hover {"), css.indexOf(".card-hover:active"));
+  assert.ok(!/outline/.test(hover));
+});
+
+test("preco medio da linha de escopo com 2 casas ('R$ 98,40', nao 'R$ 98,4')", async () => {
+  const { fmtBrlExato, fmtBrlFull } = await import("../src/lib/formatters.ts");
+  assert.equal(fmtBrlExato(98.4).replace(/\s/g, " "), "R$ 98,40");
+  assert.equal(fmtBrlExato(1234.5).replace(/\s/g, " "), "R$ 1.234,50");
+  assert.equal(fmtBrlFull(98.4).replace(/\s/g, " "), "R$ 98,4", "fmtBrlFull global segue como esta'");
+  const { avgPriceNote } = await import("../src/lib/produtos-tab-transition.ts");
+  assert.match(avgPriceNote(98.4).replace(/\s/g, " "), /R\$ 98,40\./);
+  assert.ok(ler("app/produtos/page.tsx").includes("`Preço médio ${fmtBrlExato(avg)}`"));
+});

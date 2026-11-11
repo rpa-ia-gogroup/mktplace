@@ -41,7 +41,8 @@ const GRADE = "grid grid-cols-2 sm:grid-cols-4 gap-3";
  * alternar (`aria-pressed`, anel quando ativo) e NAO abre dialogo. Os percentuais
  * reais podem variar em torno de 50/30/15/5 por causa do produto que cruza a
  * fronteira — isso e esperado, nao um bug. Sem periodo anterior nem serie: sem
- * pilula e sem grafico.
+ * pilula e sem grafico. O PERCENTUAL abre o cartao e o R$ vem depois (regra de produto:
+ * % antes do absoluto).
  */
 function ScopeLine({ scopeNote, dica, className }: { scopeNote?: string; dica?: string; className: string }) {
   if (!scopeNote && !dica) return null;
@@ -84,8 +85,8 @@ export default function ProductParetoSummary({ buckets, loading, activeBucket, o
             icone={ICONE_DA_CURVA[b.bucket] ?? Layers}
             rotulo={`Curva ${b.label}`}
             ajuda={<InfoDica emControle texto={b.description} />}
-            valor={fmtBrlCurto(b.gmv)}
-            comparacao={`${fmtPctSimples(b.gmv_pct)} do GMV · ${b.count} produtos`}
+            valor={fmtPctSimples(b.gmv_pct)}
+            comparacao={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}
             ativo={activeBucket === b.bucket}
             acaoFalada="filtrar a tabela"
             onAbrir={() => onSelectBucket(toggleBucketSelection(activeBucket, b.bucket))}
