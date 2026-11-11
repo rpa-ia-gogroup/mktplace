@@ -173,6 +173,21 @@ test("PREVIA: classificacao_fonte e fecha_em espelham a API (celula e total)", (
   assert.match(lim.description, /2026-12-31/);
 });
 
+test("margem_principal segue a tela (margemPrincipal): estimada na PREVIA com cenario numerico", () => {
+  const [tk, ml, sh] = proj(T0090()).data.celulas;
+  assert.equal(tk.margem_principal, "estimada");
+  assert.equal(ml.margem_principal, "conhecida", "mes maduro: conhecida");
+  assert.equal(sh.margem_principal, "conhecida");
+  // PREVIA sem cenario, ou com margem estimada nula: conhecida.
+  const semCenario = proj(resposta([celulaPrevia({ cenario_premissas: null })])).data.celulas[0];
+  assert.equal(semCenario.margem_principal, "conhecida");
+  const nula = proj(resposta([celulaPrevia({ cenario_premissas: cenario({ margem_contribuicao_estimada: null }) })])).data.celulas[0];
+  assert.equal(nula.margem_principal, "conhecida");
+  // `previa: true` sem classificacao PREVIA tambem conta (ehPrevia).
+  const flag = proj(resposta([celulaPrevia({ classificacao: "PARCIAL", previa: true })])).data.celulas[0];
+  assert.equal(flag.margem_principal, "estimada");
+});
+
 test("linha parcial mantem o valor da API com cobertura_rotulo, origem e entra_na_margem", () => {
   const tk = proj(T0090()).data.celulas[0];
   assert.equal(tk.taxas.status, "PARCIAL");

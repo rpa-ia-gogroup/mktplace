@@ -149,6 +149,8 @@ const celula = z.object({
   classificacao: z.enum(DRE_CLASSIFICACOES),
   /** T-0090 — data em que a previa fecha; ausente em API anterior. */
   fecha_em: optStr,
+  /** T-0090 — `true` quando PREVIA; ausente em API anterior. */
+  previa: z.boolean().nullish(),
   motivos_classificacao: z.array(z.string()),
   avisos_qualidade: z.array(z.string()),
   componentes: z.object(Object.fromEntries(NOMES.map((n) => [n, componente])) as Record<Nome, typeof componente>),
@@ -258,6 +260,12 @@ const celulaOut = z.object({
   resultado: linha,
   margem_pct: z.number().nullable(),
   componentes_faltando: z.array(z.string()),
+  /**
+   * T-0090 — qual margem e' o DESTAQUE, mesma regra da tela (`margemPrincipal`
+   * em `src/lib/dre.ts`): `estimada` na PREVIA com cenario e margem estimada
+   * numerica (cenario_premissas.margem_estimada); senao `conhecida` (resultado).
+   */
+  margem_principal: z.enum(["conhecida", "estimada"]),
   /** T-0090 — composicao da margem conhecida como a API a montou. */
   margem_conhecida: z.object({
     componentes_usados: z.array(z.string()),
@@ -485,6 +493,12 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
     resultado,
     margem_pct: COM_VALOR.includes(resultado.status) ? numOrNull(m.pct_receita) : null,
     componentes_faltando: m.faltam,
+    // Mesma regra de `margemPrincipal` (src/lib/dre.ts): previa = classificacao
+    // PREVIA ou `previa` da API; estimada so' com numero finito no cenario.
+    margem_principal:
+      (c.classificacao === "PREVIA" || c.previa === true) && cp && numOrNull(cp.margem_contribuicao_estimada) !== null
+        ? "estimada"
+        : "conhecida",
     margem_conhecida: {
       componentes_usados: m.componentes_usados,
       componentes_parciais: parciaisApi,
