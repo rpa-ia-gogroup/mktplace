@@ -1,5 +1,6 @@
 "use client";
 
+import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
@@ -7,7 +8,9 @@ import { fmtBrl, fmtNumber } from "@/lib/formatters";
 import { brandLabel } from "@/lib/inteligencia/brands";
 import { fractionAsPctBr, pctBr, roasBr } from "@/lib/inteligencia/format";
 import { LENS_LABELS, type Lens } from "@/lib/inteligencia/lens";
-import { KIND_LABELS, LENS_COLUMNS, type EvidenceItem } from "@/lib/inteligencia/queue";
+import {
+  KIND_LABELS, LENS_COLUMNS, ROAS_SEM_VENDA_TITLE, roasSemVendaNaFotografia, roasSemVendaNote, type EvidenceItem,
+} from "@/lib/inteligencia/queue";
 
 /** `null` vira "—" com título explicativo; zero continua zero. */
 function n(v: number | null | undefined, fmt: (x: number) => string): string {
@@ -143,6 +146,13 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
       case "ad_spend":
         return <span className="text-sm font-semibold text-rose-700 tabular-nums">{n(row.ad_spend, fmtBrl)}</span>;
       case "ad_roas":
+        if (roasSemVendaNaFotografia(row)) {
+          return (
+            <span className="text-sm font-semibold text-warn-ink tabular-nums" title={ROAS_SEM_VENDA_TITLE}>
+              {roasBr(row.ad_roas as number)}*
+            </span>
+          );
+        }
         return (
           <span className="text-sm font-semibold text-slate-800 tabular-nums" title={row.ad_roas == null ? "sem dado" : undefined}>
             {row.ad_roas == null ? "—" : roasBr(row.ad_roas)}
@@ -176,8 +186,17 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
     );
   }
 
+  // C1-01: a coluna ROAS só existe no desktop; o aviso vale para as duas vistas
+  // porque o diálogo de detalhe também mostra o ROAS.
+  const avisoRoas = roasSemVendaNote(rows);
+
   return (
     <>
+      {avisoRoas && (
+        <div className="px-4 sm:px-6 pb-3">
+          <DataQualityNote note={avisoRoas} />
+        </div>
+      )}
       {/* Desktop e tablet: uma tabela densa, cabeçalho sticky DENTRO do card */}
       <div className="hidden sm:block">
         <TableScrollHint>

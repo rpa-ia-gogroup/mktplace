@@ -46,7 +46,7 @@ import {
 } from "@/lib/inteligencia/lens";
 import {
   buildQueue, KIND_LABELS, KIND_RULES, lensSampleNote, listSampleNote, queueForLens,
-  sampleNote, sortForLens, tkSampleNote, type EvidenceItem,
+  ROAS_SEM_VENDA_TITLE, roasSemVendaNaFotografia, sampleNote, sortForLens, tkSampleNote, type EvidenceItem,
 } from "@/lib/inteligencia/queue";
 import { buildPriorities, priorityLimit, receivedByKind, type Priority } from "@/lib/inteligencia/priorities";
 import {
@@ -1049,6 +1049,7 @@ function InteligenciaPageInner() {
                   <Medida label="ACOS" v={it.ad_acos_pct} fmt={pctBr} />
                   <Medida label="Dias com ads" v={it.days_advertised} fmt={contagemExata} />
                 </ul>
+                {roasSemVendaNaFotografia(it) && <DataQualityNote note={ROAS_SEM_VENDA_TITLE} />}
               </DrilldownSecao>
               <DrilldownCta
                 // Mapeamento EXATO lente -> foco: as tres lentes SAO as tres
