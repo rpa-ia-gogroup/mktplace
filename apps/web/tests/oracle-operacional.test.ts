@@ -1014,8 +1014,12 @@ test("torre_dre: PREVIA (mes imaturo com valores) e campos novos sao aceitos; fe
   assert.equal(tk.fecha_em, "2026-12-31");
   assert.equal(ml.fecha_em, "2026-12-31");
   assert.equal(env.data.total.classificacao_fonte, "PREVIA");
-  // O conector continua conservador: componente com status nao-disponivel segue nulo, nunca 0.
-  assert.equal(tk.cmv.valor, null);
+  // T-0092: com `origem` parcial da API, o valor da fonte e' exposto como PARCIAL (antes: nulo).
+  assert.equal(tk.cmv.status, "PARCIAL");
+  assert.equal(typeof tk.cmv.valor, "number");
+  // Origem "parcial" sem numero na fonte continua nula, nunca 0.
+  assert.equal(tk.devolucoes.valor, null);
+  assert.equal(tk.devolucoes.status, "NAO_CALCULAVEL");
 
   // Resposta antiga: sem fecha_em -> null; classificacao desconhecida continua falhando fechado.
   const antiga = await call(await connectDre(DRE_REAL_2026_10), "torre_dre", { ref_month: "2026-10" });
