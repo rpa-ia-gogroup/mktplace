@@ -210,6 +210,7 @@ bearer nunca repassado ao FastAPI.
 A Action **soma** uma forma de conceder `oracle:read`. Ela não afrouxa nenhuma
 dessas verificações, e não tem como fazê-lo: `api.accessToken.addScope` só
 acrescenta scope, e o único scope no arquivo é `oracle:read`.
+T-0100: o MCP aceita `oracle:read` no scope **ou** o claim `https://mktplace-ten.vercel.app/oracle_access` = `"corporate"` (Action v4) em token de usuário; token M2M (`gty` client-credentials ou `sub` `…@clients`) nunca passa pelo claim.
 
 ## 8. Migração para mktplace-ten (11/11/2026)
 
