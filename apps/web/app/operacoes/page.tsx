@@ -28,6 +28,8 @@ import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table"
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
+import { corDaSerie, temaDoGrafico } from "@/lib/chart-theme";
+import { useTema } from "@/components/theme/ThemeProvider";
 
 const BRAND_LABELS: Record<string, string> = {
   apice: "ÁPICE",
@@ -39,21 +41,16 @@ const BRAND_LABELS: Record<string, string> = {
 
 const ML_BRANDS = ["barbours", "kokeshi", "lescent"];
 const ALL_BRANDS = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
+// Posicao na paleta de series do tema (`chart-theme`): mantem Barbours violeta e
+// Kokeshi ciano, como eram, e deixa o cinza da paleta para a ultima marca.
+const SERIE_DA_MARCA: Record<string, number> = { barbours: 0, apice: 1, lescent: 3, kokeshi: 4, rituaria: 2 };
 
-// Brand colors for the trend chart
-const BRAND_COLORS: Record<string, string> = {
-  barbours: "#7c3aed",
-  kokeshi: "#06b6d4",
-  apice: "#f59e0b",
-  lescent: "#ec4899",
-  rituaria: "#10b981",
-};
 
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="px-6 py-4 border-b border-violet-50">
-      <h2 className="text-sm font-semibold text-slate-700">{title}</h2>
-      {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
+    <div className="px-6 py-4 border-b border-line">
+      <h2 className="text-sm font-semibold text-ink">{title}</h2>
+      {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
     </div>
   );
 }
@@ -69,7 +66,7 @@ function TableWrap({ children }: { children: React.ReactNode }) {
 function Th({ children, right }: { children: React.ReactNode; right?: boolean }) {
   return (
     <th
-      className={`px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${
+      className={`px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider ${
         right ? "text-right" : "text-left"
       }`}
     >
@@ -79,13 +76,13 @@ function Th({ children, right }: { children: React.ReactNode; right?: boolean })
 }
 
 function GpmBadge({ v }: { v: number | null }) {
-  if (v == null) return <span className="text-slate-300">—</span>;
+  if (v == null) return <span className="text-ink-faint">—</span>;
   const cls =
     v >= 20
-      ? "bg-emerald-100 text-emerald-800"
+      ? "bg-ok-soft text-ok-ink"
       : v >= 10
-      ? "bg-amber-100 text-amber-800"
-      : "bg-rose-100 text-rose-700";
+      ? "bg-warn-soft text-warn-ink"
+      : "bg-crit-soft text-crit-ink";
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
       {fmtBrlCurto(v)}
@@ -94,13 +91,13 @@ function GpmBadge({ v }: { v: number | null }) {
 }
 
 function PctLiveColor({ v }: { v: number | null }) {
-  if (v == null) return <span className="text-slate-400">—</span>;
+  if (v == null) return <span className="text-ink-faint">—</span>;
   const cls =
     v >= 15
-      ? "text-emerald-700 font-semibold"
+      ? "text-ok-ink font-semibold"
       : v >= 5
-      ? "text-amber-700 font-semibold"
-      : "text-rose-600 font-semibold";
+      ? "text-warn-ink font-semibold"
+      : "text-crit font-semibold";
   return <span className={`tabular-nums ${cls}`}>{fmtPctSimples(v)}</span>;
 }
 
@@ -126,6 +123,7 @@ function formatDateLabel(iso: string): string {
 
 export default function OperacoesPage() {
   const [data, setData] = useState<OperacoesData | null>(null);
+  const tema = temaDoGrafico(useTema().resolvido);
   const [isLive, setIsLive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -294,7 +292,7 @@ export default function OperacoesPage() {
             {dataIsFresh ? (
               <LiveStatusBadge live={displayIsLive} />
             ) : isLoadingState ? (
-              <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
+              <span className="text-xs text-ink-muted bg-raised border border-line rounded-lg px-3 py-1.5 font-medium">
                 Atualizando dados...
               </span>
             ) : null}
@@ -328,11 +326,11 @@ export default function OperacoesPage() {
       <>
         {/* Navegacao interna compacta */}
         <nav aria-label="Navegação interna da página" className="flex flex-wrap gap-1 -mx-2.5">
-          <a href="#alertas" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Alertas</a>
-          <a href="#top-criadores" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Top Criadores</a>
-          <a href="#lives" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Performance de Lives</a>
-          <a href="#velocidade-ml" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Velocidade ML</a>
-          <a href="#trend-tiktok" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Trend TikTok</a>
+          <a href="#alertas" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Alertas</a>
+          <a href="#top-criadores" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Top Criadores</a>
+          <a href="#lives" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Performance de Lives</a>
+          <a href="#velocidade-ml" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Velocidade ML</a>
+          <a href="#trend-tiktok" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Trend TikTok</a>
         </nav>
 
         {/* Seção 1 — Alertas Ativos */}
@@ -341,13 +339,13 @@ export default function OperacoesPage() {
           className={`scroll-mt-24 transition-opacity duration-200 ${isLoadingState ? "opacity-50 pointer-events-none" : ""}`}
           aria-busy={isLoadingState}
         >
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+          <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-widest mb-3">
             Alertas Ativos — Últimos 7 dias
           </h2>
 
           {alertas.length === 0 && dataIsFresh ? (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
-              <p className="text-sm font-semibold text-emerald-800">
+            <div className="bg-ok-soft border border-ok/30 rounded-2xl p-5">
+              <p className="text-sm font-semibold text-ok-ink">
                 Nenhum alerta ativo esta semana.
               </p>
             </div>
@@ -356,26 +354,26 @@ export default function OperacoesPage() {
               {criticos.map((a, i) => (
                 <div
                   key={i}
-                  className="bg-rose-50 border border-rose-200 rounded-2xl px-5 py-4 flex items-start justify-between gap-4"
+                  className="bg-crit-soft border border-crit/30 rounded-2xl px-5 py-4 flex items-start justify-between gap-4"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-rose-500 shrink-0" />
+                    <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-crit shrink-0" />
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">
+                        <span className="text-[10px] font-bold text-crit-ink uppercase tracking-wider">
                           Crítico
                         </span>
-                        <span className="text-[10px] font-semibold text-rose-500 bg-rose-100 border border-rose-200 rounded px-1.5 py-0.5">
+                        <span className="text-[10px] font-semibold text-crit bg-crit-soft border border-crit/30 rounded px-1.5 py-0.5">
                           {BRAND_LABELS[a.brand] ?? a.brand}
                         </span>
                       </div>
-                      <p className="text-sm text-rose-900">{a.mensagem}</p>
+                      <p className="text-sm text-crit-ink">{a.mensagem}</p>
                     </div>
                   </div>
                   {a.ad_spend != null && (
                     <div className="text-right shrink-0">
-                      <p className="text-xs text-rose-500 font-medium">Ad Spend</p>
-                      <p className="text-sm font-bold text-rose-800 tabular-nums">
+                      <p className="text-xs text-crit font-medium">Ad Spend</p>
+                      <p className="text-sm font-bold text-crit-ink tabular-nums">
                         {fmtBrlCurto(a.ad_spend)}
                       </p>
                     </div>
@@ -385,26 +383,26 @@ export default function OperacoesPage() {
               {atencoes.map((a, i) => (
                 <div
                   key={i}
-                  className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4 flex items-start justify-between gap-4"
+                  className="bg-warn-soft border border-warn/30 rounded-2xl px-5 py-4 flex items-start justify-between gap-4"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                    <span className="mt-0.5 inline-block w-2 h-2 rounded-full bg-warn shrink-0" />
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">
+                        <span className="text-[10px] font-bold text-warn-ink uppercase tracking-wider">
                           Atenção
                         </span>
-                        <span className="text-[10px] font-semibold text-amber-600 bg-amber-100 border border-amber-200 rounded px-1.5 py-0.5">
+                        <span className="text-[10px] font-semibold text-warn bg-warn-soft border border-warn/30 rounded px-1.5 py-0.5">
                           {BRAND_LABELS[a.brand] ?? a.brand}
                         </span>
                       </div>
-                      <p className="text-sm text-amber-900">{a.mensagem}</p>
+                      <p className="text-sm text-warn-ink">{a.mensagem}</p>
                     </div>
                   </div>
                   {a.roas != null && (
                     <div className="text-right shrink-0">
-                      <p className="text-xs text-amber-500 font-medium">ROAS</p>
-                      <p className="text-sm font-bold text-amber-800 tabular-nums">
+                      <p className="text-xs text-warn font-medium">ROAS</p>
+                      <p className="text-sm font-bold text-warn-ink tabular-nums">
                         {fmtVezes(a.roas)}
                       </p>
                     </div>
@@ -418,7 +416,7 @@ export default function OperacoesPage() {
         {/* Seção 2 — Top Criadores */}
         <div
           id="top-criadores"
-          className={`scroll-mt-24 bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
+          className={`scroll-mt-24 bg-surface border border-line rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
             isLoadingState ? "opacity-50 pointer-events-none" : ""
           }`}
           aria-busy={isLoadingState}
@@ -431,10 +429,10 @@ export default function OperacoesPage() {
               <button
                 key={b}
                 onClick={() => setCreatorBrand(b)}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   creatorBrand === b
-                    ? "bg-violet-600 text-white border-violet-600"
-                    : "bg-white text-slate-600 border-violet-100 hover:border-violet-300"
+                    ? "bg-accent text-accent-on border-accent"
+                    : "bg-surface text-ink-muted border-line hover:border-accent/40"
                 }`}
               >
                 {b === "all" ? "Todos" : BRAND_LABELS[b]}
@@ -444,7 +442,7 @@ export default function OperacoesPage() {
 
           <TableWrap>
             <thead>
-              <tr className="bg-slate-50 text-left">
+              <tr className="bg-raised text-left">
                 <Th>#</Th>
                 <Th>Marca</Th>
                 <SortableHeader
@@ -498,41 +496,41 @@ export default function OperacoesPage() {
                 />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-line">
               {creatorsSort.sortedRows.map((r, i) => (
-                <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-xs font-bold text-slate-400 tabular-nums w-8">
+                <tr key={i} className="hover:bg-raised transition-colors">
+                  <td className="px-4 py-3 text-xs font-bold text-ink-faint tabular-nums w-8">
                     {i + 1}
                   </td>
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">
+                  <td className="px-4 py-3 text-xs font-semibold text-ink whitespace-nowrap">
                     {BRAND_LABELS[r.brand] ?? r.brand}
                   </td>
-                  <td className="px-4 py-3 text-slate-700 max-w-[180px] truncate" title={r.creator}>
+                  <td className="px-4 py-3 text-ink max-w-[180px] truncate" title={r.creator}>
                     {r.creator}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink font-semibold text-sm">
                     {fmtBrlCurto(r.gmv)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-slate-300">—</span>}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                    {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-slate-300">—</span>}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                    {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-slate-300">—</span>}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                    {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.videos > 0 ? r.videos : <span className="text-slate-300">—</span>}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                    {r.videos > 0 ? r.videos : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.lives > 0 ? r.lives : <span className="text-slate-300">—</span>}
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                    {r.lives > 0 ? r.lives : <span className="text-ink-faint">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {r.videos > 0 ? (
                       <GpmBadge v={r.gpm_video} />
                     ) : (
-                      <span className="text-slate-300 text-sm">—</span>
+                      <span className="text-ink-faint text-sm">—</span>
                     )}
                   </td>
                 </tr>
@@ -541,7 +539,7 @@ export default function OperacoesPage() {
                 <tr>
                   <td
                     colSpan={10}
-                    className="px-6 py-8 text-center text-slate-400 text-sm"
+                    className="px-6 py-8 text-center text-ink-faint text-sm"
                   >
                     Nenhum criador encontrado para o filtro selecionado.
                   </td>
@@ -549,16 +547,16 @@ export default function OperacoesPage() {
               )}
             </tbody>
           </TableWrap>
-          <div className="px-6 py-3 border-t border-slate-50 flex items-center gap-6 flex-wrap">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">GPM:</span>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> &gt;= R$20
+          <div className="px-6 py-3 border-t border-line flex items-center gap-6 flex-wrap">
+            <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest">GPM:</span>
+            <span className="flex items-center gap-1.5 text-xs text-ok-ink">
+              <span className="w-2 h-2 rounded-full bg-ok inline-block" /> &gt;= R$20
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-amber-700">
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> R$10–20
+            <span className="flex items-center gap-1.5 text-xs text-warn-ink">
+              <span className="w-2 h-2 rounded-full bg-warn inline-block" /> R$10–20
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-rose-600">
-              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> &lt; R$10
+            <span className="flex items-center gap-1.5 text-xs text-crit">
+              <span className="w-2 h-2 rounded-full bg-crit inline-block" /> &lt; R$10
             </span>
           </div>
         </div>
@@ -566,7 +564,7 @@ export default function OperacoesPage() {
         {/* Seção 3 — Performance de Lives */}
         <div
           id="lives"
-          className={`scroll-mt-24 bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
+          className={`scroll-mt-24 bg-surface border border-line rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
             isLoadingState ? "opacity-50 pointer-events-none" : ""
           }`}
           aria-busy={isLoadingState}
@@ -574,7 +572,7 @@ export default function OperacoesPage() {
           <SectionHeader title="Performance de Lives — Últimos 30 dias" />
           <TableWrap>
             <thead>
-              <tr className="bg-slate-50 text-left">
+              <tr className="bg-raised text-left">
                 <SortableHeader
                   label="Marca"
                   column="brand"
@@ -620,28 +618,28 @@ export default function OperacoesPage() {
                 />
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-line">
               {livesSort.sortedRows.map((r) => (
-                <tr key={r.brand} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">
+                <tr key={r.brand} className="hover:bg-raised transition-colors">
+                  <td className="px-4 py-3 text-xs font-semibold text-ink whitespace-nowrap">
                     {BRAND_LABELS[r.brand] ?? r.brand}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
                     {r.total_lives}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
                     {(r.total_minutes / 60).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink font-semibold text-sm">
                     {fmtBrlCurto(r.live_gmv)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <PctLiveColor v={r.pct_live} />
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
                     {r.gmv_per_live != null ? fmtBrlCurto(r.gmv_per_live) : "—"}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
+                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
                     {r.gmv_per_minute != null
                       ? fmtBrlCurto(r.gmv_per_minute)
                       : "—"}
@@ -652,7 +650,7 @@ export default function OperacoesPage() {
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-6 py-8 text-center text-slate-400 text-sm"
+                    className="px-6 py-8 text-center text-ink-faint text-sm"
                   >
                     Nenhuma marca realizou lives nos últimos 30 dias.
                   </td>
@@ -660,16 +658,16 @@ export default function OperacoesPage() {
               )}
             </tbody>
           </TableWrap>
-          <div className="px-6 py-3 border-t border-slate-50 flex items-center gap-6 flex-wrap">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">% GMV via Live:</span>
-            <span className="flex items-center gap-1.5 text-xs text-emerald-700">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> &gt;= 15%
+          <div className="px-6 py-3 border-t border-line flex items-center gap-6 flex-wrap">
+            <span className="text-[10px] font-semibold text-ink-faint uppercase tracking-widest">% GMV via Live:</span>
+            <span className="flex items-center gap-1.5 text-xs text-ok-ink">
+              <span className="w-2 h-2 rounded-full bg-ok inline-block" /> &gt;= 15%
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-amber-700">
-              <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> 5–15%
+            <span className="flex items-center gap-1.5 text-xs text-warn-ink">
+              <span className="w-2 h-2 rounded-full bg-warn inline-block" /> 5–15%
             </span>
-            <span className="flex items-center gap-1.5 text-xs text-rose-600">
-              <span className="w-2 h-2 rounded-full bg-rose-400 inline-block" /> &lt; 5%
+            <span className="flex items-center gap-1.5 text-xs text-crit">
+              <span className="w-2 h-2 rounded-full bg-crit inline-block" /> &lt; 5%
             </span>
           </div>
         </div>
@@ -680,7 +678,7 @@ export default function OperacoesPage() {
           className={`scroll-mt-24 transition-opacity duration-200 ${isLoadingState ? "opacity-50 pointer-events-none" : ""}`}
           aria-busy={isLoadingState}
         >
-          <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
+          <h2 className="text-xs font-semibold text-ink-muted uppercase tracking-widest mb-3">
             Velocidade ML — Últimos 7 dias
           </h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -698,7 +696,7 @@ export default function OperacoesPage() {
         {/* Seção 5 — Trend TikTok */}
         <div
           id="trend-tiktok"
-          className={`scroll-mt-24 bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
+          className={`scroll-mt-24 bg-surface border border-line rounded-2xl shadow-sm overflow-hidden transition-opacity duration-200 ${
             isLoadingState ? "opacity-50 pointer-events-none" : ""
           }`}
           aria-busy={isLoadingState}
@@ -713,13 +711,13 @@ export default function OperacoesPage() {
                 <ComposedChart data={chartData} margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
                   <XAxis
                     dataKey="date"
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: tema.eixo }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     tickFormatter={(v) => fmtBrlCurto(v as number)}
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 11, fill: tema.eixo }}
                     axisLine={false}
                     tickLine={false}
                     width={72}
@@ -730,12 +728,13 @@ export default function OperacoesPage() {
                       BRAND_LABELS[name] ?? name,
                     ]}
                     contentStyle={{
-                      border: "1px solid #ede9fe",
+                      background: tema.tooltipFundo,
+                      border: `1px solid ${tema.tooltipBorda}`,
                       borderRadius: "12px",
                       fontSize: "12px",
                       boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                     }}
-                    labelStyle={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}
+                    labelStyle={{ fontWeight: 600, color: tema.tooltipTinta, marginBottom: 4 }}
                   />
                   <Legend
                     formatter={(value) => BRAND_LABELS[value] ?? value}
@@ -746,7 +745,7 @@ export default function OperacoesPage() {
                       key={brand}
                       type="monotone"
                       dataKey={brand}
-                      stroke={BRAND_COLORS[brand]}
+                      stroke={corDaSerie(tema, SERIE_DA_MARCA[brand] ?? 0)}
                       strokeWidth={2}
                       dot={false}
                       activeDot={{ r: 4 }}
@@ -756,7 +755,7 @@ export default function OperacoesPage() {
               </ResponsiveContainer>
             ) : (
               dataIsFresh && (
-                <p className="text-sm text-slate-400 text-center py-10">
+                <p className="text-sm text-ink-faint text-center py-10">
                   Sem dados TikTok nos últimos 14 dias.
                 </p>
               )

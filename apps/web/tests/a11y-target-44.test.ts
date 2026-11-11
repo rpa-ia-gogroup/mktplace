@@ -94,7 +94,7 @@ test("A2: nenhum glifo do SortableHeader renderiza abaixo de 12px", () => {
     assert.ok(px >= 12, `tamanho arbitrário abaixo do piso: ${px}px`);
   }
   // os dois ramos do ícone (inativo e ativo) precisam do tamanho explícito
-  const ramos = [...s.matchAll(/className="text-(?:slate-300|violet-600) (text-\w+) leading-none"/g)].map((m) => m[1]);
+  const ramos = [...s.matchAll(/className="text-(?:ink-faint|accent) (text-\w+) leading-none"/g)].map((m) => m[1]);
   assert.equal(ramos.length, 2, "esperava dois ramos de SortIcon, achei " + ramos.length);
   for (const c of ramos) assert.equal(c, "text-xs", "o glifo deve declarar text-xs (12px)");
 });
@@ -108,8 +108,8 @@ test("A2: o tamanho do glifo é explícito, não herdado — /pedidos rebaixa o 
     "premissa do teste mudou: /pedidos não sobrescreve mais o tamanho do <th>",
   );
   const s = src(SORTABLE);
-  assert.match(s, /text-slate-300 text-xs leading-none/, "glifo inativo com tamanho próprio");
-  assert.match(s, /text-violet-600 text-xs leading-none/, "glifo ativo com tamanho próprio");
+  assert.match(s, /text-ink-faint text-xs leading-none/, "glifo inativo com tamanho próprio");
+  assert.match(s, /text-accent text-xs leading-none/, "glifo ativo com tamanho próprio");
 });
 
 test("A4: o botão do cabeçalho ordenável declara 44px de altura", () => {
@@ -119,7 +119,7 @@ test("A4: o botão do cabeçalho ordenável declara 44px de altura", () => {
   assert.match(bloco, MIN_44, "o botão do cabeçalho precisa de min-h-11 (44px)");
   assert.match(bloco, /w-full h-full/, "a célula inteira continua clicável");
   assert.match(bloco, /px-4 py-3/, "padding original preservado");
-  assert.match(bloco, /focus-visible:ring-violet-500/, "foco visível preservado");
+  assert.match(bloco, /focus-visible:ring-accent/, "foco visível preservado");
 });
 
 test("A4: a API pública e a semântica do SortableHeader estão intactas", () => {
