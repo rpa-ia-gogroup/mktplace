@@ -22,12 +22,15 @@
  * "por que travou"; os vencidos ganham o atraso; as listas de prazo mostram a
  * data do prazo em vez da situacao, que e' a mesma em todas as linhas.
  */
-import { Download } from "lucide-react";
+import { Download, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import DataQualityNote from "@/components/drilldown/DataQualityNote";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import Segmented from "@/components/ui/Segmented";
 import {
@@ -156,11 +159,16 @@ export default function TravadosDialog({
   canal,
   alvo,
   aoFechar,
+  icone,
+  identidade,
 }: {
   api: string;
   canal: Canal;
   alvo: AlvoTravados | null;
   aoFechar: () => void;
+  /** Ladrilho e cor do cartao que abriu o detalhe (IDENTIDADE-GERENCIAL). */
+  icone?: LucideIcon;
+  identidade?: IdentidadeKpi;
 }) {
   const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
   const [tentativa, setTentativa] = useState(0);
@@ -306,7 +314,7 @@ export default function TravadosDialog({
     .join(" ");
 
   return (
-    <KpiDrilldownDialog open={alvo !== null} onClose={aoFechar} title={alvo?.titulo ?? "Travados"} largura="larga">
+    <KpiDrilldownDialog open={alvo !== null} onClose={aoFechar} title={alvo?.titulo ?? "Travados"} largura="larga" icone={icone} identidade={identidade}>
       {alvo ? (
         <div className="flex flex-col gap-4 text-sm" data-testid="exp-travados">
           {/* POPUPS-1 — o numero e a fatia da fila, sem frase em volta. */}
@@ -330,20 +338,16 @@ export default function TravadosDialog({
           {estado.tipo === "ok" ? <ConsolidadoEtapas itens={consolidado} total={estado.total} /> : null}
 
           {estado.tipo === "carregando" ? (
-            <p role="status" className="text-sm text-ink-muted">Carregando pedidos…</p>
+            <StateBlock compacto tipo="carregando" titulo="Carregando pedidos…" />
           ) : estado.tipo === "erro" ? (
-            <p role="status" className="text-sm text-crit-ink">
-              Não foi possível carregar os pedidos.{" "}
-              <button
-                type="button"
-                onClick={() => setTentativa((n) => n + 1)}
-                className="font-semibold underline underline-offset-4"
-              >
-                Tentar de novo
-              </button>
-            </p>
+            <StateBlock
+              compacto
+              tipo="erro"
+              titulo="Não foi possível carregar os pedidos."
+              acao={<RetryButton onClick={() => setTentativa((n) => n + 1)} />}
+            />
           ) : estado.linhas.length === 0 ? (
-            <p role="status" className="text-sm text-ink-muted">{cfg.vazio}</p>
+            <StateBlock compacto tipo="vazio" titulo={cfg.vazio} />
           ) : (
             <>
               {temFiltroDia ? (
@@ -456,7 +460,7 @@ export default function TravadosDialog({
               </DrilldownSecao>
             </>
           )}
-          {rodape ? <p className="text-xs text-ink-faint">{rodape}</p> : null}
+          <DataQualityNote note={rodape} />
         </div>
       ) : null}
     </KpiDrilldownDialog>

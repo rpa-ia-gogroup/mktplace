@@ -947,7 +947,7 @@ test("M5: textos de cobertura com acento e marca com o rotulo de exibicao", () =
 test("M4/M6: textos de estado comuns e fluxo vazio com estado proprio", () => {
   const tk = readFileSync(join(RAIZ, "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
   for (const f of [CLIENTE, tk]) {
-    assert.match(f, /titulo=\{TEXTO_ESTADO\.carregando\}/);
+    assert.match(f, /<span className="sr-only">\{TEXTO_ESTADO\.carregando\}<\/span>/);
     assert.match(f, /titulo=\{TEXTO_ESTADO\.erro\}/);
   }
   assert.match(CLIENTE, /<StateBlock tipo="vazio" titulo=\{TEXTO_ESTADO\.vazio\} compacto \/>/);

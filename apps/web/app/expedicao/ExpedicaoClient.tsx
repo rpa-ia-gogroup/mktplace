@@ -135,6 +135,7 @@ import LayoutExpedicao, {
   EstadoSecao,
   TEXTO_ESTADO,
 } from "@/components/expedicao/LayoutExpedicao";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
   OPCAO_PERSONALIZADA,
@@ -1758,6 +1759,11 @@ export default function ExpedicaoClient({
     </Panel>
   );
 
+  // IDENTIDADE-GERENCIAL: o popup herda o ladrilho e a cor do cartao que o abriu.
+  const medidaDoAlvo = alvoTravados
+    ? Object.keys(LISTA_DO_KPI).find((m) => LISTA_DO_KPI[m] === (alvoTravados.lista ?? "travados"))
+    : undefined;
+
   // `div`, nao `main`: o landmark `main` e do AppShell (um por pagina). Dois
   // `main` quebram a navegacao por landmarks no leitor de tela — mesmo
   // motivo do `h2` no cabecalho compartilhado.
@@ -1775,6 +1781,8 @@ export default function ExpedicaoClient({
       canal={filtros.channel}
       alvo={alvoTravados}
       aoFechar={() => setAlvoTravados(null)}
+      icone={medidaDoAlvo ? ICONE_DA_MEDIDA[medidaDoAlvo] : undefined}
+      identidade={medidaDoAlvo ? IDENTIDADE_DA_MEDIDA[medidaDoAlvo] : undefined}
     />
     <LayoutExpedicao
       // 1-2. CABECALHO, FOTOGRAFIA, FRESCOR E FILTROS (compartilhado). O canal
@@ -1801,7 +1809,12 @@ export default function ExpedicaoClient({
       // Os estados sao os MESMOS componentes do TikTok (T-0010).
       estado={
         <>
-          {estado === "carregando" && <StateBlock tipo="carregando" titulo={TEXTO_ESTADO.carregando} />}
+          {estado === "carregando" && (
+            <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <span className="sr-only">{TEXTO_ESTADO.carregando}</span>
+              {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
+            </div>
+          )}
           {estado === "canal_desligado" && (
             <StateBlock tipo="indisponivel" titulo="Este canal ainda não está disponível na API." />
           )}

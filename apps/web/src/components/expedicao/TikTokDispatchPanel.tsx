@@ -92,6 +92,7 @@ import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
 import SortHeaderComAjuda from "@/components/expedicao/SortHeaderComAjuda";
 import SortHeader from "@/components/ui/SortHeader";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import type { Visao } from "@/lib/expedicao-ux";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
@@ -893,7 +894,12 @@ export default function TikTokDispatchPanel({
       // no selo do cabecalho e na barra de qualidade.
       estado={
         <>
-          {estado === "carregando" ? <StateBlock tipo="carregando" titulo={TEXTO_ESTADO.carregando} /> : null}
+          {estado === "carregando" ? (
+            <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <span className="sr-only">{TEXTO_ESTADO.carregando}</span>
+              {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
+            </div>
+          ) : null}
           {estado === "erro" ? (
             <StateBlock
               tipo="erro"

@@ -673,10 +673,11 @@ test("os dois corpos usam o mesmo esqueleto, a mesma raiz e a mesma tabela", () 
 });
 
 test("estados da fila sao os mesmos componentes do TikTok, com nova tentativa", () => {
-  assert.match(CLIENTE, /<StateBlock tipo="carregando"/);
+  // G9: carregando no formato do cartao, como a Gerencial.
+  assert.match(CLIENTE, /<KpiCardSkeleton key=\{i\} anunciar=\{false\} \/>/);
   assert.match(CLIENTE, /<RetryButton onClick=\{tentarDeNovo\} \/>/);
   assert.match(CLIENTE, /const tentarDeNovo = useCallback\(\(\) => setFiltros\(\(f\) => \(\{ \.\.\.f \}\)\), \[\]\);/);
-  assert.match(TIKTOK, /<StateBlock tipo="carregando"/);
+  assert.match(TIKTOK, /<KpiCardSkeleton key=\{i\} anunciar=\{false\} \/>/);
 });
 
 test("secao sem fonte no canal: bloco curto 'indisponível neste canal' com o ⓘ", () => {
