@@ -196,7 +196,7 @@ def test_apice_fica_fora_e_so_apice_nao_consulta_nada():
 
 def test_90_dias_nao_tem_anterior_porque_a_view_so_guarda_90():
     r, _ = montar(dias=90)
-    assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao", "reembolso"}
+    assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao", "reembolso", "devolucao"}
     assert r.sem_anterior["reclamacao"].a_partir_de is None
     k = next(m for m in r.marcas if m.marca == "kokeshi")
     assert k.pedidos_anterior is None and k.reclamacoes_anterior is None
@@ -207,8 +207,8 @@ def test_anterior_antes_da_coleta_diz_desde_quando_e_quando_passa_a_existir():
     sem = ml.sem_anterior_ml(
         ml.base.calcular_janela(30, datetime(2026, 9, 20, tzinfo=timezone.utc)),
         ml.Janela(inicio=date(2026, 7, 21), fim=date(2026, 8, 19), dias=30), date(2026, 9, 20))
-    # so' o que depende da coleta de reclamacoes: cancelamento e reembolso vem da view de pedidos
-    assert set(sem) == {"resposta", "reclamacao", "mediacao"}
+    # so' o que depende da coleta de reclamacoes (devolucao inclusa): cancelamento e reembolso vem da view de pedidos
+    assert set(sem) == {"resposta", "reclamacao", "mediacao", "devolucao"}
     assert sem["reclamacao"].motivo == "coleta desde 12/08" and sem["reclamacao"].a_partir_de == date(2026, 10, 11)
 
 
@@ -267,16 +267,25 @@ def test_coleta_velha_ganha_aviso():
     assert montar()[0].aviso_frescor is None
 
 
-def test_devolucao_e_pendencia_nunca_zero_e_reembolso_nao_e_mais():
-    r, _ = montar()
-    assert [p.codigo for p in r.pendencias] == ["ml_devolucoes"]
-    assert "devolucoes" not in r.marcas[0].model_dump()
+def test_devolucao_soma_so_com_toda_a_janela_lida_e_null_nunca_vira_zero():
+    # sem leitura em nenhum dia (a view hoje): None, sem pendencia e sem "anterior"
+    r, _ = montar(brands=["kokeshi"])
+    k = r.marcas[0]
+    assert k.devolucoes is None and k.devolucoes_anterior is None and r.pendencias == []
+    assert all(p.devolucoes is None for p in r.serie_diaria)
+    # todos os dias lidos (inclusive zero): soma na janela e no periodo anterior
+    lidas = [{**x, "devolucoes": 1} for x in diario(dias=60)]
+    k = montar(Fonte(diar=lidas), brands=["kokeshi"])[0].marcas[0]
+    assert k.devolucoes == 30 and k.devolucoes_anterior == 30
+    # um unico dia NULL na janela derruba a janela inteira (nao sai total menor que o real)
+    furo = [{**x, "devolucoes": None if x["dia"].startswith(FIM.isoformat()) else 1} for x in diario(dias=60)]
+    k = montar(Fonte(diar=furo), brands=["kokeshi"])[0].marcas[0]
+    assert k.devolucoes is None and k.devolucoes_anterior == 30
 
 
 def test_sql_diario_traz_as_colunas_novas_na_mesma_consulta_e_o_backlog_fora_da_janela():
-    for col in ("pedidos_cancelados", "reembolsos", "valor_reembolsado", "perguntas_sem_resposta_24h"):
+    for col in ("pedidos_cancelados", "reembolsos", "valor_reembolsado", "perguntas_sem_resposta_24h", "devolucoes"):
         assert col in ml.SQL_DIARIO
-    assert "devolucoes" not in ml.SQL_DIARIO
     assert "dia >= :desde OR perguntas_sem_resposta_24h > 0" in ml.SQL_DIARIO
 
 

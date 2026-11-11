@@ -1,7 +1,7 @@
 /**
  * Aba CX · Mercado Livre (10/11/2026) — `GET /api/v1/cx/mercadolivre?brands=&dias=`.
- * Cancelamento e Reembolso vem da view diaria (pedidos cancelados e reembolsos ÷ pedidos);
- * devolucao segue sem fonte (a coluna vem vazia) e nao e' desenhada.
+ * Cancelamento, Reembolso e Devolucao vem da view diaria (contagens ÷ pedidos); devolucao
+ * so' tem numero quando TODO dia da janela foi lido (a API manda null, nunca 0).
  *
  * Mesmas regras da CX da Shopee: ausencia nunca vira zero ("—"), numero Torre
  * sem faixa oficial, periodo anterior so' quando a API o mede (`sem_anterior`
@@ -37,14 +37,15 @@ import {
 import { MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS } from "./performance-contas.ts";
 
 /** Taxas sobre pedidos (colunas da tabela por marca). */
-export type IndicadorTaxa = "reclamacao" | "cancelamento" | "mediacao" | "reembolso";
+export type IndicadorTaxa = "reclamacao" | "cancelamento" | "mediacao" | "devolucao" | "reembolso";
 /** Chaves do `sem_anterior` da API: as taxas e a taxa de resposta. */
 export type IndicadorMl = IndicadorTaxa | "resposta";
-export const INDICADORES_ML: readonly IndicadorTaxa[] = ["reclamacao", "cancelamento", "mediacao", "reembolso"];
-const CAMPO: Record<IndicadorTaxa, "reclamacoes" | "cancelamentos" | "mediacoes" | "reembolsos"> = {
+export const INDICADORES_ML: readonly IndicadorTaxa[] = ["reclamacao", "cancelamento", "mediacao", "devolucao", "reembolso"];
+const CAMPO: Record<IndicadorTaxa, "reclamacoes" | "cancelamentos" | "mediacoes" | "devolucoes" | "reembolsos"> = {
   reclamacao: "reclamacoes",
   cancelamento: "cancelamentos",
   mediacao: "mediacoes",
+  devolucao: "devolucoes",
   reembolso: "reembolsos",
 };
 // Os mesmos nomes da CX da Shopee: o gestor le' os dois canais do mesmo jeito.
@@ -53,6 +54,7 @@ export const ROTULO_ML: Record<IndicadorMl, string> = {
   reclamacao: ROTULO_INDICADOR.contactRate,
   cancelamento: ROTULO_INDICADOR.cancelamento,
   mediacao: "Mediações",
+  devolucao: "Devolução",
   reembolso: ROTULO_INDICADOR.reembolso,
 };
 
@@ -62,6 +64,7 @@ export interface LinhaMl {
   reclamacoes?: number | null;
   cancelamentos?: number | null;
   reembolsos?: number | null;
+  devolucoes?: number | null;
   valor_reembolsado?: number | null;
   mediacoes?: number | null;
   perguntas?: number | null;
@@ -72,6 +75,7 @@ export interface LinhaMl {
   reclamacoes_anterior?: number | null;
   cancelamentos_anterior?: number | null;
   reembolsos_anterior?: number | null;
+  devolucoes_anterior?: number | null;
   mediacoes_anterior?: number | null;
   aguardando_nos?: number | null;
   vencidas?: number | null;
@@ -95,6 +99,7 @@ export interface PontoDiaMl {
   reclamacoes?: number | null;
   cancelamentos?: number | null;
   reembolsos?: number | null;
+  devolucoes?: number | null;
   mediacoes?: number | null;
 }
 
@@ -536,7 +541,9 @@ export const AJUDA_ML = {
   status:
     "Reputação OFICIAL do Mercado Livre de cada conta (termômetro de cor e MercadoLíder). Em vermelho, as métricas fora do limite para MercadoLíder.",
   reembolso:
-    "Pedidos com reembolso no período ÷ pedidos do período, somando as marcas; o valor reembolsado fica no detalhe. Cálculo da Torre. Não é taxa de devolução: devolução ainda não tem fonte no Mercado Livre.",
+    "Pedidos com reembolso no período ÷ pedidos do período, somando as marcas; o valor reembolsado fica no detalhe. Cálculo da Torre.",
+  devolucao:
+    "Devoluções abertas no período ÷ pedidos do período, somando as marcas (o mesmo conceito da Shopee). Cálculo da Torre. A marca só entra com todos os dias do período lidos pela coleta; sem isso fica de fora, nunca como zero, e o card mostra — enquanto nenhuma marca tiver leitura completa.",
   reclamacao:
     "Contact rate: de cada 100 pedidos, quantos viraram reclamação. Reclamações abertas no período (tipo mediação, sem os cancelamentos) ÷ pedidos criados no período, somando as marcas. Cálculo da Torre: não é a taxa de reputação do Mercado Livre, que tem regras e exclusões próprias. Sem faixa de cor porque não há meta definida.",
   cancelamento:
@@ -605,7 +612,7 @@ export function montarStatusMarcasMl(d: CxMlResponse, rotuloMarca: (m: string) =
         marca: rotuloMarca(m),
         aguardando: inteiro(l?.perguntas_sem_resposta),
         cancelamento: pctCx(razaoPct([[l?.cancelamentos, l?.pedidos]])),
-        devolucoes: "—",
+        devolucoes: inteiro(l?.devolucoes),
       };
       if (!conta) {
         const motivo = rep?.estado === "erro" ? "Reputação indisponível nesta carga." : semFoto.get(m);

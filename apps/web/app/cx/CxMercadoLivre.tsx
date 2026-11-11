@@ -6,16 +6,16 @@
  *   0. cabecalho com chip (periodo, e dado velho quando e' o caso);
  *   1. heroi: Taxa de resposta (perguntas respondidas ÷ perguntas), selo da reputacao
  *      e Saude da Conta por marca (reputacao oficial do ML), como na Shopee;
- *   2. faixa, na mesma ordem da Shopee: Contact rate (reclamacoes ÷ pedidos),
- *      Cancelamento (pedidos cancelados ÷ pedidos) e Reembolso (reembolsos ÷ pedidos);
+ *   2. faixa: Contact rate (reclamacoes ÷ pedidos), Cancelamento (pedidos cancelados ÷ pedidos),
+ *      Devolucao (devolucoes ÷ pedidos) e Reembolso (reembolsos ÷ pedidos);
  *   3. "O que exige atencao agora": metrica fora do limite, prazos vencidos, perguntas;
  *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
  *   5. atendimento por loja: fila, prazo, perguntas, tempo de resposta;
- *   6. Mais detalhes: o que ainda falta (devolucoes, sem fonte) e a cobertura.
+ *   6. Mais detalhes: pendencias de fonte e a cobertura.
  * A metodologia mora nos ⓘ. Busca pelo navegador (`torreFetch`), como a Shopee.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
+import { Ban, MessageCircle, MessagesSquare, PackageX, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
@@ -244,10 +244,11 @@ const VISUAL_TAXA: Record<IndicadorTaxa, { identidade: IdentidadeKpi; icone: typ
   cancelamento: { identidade: "ads", icone: Ban },
   // sem cartao na faixa hoje; so' completa o tipo
   mediacao: { identidade: "prazo", icone: Ban },
+  devolucao: { identidade: "pedidos", icone: PackageX },
   reembolso: { identidade: "gmv", icone: Undo2 },
 };
 
-const ROTULO_CURTO: Record<IndicadorTaxa, string> = { reclamacao: "Reclam.", cancelamento: "Cancel.", mediacao: "Mediações", reembolso: "Reemb." };
+const ROTULO_CURTO: Record<IndicadorTaxa, string> = { reclamacao: "Reclam.", cancelamento: "Cancel.", mediacao: "Mediações", devolucao: "Devol.", reembolso: "Reemb." };
 
 /** Detalhe de um cartao de taxa: o valor exato e a taxa de cada marca (so' dados que a resposta ja' traz). */
 function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r: ResumoMl; linhas: ReturnType<typeof montarProblemasMl>["linhas"]; periodo: string; geradoEm: string }) {
@@ -275,7 +276,7 @@ function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r:
 }
 
 // ---------------------------------------------------------------------------
-// 2. Faixa de KPIs: Contact rate, Cancelamento e Reembolso, na ordem da Shopee
+// 2. Faixa de KPIs: Contact rate, Cancelamento, Devolução e Reembolso
 // ---------------------------------------------------------------------------
 function Faixa({ r, dias, semNoHeroi, abrir }: { r: ResumoMl; dias: number; semNoHeroi: string | null; abrir: (i: IndicadorTaxa) => void }) {
   // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
@@ -315,9 +316,10 @@ function Faixa({ r, dias, semNoHeroi, abrir }: { r: ResumoMl; dias: number; semN
     r.contagem[i] == null ? null : `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}`;
   return (
     <section aria-label="Indicadores do período">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="cx-faixa">
         {taxa("reclamacao", "atendimento", MessagesSquare, n("reclamacao", "reclamação", "reclamações"))}
         {taxa("cancelamento", "ads", Ban, n("cancelamento", "pedido cancelado", "pedidos cancelados"))}
+        {taxa("devolucao", "pedidos", PackageX, n("devolucao", "devolução", "devoluções"))}
         {taxa("reembolso", "gmv", Undo2, n("reembolso", "reembolso", "reembolsos"))}
       </div>
     </section>
@@ -385,7 +387,7 @@ function ProblemasPorMarca({ linhas, total, dias }: { linhas: ReturnType<typeof 
   return (
     <Panel titulo="Problemas por marca" aria-label="Problemas por marca" semPadding>
       <TableScrollHint>
-        <table className="w-full min-w-[520px] border-collapse text-sm" data-testid="cx-problemas-marca">
+        <table className="w-full min-w-[600px] border-collapse text-sm" data-testid="cx-problemas-marca">
           <caption className="sr-only">Problemas por marca, em % dos pedidos</caption>
           <thead className={THEAD}>
             <tr>
