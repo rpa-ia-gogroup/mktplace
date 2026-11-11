@@ -496,7 +496,7 @@ import {
 } from "../src/server/oracle/observability.ts";
 
 const OBS_ISSUER = "https://gobeaute-oraculo.us.auth0.com/";
-const OBS_AUDIENCE = "https://mktplace-gobeaute.vercel.app/api/mcp";
+const OBS_AUDIENCE = "https://mktplace-ten.vercel.app/api/mcp";
 
 const OBS_PROD: AccessEnv = {
   NODE_ENV: "production",

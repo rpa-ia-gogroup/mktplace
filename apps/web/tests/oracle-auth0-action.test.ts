@@ -29,7 +29,7 @@ const { decideOracleAccess, extractEmailDomain } = action;
 
 const ORACLE_CLIENT = "cid_oraculo_org_a";
 const OUTRA_ORG = "cid_oraculo_org_b";
-const AUDIENCE = "https://mktplace-gobeaute.vercel.app/api/mcp";
+const AUDIENCE = "https://mktplace-ten.vercel.app/api/mcp";
 
 /** Contexto valido; cada teste altera só o que quer provar. */
 function ctx(over: Record<string, unknown> = {}) {
@@ -229,8 +229,8 @@ test("cada organizacao Claude tem seu Client ID, e todos entram pela mesma polit
 test("cliente do Oraculo pedindo audience divergente e' negado", () => {
   for (const requestedAudience of [
     "https://outra-api.example/api",
-    "https://mktplace-gobeaute.vercel.app/api/mcp/",
-    "https://mktplace-gobeaute.vercel.app/api/outro",
+    "https://mktplace-ten.vercel.app/api/mcp/",
+    "https://mktplace-ten.vercel.app/api/outro",
   ]) {
     const d = decideOracleAccess(ctx({ requestedAudience }));
     assert.equal(d.applies, true, requestedAudience);
