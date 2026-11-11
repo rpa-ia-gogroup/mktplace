@@ -1368,6 +1368,17 @@ def test_t0087b_ler_cmv_estimado_passa_a_janela_de_emissao():
     assert (p["inicio"], p["fim_exclusivo"]) == (date(2026, 12, 1), date(2027, 1, 1))
 
 
+def test_t0087b_ler_impostos_usa_a_mesma_janela_de_emissao_do_cmv():
+    assert FILTRO_EMISSAO in _sql(P.SQL_IMPOSTOS)
+    comps = [JUL, AGO, date(2026, 9, 1), OUT]
+    eng = _EngParams()
+    P.ler_impostos(eng, comps, ["ml"], ["kokeshi"], True)
+    p = eng.params[P.SQL_IMPOSTOS]
+    assert {k: p[k] for k in JANELA_JUL_OUT} == JANELA_JUL_OUT
+    # a janela do webgex (folga em volta) nao muda
+    assert (p["inicio_webgex"], p["fim_webgex"]) == P.janela_webgex(comps)
+
+
 def test_t0091_publicar_le_a_estimativa_sem_conexao_do_neon_e_grava_o_cmv_estimado(monkeypatch):
     alvo = _AlvoFake(_esp_shopee())
     fonte = _FonteFake(alvo, [_shopee()], estimado=[sem_custo("K1", receita=600, qtd=10),

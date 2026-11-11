@@ -567,6 +567,7 @@ SQL_IMPOSTOS = text("""
                COUNT(*) OVER (PARTITION BY chave_nfe) AS celulas_da_chave
         FROM gold.nf_vendas_unificada_v2
         WHERE data_mes = ANY(:competencias)
+          AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
           AND canal = 'marketplace'
           AND plataforma = ANY(:plataformas)
           AND marca = ANY(:marcas)
@@ -1443,6 +1444,7 @@ def ler_impostos(fonte_engine, comps: list[date], canais: list[str], marcas: lis
     inicio_webgex, fim_webgex = janela_webgex(comps)
     params = {
         "competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas,
+        "inicio": comps[0], "fim_exclusivo": somar_meses(comps[-1], 1),
         "inicio_webgex": inicio_webgex, "fim_webgex": fim_webgex,
     }
     try:
