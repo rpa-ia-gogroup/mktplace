@@ -18,6 +18,10 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
+import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
+import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import TableScrollHint from "@/components/TableScrollHint";
 import { LinhaSemComparacao, pilula } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
@@ -143,6 +147,8 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
   const valor = pctCx(r.resposta);
   const semNoHeroi = !comp?.delta && r.resposta != null && !!sem;
   const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
+  // Cartao de taxa aberto no detalhe por marca (um dialogo por vez: o da marca fica fechado enquanto este abre).
+  const [taxaAberta, setTaxaAberta] = useState<IndicadorTaxa | null>(null);
   const aberta = status.find((x) => x.chave === marcaAberta) ?? null;
   // a marca fora (Apice) nao e' problema: so' no ⓘ do heroi
   const fora = dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ");
@@ -181,7 +187,7 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
         meio={status.length ? <SaudePorMarca itens={status} abrir={setMarcaAberta} ajuda={AJUDA_ML.status} /> : undefined}
       />
 
-      <Faixa r={r} dias={dias} semNoHeroi={semNoHeroi ? sem!.texto : null} />
+      <Faixa r={r} dias={dias} semNoHeroi={semNoHeroi ? sem!.texto : null} abrir={setTaxaAberta} />
 
       <FilaAtencao
         titulo={
@@ -215,6 +221,16 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
         />
       </MaisDetalhes>
 
+      <KpiDrilldownDialog
+        open={taxaAberta != null}
+        onClose={() => setTaxaAberta(null)}
+        title={taxaAberta ? `${ROTULO_ML[taxaAberta]} · por marca` : ""}
+        icone={taxaAberta ? VISUAL_TAXA[taxaAberta].icone : undefined}
+        identidade={taxaAberta ? VISUAL_TAXA[taxaAberta].identidade : undefined}
+      >
+        {taxaAberta && <DetalheTaxa i={taxaAberta} r={r} linhas={prob.linhas} periodo={textoJanela(dados.janela)} geradoEm={dados.gerado_em} />}
+      </KpiDrilldownDialog>
+
       <KpiDrilldownDialog open={aberta != null} onClose={() => setMarcaAberta(null)} title={aberta ? `${aberta.marca} · Saúde da Conta` : ""}>
         <DetalheMarca s={aberta} fila={null} />
       </KpiDrilldownDialog>
@@ -222,10 +238,42 @@ function Corpo({ dados, dias }: { dados: CxMlResponse; dias: number }) {
   );
 }
 
+/** Cor e icone de cada taxa: o detalhe herda os do cartao que o abriu. */
+const VISUAL_TAXA: Record<IndicadorTaxa, { identidade: IdentidadeKpi; icone: typeof Ban }> = {
+  reclamacao: { identidade: "atendimento", icone: MessagesSquare },
+  cancelamento: { identidade: "ads", icone: Ban },
+  // sem cartao na faixa hoje; so' completa o tipo
+  mediacao: { identidade: "prazo", icone: Ban },
+};
+
+/** Detalhe de um cartao de taxa: o valor exato e a taxa de cada marca (so' dados que a resposta ja' traz). */
+function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r: ResumoMl; linhas: ReturnType<typeof montarProblemasMl>["linhas"]; periodo: string; geradoEm: string }) {
+  const n = r.contagem[i];
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+          <NumeroAnimado texto={pctCx(r.taxa[i])} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
+          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{n == null ? "" : `${inteiro(n)} de ${inteiro(r.pedidos)} pedidos`}</span>
+        </div>
+        <DrilldownContextLine leading="Mercado Livre" periodLabel={periodo} refreshedAt={geradoEm} dica={<InfoDica texto={AJUDA_ML[i]} />} />
+      </div>
+      <DrilldownSecao titulo="Por marca">
+        <ul className="flex flex-col list-none p-0 m-0">
+          {linhas.map((l) => {
+            const c = l.celulas[i];
+            return <EvidenceRow key={l.chave} label={l.marca} value={c.pct} reference={[`${c.n} de ${l.pedidos} pedidos`, c.antes ? `antes ${c.antes}` : null].filter(Boolean).join(" · ")} />;
+          })}
+        </ul>
+      </DrilldownSecao>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // 2. Faixa de KPIs: Contact rate, Cancelamento e Reembolso, na ordem da Shopee
 // ---------------------------------------------------------------------------
-function Faixa({ r, dias, semNoHeroi }: { r: ResumoMl; dias: number; semNoHeroi: string | null }) {
+function Faixa({ r, dias, semNoHeroi, abrir }: { r: ResumoMl; dias: number; semNoHeroi: string | null; abrir: (i: IndicadorTaxa) => void }) {
   // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
   const visto = new Set<string>(semNoHeroi ? [semNoHeroi] : []);
   const taxa = (i: IndicadorTaxa, identidade: IdentidadeKpi, icone: typeof Ban, comparacao: ReactNode) => {
@@ -253,8 +301,9 @@ function Faixa({ r, dias, semNoHeroi }: { r: ResumoMl; dias: number; semNoHeroi:
         serie={c?.serie ?? undefined}
         granularidade={c?.granularidade}
         comparacao={comparacao}
-        ajuda={<InfoDica texto={[AJUDA_ML[i], c?.delta != null ? AJUDA_ML.comparacao(dias) : undefined].filter(Boolean).join(" ")} />}
+        ajuda={<InfoDica emControle={r.taxa[i] != null} texto={[AJUDA_ML[i], c?.delta != null ? AJUDA_ML.comparacao(dias) : undefined].filter(Boolean).join(" ")} />}
         contexto={contexto}
+        onAbrir={r.taxa[i] != null ? () => abrir(i) : undefined}
       />
     );
   };
