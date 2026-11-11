@@ -31,6 +31,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import Note from "@/components/ui/Note";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import MetasGrade from "@/components/metas/MetasGrade";
+import MetasTotais from "@/components/metas/MetasTotais";
 import MetaPorDia from "@/components/metas/MetaPorDia";
 import { MetasErro, fetchMetas, fetchRealizado, salvarMetas } from "@/lib/metas-api";
 import {
@@ -44,6 +45,7 @@ import {
   rascunhoParcialDe,
   realizadoDasMarcas,
   rotuloMes,
+  totais,
   valoresDaResposta,
   type Chave,
   type FalhaMetas,
@@ -114,6 +116,7 @@ export default function MetasClient() {
   const pronta = carga !== null && carga.mes === mes && "salvo" in carga ? carga : null;
   const salvo = useMemo(() => pronta?.salvo ?? {}, [pronta]);
   const analise = useMemo(() => analisar(salvo, rascunho), [salvo, rascunho]);
+  const totaisDoRascunho = useMemo(() => totais(analise.efetivos), [analise]);
   const nInvalidas = Object.keys(analise.invalidas).length;
   const nAlteradas = analise.alteradas.length;
   const sujo = pronta !== null && (nAlteradas > 0 || nInvalidas > 0);
@@ -289,6 +292,8 @@ export default function MetasClient() {
           {vazio && (
             <Note>Nenhuma meta definida para {rotuloMes(mes)}.</Note>
           )}
+
+          <MetasTotais totais={totaisDoRascunho} />
 
           <MetasGrade
             rascunho={rascunho}

@@ -88,20 +88,6 @@ export default function MetasGrade({ rascunho, salvo, analise, realizado, desabi
             </tr>
           ))}
         </tbody>
-        <tfoot>
-          <tr className="border-t border-line-strong bg-raised">
-            <th scope="row" className="px-4 py-3 text-left text-sm font-semibold text-ink">Total do canal</th>
-            {CANAIS.map((c) => (
-              <td key={c.id} className="px-3 py-3 text-right font-semibold tabular-nums text-ink">
-                {fmtCompacto(t.porCanal[c.id])}
-              </td>
-            ))}
-            <td className="px-4 py-3 text-right tabular-nums">
-              <span className="block text-xs font-semibold uppercase tracking-wide text-ink-faint">Meta global</span>
-              <span className="text-lg font-bold text-accent">{fmtCompacto(t.global)}</span>
-            </td>
-          </tr>
-        </tfoot>
       </table>
     </div>
   );
