@@ -23,6 +23,7 @@ import {
   problemaNaResposta,
   rascunhoDe,
   rascunhoParcialDe,
+  legendaRealizado,
   realizadoDasMarcas,
   rotuloMes,
   textoDoCampo,
@@ -206,6 +207,18 @@ test("realizado vem das linhas de /performance/brands", () => {
   assert.equal(r[K], 4_467_318);
   assert.equal(r[chave("kokeshi", "shopee")], null);
   assert.equal(Object.keys(r).length, 3);
+});
+
+test("legenda do realizado: ausencia nunca vira R$ 0", () => {
+  const sem = realizadoDasMarcas([{ brand: "azbuy", tiktok_gmv: 1, ml_gmv: null, shopee_gmv: null }]);
+  // marca sem linha na API, GMV nulo e chave ausente: todos "sem dado"
+  assert.equal(legendaRealizado(sem[chave("kokeshi", "ml")]), "realizado —, sem dado");
+  assert.equal(legendaRealizado(sem[chave("azbuy", "ml")]), "realizado —, sem dado");
+  assert.equal(legendaRealizado(null), "realizado —, sem dado");
+  assert.doesNotMatch(legendaRealizado(undefined), /R\$ 0/);
+  // zero de verdade continua zero
+  assert.equal(legendaRealizado(0), "realizado R$ 0");
+  assert.equal(legendaRealizado(1_743_344), "realizado R$ 1,74 mi");
 });
 
 // ---------------------------------------------------------------------------

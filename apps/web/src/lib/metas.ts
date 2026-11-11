@@ -168,6 +168,11 @@ export function fmtCompacto(valor: number | null | undefined): string {
   return `R$ ${Math.round(valor).toLocaleString("pt-BR")}`;
 }
 
+/** Legenda do realizado numa celula: ausencia (sem linha da marca ou GMV nulo) nunca vira "R$ 0". */
+export function legendaRealizado(valor: number | null | undefined): string {
+  return valor == null ? "realizado —, sem dado" : `realizado ${fmtCompacto(valor)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Grade
 // ---------------------------------------------------------------------------

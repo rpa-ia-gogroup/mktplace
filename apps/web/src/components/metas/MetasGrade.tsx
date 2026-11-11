@@ -13,6 +13,7 @@ import {
   MARCAS,
   chave,
   fmtCompacto,
+  legendaRealizado,
   lerValor,
   textoDoCampo,
   totais,
@@ -157,7 +158,7 @@ function Celula({
             ? "mês ainda não começou"
             : realizado === undefined
               ? "realizado indisponível"
-              : `realizado ${fmtCompacto(realizado ?? 0)}`}
+              : legendaRealizado(realizado)}
       </span>
     </div>
   );
