@@ -110,7 +110,9 @@ export function variacao(atual: number, base: number): number | null {
 export interface ComparacaoDeHoje {
   /** "vs ontem até 14h" (ou o corte de cada canal), com o aviso quando um recorte fica de fora. */
   rotulo: string;
-  /** Explicacao para o (i), so' quando os canais cortam em horas diferentes. */
+  /** Versao para cartoes estreitos: igual ao `rotulo`, ou "vs ontem, mesma hora" se os cortes diferem. */
+  rotuloCurto: string;
+  /** Explicacao para o (i), quando os canais cortam em horas diferentes ou algum ficou de fora. */
   detalhe: string | null;
   gmvPct: number | null;
   pedidosPct: number | null;
@@ -128,11 +130,17 @@ export interface ComparacaoDeHoje {
 export function comparacaoDeHoje(d: HojePorHora | null): ComparacaoDeHoje | null {
   const rotulo = d ? rotuloDosCortes(d) : null;
   if (!d?.disponivel || !rotulo || !d.hoje || !d.ontem) return null;
-  const fora = d.limitacoes.some((l) => l.startsWith("Kokeshi na Shopee")) ? " (sem Kokeshi Shopee)" : "";
+  // Canal sem hora fechada soma 0 dos dois lados: diz que ficou de fora, nunca some calado.
+  const semHora = d.canais.filter((c) => c.corte_hora === 0).map((c) => NOME_CURTO[c.channel]);
+  const kokeshi = d.limitacoes.some((l) => l.startsWith("Kokeshi na Shopee")) && !semHora.includes("Shopee");
+  const fora = [...(semHora.length ? [semHora.join(" e ")] : []), ...(kokeshi ? ["Kokeshi Shopee"] : [])];
+  const aviso = fora.length ? ` (sem ${fora.join(" e ")})` : "";
+  const cortesDiferem = rotulo.includes("·");
   return {
-    rotulo: `vs ontem ${rotulo}${fora}`,
-    detalhe: rotulo.includes("·")
-      ? "Cada canal vai até a última hora que ele já fechou e é comparado com ontem até a mesma hora. O canal mais atrasado não segura os outros."
+    rotulo: `vs ontem ${rotulo}${aviso}`,
+    rotuloCurto: `vs ontem ${cortesDiferem ? ", mesma hora" : rotulo}${aviso}`.replace("ontem ,", "ontem,"),
+    detalhe: cortesDiferem || semHora.length
+      ? "Cada canal conta até a última hora que já chegou e é comparado com ontem até essa mesma hora. Por isso a hora muda de um canal para outro."
       : null,
     gmvPct: variacao(d.hoje.gmv, d.ontem.gmv),
     pedidosPct: variacao(d.hoje.pedidos, d.ontem.pedidos),

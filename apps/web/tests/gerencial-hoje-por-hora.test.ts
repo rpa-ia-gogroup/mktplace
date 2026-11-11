@@ -54,8 +54,15 @@ test("corte por canal: cada canal na sua hora, curto; mesmo corte junta; sem cor
   assert.equal(rotuloDosCortes({ corte_hora: 0, canais: [f("ml", 0)] }), null);
   const c = comparacaoDeHoje({ ...resposta, ...d })!;
   assert.equal(c.rotulo, "vs ontem ML e TikTok até 8h · Shopee até 6h");
-  assert.match(c.detalhe!, /mais atrasado não segura/);
+  assert.equal(c.rotuloCurto, "vs ontem, mesma hora"); // cartao estreito
+  assert.match(c.detalhe!, /Por isso a hora muda/);
   assert.equal(comparacaoDeHoje(resposta)!.detalhe, null);
+  assert.equal(comparacaoDeHoje(resposta)!.rotuloCurto, "vs ontem até 14h");
+  // Shopee sem hora fechada: fica de fora e diz isso (e o aviso da Kokeshi nao se repete).
+  const sem = comparacaoDeHoje({ ...resposta, corte_hora: 8, canais: [f("ml", 8), f("shopee", 0)],
+    limitacoes: ["Kokeshi na Shopee fica fora do corte por hora: ..."] })!;
+  assert.equal(sem.rotulo, "vs ontem até 8h (sem Shopee)");
+  assert.ok(sem.detalhe);
 });
 
 const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");

@@ -466,7 +466,7 @@ function GerencialComGrandes() {
   const kpisDaTela = useMemo(() => {
     if (!compHoje) return kpis;
     const ref = (pct: number | null) =>
-      pct != null ? { deltaPct: pct, deltaTone: "higher_is_better" as const, reference: compHoje.rotulo } : {};
+      pct != null ? { deltaPct: pct, deltaTone: "higher_is_better" as const, reference: compHoje.rotuloCurto } : {};
     return kpis.map((k) =>
       k.key === "orders" ? { ...k, ...ref(compHoje.pedidosPct) } : k.key === "avg_ticket" ? { ...k, ...ref(compHoje.ticketPct) } : k,
     );
