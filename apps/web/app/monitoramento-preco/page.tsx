@@ -140,16 +140,16 @@ function sincronizaUrl(mudanca: { data?: string; canal?: Marketplace }) {
 }
 
 const TONE_FRESCOR: Record<string, string> = {
-  fresh: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  stale: "bg-amber-50 text-amber-900 border-amber-300",
-  historical: "bg-sky-50 text-sky-900 border-sky-200",
-  unavailable: "bg-slate-50 text-slate-600 border-slate-200",
+  fresh: "bg-ok-soft text-ok-ink border-ok/30",
+  stale: "bg-warn-soft text-warn-ink border-warn/40",
+  historical: "bg-accent-soft text-accent-ink border-accent/30",
+  unavailable: "bg-raised text-ink-muted border-line",
 };
 
 const TONE_CLASS: Record<"attention" | "neutral" | "muted", string> = {
-  attention: "bg-amber-50 text-amber-800 border-amber-200",
-  neutral: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  muted: "bg-slate-50 text-slate-600 border-slate-200",
+  attention: "bg-warn-soft text-warn-ink border-warn/30",
+  neutral: "bg-ok-soft text-ok-ink border-ok/30",
+  muted: "bg-raised text-ink-muted border-line",
 };
 
 /** POPUPS-1 — pilula da diferenca no detalhe, pela situacao que o backend deu. */
@@ -475,7 +475,7 @@ export default function MonitoramentoPrecoPage() {
         meta={
           // A ressalva de escopo (observacional, sem frete/cupom, sem vigencia)
           // fica no "ⓘ" do selo: continua existindo, fora do caminho do olho.
-          <span className="inline-flex items-center gap-1 text-xs font-semibold border border-amber-200 bg-amber-50 text-amber-900 rounded-full px-2 py-0.5">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold border border-warn/30 bg-warn-soft text-warn-ink rounded-full px-2 py-0.5">
             Modo observacional
             <InfoDica
               texto={[
@@ -494,14 +494,14 @@ export default function MonitoramentoPrecoPage() {
       {canais.length > 1 && (
         <section
           aria-label="Canal"
-          className="bg-white border border-violet-100 rounded-2xl shadow-sm p-3 mb-4"
+          className="bg-surface border border-line rounded-2xl shadow-sm p-3 mb-4"
         >
           <div
             role="group"
             aria-labelledby={canalId}
             className="flex flex-wrap items-center gap-2"
           >
-            <span id={canalId} className="text-xs text-slate-500 mr-1">
+            <span id={canalId} className="text-xs text-ink-muted mr-1">
               Canal
             </span>
             {canais.map((c) => {
@@ -518,10 +518,10 @@ export default function MonitoramentoPrecoPage() {
                   // ligado ou desligado. Com `aria-pressed`, cada um anuncia
                   // pressionado ou nao, e o estado deixa de depender da cor.
                   aria-pressed={ativo}
-                  className={`min-h-[44px] min-w-[44px] px-4 rounded-lg border text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+                  className={`min-h-[44px] min-w-[44px] px-4 rounded-lg border text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                     ativo
-                      ? "bg-violet-600 border-violet-600 text-white"
-                      : "bg-white border-slate-300 text-slate-700 hover:bg-slate-50"
+                      ? "bg-accent border-accent text-accent-on"
+                      : "bg-surface border-line-strong text-ink hover:bg-raised"
                   }`}
                 >
                   {c.rotulo}
@@ -535,28 +535,28 @@ export default function MonitoramentoPrecoPage() {
       {/* ---------------- contexto e frescor ---------------- */}
       <section
         aria-label="Contexto dos dados"
-        className="bg-white border border-violet-100 rounded-2xl shadow-sm p-4 mb-4"
+        className="bg-surface border border-line rounded-2xl shadow-sm p-4 mb-4"
       >
         <dl className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
           <div>
-            <dt className="text-slate-500 text-xs uppercase tracking-wide">Canal</dt>
-            <dd className="font-semibold text-slate-800">
+            <dt className="text-ink-muted text-xs uppercase tracking-wide">Canal</dt>
+            <dd className="font-semibold text-ink">
               {canalLabel(marketplace)}
               {/* A politica de data e' do CANAL e viaja no payload. So' os
                   canais novos a exibem: no ML o teto D-1 ja' era conhecido e
                   acrescentar o chip mudaria uma tela publicada. */}
               {meta && marketplace !== "ml" && (
-                <span className="ml-2 inline-block text-xs font-normal text-slate-500 align-middle">
+                <span className="ml-2 inline-block text-xs font-normal text-ink-muted align-middle">
                   {politica.tetoRotulo}
                 </span>
               )}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500 text-xs uppercase tracking-wide">
+            <dt className="text-ink-muted text-xs uppercase tracking-wide">
               Preço observado em
             </dt>
-            <dd className="font-semibold text-slate-800">
+            <dd className="font-semibold text-ink">
               {fmtData(meta?.observed_ref_date)}
               {meta && (
                 <span
@@ -568,20 +568,20 @@ export default function MonitoramentoPrecoPage() {
             </dd>
           </div>
           <div>
-            <dt className="flex items-center gap-1 text-slate-500 text-xs uppercase tracking-wide">
+            <dt className="flex items-center gap-1 text-ink-muted text-xs uppercase tracking-wide">
               Referência PDV capturada em
               {/* A frase que declara as DUAS datas e a ausencia de vigencia. */}
               {meta?.comparison_basis_text && (
                 <InfoDica texto={meta.comparison_basis_text} />
               )}
             </dt>
-            <dd className="font-semibold text-slate-800">
+            <dd className="font-semibold text-ink">
               {fmtInstanteBrt(meta?.reference_captured_at)}
             </dd>
           </div>
           <div>
-            <dt className="text-slate-500 text-xs uppercase tracking-wide">Sync executado em</dt>
-            <dd className="font-semibold text-slate-800">
+            <dt className="text-ink-muted text-xs uppercase tracking-wide">Sync executado em</dt>
+            <dd className="font-semibold text-ink">
               {fmtInstanteBrt(meta?.refreshed_at)}
             </dd>
           </div>
@@ -590,7 +590,7 @@ export default function MonitoramentoPrecoPage() {
         {/* Gate PMA-2C4B — D0 NAO e' periodo fechado: muda como TUDO abaixo
             se le', entao vira um selo curto com a explicacao no "ⓘ". */}
         {politica.avisoMutavel && (
-          <p className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5 mt-3">
+          <p className="inline-flex items-center gap-1 text-xs font-semibold text-warn-ink bg-warn-soft border border-warn/30 rounded-full px-2 py-0.5 mt-3">
             Dia corrente: ainda pode mudar
             <InfoDica texto={politica.avisoMutavel} />
           </p>
@@ -600,7 +600,7 @@ export default function MonitoramentoPrecoPage() {
         {avisoCanal && (
           <p
             role="status"
-            className="text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 mt-3"
+            className="text-xs text-ink bg-raised border border-line rounded-lg px-3 py-2 mt-3"
           >
             {avisoCanal}
           </p>
@@ -608,8 +608,8 @@ export default function MonitoramentoPrecoPage() {
 
         {/* Cobertura por CONTA: so' os canais publicam mais de um relogio. */}
         {contas.length > 0 && meta?.date_policy === "snapshot_current" && (
-          <div className="mt-3 border-t border-violet-100 pt-3">
-            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">
+          <div className="mt-3 border-t border-line pt-3">
+            <p className="text-xs text-ink-muted uppercase tracking-wide mb-2">
               Cobertura por conta — {cobertura.contasObservadas} observada(s)
               {cobertura.revistas != null && (
                 <> · {fmtContagem(cobertura.revistas)} oferta(s) revista(s),{" "}
@@ -624,16 +624,16 @@ export default function MonitoramentoPrecoPage() {
               {contas.map((c) => (
                 <li
                   key={c.conta}
-                  className="border border-slate-200 rounded-lg px-3 py-2"
+                  className="border border-line rounded-lg px-3 py-2"
                 >
-                  <span className="font-semibold text-slate-800">{c.conta}</span>
-                  <span className="block text-slate-600">
+                  <span className="font-semibold text-ink">{c.conta}</span>
+                  <span className="block text-ink-muted">
                     {c.ofertas == null ? INDISPONIVEL : fmtContagem(c.ofertas)} oferta(s)
                     {c.revistas != null && (
                       <> · {fmtContagem(c.revistas)} revista(s)</>
                     )}
                   </span>
-                  <span className="block text-slate-500">
+                  <span className="block text-ink-muted">
                     carga: {c.relogio}
                   </span>
                 </li>
@@ -643,7 +643,7 @@ export default function MonitoramentoPrecoPage() {
         )}
 
         {meta && (
-          <p className="text-xs text-slate-500 mt-3 border-t border-violet-100 pt-3">
+          <p className="text-xs text-ink-muted mt-3 border-t border-line pt-3">
             Marcas monitoradas: {meta.monitored_brands.map(brandLabel).join(", ")}.
             {/* Gate PMA-2C4D3-H2 — a ausencia e' DECLARADA, e declarada como
                 ausencia de observacao. Antes, Kokeshi aparecia no filtro da
@@ -682,12 +682,12 @@ export default function MonitoramentoPrecoPage() {
         <section
           role="status"
           aria-label="Aviso de defasagem dos dados"
-          className="bg-amber-50 border border-amber-300 rounded-2xl p-4 mb-4"
+          className="bg-warn-soft border border-warn/40 rounded-2xl p-4 mb-4"
         >
-          <p className="text-sm font-semibold text-amber-900">
+          <p className="text-sm font-semibold text-warn-ink">
             Sincronização atrasada em {fmtContagem(meta.lag_days ?? 0)} dia(s).
           </p>
-          <p className="text-xs text-amber-800 mt-1">
+          <p className="text-xs text-warn-ink mt-1">
             Dados de <strong>{fmtData(meta.observed_ref_date)}</strong> (esperado{" "}
             {fmtData(meta.eligible_ref_date)}) —{" "}
             <strong>não descrevem o preço de hoje</strong>.
@@ -699,9 +699,9 @@ export default function MonitoramentoPrecoPage() {
         <section
           role="status"
           aria-label="Aviso de consulta retrospectiva"
-          className="bg-sky-50 border border-sky-200 rounded-2xl p-4 mb-4"
+          className="bg-accent-soft border border-line rounded-2xl p-4 mb-4"
         >
-          <p className="flex items-center gap-1 text-sm font-semibold text-sky-900">
+          <p className="flex items-center gap-1 text-sm font-semibold text-accent-ink">
             Consulta retrospectiva — {fmtData(meta.observed_ref_date)}
             <InfoDica
               texto={
@@ -711,7 +711,7 @@ export default function MonitoramentoPrecoPage() {
               }
             />
           </p>
-          <p className="text-xs text-sky-900 mt-1">
+          <p className="text-xs text-accent-ink mt-1">
             Referência PDV mais recente disponível hoje (
             {fmtInstanteBrt(meta.reference_captured_at)}).
           </p>
@@ -722,13 +722,13 @@ export default function MonitoramentoPrecoPage() {
         <section
           role="status"
           aria-label="Sem observação para a data escolhida"
-          className="bg-slate-50 border border-slate-200 rounded-2xl p-4 mb-4"
+          className="bg-raised border border-line rounded-2xl p-4 mb-4"
         >
-          <p className="text-sm font-semibold text-slate-800">
+          <p className="text-sm font-semibold text-ink">
             Sem observação para{" "}
             {fmtData(meta.requested_observed_date) || INDISPONIVEL}.
           </p>
-          <p className="text-xs text-slate-600 mt-1">
+          <p className="text-xs text-ink-muted mt-1">
             Dia não sincronizado — ausência não é zero.
           </p>
         </section>
@@ -745,21 +745,21 @@ export default function MonitoramentoPrecoPage() {
       <section
         aria-label="Frescor da fotografia"
         aria-busy={estado.loading}
-        className="bg-white border border-violet-100 rounded-2xl shadow-sm p-4 mb-4"
+        className="bg-surface border border-line rounded-2xl shadow-sm p-4 mb-4"
       >
         <div className="flex flex-wrap items-baseline gap-2 mb-3">
-          <h2 className="text-sm font-semibold text-slate-800">
+          <h2 className="text-sm font-semibold text-ink">
             Frescor da fotografia
           </h2>
           <span
             className={`inline-block text-xs font-semibold border rounded-full px-2 py-0.5 ${
               frescor.situacao === "em_dia"
-                ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                ? "bg-ok-soft border-ok/30 text-ok-ink"
                 : frescor.situacao === "atrasada"
-                  ? "bg-amber-50 border-amber-300 text-amber-900"
+                  ? "bg-warn-soft border-warn/40 text-warn-ink"
                   : frescor.situacao === "retrospectiva"
-                    ? "bg-sky-50 border-sky-200 text-sky-900"
-                    : "bg-slate-100 border-slate-300 text-slate-700"
+                    ? "bg-accent-soft border-accent/30 text-accent-ink"
+                    : "bg-raised border-line-strong text-ink"
             }`}
           >
             {frescor.rotuloSituacao}
@@ -773,7 +773,7 @@ export default function MonitoramentoPrecoPage() {
             {Array.from({ length: 4 }).map((_, i) => (
               <div
                 key={i}
-                className="h-20 rounded-xl bg-slate-100 animate-pulse"
+                className="h-20 rounded-xl bg-raised animate-pulse"
               />
             ))}
           </div>
@@ -784,15 +784,15 @@ export default function MonitoramentoPrecoPage() {
                 key={r.chave}
                 className={`rounded-xl border p-3 ${
                   r.chave === "ingestao_bruta"
-                    ? "border-dashed border-slate-300 bg-slate-50"
-                    : "border-slate-200 bg-white"
+                    ? "border-dashed border-line-strong bg-raised"
+                    : "border-line bg-surface"
                 }`}
               >
-                <dt className="flex items-center gap-1 text-xs uppercase tracking-wide text-slate-500">
+                <dt className="flex items-center gap-1 text-xs uppercase tracking-wide text-ink-muted">
                   {r.rotulo}
                   <InfoDica texto={r.explicacao} />
                 </dt>
-                <dd className="text-sm font-semibold text-slate-900 mt-0.5 tabular-nums">
+                <dd className="text-sm font-semibold text-ink mt-0.5 tabular-nums">
                   {r.valor}
                 </dd>
               </div>
@@ -833,7 +833,7 @@ export default function MonitoramentoPrecoPage() {
         )}
         {qualidadeViews.length > 0 && (
           <>
-          <h2 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Qualidade do dado</h2>
+          <h2 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-ink-muted">Qualidade do dado</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {qualidadeViews.map((k, i) => (
               <div
@@ -872,10 +872,10 @@ export default function MonitoramentoPrecoPage() {
       <section
         aria-label="Causas da ausência de referência"
         aria-busy={estado.loading}
-        className="bg-white border border-violet-100 rounded-2xl shadow-sm p-4 mb-4"
+        className="bg-surface border border-line rounded-2xl shadow-sm p-4 mb-4"
       >
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-          <h2 className="flex items-center gap-1 text-sm font-semibold text-slate-800">
+          <h2 className="flex items-center gap-1 text-sm font-semibold text-ink">
             Por que não há referência
             <InfoDica
               texto={
@@ -889,8 +889,8 @@ export default function MonitoramentoPrecoPage() {
             <span
               className={`text-xs font-semibold rounded-full border px-2 py-0.5 ${
                 causas.fecha
-                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-                  : "bg-rose-50 border-rose-300 text-rose-900"
+                  ? "bg-ok-soft border-ok/30 text-ok-ink"
+                  : "bg-crit-soft border-crit/40 text-crit-ink"
               }`}
             >
               {causas.fecha
@@ -903,26 +903,26 @@ export default function MonitoramentoPrecoPage() {
         {estado.loading && causas.linhas === null ? (
           <div className="space-y-2" aria-hidden="true">
             {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-12 rounded-xl bg-slate-100 animate-pulse" />
+              <div key={i} className="h-12 rounded-xl bg-raised animate-pulse" />
             ))}
           </div>
         ) : estado.error ? (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-muted">
             Causas indisponíveis — veja o aviso de falha.
           </p>
         ) : canalIndisponivel ? (
           /* Canal nao publicado: nada foi medido, entao nao ha "zero medido". */
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-muted">
             Causas indisponíveis — canal ainda não publicado (não é zero).
           </p>
         ) : causas.indisponivel ? (
           /* Deploy antigo da API: AUSENCIA DE CAMPO, nao ausencia de causa. */
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-muted">
             Detalhamento indisponível nesta versão da API.
           </p>
         ) : causas.total === 0 ? (
           /* Zero MEDIDO, e e' uma boa noticia. Diferente de "nao medimos". */
-          <p className="text-sm text-emerald-800">
+          <p className="text-sm text-ok-ink">
             Nenhuma oferta sem referência (zero medido).
           </p>
         ) : (
@@ -932,23 +932,23 @@ export default function MonitoramentoPrecoPage() {
                 key={c.chave}
                 className={`rounded-xl border p-3 ${
                   c.residual
-                    ? "border-rose-300 bg-rose-50"
-                    : "border-slate-200 bg-white"
+                    ? "border-crit/40 bg-crit-soft"
+                    : "border-line bg-surface"
                 }`}
               >
                 <div className="flex items-baseline justify-between gap-3">
                   <span
                     className={`flex items-center gap-1 text-sm font-semibold ${
-                      c.residual ? "text-rose-900" : "text-slate-800"
+                      c.residual ? "text-crit-ink" : "text-ink"
                     }`}
                   >
                     {c.rotulo}
                     {c.detalhe && <InfoDica texto={c.detalhe} />}
                   </span>
-                  <span className="text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                  <span className="text-sm font-bold text-ink tabular-nums whitespace-nowrap">
                     {fmtContagem(c.valor)}
                     {c.fracao != null && (
-                      <span className="ml-1 text-xs font-normal text-slate-500">
+                      <span className="ml-1 text-xs font-normal text-ink-muted">
                         ({fmtParticipacao(c.fracao)})
                       </span>
                     )}
@@ -963,18 +963,18 @@ export default function MonitoramentoPrecoPage() {
       {/* ---------------- filtros ---------------- */}
       <section
         aria-label="Filtros"
-        className="bg-white border border-violet-100 rounded-2xl shadow-sm p-4 mb-4"
+        className="bg-surface border border-line rounded-2xl shadow-sm p-4 mb-4"
       >
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex flex-col">
-            <label htmlFor={dataId} className="text-xs text-slate-500 mb-1">
+            <label htmlFor={dataId} className="text-xs text-ink-muted mb-1">
               Data observada
             </label>
             <select
               id={dataId}
               value={observedDate}
               onChange={(e) => trocaData(e.target.value)}
-              className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               {/*
                 "Mais recente" e' o modo `latest`: acompanha o sync. As demais
@@ -991,14 +991,14 @@ export default function MonitoramentoPrecoPage() {
           </div>
 
           <div className="flex flex-col">
-            <label htmlFor={marcaId} className="text-xs text-slate-500 mb-1">
+            <label htmlFor={marcaId} className="text-xs text-ink-muted mb-1">
               Marca
             </label>
             <select
               id={marcaId}
               value={brand}
               onChange={(e) => trocaFiltro(() => setBrand(e.target.value))}
-              className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <option value="">Todas as monitoradas</option>
               {marcasDoFiltro.map((b) => (
@@ -1011,7 +1011,7 @@ export default function MonitoramentoPrecoPage() {
 
           <div className="flex flex-col">
             <div className="flex items-center gap-1 mb-1">
-              <label htmlFor={situacaoId} className="text-xs text-slate-500">
+              <label htmlFor={situacaoId} className="text-xs text-ink-muted">
                 Situação
               </label>
               {/* O filtro de situacao so' mexe na tabela: os KPIs guardam o
@@ -1022,7 +1022,7 @@ export default function MonitoramentoPrecoPage() {
               id={situacaoId}
               value={status}
               onChange={(e) => trocaFiltro(() => setStatus(e.target.value))}
-              className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <option value="">Todas as situações</option>
               {STATUS_ORDER.map((s) => (
@@ -1038,14 +1038,14 @@ export default function MonitoramentoPrecoPage() {
               oferecer um controle que so' produz erro seria pior que omiti-lo. */}
           {filtros.conta && contasDoFiltro.length > 0 && (
             <div className="flex flex-col">
-              <label htmlFor={contaId} className="text-xs text-slate-500 mb-1">
+              <label htmlFor={contaId} className="text-xs text-ink-muted mb-1">
                 Conta de loja
               </label>
               <select
                 id={contaId}
                 value={shopAccount}
                 onChange={(e) => trocaFiltro(() => setShopAccount(e.target.value))}
-                className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <option value="">Todas as contas</option>
                 {contasDoFiltro.map((c) => (
@@ -1065,7 +1065,7 @@ export default function MonitoramentoPrecoPage() {
               paginacao continuam corretos. */}
           {filtros.tipoDeProduto && (meta?.out_of_scope_offer_count ?? 0) > 0 && (
             <div className="flex flex-col">
-              <label htmlFor={escopoId} className="text-xs text-slate-500 mb-1">
+              <label htmlFor={escopoId} className="text-xs text-ink-muted mb-1">
                 Escopo
               </label>
               <select
@@ -1074,7 +1074,7 @@ export default function MonitoramentoPrecoPage() {
                 onChange={(e) =>
                   trocaFiltro(() => setEscopo(e.target.value as EscopoFiltro))
                 }
-                className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <option value="todos">
                   Todas as marcas da fotografia
@@ -1086,14 +1086,14 @@ export default function MonitoramentoPrecoPage() {
 
           {filtros.tipoDeProduto && tiposDoCanal.length > 0 && (
             <div className="flex flex-col">
-              <label htmlFor={tipoId} className="text-xs text-slate-500 mb-1">
+              <label htmlFor={tipoId} className="text-xs text-ink-muted mb-1">
                 Tipo de produto
               </label>
               <select
                 id={tipoId}
                 value={productType}
                 onChange={(e) => trocaFiltro(() => setProductType(e.target.value))}
-                className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <option value="">Todos os tipos</option>
                 {tiposDoCanal.map((tp) => (
@@ -1106,7 +1106,7 @@ export default function MonitoramentoPrecoPage() {
           )}
 
           <form onSubmit={submeterBusca} className="flex flex-col grow min-w-[220px]">
-            <label htmlFor={buscaId} className="text-xs text-slate-500 mb-1">
+            <label htmlFor={buscaId} className="text-xs text-ink-muted mb-1">
               Buscar por título, SKU, EAN ou item
             </label>
             <div className="flex gap-2">
@@ -1117,11 +1117,11 @@ export default function MonitoramentoPrecoPage() {
                 onChange={(e) => setBuscaInput(e.target.value)}
                 maxLength={120}
                 placeholder="Ex.: RT01016, 7897185070156, MLB..."
-                className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-sm grow focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="border border-line-strong bg-surface text-ink rounded-lg px-3 min-h-[44px] text-sm grow focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               />
               <button
                 type="submit"
-                className="bg-violet-600 text-white rounded-lg px-4 min-h-[44px] text-sm font-semibold hover:bg-violet-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="bg-accent text-accent-on rounded-lg px-4 min-h-[44px] text-sm font-semibold hover:bg-accent/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 Buscar
               </button>
@@ -1132,7 +1132,7 @@ export default function MonitoramentoPrecoPage() {
             type="button"
             onClick={limparFiltros}
             disabled={!temFiltro}
-            className="border border-slate-300 rounded-lg px-4 min-h-[44px] text-sm font-semibold text-slate-700 disabled:opacity-40 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+            className="border border-line-strong rounded-lg px-4 min-h-[44px] text-sm font-semibold text-ink disabled:opacity-40 hover:bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             Limpar filtros
           </button>
@@ -1187,9 +1187,9 @@ export default function MonitoramentoPrecoPage() {
           // 1440/1024/390. E' o mesmo padrao que /pedidos ja usa; as outras
           // rotas nao expunham o problema porque as tabelas delas sao mais
           // estreitas. A rolagem interna da tabela continua funcionando.
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
             {truncamento && (
-              <p className="text-xs text-slate-600 px-4 pt-4">{truncamento}</p>
+              <p className="text-xs text-ink-muted px-4 pt-4">{truncamento}</p>
             )}
             <TableScrollHint>
               <table className="w-full text-sm">
@@ -1199,7 +1199,7 @@ export default function MonitoramentoPrecoPage() {
                   diferença negativa.
                 </caption>
                 <thead>
-                  <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
+                  <tr className="text-left text-xs text-ink-muted border-b border-line">
                     <th scope="col" className="px-4 py-3 font-semibold">Produto / anúncio</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Marca</th>
                     <th scope="col" className="px-4 py-3 font-semibold">Item</th>
@@ -1223,13 +1223,13 @@ export default function MonitoramentoPrecoPage() {
                   {linhas.map((row) => (
                     <tr
                       key={`${row.item_id}-${row.ref_date}`}
-                      className="border-b border-slate-100 last:border-0 hover:bg-violet-50/40"
+                      className="border-b border-line last:border-0 hover:bg-accent-soft/40"
                     >
                       <td className="px-4 py-3 max-w-[280px]">
-                        <span className="block truncate text-slate-800" title={tituloLinha(row)}>
+                        <span className="block truncate text-ink" title={tituloLinha(row)}>
                           {tituloLinha(row)}
                         </span>
-                        <span className="block text-xs text-slate-500">
+                        <span className="block text-xs text-ink-muted">
                           {listingStatusLabel(row.listing_status)}
                         </span>
                       </td>
@@ -1240,20 +1240,20 @@ export default function MonitoramentoPrecoPage() {
                             cobertura. Sem o rotulo, 223 ofertas de fora do
                             produto passariam por monitoramento de beleza. */}
                         {foraDoEscopo(row) && (
-                          <span className="ml-2 inline-block text-xs font-semibold border border-slate-300 text-slate-600 rounded-full px-2 py-0.5 align-middle">
+                          <span className="ml-2 inline-block text-xs font-semibold border border-line-strong text-ink-muted rounded-full px-2 py-0.5 align-middle">
                             {ROTULO_FORA_DE_ESCOPO}
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-slate-600 text-xs">
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-muted text-xs">
                         {row.item_id}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-slate-600 text-xs">
+                      <td className="px-4 py-3 whitespace-nowrap text-ink-muted text-xs">
                         {row.seller_sku ?? INDISPONIVEL}
                       </td>
                       <td
                         className={`px-4 py-3 text-right tabular-nums whitespace-nowrap ${
-                          temPrecoObservado(row) ? "" : "text-slate-500 italic"
+                          temPrecoObservado(row) ? "" : "text-ink-muted italic"
                         }`}
                       >
                         {/* `null` vira "Não observado", nunca R$ 0,00. */}
@@ -1265,8 +1265,8 @@ export default function MonitoramentoPrecoPage() {
                       <td
                         className={`px-4 py-3 text-right tabular-nums whitespace-nowrap font-semibold ${
                           row.difference_amount != null && row.difference_amount < 0
-                            ? "text-amber-700"
-                            : "text-slate-700"
+                            ? "text-warn-ink"
+                            : "text-ink"
                         }`}
                       >
                         {fmtDiferenca(row.difference_amount)}
@@ -1275,7 +1275,7 @@ export default function MonitoramentoPrecoPage() {
                         {fmtPercentual(row.difference_pct)}
                       </td>
                       {filtros.tipoDeProduto && (
-                        <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs text-ink-muted whitespace-nowrap">
                           {/* MATERIALIZADO pelo publisher. A tela nao
                               reclassifica kit — apenas traduz o rotulo. */}
                           {productTypeLabel(row.product_type)}
@@ -1284,10 +1284,10 @@ export default function MonitoramentoPrecoPage() {
                       <td className="px-4 py-3">
                         <StatusBadge status={row.comparison_status} />
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-ink-muted whitespace-nowrap">
                         {matchLabel(row.match_method, row.match_quality)}
                       </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">
+                      <td className="px-4 py-3 text-xs text-ink-muted whitespace-nowrap">
                         {fmtCapturaPreco(row.observed_at)}
                         {/* Frescor da LINHA, distinto do da fotografia: com a
                             fotografia em dia, `stale` quer dizer que ESTA
@@ -1299,7 +1299,7 @@ export default function MonitoramentoPrecoPage() {
                             publicada sem acrescentar informacao. */}
                         {meta?.date_policy === "snapshot_current" &&
                           row.freshness_status !== "fresh" && (
-                          <span className="block text-xs text-slate-500">
+                          <span className="block text-xs text-ink-muted">
                             {situacaoFrescorLabel(
                               situacaoFrescor(row, meta.freshness_status),
                             )}
@@ -1310,7 +1310,7 @@ export default function MonitoramentoPrecoPage() {
                         <button
                           type="button"
                           onClick={() => setLinhaAberta(row)}
-                          className="border border-slate-300 rounded-lg px-3 min-h-[44px] text-xs font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                          className="border border-line-strong rounded-lg px-3 min-h-[44px] text-xs font-semibold text-ink hover:bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                         >
                           Analisar
                         </button>
@@ -1322,8 +1322,8 @@ export default function MonitoramentoPrecoPage() {
             </TableScrollHint>
 
             {paginacao && (
-              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-slate-200">
-                <p className="text-xs text-slate-600">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-line">
+                <p className="text-xs text-ink-muted">
                   {paginacao.rotulo} · página {fmtContagem(paginacao.pagina)} de{" "}
                   {fmtContagem(paginacao.totalPaginas)}
                 </p>
@@ -1332,7 +1332,7 @@ export default function MonitoramentoPrecoPage() {
                     type="button"
                     onClick={() => setOffset(Math.max(0, offset - LIMITE))}
                     disabled={!paginacao.temAnterior}
-                    className="border border-slate-300 rounded-lg px-4 min-h-[44px] text-sm font-semibold disabled:opacity-40 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    className="border border-line-strong rounded-lg px-4 min-h-[44px] text-sm font-semibold disabled:opacity-40 hover:bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     Anterior
                   </button>
@@ -1340,7 +1340,7 @@ export default function MonitoramentoPrecoPage() {
                     type="button"
                     onClick={() => setOffset(offset + LIMITE)}
                     disabled={!paginacao.temProxima}
-                    className="border border-slate-300 rounded-lg px-4 min-h-[44px] text-sm font-semibold disabled:opacity-40 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                    className="border border-line-strong rounded-lg px-4 min-h-[44px] text-sm font-semibold disabled:opacity-40 hover:bg-raised focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                   >
                     Próxima
                   </button>

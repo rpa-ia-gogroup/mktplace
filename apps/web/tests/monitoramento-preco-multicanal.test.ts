@@ -609,7 +609,7 @@ test("H1-2. exatamente um canal fica pressionado, e ele vem de `marketplace`", a
 test("H1-3. o estado nao depende so' de cor", async () => {
   const codigo = await ler(PAGE);
   const bloco = codigo.split("seletor de canal")[1].split("</section>")[0];
-  const temCor = /bg-violet-600/.test(bloco);
+  const temCor = /bg-accent /.test(bloco);
   assert.ok(temCor, "a cor continua existindo — ela e' reforco, nao substituto");
   assert.ok(bloco.includes("aria-pressed"),
     "mas precisa haver estado programatico ALEM da cor");
