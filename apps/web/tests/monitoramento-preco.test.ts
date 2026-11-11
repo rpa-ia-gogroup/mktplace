@@ -707,7 +707,7 @@ test("o wrapper da tabela corta o overflow horizontal da pagina", async () => {
   // wrapper, nao no TableScrollHint, que precisa seguir rolavel.
   const pagina = await lerCodigo(PAGE);
   const wrapper = pagina.match(
-    /<div className="bg-white border border-violet-100 rounded-2xl shadow-sm[^"]*">\s*\{truncamento/,
+    /<div className="bg-surface border border-line rounded-2xl shadow-sm[^"]*">\s*\{truncamento/,
   );
   assert.ok(wrapper, "o wrapper da tabela mudou de forma; revise o recorte");
   assert.ok(
