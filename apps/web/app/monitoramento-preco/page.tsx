@@ -82,16 +82,34 @@ import {
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import TableScrollHint from "@/components/TableScrollHint";
-import { ArrowUpRight } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Boxes, CircleSlash, Clock, History, PauseCircle, Scale, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import InfoDica from "@/components/ui/InfoDica";
+import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import { computeRequestStatus } from "@/lib/request-freshness";
 
 const LIMITE = MONITORAMENTO_PRECO_MAX_LIMIT;
+
+const GRADE_KPIS = "grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6";
+
+/** Identidade (cor) e icone de cada cartao: so' as 7 identidades da Gerencial. */
+const VISUAL_KPI: Record<string, { identidade: IdentidadeKpi; icone: LucideIcon }> = {
+  monitored: { identidade: "pedidos", icone: Boxes },
+  comparable: { identidade: "gmv", icone: Scale },
+  below: { identidade: "ticket", icone: TrendingDown },
+  at_or_above: { identidade: "ticket", icone: TrendingUp },
+  no_reference: { identidade: "atendimento", icone: CircleSlash },
+  inactive: { identidade: "prazo", icone: PauseCircle },
+  ambiguous: { identidade: "atendimento", icone: AlertTriangle },
+  stale: { identidade: "prazo", icone: Clock },
+  historical: { identidade: "ticket", icone: History },
+};
 
 /** Gate PMA-H1 — a data observada vive na URL, para o link ser compartilhavel. */
 const PARAM_DATA = "observed_date";
@@ -785,59 +803,58 @@ export default function MonitoramentoPrecoPage() {
 
       {/* ---------------- KPIs ---------------- */}
       <section aria-label="Indicadores" aria-busy={estado.loading} className="mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-          {estado.loading && kpiViews.length === 0
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-violet-100 rounded-2xl shadow-sm h-24 animate-pulse"
-                  aria-hidden="true"
-                />
-              ))
-            : kpiViews.map((k) => (
-                <button
-                  key={k.chave}
-                  type="button"
-                  onClick={
-                    k.status
+        {estado.loading && kpiViews.length === 0 ? (
+          <FaixaCarregando cartoes={6} className={GRADE_KPIS} />
+        ) : (
+          <div className={GRADE_KPIS}>
+            {kpiViews.map((k) => (
+              <KpiTile
+                key={k.chave}
+                variante="gerencial"
+                identidade={VISUAL_KPI[k.chave].identidade}
+                icone={VISUAL_KPI[k.chave].icone}
+                rotulo={k.rotulo}
+                ajuda={<InfoDica texto={k.detalhe} emControle />}
+                /* Canal nao publicado: o envelope traz contagens zeradas,
+                   que sao ausencia de fonte, nunca zero medido. */
+                valor={canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
+                ativo={k.status ? status === k.status : undefined}
+                acaoFalada="ver na fila"
+                onAbrir={
+                  canalIndisponivel
+                    ? undefined
+                    : k.status
                       ? () => trocaFiltro(() => setStatus(k.status as string))
                       : () => limparFiltros()
-                  }
-                  className="text-left bg-white border border-violet-100 rounded-2xl shadow-sm p-4 min-h-[44px] hover:border-violet-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-                >
-                  <span className="flex items-center gap-1 text-xs text-slate-500">
-                    {k.rotulo}
-                    <InfoDica texto={k.detalhe} emControle />
-                  </span>
-                  <span className="block text-2xl font-bold text-slate-900 tabular-nums">
-                    {/* Canal nao publicado: o envelope traz contagens zeradas,
-                        que sao ausencia de fonte, nunca zero medido. */}
-                    {canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
-                  </span>
-                  <span className="sr-only">{k.detalhe}</span>
-                </button>
-              ))}
-        </div>
-        {qualidadeViews.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
-            {qualidadeViews.map((k) => (
-              <button
-                key={k.chave}
-                type="button"
-                onClick={() => trocaFiltro(() => setStatus(k.status as string))}
-                className="text-left bg-slate-50 border border-slate-200 rounded-2xl p-3 min-h-[44px] hover:border-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              >
-                <span className="flex items-center gap-1 text-xs text-slate-500">
-                  Qualidade do dado · {k.rotulo}
-                  <InfoDica texto={k.detalhe} emControle />
-                </span>
-                <span className="block text-lg font-bold text-slate-800 tabular-nums">
-                  {canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
-                </span>
-                <span className="sr-only">{k.detalhe}</span>
-              </button>
+                }
+              />
             ))}
           </div>
+        )}
+        {qualidadeViews.length > 0 && (
+          <>
+          <h2 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">Qualidade do dado</h2>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {qualidadeViews.map((k, i) => (
+              <div
+                key={k.chave}
+                className={i === qualidadeViews.length - 1 && qualidadeViews.length % 2 === 1 ? "col-span-2 sm:col-span-1" : ""}
+              >
+                <KpiTile
+                  variante="gerencial"
+                  identidade={VISUAL_KPI[k.chave].identidade}
+                  icone={VISUAL_KPI[k.chave].icone}
+                  rotulo={k.rotulo}
+                  ajuda={<InfoDica texto={k.detalhe} emControle />}
+                  valor={canalIndisponivel ? INDISPONIVEL : fmtContagem(k.valor)}
+                  ativo={k.status ? status === k.status : undefined}
+                  acaoFalada="ver na fila"
+                  onAbrir={k.status && !canalIndisponivel ? () => trocaFiltro(() => setStatus(k.status as string)) : undefined}
+                />
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </section>
 
@@ -1125,73 +1142,41 @@ export default function MonitoramentoPrecoPage() {
       {/* ---------------- tabela ---------------- */}
       <section aria-label="Anúncios monitorados" aria-busy={estado.loading}>
         {estado.loading && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm p-8">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Carregando monitoramento de preços…
-            </h2>
-            <div className="mt-4 space-y-2" aria-hidden="true">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="h-8 bg-slate-100 rounded animate-pulse" />
-              ))}
-            </div>
-          </div>
+          <StateBlock tipo="carregando" titulo="Carregando monitoramento de preços…" />
         )}
 
         {estado.error && (
-          <div
-            role="alert"
-            className="bg-white border border-rose-200 rounded-2xl shadow-sm p-8 text-center"
-          >
-            <h2 className="text-sm font-semibold text-rose-800">
-              Monitoramento de preços indisponível
-            </h2>
-            {/* Gate PMA-2C4D3-H3 — texto para a PESSOA. Antes vinha `{erro}`,
-                que e' diagnostico ("A API respondeu 422.") e expunha o status
-                HTTP a quem opera. O status continua no estado, escolhendo a
-                redacao; nao aparece. */}
-            <p className="text-xs text-slate-600 mt-2">
-              {mensagemDeFalha(erroStatus)}
-            </p>
-            <button
-              type="button"
-              onClick={() => setRetryKey((k) => k + 1)}
-              className="mt-4 border border-slate-300 rounded-lg px-4 min-h-[44px] text-sm font-semibold hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-            >
-              Tentar novamente
-            </button>
-          </div>
+          // Texto para a PESSOA (Gate PMA-2C4D3-H3): o status HTTP escolhe a redacao e nao aparece.
+          <StateBlock
+            tipo="erro"
+            titulo="Monitoramento de preços indisponível"
+            descricao={mensagemDeFalha(erroStatus)}
+            acao={<RetryButton onClick={() => setRetryKey((k) => k + 1)} />}
+          />
         )}
 
         {/* T-0067 — canal nao publicado: a tabela vazia diz POR QUE esta vazia. */}
         {estado.fresh && linhas.length === 0 && avisoCanal && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm p-8 text-center">
-            <h2 className="text-sm font-semibold text-slate-700">
-              {canalLabel(marketplace)}: canal ainda não publicado
-            </h2>
-            <p className="text-xs text-slate-500 mt-2">{avisoCanal}</p>
-          </div>
+          <StateBlock tipo="indisponivel" titulo={`${canalLabel(marketplace)}: canal ainda não publicado`} descricao={avisoCanal} />
         )}
 
         {estado.fresh && linhas.length === 0 && !avisoCanal && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm p-8 text-center">
-            <h2 className="text-sm font-semibold text-slate-700">
-              Nenhum anúncio para os filtros selecionados
-            </h2>
-            <p className="text-xs text-slate-500 mt-2">
-              {temFiltro
-                ? "Ajuste os filtros."
-                : "Sem anúncios publicados na data observada."}
-            </p>
-            {temFiltro && (
-              <button
-                type="button"
-                onClick={limparFiltros}
-                className="mt-4 border border-slate-300 rounded-lg px-4 min-h-[44px] text-sm font-semibold hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-              >
-                Limpar filtros
-              </button>
-            )}
-          </div>
+          <StateBlock
+            tipo="vazio"
+            titulo="Nenhum anúncio para os filtros selecionados"
+            descricao={temFiltro ? "Ajuste os filtros." : "Sem anúncios publicados na data observada."}
+            acao={
+              temFiltro ? (
+                <button
+                  type="button"
+                  onClick={limparFiltros}
+                  className="mt-1 inline-flex min-h-[44px] items-center rounded-lg border border-current/30 px-3 text-xs font-semibold hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  Limpar filtros
+                </button>
+              ) : undefined
+            }
+          />
         )}
 
         {estado.fresh && linhas.length > 0 && (
