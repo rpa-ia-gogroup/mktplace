@@ -32,3 +32,41 @@ export function fullDaMarca(
   }
   return r;
 }
+
+/** Por marca: proporcao de GMV (ml, shopee) e contagem real de pedidos Full das fatos. */
+export interface FullMarca {
+  ml?: number | null;
+  shopee?: number | null;
+  /** Pedidos Full medidos: ML Full (pagos) + Shopee FBS (elegiveis). Ausente = canal sem medida. */
+  pedFull?: number | null;
+  /** Pedidos da marca na janela da medida; so' preenchido quando a janela nao e' o periodo. */
+  pedBase?: number | null;
+}
+
+export type FullPorMarca = Record<string, FullMarca>;
+
+/** Dados de Full que a pagina entrega aos detalhes; `aproximado` = a medida cobre so' parte do periodo (ate' ontem). */
+export interface FullDoDetalhe {
+  por: FullPorMarca;
+  aproximado: boolean;
+}
+
+/**
+ * Pedidos de uma marca em Full e sem Full. A contagem de Full e' real (fatos de
+ * modalidade); sem Full e' o resto dos pedidos da marca, TikTok incluso.
+ * `null` = sem medida: marca sem Full medido, ou com canal vendendo sem
+ * modalidade (Kokeshi na Shopee) -- nunca vira "tudo sem Full".
+ * Janela diferente do periodo (dia em andamento): vale a PROPORCAO da janela.
+ */
+export function fullPedidosDaMarca(
+  pedidos: number,
+  f: FullMarca | undefined,
+  aproximado: boolean,
+  d: FullDaMarca | null,
+): { full: number; semFull: number } | null {
+  const base = aproximado ? f?.pedBase : pedidos;
+  if (!f || f.pedFull == null || !d || !(pedidos > 0) || !(base != null && base > 0)) return null;
+  if (Object.values(d.semDado).some((v) => (v ?? 0) > 0)) return null;
+  const full = Math.round(pedidos * Math.min(1, f.pedFull / base));
+  return { full, semFull: pedidos - full };
+}

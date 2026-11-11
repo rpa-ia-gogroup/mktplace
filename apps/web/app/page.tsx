@@ -55,9 +55,10 @@ import {
 import { mergeChannelSeries, reconcileSeriesTotal, type MergedBucket } from "@/lib/gerencial/trend-series";
 import { bucketDeHoje } from "@/lib/gerencial/dia-em-andamento";
 import type { TrendMetric } from "@/lib/gerencial/request-key";
-import { fetchHojePorHora, fetchMLFulfillment, fetchShopeeFbs, type TrendGranularityRequest } from "@/lib/api-client";
-import { buildQuery as queryMlFull } from "@/lib/ml-fulfillment";
+import { fetchBrands, fetchHojePorHora, fetchMLFulfillment, fetchShopeeFbs, type TrendGranularityRequest } from "@/lib/api-client";
+import { buildQuery as queryMlFull, byClass as byClassMl } from "@/lib/ml-fulfillment";
 import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
+import type { FullPorMarca } from "@/lib/gerencial/divisao-full";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "@/lib/gerencial/marcas-menores-gerencial";
@@ -330,40 +331,60 @@ function GerencialComGrandes() {
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- filterIdentity cobre os filtros
   }, [filterIdentity, hoje, sources.demoMode, sources.retryKey]);
-  // A mesma proporcao Full, POR MARCA, para o card de Marcas. A rota do ML nao
-  // abre por marca: uma consulta por marca. Shopee vem do `by_brand` (Kokeshi
-  // fora da esteira = sem dado). As fatos so' tem dia fechado: periodo so' de
-  // hoje fica sem divisao (uma barra so').
-  const [fullPorMarca, setFullPorMarca] = useState<Record<string, { ml?: number | null; shopee?: number | null }> | null>(
-    null,
-  );
+  // A mesma proporcao Full, POR MARCA, para o card de Marcas e os detalhes de GMV e
+  // Pedidos. A rota do ML nao abre por marca: uma consulta por marca. Shopee vem do
+  // `by_brand` (Kokeshi fora da esteira = sem dado). As fatos so' tem dia fechado:
+  // periodo que passa de ontem (ou so' hoje) usa a medida ate' ontem (`aproximado`);
+  // so' hoje o card de Marcas segue com uma barra so', como antes.
+  const [fullPorMarca, setFullPorMarca] = useState<FullPorMarca | null>(null);
+  const [fullJanela, setFullJanela] = useState({ aproximado: false, soHoje: false });
   useEffect(() => {
     setFullPorMarca(null);
-    const { dateFrom: from, dateTo, brands: marcas, channels } = filters;
+    const { dateFrom, dateTo, brands: marcas, channels } = filters;
     const ontem = new Date(Date.parse(`${hoje}T12:00:00Z`) - 864e5).toISOString().slice(0, 10);
     const ate = dateTo < ontem ? dateTo : ontem;
+    const soHoje = dateFrom > ate;
+    const from = soHoje ? ate : dateFrom;
+    const aproximado = from !== dateFrom || ate !== dateTo;
     // So' TikTok selecionado: nao ha Full a mostrar, fica a barra unica.
     const temFull = isMarketplaceSelected(channels, "ml") || isMarketplaceSelected(channels, "shopee");
-    if (sources.demoMode || from > ate || !temFull) return;
+    if (sources.demoMode || !temFull) return;
     const ac = new AbortController();
     const ids = marcas.length > 0 ? marcas : MARCAS.map((m) => m.id);
     const ml = isMarketplaceSelected(channels, "ml")
       ? Promise.all(
           ids.map((b) =>
             fetchMLFulfillment(queryMlFull({ from, to: ate, brands: [b] }), ac.signal).then(
-              (r) => [b, r.share_full_gmv] as const,
+              (r) =>
+                [b, r.share_full_gmv, r.share_full_orders == null ? null : (byClassMl(r, "full")?.paid_orders ?? 0)] as const,
             ),
           ),
         )
-      : Promise.resolve([] as (readonly [string, number | null])[]);
+      : Promise.resolve([] as (readonly [string, number | null, number | null])[]);
     const shopee = isMarketplaceSelected(channels, "shopee")
       ? fetchShopeeFbs(queryShopeeFbs({ from, to: ate }), ac.signal).then((r) => ("by_brand" in r ? r.by_brand : []))
       : Promise.resolve([]);
-    Promise.all([ml, shopee])
-      .then(([m, sh]) => {
-        const mapa: Record<string, { ml?: number | null; shopee?: number | null }> = {};
-        for (const [b, s] of m) (mapa[b] ??= {}).ml = s;
-        for (const r of sh) (mapa[r.brand] ??= {}).shopee = r.share_fbs_gmv;
+    // Pedidos da marca na janela da medida (so' quando ela nao e' o periodo todo).
+    const base = aproximado
+      ? fetchBrands(channels, undefined, { brands: marcas, dateFrom: from, dateTo: ate, compare: false }).then((r) =>
+          r.live ? r.data : null,
+        )
+      : Promise.resolve(null);
+    Promise.all([ml, shopee, base])
+      .then(([m, sh, bs]) => {
+        const mapa: FullPorMarca = {};
+        for (const [b, s, n] of m) {
+          const e = (mapa[b] ??= {});
+          e.ml = s;
+          if (n != null) e.pedFull = (e.pedFull ?? 0) + n;
+        }
+        for (const r of sh) {
+          const e = (mapa[r.brand] ??= {});
+          e.shopee = r.share_fbs_gmv;
+          if (r.share_fbs_orders != null) e.pedFull = (e.pedFull ?? 0) + Math.round(r.eligible_orders * r.share_fbs_orders);
+        }
+        for (const b of bs ?? []) if (mapa[b.brand]) mapa[b.brand].pedBase = b.orders;
+        setFullJanela({ aproximado, soHoje });
         setFullPorMarca(mapa);
       })
       .catch(() => undefined);
@@ -791,7 +812,7 @@ function GerencialComGrandes() {
             brandHref={brandHref}
             tendenciaDoDia={tendenciaDoDia}
             tendenciaDoMes={tendenciaDoMes}
-            fullPorMarca={fullPorMarca}
+            fullPorMarca={fullJanela.soHoje ? null : fullPorMarca}
           />
         </div>
       </div>
@@ -935,6 +956,7 @@ function GerencialComGrandes() {
             overview={overview}
             brands={brands}
             channels={filters.channels}
+            full={fullPorMarca ? { por: fullPorMarca, aproximado: fullJanela.aproximado } : null}
             buildHref={buildHref}
           />
         )}
