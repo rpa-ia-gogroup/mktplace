@@ -12,14 +12,19 @@ import {
 } from "@/lib/api-client";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import KpiCard from "@/components/KpiCard";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
+import { FaixaTotais, GrupoCanal, VISUAL_DETALHE } from "@/components/pedidos/PedidosCartoes";
+import PedidosDrilldownContent from "@/components/pedidos/PedidosDrilldownContent";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import { fmtBrl } from "@/lib/formatters";
+import { fmtBrlCurto, fmtPctSimples, fmtNumCurto } from "@/lib/formatters";
+import { seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
 import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -34,7 +39,7 @@ function fmtNum(v: number | null): string {
 
 function fmtRate(v: number | null): string {
   if (v == null) return "—";
-  return v.toFixed(1) + "%";
+  return fmtPctSimples(v);
 }
 
 function cancelColor(v: number | null): string {
@@ -44,59 +49,9 @@ function cancelColor(v: number | null): string {
   return "text-rose-700";
 }
 
-function cancelBg(v: number | null): string {
-  if (v == null) return "";
-  if (v < 2) return "bg-emerald-50";
-  if (v < 5) return "bg-amber-50";
-  return "bg-rose-50";
-}
-
 function shortDate(dateStr: string): string {
   const [, m, d] = dateStr.split("-");
   return `${parseInt(d)}/${parseInt(m)}`;
-}
-
-interface CanalCardProps {
-  title: string;
-  accentColor: string;
-  orders: number;
-  canceled: number;
-  gmv: number;
-  cancelRate: number | null;
-  delivered: number | null;
-}
-
-function CanalCard({ title, accentColor, orders, canceled, gmv, cancelRate, delivered }: CanalCardProps) {
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-violet-100 p-5 flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${accentColor} shrink-0`} />
-        <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">{title}</span>
-      </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-        <div>
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Pedidos</p>
-          <p className="text-xl font-bold text-slate-800 tabular-nums">{fmtNum(orders)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">GMV</p>
-          <p className="text-xl font-bold text-slate-800 tabular-nums">{fmtBrl(gmv)}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Cancelados</p>
-          <p className={`text-base font-bold tabular-nums ${cancelBg(cancelRate)} rounded-md px-1.5 py-0.5 inline-block ${cancelColor(cancelRate)}`}>
-            {fmtNum(canceled)} <span className="text-xs font-semibold">({fmtRate(cancelRate)})</span>
-          </p>
-        </div>
-        {delivered != null && (
-          <div>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-0.5">Entregues</p>
-            <p className="text-base font-bold text-emerald-700 tabular-nums">{fmtNum(delivered)}</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
 
 function getBrandSortValue(row: PedidosBrandRow, column: string): string | number | null {
@@ -193,7 +148,7 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-800">
                   {fmtNum(row.total_orders)}
                 </td>
-                <td className="px-5 py-3 text-right tabular-nums text-slate-700">{fmtBrl(row.total_gmv)}</td>
+                <td className="px-5 py-3 text-right tabular-nums text-slate-700">{fmtBrlCurto(row.total_gmv)}</td>
               </tr>
             ))}
           </tbody>
@@ -210,6 +165,8 @@ function PedidosPageInner() {
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  // Cartao aberto no detalhe (dialogo unico da pagina).
+  const [detalhe, setDetalhe] = useState<ChaveDetalhe | null>(null);
   // Chave da ultima requisicao resolvida (sucesso ou falha) — comparada com
   // a chave atual para decidir se o estado em memoria reflete de fato os
   // filtros exibidos agora (mesmo padrao Financeiro/Regioes/Qualidade, Gate U4/U5).
@@ -300,6 +257,10 @@ function PedidosPageInner() {
     ...(showMlSel ? { ml: r.ml_orders } : {}),
   }));
 
+  const selecao = { tiktok: showTiktokSel, ml: showMlSel };
+  const series = useMemo(() => seriesDoPeriodo(daily, selecao), [daily, showTiktokSel, showMlSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dadosCartoes = { kpis, tk, ml };
+
   return (
     <PageContainer>
       <PageHeader
@@ -354,21 +315,6 @@ function PedidosPageInner() {
           </p>
         )}
 
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider mb-1">Erro de carregamento</p>
-              <p className="text-sm text-rose-800">{error}</p>
-            </div>
-            <button
-              onClick={() => { setError(null); setRetryKey((k) => k + 1); }}
-              className="text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg px-3 py-1.5 hover:bg-rose-100 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        )}
-
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState
             ? "Carregando dados de pedidos..."
@@ -380,14 +326,14 @@ function PedidosPageInner() {
         </span>
 
       {isErrorState ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-10 text-center">
-          <p className="text-slate-500 text-sm font-medium">Não foi possível carregar os dados de pedidos.</p>
-        </div>
+        <StateBlock
+          tipo="erro"
+          titulo="Não foi possível carregar os dados de pedidos."
+          descricao={error}
+          acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+        />
       ) : showShopeeOnly ? (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-12 text-center">
-          <p className="text-slate-500 text-sm font-medium">Sem cobertura de Shopee em Pedidos.</p>
-          <p className="text-slate-400 text-xs mt-1">Selecione TikTok Shop ou Mercado Livre.</p>
-        </div>
+        <StateBlock tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos." descricao="Selecione TikTok Shop ou Mercado Livre." />
       ) : (
       <>
         {/* Navegacao interna compacta */}
@@ -398,62 +344,33 @@ function PedidosPageInner() {
           <a href="#por-marca" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Por Marca</a>
         </nav>
 
-        {/* KPI cards */}
-        <div id="resumo" className={`scroll-mt-24 grid grid-cols-2 md:grid-cols-4 gap-4 transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`} aria-busy={isLoadingState}>
-          <KpiCard
-            label="Total de pedidos"
-            value={kpis ? fmtNum(kpis.total_orders) : "—"}
-            subvalue={periodLabel}
-            accent="bg-violet-600"
-          />
-          <KpiCard
-            label="GMV total"
-            value={kpis ? fmtBrl(kpis.total_gmv) : "—"}
-            subvalue="Só TikTok Shop + Mercado Livre"
-            accent="bg-violet-600"
-          />
-          <KpiCard
-            label="Ticket médio"
-            value={kpis ? fmtBrl(kpis.avg_ticket) : "—"}
-            subvalue="por pedido"
-            accent="bg-violet-400"
-          />
-          <KpiCard
-            label="Taxa cancelamento"
-            value={kpis ? fmtRate(kpis.cancel_rate_pct) : "—"}
-            subvalue={kpis ? `${fmtNum((tk?.canceled ?? 0) + (ml?.canceled ?? 0))} cancelados` : undefined}
-            accent={kpis?.cancel_rate_pct == null ? "bg-slate-300" : kpis.cancel_rate_pct < 2 ? "bg-emerald-500" : kpis.cancel_rate_pct < 5 ? "bg-amber-500" : "bg-rose-500"}
-          />
+        {/* Cartoes no padrao da Gerencial: os 4 totais e um grupo por canal. */}
+        <div id="resumo" className="scroll-mt-24" aria-busy={isLoadingState}>
+          {isLoadingState ? (
+            <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />
+          ) : (
+            <FaixaTotais dados={dadosCartoes} series={series} onAbrir={setDetalhe} />
+          )}
         </div>
 
-        {/* Canal breakdown */}
-        <div id="por-canal" className="scroll-mt-24 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {tk && (
-            <CanalCard
-              title="TikTok Shop"
-              accentColor="bg-violet-600"
-              orders={tk.orders}
-              canceled={tk.canceled}
-              gmv={tk.gmv}
-              cancelRate={tk.cancel_rate_pct}
-              delivered={tk.delivered}
+        <div id="por-canal" className="scroll-mt-24 flex flex-col gap-4">
+          {isLoadingState && <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />}
+          {!isLoadingState && tk && (
+            <GrupoCanal
+              canal="tiktok" titulo="TikTok Shop" dados={tk}
+              serieOrders={series.tkPedidos} serieCancelados={series.tkCancelados}
+              chaveOrders="tk_pedidos" chaveCancelados="tk_cancelados" onAbrir={setDetalhe}
             />
           )}
-          {ml && (
-            <CanalCard
-              title="Mercado Livre"
-              accentColor="bg-amber-500"
-              orders={ml.orders}
-              canceled={ml.canceled}
-              gmv={ml.gmv}
-              cancelRate={ml.cancel_rate_pct}
-              delivered={ml.delivered}
+          {!isLoadingState && ml && (
+            <GrupoCanal
+              canal="ml" titulo="Mercado Livre" dados={ml}
+              serieOrders={series.mlPedidos} serieCancelados={series.mlCancelados}
+              chaveOrders="ml_pedidos" chaveCancelados="ml_cancelados" onAbrir={setDetalhe}
             />
           )}
-          {!tk && !ml && dataIsFresh && (
-            <div className="col-span-2 bg-white rounded-2xl border border-violet-100 p-8 text-center">
-              <p className="text-sm text-slate-400">Sem dados de canais disponíveis.</p>
-            </div>
+          {!isLoadingState && !tk && !ml && dataIsFresh && (
+            <StateBlock tipo="vazio" titulo="Sem dados de canais disponíveis." />
           )}
         </div>
 
@@ -477,8 +394,8 @@ function PedidosPageInner() {
                   tick={{ fontSize: 11, fill: "#64748b" }}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
-                  width={36}
+                  tickFormatter={(v) => fmtNumCurto(v)}
+                  width={56}
                 />
                 <Tooltip
                   contentStyle={{ borderRadius: "12px", border: "1px solid #ede9fe", fontSize: 12 }}
@@ -509,13 +426,31 @@ function PedidosPageInner() {
         </div>
 
         {dataIsFresh && !displayData && (
-          <div className="bg-white rounded-2xl border border-violet-100 p-12 text-center">
-            <p className="text-sm text-slate-500">API offline — pedidos indisponíveis.</p>
-          </div>
+          <StateBlock tipo="indisponivel" titulo="API offline — pedidos indisponíveis." />
         )}
       </>
       )}
-      </PageContainer>
+      <KpiDrilldownDialog
+        open={detalhe != null}
+        onClose={() => setDetalhe(null)}
+        title={detalhe ? TITULO_DETALHE[detalhe] : ""}
+        icone={detalhe ? VISUAL_DETALHE[detalhe].icone : undefined}
+        identidade={detalhe ? VISUAL_DETALHE[detalhe].identidade : undefined}
+      >
+        {detalhe && dataIsFresh && (
+          <PedidosDrilldownContent
+            chave={detalhe}
+            dados={dadosCartoes}
+            marcas={brandRows}
+            sel={selecao}
+            series={series}
+            identidade={VISUAL_DETALHE[detalhe].identidade}
+            periodLabel={periodLabel}
+            refreshedAt={displayData?.refreshed_at ?? null}
+          />
+        )}
+      </KpiDrilldownDialog>
+    </PageContainer>
   );
 }
 

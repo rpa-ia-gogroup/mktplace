@@ -251,7 +251,8 @@ function KpiCardIdentidade({
       <span className={`text-lg md:text-xl lg:text-2xl xl:text-lg min-[1440px]:text-2xl font-semibold tracking-tight tabular-nums leading-tight ${TOM_TINTA[tom]}`}>
         {typeof valor === "string" ? <NumeroAnimado texto={valor} /> : valor}
       </span>
-      <span className="mt-auto flex items-end justify-between gap-3 pt-1">
+      {/* flex-wrap: em cartao estreito (390px, 2 colunas) o grafico passa para a linha de baixo em vez de sair da caixa. */}
+      <span className="mt-auto flex flex-wrap items-end justify-between gap-x-3 gap-y-1 pt-1">
         <span className="flex min-w-0 flex-col gap-1">
           {(delta || antes) && (
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -261,7 +262,11 @@ function KpiCardIdentidade({
           )}
           {comparacao && <span className="text-xs text-ink-faint leading-snug">{comparacao}</span>}
         </span>
-        {t && t.pontos.length >= 4 && <LinhaDeTendencia t={t} tinta={tinta} />}
+        {t && t.pontos.length >= 4 && (
+          <span className="ml-auto">
+            <LinhaDeTendencia t={t} tinta={tinta} />
+          </span>
+        )}
       </span>
     </>
   );

@@ -76,8 +76,8 @@ test("Pedidos: a selecao Shopee-isolada tambem marca setResolvedKey(key) (nunca 
 
 test("Pedidos: cards/series de canal nao selecionado nunca aparecem (gating por showTiktokSel/showMlSel)", () => {
   const src = readSource("app", "pedidos", "page.tsx");
-  assert.match(src, /\{tk &&/, "CanalCard do TikTok deve ser condicionado a variavel derivada da selecao");
-  assert.match(src, /\{ml &&/, "CanalCard do ML deve ser condicionado a variavel derivada da selecao");
+  assert.match(src, /\{(?:!isLoadingState && )?tk &&/, "o grupo de cartoes do TikTok deve ser condicionado a variavel derivada da selecao");
+  assert.match(src, /\{(?:!isLoadingState && )?ml &&/, "o grupo de cartoes do ML deve ser condicionado a variavel derivada da selecao");
   assert.match(src, /\{showTiktokSel && <Bar dataKey="tiktok"/, "serie do grafico (TikTok) deve ser condicionada a showTiktokSel");
   assert.match(src, /\{showMlSel && <Bar dataKey="ml"/, "serie do grafico (ML) deve ser condicionada a showMlSel");
 });
