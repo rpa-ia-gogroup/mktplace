@@ -16,7 +16,7 @@ import {
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { acosDoRoas } from "@/lib/gerencial/kpi-band";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
-import { fmtBrl, fmtNumber, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
@@ -79,7 +79,7 @@ function KpiReference({
   const outra = kind !== "gmv" && comparacao?.deltaPct != null && comparacao.reference ? comparacao : null;
   if (!gmv && !outra) return null;
   const pct = gmv ? overview.gmv_mom_pct! : outra!.deltaPct!;
-  const antes = gmv ? fmtBrl(overview.prev_gmv) : outra!.reference!;
+  const antes = gmv ? fmtBrlCurto(overview.prev_gmv) : outra!.reference!;
   const neutro = kind === "ad_spend" || outra?.deltaTone === "neutral";
   const sobe = pct >= 0;
   const Seta = sobe ? ArrowUpRight : ArrowDownRight;
@@ -203,7 +203,7 @@ function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; 
               ponto={CHANNEL_DOT[c.channel]}
               barra={CHANNEL_DOT[c.channel]}
               pct={c.pct}
-              value={c.value != null ? `${fmtBrl(c.value)} · ${fmtPct1(c.pct)}` : "Sem dado"}
+              value={c.value != null ? `${fmtBrlCurto(c.value)} · ${fmtPct1(c.pct)}` : "Sem dado"}
               tone={c.value != null ? "value" : "muted"}
             />
           ))}
@@ -219,7 +219,7 @@ function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; 
                 label={b.label}
                 pct={b.pct}
                 delta={d != null ? { pct: d } : null}
-                value={`${fmtBrl(b.value)} · ${fmtPct1(b.pct)}`}
+                value={`${fmtBrlCurto(b.value)} · ${fmtPct1(b.pct)}`}
               />
             );
           })}
@@ -235,7 +235,7 @@ function OrdersBreakdown({ brands }: { brands: BrandRow[] }) {
     <DrilldownSecao titulo="Por marca" acao={<span>{byBrand.length}</span>}>
       <ul className="flex flex-col">
         {byBrand.map((b) => (
-          <EvidenceRow key={b.brand} label={b.label} pct={b.pct} value={`${fmtNumber(b.value)} · ${fmtPct1(b.pct)}`} />
+          <EvidenceRow key={b.brand} label={b.label} pct={b.pct} value={`${fmtNumCurto(b.value)} · ${fmtPct1(b.pct)}`} />
         ))}
       </ul>
     </DrilldownSecao>
@@ -253,7 +253,7 @@ function AvgTicketBreakdown({ brands }: { brands: BrandRow[] }) {
             key={r.brand}
             label={r.label}
             pct={r.avgTicket != null && maior > 0 ? (r.avgTicket / maior) * 100 : null}
-            value={r.avgTicket != null ? fmtBrl(r.avgTicket) : "—"}
+            value={r.avgTicket != null ? fmtBrlCurto(r.avgTicket) : "—"}
             tone={r.avgTicket != null ? "value" : "muted"}
           />
         ))}
@@ -280,7 +280,7 @@ function AdSpendBreakdown({ overview, brands, channels }: { overview: OverviewDa
         {(mlSelected || shopeeSelected) && (
           <EvidenceRow
             label="Mercado Livre + Shopee"
-            value={overview.ad_spend != null ? fmtBrl(overview.ad_spend) : "Sem dado"}
+            value={overview.ad_spend != null ? fmtBrlCurto(overview.ad_spend) : "Sem dado"}
             tone={overview.ad_spend != null ? "value" : "muted"}
           />
         )}
@@ -303,7 +303,7 @@ function AdSpendBreakdown({ overview, brands, channels }: { overview: OverviewDa
                   const d = variacao(b.ad_spend, b.ad_spend_prev);
                   return d != null ? { pct: d, neutro: true } : null;
                 })()}
-                value={`${fmtBrl(b.ad_spend!)} · ${fmtPct1(pct)}`}
+                value={`${fmtBrlCurto(b.ad_spend!)} · ${fmtPct1(pct)}`}
               />
             );
           })}

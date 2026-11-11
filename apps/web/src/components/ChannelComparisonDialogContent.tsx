@@ -5,7 +5,7 @@ import { formatChannelMetric, signalLabel, signalTone } from "@/lib/canais-chann
 import { buildChannelDiagnosis } from "@/lib/channel-signal-reasons";
 import { buildArrivalParams } from "@/lib/brand-arrival-context";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { fmtBrlCurto, fmtBrlFull, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtBrlFull, fmtNumCurto } from "@/lib/formatters";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
@@ -128,7 +128,7 @@ export default function ChannelComparisonDialogContent({
             className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums"
           />
           <span className="pb-0.5 text-xs text-ink-faint tabular-nums">
-            GMV · {fmtNumber(row.orders)} pedidos
+            GMV · {fmtNumCurto(row.orders)} pedidos
             {median?.gmv_median != null && ` · mediana do canal ${fmtBrlCurto(median.gmv_median)}`}
           </span>
         </div>

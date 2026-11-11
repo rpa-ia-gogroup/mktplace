@@ -101,7 +101,9 @@ test("conteudos de drill-down da Gerencial V2 nao criam shell nem role=dialog pr
 
 test("dialogo de Canais so abre com dados frescos (dataIsFresh) e conteudo condicionado", () => {
   const src = read("app/canais/page.tsx");
-  assert.match(src, /open=\{dataIsFresh && detailRow != null\}/, "abertura gated por frescor");
+  // Canais abre dois conteudos no mesmo dialogo (detalhe do canal e detalhe do cartao); os dois com a guarda.
+  assert.match(src, /open=\{dataIsFresh && \(detailRow != null \|\| kpiAberto != null\)\}/, "abertura gated por frescor");
+  assert.match(src, /\{dataIsFresh && kpiAberto && \(/, "conteúdo do cartão também gated por frescor");
   assert.match(src, /\{dataIsFresh && detailRow && \(/, "conteúdo também gated por frescor");
 });
 
