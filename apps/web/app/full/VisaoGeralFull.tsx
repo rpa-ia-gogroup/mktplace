@@ -32,6 +32,7 @@ import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
 import ChipCurva from "@/components/full/ChipCurva";
 import SeloCanal from "@/components/full/SeloCanal";
+import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { fetchCurvaAbc, fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
@@ -91,7 +92,6 @@ import {
   type Curva,
   type FiltroCurva,
   heroiRuptura,
-  impactoPorMarca,
   kpiImpacto,
   kpiParamVenda,
   pctDestaque,
@@ -117,8 +117,6 @@ const DICA_RUPTURA =
   "Fora do total: kits da Shopee (não conciliados), a Kokeshi na Shopee (sem conta na esteira de estoque) e a Ápice no ML.";
 const NOTA_VENDEDOR =
   "Ruptura no Full não quer dizer venda parada: na Shopee o vendedor pode ter estoque próprio e seguir vendendo fora do Full.";
-const NOTA_IMPACTO =
-  "No ML, anúncios do mesmo inventário fora do Full podem seguir vendendo. Item sem preço fica fora da soma.";
 const DICA_COBERTURA =
   "Mediana da cobertura em dias dos itens com venda nos 28 dias, como a API calcula item a item. Itens sem venda ficam fora.";
 
@@ -369,43 +367,6 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
   );
 }
 
-function DetalheImpacto({ canal, impacto }: { canal: Canal; impacto: ImpactoRuptura | null }) {
-  const linhas = impactoPorMarca(canal, impacto);
-  return (
-    <div className="flex flex-col gap-3 text-sm">
-      {linhas === null ? (
-        <p className="text-ink-muted">Impacto potencial indisponível agora.</p>
-      ) : (
-        <table className="w-full">
-          <caption className="sr-only">Impacto potencial por marca {noCanal(canal, NOME_CANAL[canal])}, da maior perda para a menor</caption>
-          <thead className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            <tr>
-              <th scope="col" className="py-2 pr-2 text-left">Marca</th>
-              <th scope="col" className="px-2 py-2 text-right">% do Full da marca</th>
-              <th scope="col" className="py-2 pl-2 text-right">R$/dia potencial</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {linhas.map((l) => (
-              <tr key={l.marca}>
-                <th scope="row" className="py-2 pr-2 text-left font-medium text-ink">{tituloMarca(l.marca)}</th>
-                <td className="px-2 py-2 text-right tabular-nums">{l.vendedorTemEstoque ? "—" : l.pct === null ? <Ausente motivo="faturamento Full de 28 dias incompleto" /> : fmtPct(l.pct)}</td>
-                <td className="py-2 pl-2 text-right tabular-nums">
-                  {l.vendedorTemEstoque ? <span className="text-xs text-ink-muted">vendedor tem estoque</span>
-                    : l.perda === null ? <Ausente motivo="sem preço" /> : `${fmtReais(l.perda)}/dia`}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <p className="border-t border-line pt-3 text-xs leading-snug text-ink-muted">
-        {dicaImpacto(canal, impacto)} {canal === "ml" ? NOTA_IMPACTO : NOTA_VENDEDOR}
-      </p>
-    </div>
-  );
-}
-
 export default function VisaoGeralFull() {
   const [canais, setCanais] = useState<ResumoCanal[] | null>(null);
   // `null` = impacto nao carregou: a tela segue sem R$, nunca com R$ 0.
@@ -489,8 +450,8 @@ const OPCOES_FILTRO: { valor: FiltroCurva; texto: string }[] = [
 ];
 
 function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; abc: CurvaAbc | null; recarregar: () => void }) {
-  // Um so' dialogo na pagina para os drilldowns (identidade Gerencial).
-  const [drill, setDrill] = useState<Canal | "curva" | null>(null);
+  // O unico detalhe da pagina e' o impacto por curva (os cartoes de impacto filtram a fila).
+  const [curvaAberta, setCurvaAberta] = useState(false);
   // FULL-CARINHO: filtros da fila na URL (?canal=ml&curva=aa_a): compartilhar e o "voltar" funcionam.
   const busca = useSearchParams();
   const router = useRouter();
@@ -564,7 +525,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         tom={curvaH?.critico ? "critico" : "neutro"}
         contexto={curvaH?.contexto ? <Escondido texto={curvaH.contexto} detalhe={curvaH.titulo} /> : undefined}
         acao={comCurva && (
-          <button type="button" onClick={() => setDrill("curva")} aria-haspopup="dialog"
+          <button type="button" onClick={() => setCurvaAberta(true)} aria-haspopup="dialog"
             className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
             Ver por curva →
           </button>
@@ -646,27 +607,20 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         })()}
       </div>
       <KpiDrilldownDialog
-        open={drill !== null}
-        onClose={() => setDrill(null)}
-        title={drill === "curva" ? "Impacto potencial por curva ABC" : `Impacto potencial · ${drill ? NOME_CANAL[drill] : ""}`}
+        open={curvaAberta}
+        onClose={() => setCurvaAberta(false)}
+        title="Impacto potencial por curva ABC"
+        icone={TrendingDown}
+        identidade="gmv"
       >
-        {drill === "curva" ? (
-          <div className="flex flex-col gap-4">
-            {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ, nao em rodape de 4 frases. */}
-            {abc?.status === "ok" && <div className="-mb-2 flex justify-end"><InfoDica texto={dicaCurva(abc, impacto)} /></div>}
-            {CANAIS.map((c) => (
-              <section key={c} className="flex flex-col gap-2">
-                <h3 className="m-0"><SeloCanal canal={c} /></h3>
-                <DetalheCurva canal={c} impacto={impacto} abc={abc} />
-              </section>
-            ))}
-          </div>
-        ) : drill && (
-          <div className="flex flex-col gap-4">
-            {comCurva && <DetalheCurva canal={drill} impacto={impacto} abc={abc} />}
-            <DetalheImpacto canal={drill} impacto={impacto} />
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ da 1a secao, nao em rodape. */}
+          {CANAIS.map((c, i) => (
+            <DrilldownSecao key={c} titulo={NOME_CANAL[c]} acao={i === 0 && abc?.status === "ok" ? <InfoDica texto={dicaCurva(abc, impacto)} /> : undefined}>
+              <DetalheCurva canal={c} impacto={impacto} abc={abc} />
+            </DrilldownSecao>
+          ))}
+        </div>
       </KpiDrilldownDialog>
 
       {/* 3. O que exige atencao agora: 2 colunas (marca, canal e venda na linha 2 do produto) */}

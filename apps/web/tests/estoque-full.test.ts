@@ -408,8 +408,8 @@ test("indisponivel e vazio-por-filtro sao blocos diferentes", () => {
 
 test("a tela declara os quatro estados", () => {
   assert.ok(CLIENT_SRC.includes("Carregando estoque"), "falta loading");
-  assert.ok(CLIENT_SRC.includes('role="alert"'), "falta estado de erro");
-  assert.ok(CLIENT_SRC.includes("Tentar novamente"), "erro sem acao de saida");
+  assert.ok(CLIENT_SRC.includes('tipo="erro"'), "falta estado de erro");
+  assert.ok(CLIENT_SRC.includes("<RetryButton"), "erro sem acao de saida");
   assert.ok(CLIENT_SRC.includes("PainelIndisponivel"), "falta indisponivel");
 });
 

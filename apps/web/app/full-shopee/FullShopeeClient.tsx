@@ -25,7 +25,10 @@ import { temaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import KpiCard from "@/components/KpiCard";
+import { Ban, CircleDollarSign, Clock, Package, ShoppingBag, Timer } from "lucide-react";
+import KpiTile from "@/components/ui/KpiTile";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
+import StateBlock from "@/components/ui/StateBlock";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import InfoDica from "@/components/ui/InfoDica";
@@ -266,40 +269,21 @@ function FullShopeeInner() {
       </section>
 
       {/* ---- Estados ---- */}
-      {erroJanela && (
-        <p role="alert" className="text-sm border border-warn/40 bg-warn-soft text-warn-ink rounded-lg px-3 py-2">
-          {erroJanela}
-        </p>
-      )}
+      {erroJanela && <StateBlock tipo="indisponivel" titulo={erroJanela} />}
 
-      {!erroJanela && desligadoBackend && (
-        <p role="status" className="text-sm border border-line-strong bg-raised text-ink-muted rounded-lg px-3 py-2">
-          {desligadoBackend}
-        </p>
-      )}
+      {!erroJanela && desligadoBackend && <StateBlock tipo="indisponivel" titulo={desligadoBackend} />}
 
-      {!erroJanela && erro && (
-        <p role="alert" className="text-sm border border-crit/40 bg-crit-soft text-crit-ink rounded-lg px-3 py-2">
-          {erro}
-        </p>
-      )}
+      {!erroJanela && erro && <StateBlock tipo="erro" titulo={erro} />}
 
       {!erroJanela && carregando && (
-        <div role="status" aria-live="polite" className="flex flex-col gap-3">
+        <div role="status" aria-live="polite" aria-busy="true" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <span className="sr-only">Carregando desempenho FBS da Shopee…</span>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-24 rounded-xl bg-raised animate-pulse" />
-            ))}
-          </div>
+          {Array.from({ length: 8 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
         </div>
       )}
 
       {!erroJanela && !carregando && !erro && !desligadoBackend && vazio && (
-        <p role="status" className="text-sm border border-line-strong bg-raised text-ink-muted rounded-lg px-3 py-2">
-          Nenhum pedido nesta janela: ausência de dado publicado, não queda de
-          vendas.
-        </p>
+        <StateBlock tipo="vazio" titulo="Nenhum pedido nesta janela" descricao="É ausência de dado publicado, não queda de vendas." />
       )}
 
       {/* ---- Conteudo ---- */}
@@ -312,26 +296,14 @@ function FullShopeeInner() {
               <InfoDica texto={`${AVISO_GMV_BRUTO} ${AVISO_DIVERGENCIA}`} />
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiCard label="GMV bruto (total)" value={fmtGmv(dados.totals.gross_gmv)}
-                subvalue="Não cancelados · inclui devolução e não pago" />
-              <KpiCard label="GMV FBS" value={fmtGmv(fbs?.gross_gmv ?? null)}
-                subvalue={`Vendedor: ${fmtGmv(seller?.gross_gmv ?? null)}`} />
-              <KpiCard label="Share FBS — GMV" value={fmtShare(dados.shares.share_fbs_gmv)}
-                subvalue="FBS ÷ (FBS + vendedor)"
-                accent="bg-accent" />
-              <KpiCard label="Share FBS — pedidos" value={fmtShare(dados.shares.share_fbs_orders)}
-                subvalue={`${fmtCount(dados.totals.eligible_orders)} pedidos elegíveis`}
-                accent="bg-kpi-prazo" />
-              <KpiCard label="Share FBS — unidades" value={fmtShare(dados.shares.share_fbs_units)}
-                subvalue={`${fmtCount(dados.totals.gross_units)} unidades`}
-                accent="bg-kpi-prazo" />
-              <KpiCard label="Taxa de cancelamento" value={fmtShare(dados.rates.cancellation_rate)}
-                subvalue={`${fmtCount(dados.totals.cancelled_orders)} de ${fmtCount(dados.totals.created_orders)} pedidos criados`} />
-              <KpiCard label="Handling médio" value={fmtHandling(dados.totals.handling)}
-                subvalue="Pagamento até a coleta — não é entrega" />
-              <KpiCard label="Cobertura do handling"
-                value={fmtShare(dados.totals.handling.coverage_ratio, 1)}
-                subvalue={`${fmtCount(dados.totals.handling.sample_count)} pedidos com coleta registrada`} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV bruto (total)" valor={fmtGmv(dados.totals.gross_gmv)} comparacao={"Não cancelados · inclui devolução e não pago"} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV FBS" valor={fmtGmv(fbs?.gross_gmv ?? null)} comparacao={`Vendedor: ${fmtGmv(seller?.gross_gmv ?? null)}`} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Share FBS — GMV" valor={fmtShare(dados.shares.share_fbs_gmv)} comparacao={"FBS ÷ (FBS + vendedor)"} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Share FBS — pedidos" valor={fmtShare(dados.shares.share_fbs_orders)} comparacao={`${fmtCount(dados.totals.eligible_orders)} pedidos elegíveis`} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Share FBS — unidades" valor={fmtShare(dados.shares.share_fbs_units)} comparacao={`${fmtCount(dados.totals.gross_units)} unidades`} />
+              <KpiTile variante="gerencial" identidade="ads" icone={Ban} rotulo="Taxa de cancelamento" valor={fmtShare(dados.rates.cancellation_rate)} comparacao={`${fmtCount(dados.totals.cancelled_orders)} de ${fmtCount(dados.totals.created_orders)} pedidos criados`} />
+              <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Handling médio" valor={fmtHandling(dados.totals.handling)} comparacao={"Pagamento até a coleta — não é entrega"} />
+              <KpiTile variante="gerencial" identidade="prazo" icone={Clock} rotulo="Cobertura do handling" valor={fmtShare(dados.totals.handling.coverage_ratio, 1)} comparacao={`${fmtCount(dados.totals.handling.sample_count)} pedidos com coleta registrada`} />
             </div>
           </section>
 

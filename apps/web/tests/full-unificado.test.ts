@@ -585,7 +585,7 @@ test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de fres
   assert.ok(!src.includes("selo="), "sem selo: nao ha' limite de negocio para ruptura");
   // CARD-KPI-GERENCIAL: cor de identidade da paleta (impacto = gmv, param a venda = pedidos);
   // API-4: delta e "antes" so' da foto anterior (helpers antes*); serie nunca (nao aprovada).
-  assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 1, "um KpiTile de impacto, renderizado por canal");
+  assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 2, "um KpiTile de impacto por canal + o modal da curva herda a cor");
   assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 2, "Sem estoque com demanda e Param a venda");
   assert.ok(!src.includes('identidade="ticket"'), "o cartao AA/A saiu da faixa (foi para o heroi)");
   assert.ok(!/serie=\{/.test(src), "sem sparkline: o Full nao tem serie aprovada");

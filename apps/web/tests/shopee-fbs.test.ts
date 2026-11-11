@@ -513,7 +513,7 @@ test("unavailable do backend nao e' tratado como erro", () => {
 test("a tela cobre os estados obrigatorios", () => {
   for (const [rotulo, regex] of [
     ["loading", /role="status"[\s\S]{0,200}animate-pulse|carregando/i],
-    ["erro", /role="alert"/],
+    ["erro", /tipo="erro"/],
     ["vazio real", /isVazioReal|vazio/],
     ["desligado no backend", /desligadoBackend/],
     ["janela invalida", /erroJanela/],

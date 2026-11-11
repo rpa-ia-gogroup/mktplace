@@ -45,6 +45,8 @@ import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { EstoqueFullError, fetchEstoqueFull } from "@/lib/api-client";
 import {
   avisoCoberturaCurva, avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao, type OpcaoCurva,
@@ -130,22 +132,11 @@ function PainelIndisponivel({
   passo?: string;
 }) {
   return (
-    <section
-      role="status"
-      className="bg-surface rounded-2xl border border-line p-8 flex flex-col gap-3"
-    >
-      <h3 className="text-lg font-semibold text-ink">{titulo}</h3>
-      <p className="text-sm text-ink-muted max-w-2xl">{motivo}</p>
-      {passo && (
-        <p className="text-sm text-ink-muted max-w-2xl">
-          <span className="font-semibold">Próximo passo: </span>
-          {passo}
-        </p>
-      )}
-      <p className="text-sm font-semibold text-ink">
-        Isto não significa estoque zero.
-      </p>
-    </section>
+    <StateBlock
+      tipo="indisponivel"
+      titulo={titulo}
+      descricao={<>{motivo}{passo && <> <span className="font-semibold">Próximo passo:</span> {passo}</>} <span className="font-semibold text-ink">Isto não significa estoque zero.</span></>}
+    />
   );
 }
 
@@ -539,29 +530,15 @@ export default function EstoqueFullClient() {
       />
 
       {carregando && (
-        <p role="status" className="text-sm text-ink-faint px-1 py-8">
-          Carregando estoque…
-        </p>
+        <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <span className="sr-only">Carregando estoque…</span>
+          {Array.from({ length: 8 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
+        </div>
       )}
 
+      {/* Sem numero nenhum aqui: falha nao pode ser lida como medicao. */}
       {!carregando && erro && (
-        <section
-          role="alert"
-          className="bg-surface rounded-2xl border border-crit/30 p-8 flex flex-col gap-3"
-        >
-          <h3 className="text-lg font-semibold text-ink">
-            Não foi possível carregar o estoque
-          </h3>
-          <p className="text-sm text-ink-muted">{erro}</p>
-          {/* Sem numero nenhum aqui: falha nao pode ser lida como medicao. */}
-          <button
-            type="button"
-            onClick={carregar}
-            className="self-start text-sm font-semibold rounded-lg bg-accent text-accent-on px-4 py-2 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            Tentar novamente
-          </button>
-        </section>
+        <StateBlock tipo="erro" titulo="Não foi possível carregar o estoque" descricao={erro} acao={<RetryButton onClick={carregar} />} />
       )}
 
       {!carregando && !erro && payload && isIndisponivel(payload) && (
