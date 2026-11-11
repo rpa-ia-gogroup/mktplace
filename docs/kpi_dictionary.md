@@ -455,3 +455,46 @@ unidades.
 - Serie a partir de **2026-01-01**.
 - Handling vai ate' a **coleta**; sem entrega e sem devolucao.
 - GMV e' **bruto**, inclui `to_return` e `unpaid`.
+
+---
+
+## Ausencia nao vira zero: cobertura por marca (T-0085, 2026-11-11)
+
+Regra geral: um valor-base ausente gera percentual **nulo** (a tela mostra "—", sem barra), nunca 0,0%.
+Um total que so' cobre parte das marcas divide **so' pelas marcas com o dado** e publica a cobertura.
+
+### `/api/v1/performance/financeiro` — taxa e repasse
+
+Fonte: `marts.fact_marketplace_daily_performance` (soma do periodo por marca e canal; a SQL faz
+`COALESCE(SUM(...), 0)`, entao ausencia na fato chega como 0 e a resposta ja' a publica como nulo).
+
+| Campo | Formula | Nulo quando |
+|---|---|---|
+| `<canal>_avg_fee_pct` (marca) | `abs(fees) / gmv * 100` (Shopee sem `abs`) | fees nulo/zero ou `gmv <= 0` |
+| `<canal>_avg_settlement_pct` (marca) | `settlement / gmv * 100` | settlement nulo/zero ou `gmv <= 0` |
+| `<canal>_avg_fee_pct` (consolidado) | `Σ fees(marcas com fees) / Σ gmv(as MESMAS marcas) * 100` | nenhuma marca com fees |
+| `<canal>_avg_settlement_pct` (consolidado) | `Σ settlement(marcas com settlement) / Σ gmv(as MESMAS marcas) * 100` | nenhuma marca com settlement |
+
+Canais: TikTok (`tiktok_*`, taxa e repasse), Mercado Livre (`ml_avg_fee_pct`, so' taxa) e Shopee
+(`shopee_*`, taxa e repasse). `<canal>_gmv` e `<canal>_fees` do consolidado continuam somando todas as marcas.
+
+Cobertura (campos novos, opcionais, so' em `kpis`): `tiktok_fee_cobertura`, `tiktok_settlement_cobertura`,
+`ml_fee_cobertura`, `shopee_fee_cobertura`, `shopee_settlement_cobertura`, cada um com
+`{status, marcas_com_dado, marcas_total, marcas_sem_dado}`. Universo = marcas com GMV > 0 no canal;
+`status` = `completa` | `parcial` | `sem_dado`; o campo e' nulo quando o canal nao tem GMV no recorte.
+A tela mostra "parcial (N de M marcas)" no cartao do canal.
+
+Exemplo (Shopee, out/26, 5 marcas, so' a kokeshi com taxa): antes, 972.946 / 6,04 mi = **16,1%** (diluido);
+depois, 972.946 / GMV da kokeshi = **25,27%**, cobertura parcial (1 de 5).
+
+### `/api/v1/performance/full-impacto-ruptura` — bloco `ml`
+
+- Marca com GMV Full mas **sem fotografia de estoque no dia** (`ml_inventory` sem a marca em `ref_date`):
+  `rupturas`, `sem_preco`, `perda_dia`, `perda_dia_sem_vendedor`, `pct_gmv_full` e
+  `pct_gmv_full_sem_vendedor` saem nulos; `gmv_full_dia` da marca continua medido.
+- Total do canal: `perda_dia` soma os itens das marcas com foto, e `gmv_full_dia`/`pct_gmv_full` usam
+  **so' o GMV Full das marcas com foto**.
+- Campo novo `cobertura` (opcional): `{status: completa|parcial, marcas_com_foto, marcas_total, marcas_sem_foto}`.
+  E' nulo na Shopee, onde o recorte por marca nao e' medido (a regra antiga continua valendo la').
+- Exemplo (ML, 4 marcas, barbours e lescent sem foto): antes, 11.413,56 / 139.446,19 = **8,18%**; depois,
+  so' com kokeshi + rituaria, **~16,9%**, "parcial (2 de 4 marcas)".

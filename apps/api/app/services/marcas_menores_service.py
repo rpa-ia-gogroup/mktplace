@@ -3,7 +3,9 @@
 A marca sai do CANAL do pedido (`loja.id`). So' Shopee e TikTok; nenhuma das tres
 tem ML. A Denavita esta' em outra conta Bling, ainda nao autorizada: aparece como
 "aguardando autorizacao", nunca como 0. Ausencia nunca vira 0: marca sem pedido
-tem `total=None` e dia sem pedido nao entra na serie.
+tem `total=None` e dia sem pedido nao entra na serie. Canal sem pedido no periodo anterior
+nao entra em `por_plataforma_anterior` (nem como 0): o front so' calcula a variacao quando todo
+canal do periodo atual tem base no anterior (achado C1-03).
 
 Receita do pedido = campo `total` do Bling (produtos - descontos + frete).
 Pedidos na situacao "Cancelado" ficam de fora. Quantidade e receita por produto

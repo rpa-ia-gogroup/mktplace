@@ -388,6 +388,38 @@ def test_rotas(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
 
 
+def test_rota_canal_ausente_no_anterior_nao_vira_zero(monkeypatch):
+    """C1-03: a variacao (calculada no front) so' compara canais com base nos dois periodos. O contrato que
+    sustenta isso: canal sem pedido no anterior NAO aparece em `por_plataforma_anterior` (nem como 0), na
+    marca e no consolidado, depois do `response_model`. Caso normal (os dois canais nos dois periodos): intacto."""
+    from app.database import get_db
+    from app.routers import marcas_menores as rota
+
+    so_tiktok_antes = {**DADOS, YENZAH_TIKTOK: DADOS[YENZAH_TIKTOK] + [pedido(20, "2026-10-25", 40.0)]}
+    ambos_antes = {**so_tiktok_antes, YENZAH_SHOPEE: DADOS[YENZAH_SHOPEE] + [pedido(21, "2026-10-26", 75.0)]}
+    app.dependency_overrides[get_db] = lambda: None
+    try:
+        c = TestClient(app)
+        url = "/api/v1/performance/marcas-menores?date_from=2026-11-01&date_to=2026-11-09"  # anterior: 10/23..10/31
+
+        monkeypatch.setattr(rota, "cliente_bling", lambda db: FakeBling(so_tiktok_antes))
+        r = c.get(url).json()
+        y = _marcas(r)["yenzah"]
+        assert [p["plataforma"] for p in y["por_plataforma"]] == ["SHOPEE", "TIKTOK"]
+        assert y["por_plataforma_anterior"] == {"TIKTOK": 40.0}  # Shopee ausente, nunca 0
+        assert "SHOPEE" not in r["consolidado"]["por_plataforma_anterior"]
+        assert y["pedidos_por_plataforma_anterior"] == {"TIKTOK": 1}
+
+        svc.limpar_cache()
+        monkeypatch.setattr(rota, "cliente_bling", lambda db: FakeBling(ambos_antes))
+        r = c.get(url).json()
+        y = _marcas(r)["yenzah"]
+        assert y["por_plataforma_anterior"] == {"SHOPEE": 75.0, "TIKTOK": 40.0}
+        assert y["total_anterior"] == 115.0 and y["total"] == 160.5
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
 # ---- produtos respeitam os MESMOS filtros do GMV (canal, marca, periodo, cancelados fora) ----
 
 ITENS_OK = {

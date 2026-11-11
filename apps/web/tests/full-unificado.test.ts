@@ -9,6 +9,8 @@ import {
   fmtPct,
   heroiRuptura,
   kpiImpacto,
+  marcaSemFoto,
+  perdaDestaque,
   janelaDeslocada,
   antesImpacto,
   antesParamVenda,
@@ -1006,3 +1008,38 @@ test("fila: Shopee com estoque do vendedor vai para o fim do grupo, abaixo de qu
     "AA: com perda, sem preco, e por ultimo quem a venda segue; o grupo A continua abaixo");
 });
 
+
+// ---------------------------------------------------------------------------
+// T-0085 — marca sem fotografia no dia: "—", nunca R$ 0; total "parcial (N de M)"
+// ---------------------------------------------------------------------------
+
+const SEM_FOTO: ImpactoRuptura = {
+  ...IMPACTO,
+  ml: canalImpacto("ml", {
+    perda_dia: 11413.56, pct_gmv_full: 0.169, gmv_full_dia: 67535,
+    cobertura: { status: "parcial", marcas_com_foto: 2, marcas_total: 4, marcas_sem_foto: ["barbours", "lescent"] },
+    marcas: [
+      { brand: "kokeshi", rupturas: 1, sem_preco: 0, perda_dia: 7000, perda_dia_sem_vendedor: null, gmv_full_dia: 50000, pct_gmv_full: 0.14, pct_gmv_full_sem_vendedor: null },
+      { brand: "barbours", rupturas: null, sem_preco: null, perda_dia: null, perda_dia_sem_vendedor: null, gmv_full_dia: 40000, pct_gmv_full: null, pct_gmv_full_sem_vendedor: null },
+    ],
+  }),
+};
+
+test("T-0085 total do ML parcial diz N de M marcas e quem ficou sem foto", () => {
+  const k = kpiImpacto("ml", SEM_FOTO);
+  assert.equal(k.valor, fmtPct(0.169));
+  assert.match(k.comparacao, /parcial \(2 de 4 marcas\)/);
+  assert.match(k.detalhe ?? "", /sem fotografia no dia: barbours, lescent/);
+  // cobertura completa: nada de "parcial"
+  assert.doesNotMatch(kpiImpacto("ml", IMPACTO).comparacao, /parcial/);
+});
+
+test("T-0085 marca sem foto e' ausencia: — na celula, nunca R$ 0/dia", () => {
+  const barbours = (SEM_FOTO.ml as CanalImpactoOk).marcas[1];
+  assert.equal(marcaSemFoto(barbours), true);
+  assert.equal(marcaSemFoto((SEM_FOTO.ml as CanalImpactoOk).marcas[0]), false);
+  assert.equal(perdaDestaque("ml", barbours), null);
+  assert.equal(fmtReais(perdaDestaque("ml", barbours)), "—");
+  const tela = fonte("app/full/VisaoGeralFull.tsx");
+  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*><Ausente motivo="sem fotografia no dia" \/><\/span>;/);
+});

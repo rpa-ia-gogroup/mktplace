@@ -784,3 +784,255 @@ def test_leitura_do_gate_e_read_only_com_timeout():
 def test_rotulo_do_buraco_e_o_mesmo_do_serving():
     fonte = (REPO / "apps" / "api" / "app" / "services" / "dre_service.py").read_text(encoding="utf-8")
     assert f'BURACO_NF_MARCA = "{P.BURACO_NF_MARCA}"' in fonte
+
+
+# ---------------------------------------------------------------------------
+# T-0087 — o publisher nao segura a conexao do Neon durante a leitura da origem
+# ---------------------------------------------------------------------------
+#
+# Dubles de motor: o alvo (Neon) conta conexoes abertas, so' aplica a escrita
+# no commit e mata a conexao que estiver aberta enquanto a origem e' lida (o
+# que o Neon fez em 10 e 11/11). As provas de servidor continuam em
+# `test_dre_insumo_publisher_integracao.py`.
+
+CHECK_025 = "CHECK ((componente)::text = ANY (ARRAY['cmv'::text, 'cmv_receita_fiscal'::text]))"
+
+
+class _Res:
+    def __init__(self, valor=None, linhas=(), rowcount=0):
+        self._valor, self._linhas, self.rowcount = valor, list(linhas), rowcount
+
+    def scalar(self):
+        return self._valor
+
+    def scalar_one(self):
+        return self._valor
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return [dict(r) for r in self._linhas]
+
+
+class _ConnAlvo:
+    def __init__(self, eng, transacional):
+        self.eng, self.transacional, self.morta, self.pendente = eng, transacional, False, []
+
+    def __enter__(self):
+        self.eng.abertas.append(self)
+        return self
+
+    def __exit__(self, tipo, *a):
+        self.eng.abertas.remove(self)
+        if self.transacional and tipo is None:
+            self.commit()
+        return False
+
+    def commit(self):
+        for evento in self.pendente:
+            self.eng.aplicar(evento)
+        self.pendente = []
+
+    def rollback(self):
+        self.pendente = []
+
+    def execute(self, sql, params=None):
+        from sqlalchemy.exc import OperationalError
+
+        if self.morta:
+            raise OperationalError("SELECT", {}, Exception("SSL connection has been closed unexpectedly"))
+        e = self.eng
+        e.sqls.append(sql)
+        if sql is P.SQL_TABELA_EXISTE:
+            return _Res(True)
+        if sql is P.SQL_ESPERADO:
+            return _Res(linhas=e.esperado)
+        if sql is P.SQL_CHECK_COMPONENTE:
+            return _Res(e.check)
+        if sql is P.SQL_LOCK:
+            return _Res(e.lock_livre)
+        if sql is P.SQL_PUBLICADAS:
+            return _Res(linhas=[{"competencia": m, "canal": c, "marca": mc} for m, c, mc in sorted(e.fotografia)])
+        if sql is P.SQL_AUDIT_ABRE:
+            self.pendente.append(("audit", "running"))
+            return _Res(7)
+        if sql is P.SQL_AUDIT_FECHA:
+            self.pendente.append(("audit", "success"))
+            return _Res(rowcount=1)
+        if sql is P.SQL_AUDIT_FALHA:
+            self.pendente.append(("audit", "failed"))
+            return _Res(rowcount=1)
+        if sql is P.SQL_APAGA_ESCOPO:
+            e.deletes += 1
+            self.pendente.append(("apaga", None))
+            return _Res(rowcount=len(e.fotografia))
+        if sql is P.SQL_INSERE:
+            e.inserts += 1
+            e.inseridas.append(dict(params))
+            self.pendente.append(("insere", (params["competencia"], params["canal"], params["marca"])))
+            return _Res(rowcount=1)
+        assert str(sql).startswith("SET TRANSACTION READ ONLY"), str(sql)
+        return _Res()
+
+
+class _AlvoFake:
+    def __init__(self, esperado_rows, fotografia=frozenset(), check=CHECK_025):
+        self.esperado, self.fotografia, self.check = list(esperado_rows), set(fotografia), check
+        self.lock_livre, self.abertas, self.sqls, self.auditoria = True, [], [], []
+        self.deletes = self.inserts = 0
+        self.inseridas = []
+
+    def connect(self):
+        return _ConnAlvo(self, transacional=False)
+
+    def begin(self):
+        return _ConnAlvo(self, transacional=True)
+
+    def aplicar(self, evento):
+        tipo, valor = evento
+        if tipo == "audit":
+            self.auditoria.append(valor)
+        elif tipo == "apaga":
+            self.fotografia = set()
+        else:
+            self.fotografia.add(valor)
+
+
+class _ConnFonte:
+    def __init__(self, eng):
+        self.eng = eng
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def rollback(self):
+        pass
+
+    def execute(self, sql, params=None):
+        self.eng.ao_ler()
+        if sql is P.SQL_CMV:
+            return _Res(linhas=self.eng.cmv)
+        if sql is P.SQL_CMV_CONTRAPROVA:
+            return _Res(linhas=[cp(c) for c in self.eng.cmv])
+        return _Res(linhas=[])
+
+
+class _FonteFake:
+    """Data Mart: a cada comando, registra quantas conexoes do alvo estao abertas
+    e (como o Neon) mata as que estiverem; `depois_da_leitura` simula outro
+    processo mexendo no Neon enquanto a origem e' lida."""
+
+    def __init__(self, alvo, cmv_rows, depois_da_leitura=None):
+        self.alvo, self.cmv, self.depois = alvo, list(cmv_rows), depois_da_leitura
+        self.abertas_na_leitura = []
+
+    def connect(self):
+        return _ConnFonte(self)
+
+    def ao_ler(self):
+        self.abertas_na_leitura.append(len(self.alvo.abertas))
+        for conn in self.alvo.abertas:
+            conn.morta = True
+        if self.depois is not None:
+            self.depois(self.alvo)
+
+
+def _publicar_fake(alvo, fonte):
+    return P.publicar(alvo, fonte, [JUL], ["ml"], agora=datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc))
+
+
+def test_t0087_nenhuma_conexao_do_neon_aberta_durante_as_leituras_da_origem(monkeypatch):
+    alvo = _AlvoFake([esperado("ml", "kokeshi")])
+    fonte = _FonteFake(alvo, [cmv("ml", "kokeshi")])
+    vistas = {}
+    for nome in ("ler_fonte", "ler_impostos", "ler_numeracao_nf"):
+        real = getattr(P, nome)
+
+        def espiao(*a, _nome=nome, _real=real, **k):
+            vistas[_nome] = len(alvo.abertas)
+            return _real(*a, **k)
+
+        monkeypatch.setattr(P, nome, espiao)
+    res = _publicar_fake(alvo, fonte)
+    assert vistas == {"ler_fonte": 0, "ler_impostos": 0, "ler_numeracao_nf": 0}
+    assert fonte.abertas_na_leitura and set(fonte.abertas_na_leitura) == {0}
+    assert res["aplicado"] is True and alvo.auditoria == ["running", "success"]
+    assert alvo.abertas == []
+
+
+def test_t0087_conexao_que_cai_na_leitura_longa_nao_impede_a_publicacao():
+    alvo = _AlvoFake([esperado("ml", "kokeshi")], fotografia={KOK})
+    fonte = _FonteFake(alvo, [cmv("ml", "kokeshi")])
+    res = _publicar_fake(alvo, fonte)
+    assert res["aplicado"] is True and res["recusas"] == []
+    assert alvo.fotografia == {KOK} and alvo.deletes == 1 and alvo.inserts == res["linhas"] > 0
+    assert alvo.auditoria == ["running", "success"]
+
+
+def test_t0087_lock_so_e_tomado_depois_da_origem_e_antes_de_qualquer_escrita():
+    alvo = _AlvoFake([esperado("ml", "kokeshi")])
+    _publicar_fake(alvo, _FonteFake(alvo, [cmv("ml", "kokeshi")]))
+    ordem = [s for s in alvo.sqls if s in (P.SQL_LOCK, P.SQL_AUDIT_ABRE, P.SQL_APAGA_ESCOPO, P.SQL_INSERE)]
+    assert ordem[:3] == [P.SQL_LOCK, P.SQL_AUDIT_ABRE, P.SQL_APAGA_ESCOPO]
+
+
+def test_t0087_gmv_reescrito_durante_a_leitura_publica_com_o_gmv_relido_sob_o_lock():
+    """Sync da fato no meio da leitura (DAG 10:00, cadeia diaria 10:15): as marcas
+    nao mudam, entao publica; a razao com o GMV usa o valor relido sob o lock."""
+    def gmv_dobrou(a):
+        a.esperado = [esperado("ml", "kokeshi", gmv=2_000_000)]
+
+    alvo = _AlvoFake([esperado("ml", "kokeshi", gmv=1_000_000)], fotografia={KOK})
+    fonte = _FonteFake(alvo, [cmv("ml", "kokeshi", receita=1_000_000)], depois_da_leitura=gmv_dobrou)
+    res = _publicar_fake(alvo, fonte)
+    assert res["aplicado"] is True and res["recusas"] == []
+    assert alvo.deletes == 1 and alvo.auditoria == ["running", "success"]
+    (c,) = [r for r in alvo.inseridas if r["componente"] == "cmv"]
+    # 1.000.000 / 2.000.000: com o GMV da pre-leitura seria 1.0000 e reconciliado
+    assert c["motivo"].startswith("receita fiscal / GMV = 0.5000")
+    assert c["status_reconciliacao"] == "nao_reconciliado"
+
+
+def _marca_nova(a):
+    a.esperado = [esperado("ml", "kokeshi"), esperado("ml", "barbours")]
+
+
+def _check_mudou(a):
+    a.check = CHECK_025.replace("]))", ", 'imposto_icms'::text, 'imposto_difal'::text, "
+                                      "'imposto_pis_cofins'::text]))")
+
+
+@pytest.mark.parametrize("mudanca,trecho", [
+    (_marca_nova, "conjunto de marcas esperado no Neon mudou"),
+    (_check_mudou, "contrato do Neon (CHECK ck_fdim_componente) mudou"),
+])
+def test_t0087_deriva_entre_pre_leitura_e_lock_recusa_antes_do_delete(mudanca, trecho):
+    alvo = _AlvoFake([esperado("ml", "kokeshi")], fotografia={KOK})
+    fonte = _FonteFake(alvo, [cmv("ml", "kokeshi")], depois_da_leitura=mudanca)
+    with pytest.raises(P.PublicacaoRecusada) as exc:
+        _publicar_fake(alvo, fonte)
+    assert any(trecho in m and "rode de novo" in m for m in exc.value.motivos)
+    assert alvo.deletes == 0 and alvo.inserts == 0
+    assert alvo.fotografia == {KOK}  # fotografia intacta
+    assert alvo.auditoria == ["failed"]  # o `running` foi desfeito; a falha ficou registrada
+
+
+def test_t0087_sem_deriva_a_ordem_dos_registros_e_o_gmv_nao_importam():
+    a, b = esperado("ml", "kokeshi"), esperado("ml", "barbours")
+    assert P._deriva([a, b], [dict(b), dict(a)], (False, True), (False, True)) == []
+    assert P._deriva([a], [esperado("ml", "kokeshi", gmv=1)], (False, True), (False, True)) == []
+    # mesma marca em outro canal/mes nao muda o conjunto de marcas lido na origem
+    assert P._deriva([a], [a, esperado("shopee", "kokeshi")], (False, False), (False, False)) == []
+    assert P._deriva([a], [a, b], (False, False), (False, False)) != []
+
+
+def test_t0087_lock_ocupado_aborta_sem_escrever_nem_auditar():
+    alvo = _AlvoFake([esperado("ml", "kokeshi")], fotografia={KOK})
+    alvo.lock_livre = False
+    with pytest.raises(P.LockOcupado):
+        _publicar_fake(alvo, _FonteFake(alvo, [cmv("ml", "kokeshi")]))
+    assert alvo.deletes == 0 and alvo.inserts == 0 and alvo.fotografia == {KOK} and alvo.auditoria == []

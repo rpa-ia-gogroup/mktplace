@@ -67,8 +67,12 @@ SH_GMV = [{"brand": "apice", "gmv": Decimal("2800"), "dias": 28, "fim": date(202
 
 class Sessao:
     def __init__(self, tabelas=True, ancora=True, ml_gmv=ML_GMV, sh_gmv=SH_GMV,
-                 ref_ml=REF_ML, ant_ml=None, ant_sh=None, recortes=None):
+                 ref_ml=REF_ML, ant_ml=None, ant_sh=None, recortes=None,
+                 ml_rupturas=None, marcas_foto=None):
         self.tabelas, self.ancora = tabelas, ancora
+        # T-0085: marcas com foto do ML no dia (padrao: as duas das rupturas).
+        self.ml_rupturas = ML_RUPTURAS if ml_rupturas is None else ml_rupturas
+        self.marcas_foto = ["barbours", "kokeshi"] if marcas_foto is None else marcas_foto
         self.ml_gmv, self.sh_gmv, self.ref_ml = ml_gmv, sh_gmv, ref_ml
         # API-4: foto anterior (None = nao ha') e recorte por dia (padrao: igual).
         self.ant_ml, self.ant_sh, self.recortes = ant_ml, ant_sh, recortes or {}
@@ -92,7 +96,8 @@ class Sessao:
             "SQL_TABELAS_EXISTEM": lambda: _R(escalar=self.tabelas),
             "SQL_IDENTIFICACAO_DISPONIVEL": lambda: _R([{"tem_ancora": self.ancora, "tem_precos": True}]),
             "SQL_ML_ULTIMA_FOTO": lambda: _R(escalar=self.ref_ml),
-            "SQL_ML_RUPTURAS": lambda: _R(ML_RUPTURAS),
+            "SQL_ML_RUPTURAS": lambda: _R(self.ml_rupturas),
+            "SQL_ML_MARCAS_NA_FOTO": lambda: _R(escalar=self.marcas_foto),
             "SQL_ML_GMV": lambda: _R(self.ml_gmv),
             "SQL_SHOPEE_ULTIMA_FOTO": lambda: _R(escalar=REF_SH),
             "SQL_SHOPEE_RUPTURAS": lambda: _R(SH_RUPTURAS),
@@ -156,6 +161,66 @@ def test_gmv_incompleto_nao_vira_percentual():
     assert sh["pct_gmv_full"] is None and sh["gmv_full_dia"] is None
     assert sh["motivo_pct"] == svc.MOTIVO_GMV_INCOMPLETO
     assert sh["perda_dia"] == 65.0, "a perda continua medida"
+
+
+# ---------------------------------------------------------------------------
+# T-0085 -- marca sem fotografia no dia nao vira zero nem dilui o total
+# ---------------------------------------------------------------------------
+
+def _ml_sem_foto():
+    """ML de 08/11 em escala: kokeshi e rituaria com foto; barbours e lescent
+    so' com GMV. GMV Full/dia: 50.000 + 17.535 (medidas) + 40.000 + 31.911,19."""
+    rupturas = [
+        {"brand": "kokeshi", "media": Decimal("1"), "sku": "K1", "titulo": "K1",
+         "preco_vendas": Decimal("7000"), "preco_anuncio": None},
+        {"brand": "rituaria", "media": Decimal("1"), "sku": "R1", "titulo": "R1",
+         "preco_vendas": Decimal("4413.56"), "preco_anuncio": None},
+    ]
+    fim = date(2026, 11, 3)
+    gmv = [{"brand": b, "gmv": Decimal(v) * 28, "dias": 28, "fim": fim}
+           for b, v in (("kokeshi", "50000"), ("rituaria", "17535"),
+                        ("barbours", "40000"), ("lescent", "31911.19"))]
+    s = Sessao(ml_gmv=gmv, ml_rupturas=rupturas, marcas_foto=["kokeshi", "rituaria"])
+    return _bloco(s)["ml"]
+
+
+def test_marca_sem_foto_sai_nula_e_nao_zero():
+    ml = _ml_sem_foto()
+    for brand in ("barbours", "lescent"):
+        m = next(x for x in ml["marcas"] if x["brand"] == brand)
+        assert m["rupturas"] is None and m["sem_preco"] is None, brand
+        assert m["perda_dia"] is None and m["pct_gmv_full"] is None, brand
+        assert m["gmv_full_dia"] is not None, "o GMV da marca continua medido"
+    kokeshi = next(x for x in ml["marcas"] if x["brand"] == "kokeshi")
+    assert kokeshi["rupturas"] == 1 and kokeshi["perda_dia"] == 7000.0
+
+
+def test_total_soma_e_divide_so_as_marcas_medidas():
+    ml = _ml_sem_foto()
+    assert ml["perda_dia"] == 11413.56
+    # antes: 11.413,56 / 139.446,19 = 0,0818 (GMV das 4 marcas no denominador)
+    assert ml["gmv_full_dia"] == 67535.0
+    assert ml["pct_gmv_full"] == 0.169
+    assert ml["cobertura"] == {"status": "parcial", "marcas_com_foto": 2, "marcas_total": 4,
+                               "marcas_sem_foto": ["barbours", "lescent"]}
+
+
+def test_todas_com_foto_cobertura_completa_e_shopee_sem_cobertura():
+    b = _bloco()
+    assert b["ml"]["cobertura"]["status"] == "completa"
+    assert b["shopee"]["cobertura"] is None, "Shopee: recorte por marca nao medido"
+
+
+def test_rota_aceita_marca_nula_no_contrato(cliente):
+    from app.schemas.full_impacto import ImpactoRupturaResponse
+    rupturas = [{"brand": "kokeshi", "media": Decimal("1"), "sku": "K1", "titulo": "K1",
+                 "preco_vendas": Decimal("10"), "preco_anuncio": None}]
+    s = Sessao(ml_rupturas=rupturas, marcas_foto=["kokeshi"])
+    corpo = cliente(s).get("/api/v1/performance/full-impacto-ruptura").json()
+    barbours = next(m for m in corpo["ml"]["marcas"] if m["brand"] == "barbours")
+    assert barbours["rupturas"] is None and barbours["pct_gmv_full"] is None
+    assert corpo["ml"]["cobertura"]["status"] == "parcial"
+    ImpactoRupturaResponse.model_validate(corpo)
 
 
 # ---------------------------------------------------------------------------

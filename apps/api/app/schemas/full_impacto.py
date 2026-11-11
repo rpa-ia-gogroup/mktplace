@@ -27,13 +27,26 @@ class ItemImpacto(BaseModel):
 
 class MarcaImpacto(BaseModel):
     brand: str
-    rupturas: int
-    sem_preco: int
+    #: T-0085: `None` = marca sem fotografia no dia (nao medida), nunca 0.
+    rupturas: Optional[int] = None
+    sem_preco: Optional[int] = None
     perda_dia: Optional[float] = None
     perda_dia_sem_vendedor: Optional[float] = None
     gmv_full_dia: Optional[float] = None
     pct_gmv_full: Optional[float] = None
     pct_gmv_full_sem_vendedor: Optional[float] = None
+
+
+class CoberturaFoto(BaseModel):
+    """T-0085: marcas do bloco com fotografia no dia (so' ML).
+
+    `status`: "completa" | "parcial" (texto livre: valor novo nao derruba a
+    resposta). O total do canal soma e divide so' as marcas com foto.
+    """
+    status: str
+    marcas_com_foto: int
+    marcas_total: int
+    marcas_sem_foto: list[str] = []
 
 
 class ImpactoAnterior(BaseModel):
@@ -76,6 +89,8 @@ class CanalImpactoOk(BaseModel):
     pct_gmv_full_sem_vendedor: Optional[float] = None
     motivo_pct: Optional[str] = None
     marcas: list[MarcaImpacto]
+    #: T-0085 (so' ML): `None` = recorte por marca nao medido (Shopee).
+    cobertura: Optional[CoberturaFoto] = None
     itens: list[ItemImpacto]
     #: API-4 (so' com `?anterior=true`): a foto anterior com o mesmo recorte.
     #: `None` sem o parametro, ou sem "antes" (sem foto anterior ou recorte

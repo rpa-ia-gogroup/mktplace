@@ -86,6 +86,47 @@ export function variacaoPct(total: number | null | undefined, anterior: number |
   return ((total - anterior) / anterior) * 100;
 }
 
+/**
+ * Canais com receita no período atual e SEM receita no anterior (ausência no dict, nunca 0).
+ * Ex.: a Shopee só aparece no Bling a partir de 22/10/2026; contra um anterior só com TikTok,
+ * a variação somaria um canal inteiro como "crescimento" (achado C1-03).
+ */
+export function canaisSemBase(atual: PlataformaValor[], anterior: Record<string, number> | undefined): string[] {
+  const ant = anterior ?? {};
+  return atual.filter((p) => p.faturamento > 0 && !((ant[p.plataforma] ?? 0) > 0)).map((p) => p.plataforma);
+}
+
+export interface VariacaoComMotivo {
+  pct: number | null;
+  /** Por que não há percentual mesmo havendo anterior (ex.: canal sem base); null = nada a avisar. */
+  motivo: string | null;
+}
+
+/** "sem dado de Shopee no período anterior"; nomes amigáveis, na ordem recebida, sem repetir. */
+export function motivoSemBase(canais: string[]): string | null {
+  const nomes = [...new Set(canais)].map(nomeDaPlataforma);
+  return nomes.length ? `sem dado de ${nomes.join(" e ")} no período anterior` : null;
+}
+
+/** Variação da marca só quando todo canal do período atual tem base no anterior; senão, null + motivo. */
+export function variacaoDaMarca(m: MarcaMenor): VariacaoComMotivo {
+  if (m.total == null || m.total_anterior == null) return { pct: null, motivo: null }; // sem base: nada a dizer
+  const motivo = motivoSemBase(canaisSemBase(m.por_plataforma, m.por_plataforma_anterior));
+  return motivo ? { pct: null, motivo } : { pct: variacaoPct(m.total, m.total_anterior), motivo: null };
+}
+
+/**
+ * Variação do consolidado sobre as marcas com base nos dois períodos (o mesmo conjunto dos dois lados).
+ * Se alguma dessas marcas tem canal sem base no anterior, o percentual some e o motivo lista os canais.
+ */
+export function variacaoConsolidada(marcas: MarcaMenor[]): VariacaoComMotivo {
+  const comBase = marcas.filter((m) => m.total != null && m.total_anterior != null && m.total_anterior > 0);
+  const motivo = motivoSemBase(comBase.flatMap((m) => canaisSemBase(m.por_plataforma, m.por_plataforma_anterior)));
+  if (motivo) return { pct: null, motivo };
+  const anterior = comBase.reduce((a, m) => a + (m.total_anterior ?? 0), 0);
+  return { pct: variacaoPct(comBase.reduce((a, m) => a + (m.total ?? 0), 0), anterior || null), motivo: null };
+}
+
 /** Produto x quantidade x receita por marca (itens dos pedidos do Bling). */
 export interface ProdutoLinha {
   sku: string;
