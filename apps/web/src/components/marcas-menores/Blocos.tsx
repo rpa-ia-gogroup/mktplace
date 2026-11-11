@@ -14,7 +14,8 @@ import {
   corDaPlataforma,
   fatias,
   nomeDaPlataforma,
-  variacaoPct,
+  variacaoConsolidada,
+  variacaoDaMarca,
   type Consolidado,
   type MarcaMenor,
   type ProdutosMarcas,
@@ -26,9 +27,16 @@ const SerieDiaria = dynamic(() => import("./SerieDiaria"), { ssr: false, loading
 export const FONTE_PRODUTOS =
   "Origem: itens dos pedidos do Bling. Quantidade e receita por produto (valor × quantidade − desconto do item), sem cancelados. A Denavita aguarda autorização da conta. Os itens são lidos pedido a pedido: a tabela pode vir parcial e se completa sozinha.";
 
-/** "▲ 12%" contra o período anterior; sem base, nada. */
-export function Variacao({ pct }: { pct: number | null }) {
-  if (pct == null) return null;
+/** "▲ 12%" contra o período anterior; sem base, nada; com `motivo` (canal sem base no anterior), "—" e o aviso. */
+export function Variacao({ pct, motivo = null }: { pct: number | null; motivo?: string | null }) {
+  if (pct == null) {
+    if (!motivo) return null;
+    return (
+      <span className="text-ink-muted" title={`Sem variação: ${motivo}`}>
+        — <span className="font-semibold text-warn-ink">{motivo}</span>
+      </span>
+    );
+  }
   return (
     <span className={`font-semibold ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
       {pct >= 0 ? "▲" : "▼"} {fmtPctBr(Math.abs(pct)).replace("+", "")}
@@ -57,12 +65,9 @@ export function Topo({
   // Parcial: marca sem dado fica de fora da soma e o topo diz isso (nunca soma ausencia como 0).
   const comDado = marcas.filter((m) => m.total != null).length;
   const parcial = comDado < marcas.length;
-  // Variacao so' sobre as marcas que tem base nos dois periodos: o mesmo conjunto nos dois lados.
-  const comBase = marcas.filter((m) => m.total != null && m.total_anterior != null && m.total_anterior > 0);
-  const v = emAndamento ? null : variacaoPct(
-    comBase.reduce((a, m) => a + (m.total ?? 0), 0),
-    comBase.reduce((a, m) => a + (m.total_anterior ?? 0), 0) || null,
-  );
+  // Variacao so' sobre as marcas que tem base nos dois periodos, e so' se todo canal delas tem base no anterior.
+  const vc = emAndamento ? { pct: null, motivo: null } : variacaoConsolidada(marcas);
+  const v = vc.pct;
   let inicio = 0;
   const folga = partes.length > 1 ? 1 : 0;
   const arcos = partes.map((p) => {
@@ -77,11 +82,16 @@ export function Topo({
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{titulo}</p>
           <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-ink">{total == null ? "—" : fmtCompacto(total)}</p>
-          {(v != null || parcial || emAndamento || semMeta) && (
+          {(v != null || vc.motivo != null || parcial || emAndamento || semMeta) && (
             <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
               {v != null && (
                 <span>
                   <Variacao pct={v} /> vs período anterior
+                </span>
+              )}
+              {v == null && vc.motivo != null && (
+                <span>
+                  <Variacao pct={null} motivo={vc.motivo} />
                 </span>
               )}
               {semMeta && <span className="rounded bg-raised px-1.5 font-semibold text-ink-muted">sem meta</span>}
@@ -148,7 +158,7 @@ export function Marcas({ marcas, emAndamento, semMeta = false }: { marcas: Marca
       <ul className="flex flex-col">
         {marcas.map((m) => {
           const partes = fatias(m);
-          const v = emAndamento ? null : variacaoPct(m.total, m.total_anterior);
+          const v = emAndamento ? { pct: null, motivo: null } : variacaoDaMarca(m);
           return (
             <li key={m.id} className="flex flex-col gap-2 border-t border-line py-3 first:border-t-0 first:pt-0">
               <div className="grid min-h-11 grid-cols-[88px_1fr_auto] items-center gap-3">
@@ -170,7 +180,7 @@ export function Marcas({ marcas, emAndamento, semMeta = false }: { marcas: Marca
                   <span className="text-sm font-semibold text-ink">{m.total == null ? "—" : fmtCompacto(m.total)}</span>
                   <span className="flex items-center gap-1.5 text-xs">
                     {semMeta && <span className="rounded bg-raised px-1.5 font-semibold text-ink-muted">sem meta</span>}
-                    <Variacao pct={v} />
+                    <Variacao pct={v.pct} motivo={v.motivo} />
                   </span>
                 </span>
               </div>
