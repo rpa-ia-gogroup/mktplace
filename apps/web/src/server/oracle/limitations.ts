@@ -12,6 +12,8 @@ export type Limitation = {
   readonly topic: string;
   readonly scope: string;
   readonly description: string;
+  /** Classe estavel do motivo (ex.: codigo do toolError). Nunca texto livre. */
+  readonly motivo?: string;
 };
 
 /**
@@ -161,6 +163,21 @@ export function gmvMaturing(
     topic: "gmv_em_maturacao",
     scope: `Desempenho — ${channelLabel} (${window.start} a ${window.end})`,
     description: `O GMV de ${channelLabel} de ${window.start} a ${window.end} ainda esta em maturacao (janela de ${janelaDias} dias; ${motivo}): o valor desses dias ainda pode mudar, normalmente para baixo. Nao trate como numero fechado nem compare com meses maduros sem essa ressalva.`,
+  };
+}
+
+/**
+ * R146 — a fonte de estoque Full do ML FALHOU nesta consulta (timeout, 5xx,
+ * contrato quebrado). O bloco `ml_estoque` sai sem dado e o resto da tool
+ * responde. `motivo` e' so' a CLASSE do erro — nunca mensagem de excecao.
+ */
+export function mlStockSourceFailed(categoria: string): Limitation {
+  return {
+    topic: "estoque_ml_indisponivel",
+    scope: "Estoque Full — Mercado Livre",
+    description:
+      "A fonte de estoque Full do Mercado Livre falhou nesta consulta: ml_estoque vem sem dado. Ausencia de medicao, nunca estoque zero; tente de novo em instantes. Os demais blocos (Shopee, modalidade ML) nao dependem dela.",
+    motivo: categoria,
   };
 }
 

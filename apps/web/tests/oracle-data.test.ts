@@ -14,7 +14,9 @@ import {
   BRANDS, CANAIS, FIXED_NOW, HEALTH, jsonFetch, OVERVIEW, PRODUTOS_ML,
   QUALITY, REFRESHED_AT, REGIOES_BY_UF, REGIOES_SUMMARY, TREND, type CallLog,
 } from "./oracle-fixtures.ts";
-import { ML_FULL, ML_FULL_ESTOQUE, ML_FULL_ESTOQUE_INDISPONIVEL } from "./oracle-fixtures-operacional.ts";
+import {
+  ML_FULL, ML_FULL_ESTOQUE, ML_FULL_ESTOQUE_INDISPONIVEL, SHOPEE_ESTOQUE, SHOPEE_FBS,
+} from "./oracle-fixtures-operacional.ts";
 import { mlFullEstoqueContract } from "../src/server/oracle/upstream-operacional.ts";
 
 const ROUTES = {
@@ -594,9 +596,17 @@ test("T-0080 estoque ML: contrato rejeita formato quebrado (vira erro, nao suces
     { status: "unavailable", scope_label: "x" },
   ];
   for (const q of quebrados) assert.equal(mlFullEstoqueContract.safeParse(q).success, false, JSON.stringify(q).slice(0, 80));
-  const res = await (await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": quebrados[0] }))
-    .callTool({ name: "torre_estoque_full", arguments: { canais: ["ml"] } });
-  assert.equal(res.isError, true);
+  // R146: contrato quebrado na fonte ML degrada o bloco (nunca "sucesso vazio"
+  // com numero inventado): ml_estoque sem dado + motivo = classe do erro.
+  const env = await call(
+    await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": quebrados[0] }),
+    "torre_estoque_full",
+    { canais: ["ml"] },
+  );
+  assert.equal(env.data.ml_estoque.estado, "sem_dado");
+  assert.deepEqual(env.data.ml_estoque.itens, []);
+  const lim = env.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel");
+  assert.equal(lim.motivo, "INVALID_UPSTREAM_RESPONSE");
 });
 
 test("T-0080 estoque ML: limite sempre enviado; ref_date/incluir_fora_do_full nunca; marca fora da fonte nao vai ao GET", async () => {
@@ -668,4 +678,84 @@ test("T-0080 desempenho: bloco de maturacao malformado e' contrato quebrado", as
     ...ROUTES, "/api/v1/performance/brands": { ...BRANDS, tiktok_maturacao: { em_maturacao_desde: "ontem", janela_dias: 35, motivo: "x" } },
   })).callTool({ name: "torre_desempenho_marketplaces", arguments: { periodo: "mes_anterior" } });
   assert.equal(res.isError, true);
+});
+
+// ---------------------------------------------------------------------------
+// R146 — falha da fonte ML Full (timeout, 5xx) NAO derruba a Shopee
+// ---------------------------------------------------------------------------
+
+/** Rotas por path; o ML Full estoque pendura ate o abort ou devolve 503. */
+function mlFalhaFetch(modo: "timeout" | "5xx", log: string[] = []): typeof fetch {
+  const rotas: Record<string, unknown> = {
+    "/api/v1/performance/ml-fulfillment": ML_FULL,
+    "/api/v1/performance/shopee-fbs": SHOPEE_FBS,
+    "/api/v1/performance/shopee-fbs-estoque": SHOPEE_ESTOQUE,
+  };
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = new URL(typeof input === "string" ? input : input.toString()).pathname;
+    log.push(path);
+    if (path === "/api/v1/performance/ml-full-estoque") {
+      if (modo === "5xx") {
+        return new Response(JSON.stringify({ detail: "contrato" }), {
+          status: 503, headers: { "content-type": "application/json" },
+        });
+      }
+      return new Promise((_res, rej) => {
+        const fail = () => { const e = new Error("aborted"); e.name = "AbortError"; rej(e); };
+        if (init?.signal?.aborted) return fail();
+        init?.signal?.addEventListener("abort", fail, { once: true });
+      });
+    }
+    return new Response(JSON.stringify(rotas[path]), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+}
+
+async function connectMlFalha(modo: "timeout" | "5xx", log?: string[]) {
+  const server = buildOracleServer({
+    backendBaseUrl: "https://mktplace-api.onrender.com",
+    fetchImpl: mlFalhaFetch(modo, log),
+    now: () => FIXED_NOW,
+    timeoutMs: 50,
+    rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
+  });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "r146", version: "0.0.0" });
+  await Promise.all([client.connect(ct), server.connect(st)]);
+  return client;
+}
+
+for (const [modo, motivo] of [["timeout", "SOURCE_TIMEOUT"], ["5xx", "SOURCE_UNAVAILABLE"]] as const) {
+  test(`R146 estoque: ML Full em ${modo} com Shopee ok -> resposta ok, Shopee preenchida, ml_estoque sem dado (motivo ${motivo})`, async () => {
+    const out = await call(await connectMlFalha(modo), "torre_estoque_full", {});
+    // Shopee intacta.
+    assert.equal(out.data.shopee_estoque.disponibilidade, "available");
+    assert.ok(out.data.shopee_estoque.itens.length > 0);
+    assert.notEqual(out.data.shopee_fbs, null);
+    // Modalidade ML (outra fonte) intacta.
+    assert.equal(typeof out.data.ml_full.share_full_gmv, "number");
+    // Estoque ML sem dado — nunca zero.
+    const est = out.data.ml_estoque;
+    assert.equal(est.disponibilidade, "unavailable");
+    assert.equal(est.estado, "sem_dado");
+    assert.equal(est.indicadores, null);
+    assert.deepEqual(est.itens, []);
+    const lim = out.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel");
+    assert.ok(lim, "limitacao presente");
+    assert.equal(lim.motivo, motivo, "motivo = classe do erro, sem texto livre");
+    assert.ok(!out.data.limitations.some((l: any) => l.topic === "estoque_ml_ausente"), "falha nao e' 'sem fotografia'");
+    const texto = JSON.stringify(out);
+    assert.ok(!/onrender|aborted|503|"contrato"/.test(texto), "nada da excecao ou da URL vaza");
+  });
+}
+
+test("R146 estoque: falha no PREFLIGHT de marcas tambem degrada; pedido so' ML segue ok com a modalidade", async () => {
+  const log: string[] = [];
+  const out = await call(await connectMlFalha("timeout", log), "torre_estoque_full", {
+    canais: ["ml"], marcas: ["kokeshi"],
+  });
+  assert.equal(log.filter((p) => p.endsWith("/ml-full-estoque")).length, 1, "parou no preflight");
+  assert.equal(out.data.shopee_estoque, null);
+  assert.equal(out.data.ml_estoque.estado, "sem_dado");
+  assert.equal(out.data.limitations.find((l: any) => l.topic === "estoque_ml_indisponivel").motivo, "SOURCE_TIMEOUT");
+  assert.equal(typeof out.data.ml_full.share_full_gmv, "number");
 });

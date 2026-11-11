@@ -29,13 +29,13 @@ import { z } from "zod";
 
 import { buildEnvelope } from "./envelope.ts";
 import {
-  mlStockMissing, STOCK_ML_NOT_STOCK, STOCK_ML_TOWER_COVERAGE, STOCK_PARTIAL_SCOPE,
+  mlStockMissing, mlStockSourceFailed, STOCK_ML_NOT_STOCK, STOCK_ML_TOWER_COVERAGE, STOCK_PARTIAL_SCOPE,
   STOCK_TOWER_COVERAGE, type Limitation,
 } from "./limitations.ts";
 import { BRANDS, isoDate, noDuplicates, todayInAppTimezone, inclusiveDays } from "./schemas.ts";
 import { envelopeSchema, limitationSchema, ok, safeText, safeTexts, type OracleTool, type ToolDeps } from "./tool-kit.ts";
 import { decOrNull, numOrNull } from "./torre-client.ts";
-import { toolError } from "./errors.ts";
+import { OracleToolError, toolError, type ErrorCategory } from "./errors.ts";
 import { parseUpstream } from "./upstream.ts";
 import {
   CLASSIFICACOES_ESTOQUE, CURVAS_ABC, mlFulfillmentContract, mlFullEstoqueContract,
@@ -624,6 +624,36 @@ async function mlEstoque(input: EstoqueInput, deps: ToolDeps): Promise<MlEstoque
   };
 }
 
+/**
+ * Classes em que a FONTE falhou — so' estas degradam. MISSING_CONFIGURATION
+ * (parametro fora da allowlist, i.e. bug nosso) continua derrubando a tool.
+ */
+const FALHAS_DE_FONTE: ReadonlySet<ErrorCategory> = new Set([
+  "SOURCE_TIMEOUT", "SOURCE_UNAVAILABLE", "INVALID_UPSTREAM_RESPONSE",
+]);
+
+/**
+ * R146 — o estoque ML e' fonte NOVA e fria (~6,5 s na 1a chamada contra 8 s de
+ * timeout). A falha dela, inclusive no preflight de marcas, nao pode derrubar
+ * a Shopee nem a modalidade ML: o bloco sai sem dado e a classe do erro vira
+ * limitacao. Erro que nao e' de fonte e' relancado.
+ */
+async function mlEstoqueOuFalha(
+  input: EstoqueInput, deps: ToolDeps,
+): Promise<{ bloco: MlEstoqueBlock; falha: ErrorCategory | null }> {
+  try {
+    return { bloco: await mlEstoque(input, deps), falha: null };
+  } catch (err) {
+    if (err instanceof OracleToolError && FALHAS_DE_FONTE.has(err.category)) {
+      return {
+        bloco: bloqueioMlEstoque(err.category, "Estoque Full Mercado Livre", []),
+        falha: err.category,
+      };
+    }
+    throw err;
+  }
+}
+
 async function mlFull(
   input: EstoqueInput, periodo: { start: string; end: string }, deps: ToolDeps,
 ): Promise<MlFullBlock> {
@@ -705,17 +735,19 @@ export const estoqueTool: OracleTool = {
     const periodo = resolveClosedPeriod(input, deps.now());
     const canais = input.canais ?? ["ml", "shopee"];
 
-    const [estoque, fbs, mlEst, ml] = await Promise.all([
+    const [estoque, fbs, mlEstRes, ml] = await Promise.all([
       canais.includes("shopee") ? shopeeEstoque(input, deps) : null,
       canais.includes("shopee") ? shopeeFbs(input, periodo, deps) : null,
-      canais.includes("ml") ? mlEstoque(input, deps) : null,
+      canais.includes("ml") ? mlEstoqueOuFalha(input, deps) : null,
       canais.includes("ml") ? mlFull(input, periodo, deps) : null,
     ]);
 
+    const mlEst = mlEstRes?.bloco ?? null;
     const limitations: Limitation[] = [];
     if (ml) limitations.push(STOCK_ML_NOT_STOCK);
+    if (mlEstRes?.falha) limitations.push(mlStockSourceFailed(mlEstRes.falha));
     if (mlEst?.disponibilidade === "available") limitations.push(STOCK_ML_TOWER_COVERAGE);
-    if (mlEst?.disponibilidade === "unavailable") limitations.push(mlStockMissing(null));
+    if (mlEst?.disponibilidade === "unavailable" && !mlEstRes?.falha) limitations.push(mlStockMissing(null));
     const mlSemFoto = (mlEst?.marcas ?? []).filter((m) => m.estado === "sem_fotografia").map((m) => m.brand);
     if (mlSemFoto.length > 0) limitations.push(mlStockMissing(mlSemFoto));
     if (estoque?.disponibilidade === "available") limitations.push(STOCK_TOWER_COVERAGE);
