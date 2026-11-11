@@ -209,7 +209,10 @@ def test_m02_head_unico_em_todas_as_revisoes():
     # componentes de marts.fact_dre_insumo_mensal (aceita os impostos do webgex).
     # T-0068: head avancado de 040 para 041, que so' acrescenta a coluna anulavel
     # buyer_shipping_fee a marts.fact_tiktok_order_discounts_daily.
-    assert heads == ["041"], f"head deveria ser unico e igual a 041, veio {heads}"
+    # 042/043 (Bling) e 044 (shadow Shopee aceita kokeshi) vieram depois.
+    # T-0093: head avancado de 044 para 045, que so' troca o CHECK de
+    # componentes de marts.fact_dre_insumo_mensal (aceita `shopee_devolucao_reembolso`).
+    assert heads == ["045"], f"head deveria ser unico e igual a 045, veio {heads}"
 
 
 def test_m03_as_tres_revisoes_novas_existem_uma_vez_cada():

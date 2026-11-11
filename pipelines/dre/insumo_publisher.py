@@ -17,7 +17,10 @@ Le, no Data Mart e em transacao READ ONLY, somente AGREGADOS MENSAIS por
     CHECK da tabela no Neon ja aceita o componente — ver `TAXA_SHOPEE`;
   * imposto sobre venda realizado (ICMS, DIFAL, PIS+COFINS) do webgex, casado
     com a NF de marketplace pela chave, com a cobertura em receita fiscal
-    (T-0069). So' entra depois da migration 040 — ver `IMPOSTOS`.
+    (T-0069). So' entra depois da migration 040 — ver `IMPOSTOS`;
+  * reembolso das devolucoes ACCEPTED da Shopee (`raw.shopee_returns`), por
+    mes de criacao da devolucao (BRT) x marca, nas lojas com API (T-0093). So'
+    entra depois da migration 045 — ver `DEVOLUCAO_SHOPEE`.
 
 e grava em `marts.fact_dre_insumo_mensal` (Neon). Nenhum pedido, nota,
 settlement ou dado pessoal sai do Data Mart.
@@ -188,6 +191,26 @@ IMPOSTO_BASE_PENDENTE_FISCAL = {"rituaria": date(2026, 10, 1)}
 IMPOSTO_PARCIAL_BASE = IMPOSTO_PARCIAL + "base do ICMS mudou em out/26 (desconto na base), pendente do Fiscal"
 #: Folga da janela de `data` do webgex em torno das competencias lidas.
 WEBGEX_FOLGA = timedelta(days=7)
+
+#: T-0093 — devolucao REAL da Shopee: `SUM(refund_amount)` das devolucoes com
+#: `status = 'ACCEPTED'` de `raw.shopee_returns` (a mesma fonte e regra do /cx),
+#: por mes do dia de CRIACAO da devolucao em BRT x marca. Valor positivo (custo,
+#: `sinal_origem = 1`). So' as lojas com API: a kokeshi NAO entra (a receita
+#: dela vem do shop-stats, ja' liquida de devolucoes; a API le' a devolucao
+#: dela direto do Neon, so' como informacao).
+#:
+#: INERTE ATE' A MIGRATION 045: o CHECK `ck_fdim_componente` e' lista fechada. O
+#: publisher so' le' e grava o componente quando o CHECK do Neon ja' o aceita
+#: (`check_aceita_devolucoes`); antes disso a fonte nem e' consultada, o lote
+#: sai identico ao de hoje e o resumo diz `inerte`. Mesmo mecanismo dos impostos.
+DEVOLUCAO_SHOPEE = "shopee_devolucao_reembolso"
+PROC_DEVOLUCAO_SHOPEE = ("raw.shopee_returns (status=ACCEPTED, SUM(refund_amount), mes da criacao da devolucao "
+                         "em BRT) @T-0093")
+#: Lojas Shopee com API (`raw.shopee_returns.brand` ja' e' o slug da marca).
+DEVOLUCOES_SHOPEE_MARCAS = ("apice", "barbours", "lescent", "rituaria")
+#: Primeiro dia com dado na fonte. A cobertura do mes e' dias cobertos / dias do
+#: mes (out/26 = 25/31); competencia inteira antes dele nao publica linha.
+DEVOLUCOES_SHOPEE_INICIO = date(2026, 10, 7)
 
 #: T-0091 — PALIATIVO do custo NULL na gold. As NFs Full/FBS da Shopee entraram
 #: em `gold.nf_vendas_unificada_v2` (out/26, `origem = 'webgex_full'`) sem
@@ -637,6 +660,28 @@ SQL_IMPOSTOS = text("""
     GROUP BY n.data_mes, n.marca, n.plataforma
 """)
 
+#: Devolucoes Shopee por `competencia x marca` (T-0093). Mesma regra do /cx
+#: (`cx_atendimento_service.SQL_DEVOLUCOES_MARCAS`): so' ACCEPTED vira reembolso
+#: e o mes e' o do dia de CRIACAO da devolucao em BRT. Sem COALESCE: mes sem
+#: aceita devolve `reembolsado` NULL e a montagem decide (zero medido se houve
+#: devolucao no mes; ausencia se nao houve nenhuma). `:inicio` nunca e' anterior
+#: a `DEVOLUCOES_SHOPEE_INICIO`.
+SQL_DEVOLUCOES_SHOPEE = text("""
+    SELECT date_trunc('month', (create_time AT TIME ZONE 'America/Sao_Paulo'))::date AS competencia,
+           brand                                                                    AS marca,
+           COUNT(*)                                                                 AS devolucoes,
+           COUNT(*) FILTER (WHERE status = 'ACCEPTED')                              AS aceitas,
+           COUNT(*) FILTER (WHERE status = 'ACCEPTED' AND refund_amount IS NULL)    AS aceitas_sem_valor,
+           COUNT(*) FILTER (WHERE status = 'ACCEPTED' AND refund_amount < 0)        AS aceitas_negativas,
+           SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED')                    AS reembolsado,
+           MAX(update_time)                                                         AS atualizado_em
+    FROM raw.shopee_returns
+    WHERE brand = ANY(:marcas)
+      AND (create_time AT TIME ZONE 'America/Sao_Paulo') >= :inicio
+      AND (create_time AT TIME ZONE 'America/Sao_Paulo') < :fim_exclusivo
+    GROUP BY 1, 2
+""")
+
 SQL_TABELA_EXISTE = text("SELECT to_regclass('marts.fact_dre_insumo_mensal') IS NOT NULL")
 #: Definicao do CHECK de componentes no Neon. `TAXA_SHOPEE` so' e' publicada
 #: quando aparece nela (migration que estende a 025 aplicada).
@@ -742,6 +787,10 @@ class Lote:
     cmv_estimado_estado: Optional[str] = None
     #: Motivos da validacao da estimativa que reprovou. NAO entram em `recusas`.
     cmv_estimado_recusas: list = field(default_factory=list)
+    #: T-0093: `publicado` ou `recusado: ...`; None = nao houve leitura.
+    devolucoes_estado: Optional[str] = None
+    #: Motivos da validacao das devolucoes que reprovou. NAO entram em `recusas`.
+    devolucoes_recusas: list = field(default_factory=list)
 
 
 def _linha(competencia, canal, marca, componente, valor, *, status, procedencia, sinal=None,
@@ -1036,7 +1085,8 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
                 sem_vendas: frozenset = frozenset(), publicadas: frozenset = frozenset(),
                 remover: frozenset = frozenset(), taxa_shopee: Optional[list[dict]] = None,
                 numeracao_nf: Optional[list[dict]] = None, impostos: Optional[list[dict]] = None,
-                cmv_estimado: Optional[list[dict]] = None) -> Lote:
+                cmv_estimado: Optional[list[dict]] = None,
+                devolucoes_shopee: Optional[list[dict]] = None) -> Lote:
     """Transforma a leitura em linhas da fato e lista as recusas.
 
     Recusa (a publicacao inteira aborta) quando:
@@ -1089,9 +1139,18 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
     estimada sai identica. A contraprova compara so' a parte real (a leitura do
     `SQL_CMV` nao muda). Validacao reprovada (`recusas_cmv_estimado`) NUNCA
     recusa o lote: descarta a estimativa inteira, como os impostos.
+
+    `devolucoes_shopee` (T-0093): linhas de `SQL_DEVOLUCOES_SHOPEE`. `None` = o
+    Neon ainda nao aceita `DEVOLUCAO_SHOPEE` (antes da 045) ou a leitura nao
+    rodou: nenhuma linha montada, lote como antes. Lista (mesmo vazia) = uma
+    linha por celula Shopee esperada das `DEVOLUCOES_SHOPEE_MARCAS` com
+    competencia a partir de `DEVOLUCOES_SHOPEE_INICIO`
+    (`_linha_devolucao_shopee`). Validacao reprovada (chave repetida, reembolso
+    aceito negativo) NUNCA recusa o lote: descarta as devolucoes inteiras, como
+    os impostos.
     """
     lote = Lote(extraidas=len(cmv) + len(repasse) + len(taxa_shopee or []) + len(impostos or [])
-                + len(cmv_estimado or []))
+                + len(cmv_estimado or []) + len(devolucoes_shopee or []))
     plat_para_canal = {v: k for k, v in PLATAFORMA_FISCAL.items()}
 
     def indexar(rows, chave_fn, nome):
@@ -1159,6 +1218,20 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
     for (m, marca) in set(rep_idx):
         if "tiktok" in canais and (m, "tiktok", marca) not in esp:
             lote.fora_do_escopo.append(("repasse", m, "tiktok", marca))
+    dev_idx: dict = {}
+    if devolucoes_shopee is not None:
+        dev_idx, dev_recusas = indexar_devolucoes_shopee(devolucoes_shopee)
+        for (m, marca) in sorted(dev_idx):
+            if not _celula_devolucao_shopee(m, "shopee", marca) or (m, "shopee", marca) not in esp:
+                lote.fora_do_escopo.append(("devolucoes_shopee", m, "shopee", marca))
+        if dev_recusas:
+            dev_idx = {}
+            lote.devolucoes_recusas = dev_recusas
+            lote.devolucoes_estado = "recusado: " + "; ".join(dev_recusas[:5]) + (
+                f" (e mais {len(dev_recusas) - 5})" if len(dev_recusas) > 5 else "")
+        else:
+            lote.devolucoes_estado = "publicado"
+    usar_devolucoes = devolucoes_shopee is not None and not lote.devolucoes_recusas
 
     for (m, canal, marca), gmv in sorted(esp.items(), key=lambda kv: (kv[0][0], CANAIS.index(kv[0][1]), kv[0][2])):
         c = cmv_idx.get((m, canal, marca))
@@ -1217,6 +1290,8 @@ def montar_lote(*, esperado: list[dict], cmv: list[dict], contraprova: list[dict
 
         if canal == "shopee" and taxa_shopee is not None:
             lote.linhas.append(_linha_taxa_shopee(m, marca, txs_idx.get((m, marca)), lote))
+        if usar_devolucoes and _celula_devolucao_shopee(m, canal, marca):
+            lote.linhas.append(_linha_devolucao_shopee(m, marca, dev_idx.get((m, marca))))
         if usar_impostos:
             lote.linhas.extend(_linhas_impostos(m, canal, marca, imp_idx.get((m, canal, marca)), lote))
         if canal != "tiktok":
@@ -1304,6 +1379,81 @@ def _linha_taxa_shopee(m: date, marca: str, r: Optional[dict], lote: Lote) -> di
                   cobertura=None if cobertura is None else cobertura.quantize(Decimal("0.000001")),
                   motivo=f"escrow em {com} de {pedidos} pedidos nao cancelados",
                   data_max=_ts(r["atualizado_em"]))
+
+
+def _dias_devolucao_shopee(m: date) -> int:
+    """Dias do mes `m` cobertos pela fonte de devolucoes (0 antes do inicio)."""
+    return max(0, (ultimo_dia(m) - max(m, DEVOLUCOES_SHOPEE_INICIO)).days + 1)
+
+
+def cobertura_devolucao_shopee(m: date) -> Optional[Decimal]:
+    """Dias cobertos / dias do mes, 6 casas (a coluna e' NUMERIC(9,6)); None
+    quando o mes inteiro e' anterior a `DEVOLUCOES_SHOPEE_INICIO`."""
+    dias = _dias_devolucao_shopee(m)
+    if not dias:
+        return None
+    return (Decimal(dias) / Decimal(ultimo_dia(m).day)).quantize(Decimal("0.000001"))
+
+
+def _celula_devolucao_shopee(m: date, canal: str, marca: str) -> bool:
+    """A celula publica `DEVOLUCAO_SHOPEE`: Shopee, loja com API, mes com dado."""
+    return canal == "shopee" and marca in DEVOLUCOES_SHOPEE_MARCAS and _dias_devolucao_shopee(m) > 0
+
+
+def indexar_devolucoes_shopee(rows: list[dict]) -> tuple[dict, list[str]]:
+    """`(competencia, marca) -> linha` e as recusas da leitura (T-0093).
+
+    Recusa (so' as devolucoes, nunca o lote): chave repetida e devolucao
+    aceita com `refund_amount` negativo (sinal inesperado nao e' corrigido aqui).
+    """
+    idx: dict = {}
+    recusas: list[str] = []
+    for r in rows:
+        k = (_mes_de(r["competencia"]), r["marca"])
+        if k in idx:
+            recusas.append(f"devolucoes_shopee: chave repetida {k}")
+        idx[k] = r
+        neg = int(r.get("aceitas_negativas") or 0)
+        reemb = _dec(r.get("reembolsado"))
+        if neg or (reemb is not None and reemb < 0):
+            recusas.append(f"devolucoes_shopee: {neg} devolucao(oes) aceita(s) com refund_amount negativo em {k}")
+    return idx, recusas
+
+
+def _linha_devolucao_shopee(m: date, marca: str, r: Optional[dict]) -> dict:
+    """Linha de `DEVOLUCAO_SHOPEE` de uma celula Shopee esperada (T-0093).
+
+      * nenhuma devolucao criada no mes para a marca -> `valor NULL`,
+        `ausente_na_origem` (nunca zero);
+      * devolucoes no mes, nenhuma ACCEPTED -> zero MEDIDO (nada reembolsado);
+      * ACCEPTED sem nenhum `refund_amount` -> `valor NULL` (nao da' para medir);
+      * senao `valor` = soma do `refund_amount` das ACCEPTED, positivo.
+    `cobertura` = dias do mes com dado na fonte / dias do mes.
+    """
+    cobertura = cobertura_devolucao_shopee(m)
+    dias, dias_mes = _dias_devolucao_shopee(m), ultimo_dia(m).day
+    cob_txt = (f"cobertura {dias} de {dias_mes} dias (dado desde "
+               f"{DEVOLUCOES_SHOPEE_INICIO.strftime('%d/%m/%Y')})")
+    regra = "raw.shopee_returns: ACCEPTED, por criacao da devolucao, BRT"
+    devolucoes = int((r or {}).get("devolucoes") or 0)
+    if not devolucoes:
+        return _linha(m, "shopee", marca, DEVOLUCAO_SHOPEE, None, status="ausente_na_origem",
+                      procedencia=PROC_DEVOLUCAO_SHOPEE, cobertura=cobertura,
+                      motivo=f"{regra}; nenhuma devolucao da marca no mes (ausencia nao e' zero); {cob_txt}")
+    aceitas, sem_valor = int(r["aceitas"] or 0), int(r.get("aceitas_sem_valor") or 0)
+    reemb = _dec(r["reembolsado"])
+    data_max = _ts(r["atualizado_em"])
+    contagem = f"{aceitas} aceita(s) de {devolucoes} devolucao(oes)"
+    if aceitas and reemb is None:
+        return _linha(m, "shopee", marca, DEVOLUCAO_SHOPEE, None, status="ausente_na_origem",
+                      procedencia=PROC_DEVOLUCAO_SHOPEE, cobertura=cobertura, data_max=data_max,
+                      motivo=f"{regra}; {contagem}, nenhuma com refund_amount; {cob_txt}")
+    valor = Decimal(0) if reemb is None else reemb  # sem aceita = nada reembolsado (medido)
+    if sem_valor:
+        contagem += f", {sem_valor} aceita(s) sem refund_amount fora da soma"
+    return _linha(m, "shopee", marca, DEVOLUCAO_SHOPEE, valor, status="nao_avaliado",
+                  procedencia=PROC_DEVOLUCAO_SHOPEE, sinal=1, cobertura=cobertura, data_max=data_max,
+                  motivo=f"{regra}; {contagem}; {cob_txt}")
 
 
 #: Componente -> (coluna de `SQL_IMPOSTOS`, codigo do webgex, para o motivo).
@@ -1530,6 +1680,56 @@ def ler_cmv_estimado(fonte_engine, comps: list[date], canais: list[str],
     return linhas, "lido"
 
 
+def ler_devolucoes_shopee(fonte_engine, comps: list[date], canais: list[str], marcas: list[str],
+                          aceita: bool) -> tuple[Optional[list], str]:
+    """Devolucoes Shopee (T-0093): leitura PROPRIA, READ ONLY, com timeout.
+
+    Fase 2 do `publicar` (sem conexao do Neon aberta). Como os impostos, nunca
+    derruba a publicacao:
+      * Shopee fora de `canais` ou `aceita` falso (CHECK sem o componente, antes
+        da 045) -> nao le' a fonte; `(None, "fora do escopo"|"inerte: ...")`;
+      * sem Data Mart, sem loja com API no escopo ou janela toda antes de
+        `DEVOLUCOES_SHOPEE_INICIO` -> `(None, "nao avaliado: ...")`;
+      * erro de SQL -> `(None, "indisponivel: <classe>")`, sem o texto (nada de DSN);
+      * ok -> `(linhas, "lido")`; a montagem decide `publicado`/`recusado`.
+    So' `SQLAlchemyError` e' engolido; qualquer outra excecao sobe.
+    """
+    if "shopee" not in canais:
+        return None, "fora do escopo"
+    if not aceita:
+        return None, estado_devolucoes_shopee(None)
+    marcas_dev = [m for m in DEVOLUCOES_SHOPEE_MARCAS if m in marcas]
+    if fonte_engine is None or not marcas_dev:
+        return None, "nao avaliado: sem Data Mart ou sem loja Shopee com API no escopo"
+    inicio, fim = max(comps[0], DEVOLUCOES_SHOPEE_INICIO), somar_meses(comps[-1], 1)
+    if inicio >= fim:
+        return None, f"nao avaliado: janela anterior a {DEVOLUCOES_SHOPEE_INICIO.isoformat()} (inicio do dado)"
+    params = {"marcas": marcas_dev, "inicio": inicio, "fim_exclusivo": fim}
+    try:
+        with fonte_engine.connect() as conn:
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            conn.execute(text("SET LOCAL statement_timeout = '600s'"))
+            linhas = _rows(conn, SQL_DEVOLUCOES_SHOPEE, params)
+            conn.rollback()
+    except SQLAlchemyError as exc:
+        return None, f"indisponivel: {type(exc).__name__}"
+    return linhas, "lido"
+
+
+def estado_devolucoes_shopee(devolucoes: Optional[list]) -> str:
+    """Rotulo do resumo para as devolucoes Shopee (T-0093)."""
+    if devolucoes is None:
+        return (f"inerte: o CHECK ck_fdim_componente do Neon ainda nao aceita {DEVOLUCAO_SHOPEE} "
+                "(migration 045 pendente)")
+    return "publicado"
+
+
+def _resumo_devolucoes(lote: Lote, estado_leitura: str) -> str:
+    """Estado final: o da montagem (`publicado`/`recusado: ...`) ou, sem
+    leitura, o de `ler_devolucoes_shopee` (`inerte`/`fora do escopo`/...)."""
+    return lote.devolucoes_estado or estado_leitura
+
+
 def _resumo_cmv_estimado(lote: Lote, estado_leitura: str) -> dict:
     return {"estado": lote.cmv_estimado_estado or estado_leitura, "celulas": lote.cmv_estimado,
             "recusas": lote.cmv_estimado_recusas}
@@ -1601,6 +1801,12 @@ def check_aceita_impostos(conn) -> bool:
     return bool(definicao) and all(f"'{c}'" in definicao for c in IMPOSTOS)
 
 
+def check_aceita_devolucoes(conn) -> bool:
+    """True quando o CHECK de componentes do Neon ja lista `DEVOLUCAO_SHOPEE` (045)."""
+    definicao = conn.execute(SQL_CHECK_COMPONENTE).scalar()
+    return bool(definicao) and f"'{DEVOLUCAO_SHOPEE}'" in definicao
+
+
 def _esperado(conn, comps: list[date], canais: list[str]) -> list[dict]:
     return _rows(conn, SQL_ESPERADO, {
         "inicio": comps[0], "fim_exclusivo": somar_meses(comps[-1], 1),
@@ -1613,7 +1819,7 @@ def _marcas(esperado: list[dict]) -> list[str]:
 
 
 def _deriva(esperado_antes: list[dict], esperado_lock: list[dict],
-            aceita_antes: tuple[bool, bool], aceita_lock: tuple[bool, bool]) -> list[str]:
+            aceita_antes: tuple[bool, ...], aceita_lock: tuple[bool, ...]) -> list[str]:
     """T-0087: motivos de recusa quando o Neon mudou entre a pre-leitura e o lock.
 
     So' compara o que a leitura da origem usou: as marcas e os `aceita_*`. O
@@ -1686,19 +1892,23 @@ def diagnosticar(alvo_engine, fonte_engine, comps: list[date], canais: list[str]
         atual = _rows(conn, SQL_ATUAL, {"competencias": comps, "canais": canais}) if existe else []
         aceita_tx = bool(existe) and check_aceita_taxa_shopee(conn)
         aceita_imp = bool(existe) and check_aceita_impostos(conn)
+        aceita_dev = bool(existe) and check_aceita_devolucoes(conn)
         conn.rollback()
     cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado), aceita_tx)
     cmv_est, estado_est = ler_cmv_estimado(fonte_engine, comps, canais, _marcas(esperado))
     impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado), aceita_imp)
+    devolucoes, estado_dev = ler_devolucoes_shopee(fonte_engine, comps, canais, _marcas(esperado), aceita_dev)
     numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
     publicadas = frozenset((_mes_de(r["competencia"]), r["canal"], r["marca"]) for r in atual)
     lote = montar_lote(esperado=esperado, cmv=cmv, contraprova=contraprova, repasse=repasse, canais=canais,
                        comps=comps, sem_vendas=sem_vendas, publicadas=publicadas, remover=remover,
-                       taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos, cmv_estimado=cmv_est)
+                       taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos, cmv_estimado=cmv_est,
+                       devolucoes_shopee=devolucoes)
     return _resumo(lote, comps, canais, modo="dry-run", aplicado=False, tabela_existe=bool(existe),
                    taxa_shopee=estado_taxa_shopee(taxa_shopee, canais),
                    cmv_estimado=_resumo_cmv_estimado(lote, estado_est),
                    impostos=_resumo_impostos(lote, estado_imp),
+                   devolucoes_shopee=_resumo_devolucoes(lote, estado_dev),
                    numeracao_nf=_resumo_numeracao(lote, estado_nf),
                    sem_vendas=sorted(f"{m.isoformat()[:7]}:{c}" for m, c in sem_vendas),
                    remover_marca=sorted(rotulo_chave(k) for k in remover),
@@ -1733,11 +1943,13 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
             esperado = _esperado(conn, comps, canais)
             aceita_tx = check_aceita_taxa_shopee(conn)
             aceita_imp = check_aceita_impostos(conn)
+            aceita_dev = check_aceita_devolucoes(conn)
             conn.rollback()
         # Fase 2: leituras longas da origem, SEM conexao do Neon aberta.
         cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado), aceita_tx)
         cmv_est, estado_est = ler_cmv_estimado(fonte_engine, comps, canais, _marcas(esperado))
         impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado), aceita_imp)
+        devolucoes, estado_dev = ler_devolucoes_shopee(fonte_engine, comps, canais, _marcas(esperado), aceita_dev)
         numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
         # Fase 3: escrita, transacao unica e conexao nova.
         with alvo_engine.begin() as conn:
@@ -1753,15 +1965,16 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
             publicadas = frozenset(
                 (_mes_de(r["competencia"]), r["canal"], r["marca"])
                 for r in _rows(conn, SQL_PUBLICADAS, {"competencias": comps, "canais": canais}))
-            deriva = _deriva(esperado, esperado_lock, (aceita_tx, aceita_imp),
-                             (check_aceita_taxa_shopee(conn), check_aceita_impostos(conn)))
+            deriva = _deriva(esperado, esperado_lock, (aceita_tx, aceita_imp, aceita_dev),
+                             (check_aceita_taxa_shopee(conn), check_aceita_impostos(conn),
+                              check_aceita_devolucoes(conn)))
             if deriva:  # ANTES do DELETE: a origem foi lida para outro universo/contrato
                 raise PublicacaoRecusada(deriva)
             esperado = esperado_lock
             lote = montar_lote(esperado=esperado, cmv=cmv, contraprova=contraprova, repasse=repasse, canais=canais,
                                comps=comps, sem_vendas=sem_vendas, publicadas=publicadas, remover=remover,
                                taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos,
-                               cmv_estimado=cmv_est)
+                               cmv_estimado=cmv_est, devolucoes_shopee=devolucoes)
             if lote.recusas:  # ANTES do DELETE: recusa nunca apaga a fotografia
                 raise PublicacaoRecusada(lote.recusas)
             apagadas = conn.execute(SQL_APAGA_ESCOPO, {"competencias": comps, "canais": canais}).rowcount
@@ -1781,6 +1994,7 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
                    taxa_shopee=estado_taxa_shopee(taxa_shopee, canais),
                    cmv_estimado=_resumo_cmv_estimado(lote, estado_est),
                    impostos=_resumo_impostos(lote, estado_imp),
+                   devolucoes_shopee=_resumo_devolucoes(lote, estado_dev),
                    numeracao_nf=_resumo_numeracao(lote, estado_nf),
                    sem_vendas=sorted(f"{m.isoformat()[:7]}:{c}" for m, c in sem_vendas),
                    remover_marca=sorted(rotulo_chave(k) for k in remover))

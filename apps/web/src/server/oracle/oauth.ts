@@ -229,6 +229,38 @@ export function hasRequiredScope(scopes: readonly string[], required: string): b
   return scopes.includes(required);
 }
 
+/**
+ * Claim de acesso corporativo carimbado pela Post-Login Action v4 do Auth0.
+ *
+ * Por que existe: clientes MCP third-party autocadastrados por DCR (ex.: o
+ * GoMarketplace) pedem so' `openid profile email`; o Auth0 descarta o
+ * `oracle:read` que a Action adiciona, porque ele nao esta no scope consentido.
+ * Quem emite: a Action v4, e somente DEPOIS de aprovar a politica corporativa
+ * (Google, e-mail de dominio aprovado verificado e `hd`). Token M2M nunca passa
+ * por Post-Login, entao nunca o recebe — e mesmo assim e' excluido aqui, para
+ * que um claim forjado por outra via nao vire acesso de maquina.
+ */
+export const CORPORATE_ACCESS_CLAIM = "https://mktplace-ten.vercel.app/oracle_access";
+export const CORPORATE_ACCESS_VALUE = "corporate";
+
+/** Token de maquina (client credentials): `gty` do Auth0 ou `sub` `...@clients`. */
+export function isMachineToken(payload: JWTPayload): boolean {
+  const gty = (payload as { gty?: unknown }).gty;
+  if (gty === "client-credentials") return true;
+  if (Array.isArray(gty) && gty.includes("client-credentials")) return true;
+  const sub = payload.sub;
+  return typeof sub === "string" && sub.trim().endsWith("@clients");
+}
+
+/**
+ * `true` somente com o claim EXATAMENTE igual a `"corporate"` (string, sem
+ * trim, sem caixa, sem `includes`) e em token de USUARIO.
+ */
+export function hasCorporateAccess(payload: JWTPayload): boolean {
+  const claim = (payload as Record<string, unknown>)[CORPORATE_ACCESS_CLAIM];
+  return claim === CORPORATE_ACCESS_VALUE && !isMachineToken(payload);
+}
+
 function invalidToken(detail: string): OAuthError {
   // `detail` e' SEMPRE string literal do nosso codigo: nunca o token, nunca o
   // payload, nunca a mensagem original da biblioteca.
@@ -249,7 +281,8 @@ export type VerifierOptions = {
  *
  * Valida obrigatoriamente: assinatura por JWKS, algoritmo RS256, `iss` exato,
  * `aud` contendo exatamente a audience, `exp`, `nbf` quando presente, `sub`
- * nao vazio e a permission exigida como elemento completo.
+ * nao vazio e a permission exigida como elemento completo — ou, no lugar so'
+ * da permission, o claim corporativo em token de usuario.
  */
 export function createAuth0Verifier(
   cfg: OAuthConfig,
@@ -295,8 +328,17 @@ export function createAuth0Verifier(
       // A checagem de permission acontece aqui E no `requiredScopes` do SDK.
       // Redundancia deliberada: se um dos dois for removido por engano no
       // futuro, o outro continua negando.
+      //
+      // Aceite: `oracle:read` no token OU o claim corporativo da Action v4 em
+      // token de usuario (ver `CORPORATE_ACCESS_CLAIM`). Todas as validacoes
+      // acima (assinatura, alg, iss, aud, exp, nbf, sub) ja passaram.
       if (!hasRequiredScope(scopes, cfg.requiredScope)) {
-        throw new OAuthError(OAuthErrorCode.InsufficientScope, "permissao insuficiente");
+        if (!hasCorporateAccess(payload)) {
+          throw new OAuthError(OAuthErrorCode.InsufficientScope, "permissao insuficiente");
+        }
+        // Acesso corporativo equivale a `oracle:read`: o `requiredScopes` do
+        // SDK confere a mesma lista.
+        scopes.push(cfg.requiredScope);
       }
 
       const azp = (payload as { azp?: unknown }).azp;
