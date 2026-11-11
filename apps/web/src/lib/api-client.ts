@@ -1907,7 +1907,10 @@ export interface SignalRow {
 
 export interface ProductSignalRow {
   brand: string;
-  title: string;
+  /** Nulo em parte dos itens da gold (T-0096); rotular com `productLabel`. */
+  title: string | null;
+  /** MLB do anuncio; entregue em urgent/scale/organic desde T-0096. */
+  item_id: string | null;
   pareto_bucket: string | null;
   revenue_velocity: string | null;
   gmv: number;

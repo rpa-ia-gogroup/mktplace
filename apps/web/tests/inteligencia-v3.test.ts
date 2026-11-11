@@ -33,7 +33,7 @@ import type { InteligenciaData, ProductSignalRow } from "../src/lib/api-client.t
 
 function sig(brand: string, title: string, over: Partial<ProductSignalRow> = {}): ProductSignalRow {
   return {
-    brand, title,
+    brand, title, item_id: null,
     pareto_bucket: "A_top50", revenue_velocity: "high",
     gmv: 100, ad_spend: 10, ad_roas: 10, ad_acos_pct: 10,
     cancel_rate_pct: 1, revenue_share_pct: 0.1, units_sold: 5,
@@ -235,8 +235,10 @@ test("11. fila deriva das tres listas com origem discriminada", () => {
 
 test("11b. grao preservado: nenhum identificador inventado", () => {
   const q = buildQueue(DATA, BRAND_ALL);
+  // `item_id` vem do payload (T-0096); o frontend so' repassa, nunca preenche.
+  const recebidos = [...DATA.urgent, ...DATA.scale, ...DATA.organic].map((r) => r.item_id);
+  assert.deepEqual(q.map((r) => r.item_id), recebidos, "item_id nao pode ser inventado no frontend");
   for (const r of q) {
-    assert.ok(!("item_id" in r), "item_id nao pode ser inventado no frontend");
     assert.ok(!("product_id" in r));
     assert.ok(typeof r.brand === "string" && typeof r.title === "string");
   }
