@@ -7,18 +7,23 @@ import {
   type RegioesSummaryData, type RegiaoUfRow, type RegiaoBrandRow, type RegiaoTrendPoint,
 } from "@/lib/api-client";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
-import KpiCard from "@/components/KpiCard";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
+import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
+import CartoesRegioes, { GRADE_REGIOES, TOTAL_DE_CARTOES_REGIOES, VISUAL_REGIOES } from "@/components/regioes/RegioesCartoes";
+import RegioesDrilldownContent from "@/components/regioes/RegioesDrilldownContent";
+import { TITULO_DETALHE, type ChaveRegioes } from "@/lib/regioes-cartoes";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import {
   fmtPctOrNA, coverageLabel, coverageBadgeClass, semCoberturaAviso, fmtShareOfTotalPct,
 } from "@/lib/regioes-format";
-import { buildRegionalScope, REGIONAL_GMV_LABEL, UF_FILL_LABEL } from "@/lib/regioes-scope";
+import { buildRegionalScope } from "@/lib/regioes-scope";
 import {
   buildAvisoCobertura, linhaAtualizacao, marcaPontoAusente, fmtDataBr, normalizarCobertura,
 } from "@/lib/regioes-cobertura";
@@ -72,6 +77,8 @@ function RegioesPageInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  // Cartao aberto no detalhe (dialogo unico da pagina).
+  const [detalhe, setDetalhe] = useState<ChaveRegioes | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
   const [semCobertura, setSemCobertura] = useState<string[]>([]);
   // Chave da ultima requisicao resolvida com sucesso — comparada com a
@@ -179,6 +186,13 @@ function RegioesPageInner() {
   const regionalScope = dataIsFresh
     ? buildRegionalScope(filters.channels, displaySemCobertura, displaySummary?.uf_fill_pct ?? null)
     : null;
+  const notaDoGmv = regionalScope
+    ? canaisComAtraso.length > 0
+      ? cobertura.dadosCompletosAte
+        ? `Completo só até ${fmtDataBr(cobertura.dadosCompletosAte)} — ver aviso`
+        : "Incompleto no período — ver aviso"
+      : `Escopo: ${regionalScope.channelsInScope.join(" + ") || "nenhum canal com regional"}`
+    : undefined;
 
   const ufColumnTypes = useMemo(() => ({
     uf: "text" as const, gmv: "numeric" as const, orders: "numeric" as const,
@@ -262,21 +276,6 @@ function RegioesPageInner() {
         }
       />
 
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold text-rose-700 uppercase tracking-wider mb-1">Erro de carregamento</p>
-              <p className="text-sm text-rose-800">{error}</p>
-            </div>
-            <button
-              onClick={() => { setError(null); setRetryKey((k) => k + 1); }}
-              className="text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg px-3 py-1.5 hover:bg-rose-100 transition-colors shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
-            >
-              Tentar novamente
-            </button>
-          </div>
-        )}
-
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState ? "Carregando dados regionais..." : isErrorState ? "Falha ao carregar dados regionais." : "Dados regionais carregados."}
         </span>
@@ -315,7 +314,7 @@ function RegioesPageInner() {
         {dataIsFresh && displaySummary?.coverage_warning && (
           <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs ${displaySummary.coverage_level === "low" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
             <span className="font-semibold">{displaySummary.coverage_level === "low" ? "Cobertura de UF baixa" : "Cobertura de UF parcial"}</span>
-            <span className="tabular-nums">· {fmtPctOrNA(displaySummary.uf_fill_pct)} com UF ({fmtNumber(displaySummary.uf_known_orders)} de {fmtNumber(displaySummary.uf_eligible_orders)})</span>
+            <span className="tabular-nums">· {fmtPctOrNA(displaySummary.uf_fill_pct)} com UF ({fmtNumCurto(displaySummary.uf_known_orders)} de {fmtNumCurto(displaySummary.uf_eligible_orders)})</span>
             <InfoDica texto="Os números por UF refletem só os pedidos elegíveis com UF conhecida — limitação da fonte, não erro." />
           </p>
         )}
@@ -325,13 +324,14 @@ function RegioesPageInner() {
           // erro (ja renderizado acima) — nunca skeleton, nunca dado antigo,
           // nunca `aria-busy=true`. Estado de erro dedicado, sem tentar
           // renderizar KPIs/mapa/tabelas.
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-10 text-center">
-            <p className="text-slate-500 text-sm font-medium">Não foi possível carregar os dados regionais.</p>
-          </div>
+          <StateBlock
+            tipo="erro"
+            titulo="Não foi possível carregar os dados regionais."
+            descricao={error}
+            acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+          />
         ) : isEmpty ? (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm px-6 py-12 text-center">
-            <p className="text-slate-500 text-sm font-medium">Sem dados regionais no período e filtros selecionados.</p>
-          </div>
+          <StateBlock tipo="vazio" titulo="Sem dados regionais no período e filtros selecionados." />
         ) : (
           <>
             {partialWarning && (
@@ -340,51 +340,14 @@ function RegioesPageInner() {
               </div>
             )}
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4" aria-busy={isLoadingState}>
-              <KpiCard
-                label={REGIONAL_GMV_LABEL}
-                value={displaySummary ? fmtBrl(displaySummary.gmv) : "—"}
-                subvalue={
-                  regionalScope
-                    ? canaisComAtraso.length > 0
-                      ? cobertura.dadosCompletosAte
-                        ? `Completo só até ${fmtDataBr(cobertura.dadosCompletosAte)} — ver aviso`
-                        : "Incompleto no período — ver aviso"
-                      : `Escopo: ${regionalScope.channelsInScope.join(" + ") || "nenhum canal com regional"}`
-                    : undefined
-                }
-                accent="bg-violet-600"
-              />
-              <KpiCard
-                label="Pedidos"
-                value={displaySummary ? fmtNumber(displaySummary.orders) : "—"}
-                accent="bg-cyan-500"
-              />
-              <KpiCard
-                label="UFs com venda"
-                value={displaySummary ? `${displaySummary.ufs_com_venda}/27` : "—"}
-                accent="bg-amber-500"
-              />
-              <KpiCard
-                label={UF_FILL_LABEL}
-                value={displaySummary ? fmtPctOrNA(displaySummary.uf_fill_pct) : "—"}
-                subvalue={displaySummary ? `${coverageLabel(displaySummary.coverage_level)} · dentro dos pedidos elegíveis` : undefined}
-                accent={displaySummary?.coverage_level === "ok" ? "bg-emerald-500" : displaySummary?.coverage_level === "partial" ? "bg-amber-500" : displaySummary?.coverage_level === "low" ? "bg-rose-500" : "bg-slate-300"}
-              />
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 -mt-2" aria-busy={isLoadingState}>
-              <KpiCard
-                label="Cobertura Custo Frete"
-                value={displaySummary ? fmtPctOrNA(displaySummary.shipping_cost_coverage_pct) : "—"}
-                subvalue="Shopee sem este dado"
-                accent="bg-slate-400"
-              />
-              <KpiCard
-                label="Custo Frete Seller"
-                value={displaySummary?.seller_shipping_cost != null ? fmtBrl(displaySummary.seller_shipping_cost) : "N/A"}
-                accent="bg-slate-400"
-              />
+            {/* Cartoes no padrao da Gerencial. A ressalva de escopo e de atraso (antes uma linha sob o
+                numero) vai para o ⓘ do GMV; o aviso de canal parado segue acima, visivel. */}
+            <div aria-busy={isLoadingState}>
+              {isLoadingState ? (
+                <FaixaCarregando cartoes={TOTAL_DE_CARTOES_REGIOES} className={GRADE_REGIOES} />
+              ) : (
+                <CartoesRegioes resumo={displaySummary} notaDoGmv={notaDoGmv} onAbrir={setDetalhe} />
+              )}
             </div>
 
             {/* Mapa do Brasil por UF — geometria real (SVG), ver RegioesBrazilMap.tsx.
@@ -422,9 +385,9 @@ function RegioesPageInner() {
                       return (
                         <tr key={row.uf} className="hover:bg-slate-50 transition-colors">
                           <td className="px-6 py-3 font-semibold text-slate-700 whitespace-nowrap">{row.uf}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrl(row.gmv)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumber(row.orders)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{share != null ? `${share.toFixed(1)}%` : "N/A"}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(row.gmv)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(row.orders)}</td>
+                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{share != null ? fmtPctSimples(share) : "N/A"}</td>
                           <td className="px-4 py-3 text-right"><CoverageBadge level={row.coverage_level} /></td>
                         </tr>
                       );
@@ -473,8 +436,8 @@ function RegioesPageInner() {
                       <tr key={`${row.brand}-${row.marketplace_id}`} className="hover:bg-slate-50 transition-colors">
                         <td className="px-6 py-3 font-semibold text-slate-700 whitespace-nowrap">{row.label}</td>
                         <td className="px-4 py-3 text-slate-600 whitespace-nowrap capitalize">{row.marketplace}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrl(row.gmv)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumber(row.orders)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(row.gmv)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(row.orders)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(row.uf_fill_pct)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(row.shipping_cost_coverage_pct)}</td>
                         <td className="px-4 py-3 text-right">
@@ -545,8 +508,8 @@ function RegioesPageInner() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrl(p.gmv)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumber(p.orders)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(p.gmv)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(p.orders)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(p.uf_fill_pct)}</td>
                       </tr>
                       );
@@ -557,7 +520,26 @@ function RegioesPageInner() {
             </div>
           </>
         )}
-      </PageContainer>
+      <KpiDrilldownDialog
+        open={detalhe != null}
+        onClose={() => setDetalhe(null)}
+        title={detalhe ? TITULO_DETALHE[detalhe] : ""}
+        icone={detalhe ? VISUAL_REGIOES[detalhe].icone : undefined}
+        identidade={detalhe ? VISUAL_REGIOES[detalhe].identidade : undefined}
+      >
+        {detalhe && dataIsFresh && (
+          <RegioesDrilldownContent
+            chave={detalhe}
+            resumo={displaySummary}
+            ufs={dataIsFresh ? byUf : null}
+            marcas={dataIsFresh ? byBrand : null}
+            periodLabel={periodLabel}
+            refreshedAt={displayRefreshedAt}
+            notaDoEscopo={notaDoGmv}
+          />
+        )}
+      </KpiDrilldownDialog>
+    </PageContainer>
   );
 }
 

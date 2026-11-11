@@ -1,10 +1,11 @@
 import type { CoverageLevel } from "./api-client";
+import { fmtPctSimples } from "./formatters.ts";
 
 /** Denominador 0/ausente vira "N/A" — nunca "0%" (mesma regra do backend,
  * ver app/services/regioes_service.py::_pct). */
 export function fmtPctOrNA(pct: number | null): string {
   if (pct == null) return "N/A";
-  return `${pct.toFixed(1)}%`;
+  return fmtPctSimples(pct);
 }
 
 export function coverageLabel(level: CoverageLevel): string {

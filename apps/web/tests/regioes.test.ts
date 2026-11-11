@@ -19,12 +19,13 @@ test("fmtPctOrNA: null vira 'N/A', nunca '0%'", () => {
 });
 
 test("fmtPctOrNA: zero real (0%) e' diferente de null (N/A)", () => {
-  assert.equal(fmtPctOrNA(0), "0.0%");
+  // pt-BR da casa (virgula decimal), desde a padronizacao das abas; o "N/A" de ausencia nao mudou.
+  assert.equal(fmtPctOrNA(0), "0,0%");
 });
 
 test("fmtPctOrNA: formata com 1 casa decimal", () => {
-  assert.equal(fmtPctOrNA(42.259), "42.3%");
-  assert.equal(fmtPctOrNA(100), "100.0%");
+  assert.equal(fmtPctOrNA(42.259), "42,3%");
+  assert.equal(fmtPctOrNA(100), "100,0%");
 });
 
 // ---------------------------------------------------------------------------

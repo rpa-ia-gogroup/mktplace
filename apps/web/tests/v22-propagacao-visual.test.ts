@@ -337,8 +337,9 @@ test("P19. Regioes: GMV com cobertura regional nunca se apresenta como GMV total
   const escopo = codeOnly(read("src/lib/regioes-scope.ts"));
   assert.match(escopo, /REGIONAL_GMV_LABEL/);
   assert.match(escopo, /UF_FILL_LABEL/);
+  // O rotulo vai a tela pelo componente de cartoes (padrao da Gerencial); a cobertura do canal segue na pagina.
+  assert.match(codeOnly(read("src/components/regioes/RegioesCartoes.tsx")), /REGIONAL_GMV_LABEL/, "o rotulo declarado e' o que vai a tela");
   const src = codeOnly(read("app/regioes/page.tsx"));
-  assert.match(src, /REGIONAL_GMV_LABEL/, "o rotulo declarado e' o que vai a tela");
   assert.match(src, /coverageLabel|semCoberturaAviso/, "cobertura do canal continua declarada");
 });
 

@@ -112,7 +112,7 @@ const PAGE = fs.readFileSync(path.join(import.meta.dirname, "..", "app", "regioe
 
 test("page.tsx renderiza o aviso de cobertura ANTES dos KPI cards", () => {
   const aviso = PAGE.indexOf('data-testid="aviso-cobertura-canal"');
-  const kpis = PAGE.indexOf("{/* KPI Cards */}");
+  const kpis = PAGE.indexOf("{/* Cartoes no padrao da Gerencial.");
   assert.ok(aviso > 0, "aviso-cobertura-canal ausente");
   assert.ok(kpis > 0 && aviso < kpis, "o aviso precisa vir antes dos KPIs");
   assert.match(PAGE, /buildAvisoCobertura\(cobertura\.canais\)/);
