@@ -68,8 +68,8 @@ export function validateDateRange(dateFrom: string, dateTo: string, today: Date 
  * lanca excecao.
  */
 export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFilters {
-  // Sem canal na URL -> Consolidado (ML + Shopee). `channels=all` explicito
-  // continua sendo os tres canais.
+  // Sem canal na URL -> os tres canais (DEFAULT_MARKETPLACE_SELECTION, T-0089).
+  // `channels=` explicito (ex.: ml,shopee) continua mandando.
   const channelsRaw = params.get("channels") ?? params.get("marketplace");
   const channels = channelsRaw == null ? [...DEFAULT_MARKETPLACE_SELECTION] : parseMarketplaceParam(channelsRaw);
 
@@ -94,7 +94,7 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFil
  * Presenca de qualquer um deles significa que a URL nao esta "vazia" — o
  * default por tela (`defaultPreset`/`defaultCompare`) nao se aplica mais,
  * mesmo que o parametro individual esteja ausente (nesse caso cai no
- * fallback neutro do parser: Consolidado, sem marca, compare=false). Isso e
+ * fallback neutro do parser: tres canais, sem marca, compare=false). Isso e
  * o que garante que "querystring explicita sempre vence o default da tela"
  * e que compare=false sobrevive a um reload (ver useGlobalFilters). */
 const FILTER_PARAM_NAMES = ["channels", "marketplace", "brands", "date_from", "date_to", "compare"] as const;
@@ -114,8 +114,8 @@ export interface DefaultFiltersOptions {
 }
 
 /** Resolve o default de uma tela (usado so quando a URL nao tem NENHUM
- * parametro de filtro reconhecido) — Consolidado (ML + Shopee), sem marca, o intervalo do
- * `defaultPreset` e `defaultCompare`. */
+ * parametro de filtro reconhecido) — os tres canais (`DEFAULT_MARKETPLACE_SELECTION`,
+ * o mesmo para todas as telas), sem marca, o intervalo do `defaultPreset` e `defaultCompare`. */
 export function computeDefaultFilters(options: DefaultFiltersOptions = {}): GlobalFilters {
   const { defaultPreset = "30d", defaultCompare = false, now = () => new Date() } = options;
   const range = presetRange(defaultPreset, now());

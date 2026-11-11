@@ -30,7 +30,7 @@ export type ChaveDetalhe =
   | "ml_gmv";
 
 export const TITULO_DETALHE: Record<ChaveDetalhe, string> = {
-  total_pedidos: "Total de pedidos",
+  total_pedidos: "Pedidos (sem cancelados)",
   total_gmv: "GMV total",
   ticket: "Ticket médio",
   cancelamento: "Taxa de cancelamento",
@@ -75,6 +75,30 @@ export interface Dados {
   kpis: { total_orders: number; total_gmv: number; avg_ticket: number; cancel_rate_pct: number | null } | null | undefined;
   tk: { orders: number; canceled: number; gmv: number; cancel_rate_pct: number | null; delivered: number | null } | null | undefined;
   ml: { orders: number; canceled: number; gmv: number; cancel_rate_pct: number | null; delivered: number | null } | null | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos LIQUIDOS (B1-04, QA 2026-11-11). Decisao: "pedido" na tela e' o liquido,
+// sem cancelados -- o mesmo do grafico diario e do denominador do ticket medio. A
+// API (performance_service.get_pedidos) mistura os conceitos: kpis.total_orders e
+// ml.orders sao BRUTOS (pagos + cancelados), tiktok.orders ja' e' LIQUIDO, e
+// by_brand.total_orders = tiktok_orders + ml_orders + ml_canceled. Os cancelados
+// continuam a parte, no cartao de cancelamento, nunca somados ao total.
+// ---------------------------------------------------------------------------
+
+/** Os mesmos dados com "pedidos" liquidos no total e no Mercado Livre. */
+export function paraPedidosLiquidos(d: Dados): Dados {
+  const canc = (d.tk?.canceled ?? 0) + (d.ml?.canceled ?? 0);
+  return {
+    kpis: d.kpis ? { ...d.kpis, total_orders: d.kpis.total_orders - canc } : d.kpis,
+    tk: d.tk,
+    ml: d.ml ? { ...d.ml, orders: d.ml.orders - d.ml.canceled } : d.ml,
+  };
+}
+
+/** Pedidos liquidos de uma marca: o total da API sem os cancelados do ML. */
+export function pedidosLiquidosDaMarca(r: PedidosBrandRow): number {
+  return r.total_orders - (r.ml_canceled ?? 0);
 }
 
 // ---------------------------------------------------------------------------
@@ -180,9 +204,15 @@ const taxa = (can: Num, ped: Num): number | null => (can != null && ped != null 
 const cancelados = (n: Num) => (n != null ? `${fmtNumCurto(n)} cancelados` : undefined);
 
 const DEF_MARCA: Record<ChaveDetalhe, DefMarca> = {
-  total_pedidos: { num: (r) => r.total_orders, fmt: fmtNumCurto },
+  total_pedidos: { num: (r) => pedidosLiquidosDaMarca(r), fmt: fmtNumCurto },
   total_gmv: { num: (r) => r.total_gmv, fmt: fmtBrlCurto },
-  ticket: { num: (r) => (r.total_orders > 0 ? r.total_gmv / r.total_orders : null), fmt: fmtBrlCurto },
+  ticket: {
+    num: (r) => {
+      const p = pedidosLiquidosDaMarca(r);
+      return p > 0 ? r.total_gmv / p : null;
+    },
+    fmt: fmtBrlCurto,
+  },
   cancelamento: {
     num: (r, s) => taxa(soma(s.tiktok ? r.tiktok_canceled : null, s.ml ? r.ml_canceled : null), soma(s.tiktok ? r.tiktok_orders : null, s.ml ? r.ml_orders : null)),
     fmt: fmtPctSimples,

@@ -2,10 +2,11 @@ import { Columns3 } from "lucide-react";
 
 import Panel from "@/components/ui/Panel";
 import InfoDica from "@/components/ui/InfoDica";
-import { ClassificacaoChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip } from "@/components/dre/DreChips";
 import Motivos from "@/components/dre/Motivos";
 import {
   ROTULO_CANAL,
+  avisoMargem,
   completudeExibida,
   custosAusentes,
   fmtReais,
@@ -64,7 +65,7 @@ export default function DreCanais({ canais, total }: { canais: CelulaDRE[]; tota
                   <span aria-hidden="true" className={`h-2.5 w-2.5 rounded-full ${PONTO[canal] ?? "bg-ink-faint"}`} />
                   {nome}
                 </h4>
-                <ClassificacaoChip classificacao={c.classificacao} completude={completude} />
+                <ClassificacaoChip classificacao={c.classificacao} completude={completude} fechaEm={c.fecha_em} previa={c.previa} />
               </div>
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-data">
                 <div>
@@ -101,6 +102,7 @@ export default function DreCanais({ canais, total }: { canais: CelulaDRE[]; tota
                   </dd>
                 </div>
               </dl>
+              {!sem && <AvisoMargem aviso={avisoMargem(c)} />}
               {sem && c.motivos_classificacao.length > 0 && (
                 <div>
                   <p className="text-xs font-semibold text-ink">Por que não é calculável</p>

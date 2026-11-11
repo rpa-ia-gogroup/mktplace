@@ -3,11 +3,13 @@
 import { useId } from "react";
 import { FileSpreadsheet } from "lucide-react";
 
+import Chip from "@/components/ui/Chip";
 import Panel from "@/components/ui/Panel";
 import Motivos from "@/components/dre/Motivos";
-import { ClassificacaoChip, StatusChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip, StatusChip } from "@/components/dre/DreChips";
 import {
   ROTULO_MARGEM,
+  avisoMargem,
   completudeExibida,
   custosAusentes,
   fmtCusto,
@@ -30,6 +32,10 @@ import {
  *   3. um custo com valor mas FORA da margem (nao confirmado, nao
  *      reconciliado, provisorio) aparece apagado e com "fora da margem", para
  *      ninguem refazer a conta somando-o.
+ *
+ * T-0090: cada linha traz o selo de ORIGEM (Realizado, Parcial,
+ * Indisponível) quando a API o manda, com o rotulo de cobertura ao lado; o
+ * rodape diz quando a margem inclui custo parcial. API anterior: sem selo.
  */
 export interface OpcaoRecorte {
   valor: string;
@@ -138,12 +144,18 @@ export default function DreVertical({
                   {l.recuo && l.componente.valor !== null && (
                     <span className="block text-xs text-ink-muted">Já incluído em Taxas — não somado de novo.</span>
                   )}
-                  {l.componente.valor !== null && l.chip && (
+                  {(l.origem || l.mostrarStatus) && (
                     <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                      <StatusChip status={l.componente.status} />
+                      {l.origem && <Chip tom={l.origem.tom}>{l.origem.rotulo}</Chip>}
+                      {l.origem && l.cobertura && <span className="text-xs text-ink-muted">{l.cobertura}</span>}
+                      {l.mostrarStatus && <StatusChip status={l.componente.status} />}
                       {foraDaMargem && <span className="text-xs text-ink-muted">fora da margem</span>}
                     </span>
                   )}
+                  {!l.origem && l.cobertura && (
+                    <span className="mt-0.5 block text-xs text-ink-muted">{l.cobertura}</span>
+                  )}
+                  {l.medido && <span className="mt-0.5 block text-xs text-ink-muted">{l.medido}</span>}
                   {l.componente.motivo && l.componente.status !== "disponivel" && (
                     <span className="mt-0.5 block text-xs text-ink-muted">{l.componente.motivo}</span>
                   )}
@@ -168,11 +180,17 @@ export default function DreVertical({
             <th scope="row" className="px-3 py-3 text-left [overflow-wrap:anywhere] sm:px-4">
               <span className="block font-semibold text-ink">{ROTULO_MARGEM}</span>
               <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                <ClassificacaoChip classificacao={c.classificacao} completude={completudeExibida(c)} />
+                <ClassificacaoChip
+                  classificacao={c.classificacao}
+                  completude={completudeExibida(c)}
+                  fechaEm={c.fecha_em}
+                  previa={c.previa}
+                />
                 {completudeExibida(c) === null && (
                   <span className="text-xs font-semibold text-ink-muted">— veja os canais</span>
                 )}
               </span>
+              {!naoCalc && <AvisoMargem aviso={avisoMargem(c)} className="mt-1" />}
               {naoCalc ? (
                 // DRE-UX-2: o "e mais N" agora abre — antes os motivos alem do
                 // quarto ficavam inalcancaveis.

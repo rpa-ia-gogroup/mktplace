@@ -15,11 +15,15 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-Classificacao = Literal["COMPLETA", "PARCIAL", "NAO_CALCULAVEL"]
+#: T-0090: `PREVIA` = mes imaturo (M+2) com receita; NAO_CALCULAVEL so' sem receita.
+Classificacao = Literal["COMPLETA", "PARCIAL", "PREVIA", "NAO_CALCULAVEL"]
 StatusComponente = Literal[
     "disponivel", "parcial", "indisponivel", "snapshot_ausente", "snapshot_vencido", "nao_reconciliado",
     "nao_confirmado", "provisorio", "sinal_inesperado", "nao_aplicavel",
 ]
+#: T-0090: de onde vem o numero do componente.
+#: `extrapolado` (so' CMV): medido estendido a' receita inteira pela razao coberta.
+OrigemComponente = Literal["realizado", "parcial", "extrapolado", "indisponivel", "nao_aplicavel"]
 NomeComponente = Literal["receita", "devolucoes", "taxas", "afiliados", "ads", "frete", "cmv", "impostos"]
 
 
@@ -45,6 +49,16 @@ class Componente(BaseModel):
     #: CMV / receita COM custo x 100. Denominador diferente de `pct_receita`
     #: (CMV / receita da DRE = GMV). `None` sem custo ou sem receita com custo.
     cmv_pct_receita_coberta: float | None = None
+    #: T-0090, opcionais e retrocompativeis. `realizado` = disponivel com valor;
+    #: `parcial` = valor com status parcial/nao_confirmado/provisorio/nao_reconciliado.
+    origem: OrigemComponente | None = None
+    #: Custo somavel com origem realizado, parcial ou extrapolado (receita e afiliados: False).
+    entra_na_margem: bool = False
+    #: Rotulo curto da cobertura (ex.: "escrow em 93,0% dos pedidos").
+    cobertura_rotulo: str | None = None
+    #: T-0090, so' CMV: custo medido cru (sempre que o CMV tem valor). Com
+    #: `origem = extrapolado`, `valor` e' o estendido a' receita e este e' o medido.
+    valor_medido: float | None = None
 
 
 class Componentes(BaseModel):
@@ -67,6 +81,8 @@ class ComponenteAusente(BaseModel):
 class Completude(BaseModel):
     usados: int
     aplicaveis: int
+    #: T-0090: quantos dos `usados` entraram como parciais.
+    parciais: int = 0
     texto: str
 
 
@@ -76,7 +92,11 @@ class Margem(BaseModel):
     rotulo: str
     formula: str | None = None
     componentes_usados: list[str]
+    #: T-0090: custos que entraram com origem parcial.
+    componentes_parciais: list[str] = []
     faltam: list[str]
+    #: T-0090: presente quando ha parciais (margem tende a estar acima da real).
+    aviso: str | None = None
 
 
 class DataMaxima(BaseModel):
@@ -93,7 +113,8 @@ class DataMaxima(BaseModel):
 #: ---------------------------------------------------------------------------
 
 EstadoCenario = Literal["calculavel", "parcial", "nao_calculavel"]
-OrigemLinha = Literal["realizado", "premissa", "decomposicao", "indisponivel", "calculado", "misto"]
+OrigemLinha = Literal["realizado", "parcial", "premissa", "extrapolado", "decomposicao", "indisponivel",
+                      "calculado", "misto"]
 
 
 class LinhaCenario(BaseModel):
@@ -147,6 +168,8 @@ class CenarioPremissas(BaseModel):
     margem_contribuicao_estimada_pct: float | None = None
     fonte_premissas: FontePremissas
     celulas: int
+    #: T-0090: celulas do recorte sem premissa publicada (fora do cenario).
+    celulas_sem_premissa: int = 0
 
 
 class CelulaDRE(BaseModel):
@@ -158,6 +181,9 @@ class CelulaDRE(BaseModel):
     marca_label: str | None = None
     celulas: int | None = None
     classificacao: Classificacao
+    #: T-0090: `True` quando PREVIA; `fecha_em` = ultimo dia de M+2 (agregado: o maior).
+    previa: bool = False
+    fecha_em: date | None = None
     motivos_classificacao: list[str]
     avisos_qualidade: list[str]
     componentes: Componentes

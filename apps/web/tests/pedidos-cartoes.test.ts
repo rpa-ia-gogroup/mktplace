@@ -172,3 +172,35 @@ test("KpiTile: o rodape ocupa a largura do cartao (o grafico fica sempre a direi
   assert.ok(kpi.includes("self-stretch pt-1"), "rodape com self-stretch (o <button> traz align-items:flex-start)");
   assert.ok(kpi.includes('<span className="ml-auto">'), "e o grafico com ml-auto quando quebra para a linha de baixo");
 });
+
+test("B1-04: o cartao de pedidos e' LIQUIDO (sem cancelados), o mesmo do grafico diario e do ticket", async () => {
+  const { paraPedidosLiquidos, pedidosLiquidosDaMarca, TITULO_DETALHE } = await import("../src/lib/pedidos-cartoes.ts");
+  // Numeros do QA (12/10 a 10/11, so' ML): API bruto 63.948 = 61.792 pagos + 2.156 cancelados.
+  const bruto: Dados = {
+    kpis: { total_orders: 63_948, total_gmv: 4_962_256.9, avg_ticket: 80.31, cancel_rate_pct: 3.37 },
+    tk: undefined,
+    ml: { orders: 63_948, canceled: 2_156, gmv: 4_962_256.9, cancel_rate_pct: 3.37, delivered: null },
+  };
+  const liq = paraPedidosLiquidos(bruto);
+  assert.equal(liq.kpis!.total_orders, 61_792, "card = soma do grafico diario");
+  assert.equal(Math.round((liq.kpis!.total_gmv / liq.kpis!.total_orders) * 100) / 100, 80.31, "ticket fecha com o card");
+  assert.equal(liq.ml!.orders, 61_792);
+  assert.equal(liq.ml!.canceled, 2_156, "cancelados ficam a parte, intactos");
+  assert.equal(valorExato("total_pedidos", liq), "61.792", "o detalhe nao contradiz o cartao");
+  // TikTok: a API ja' manda tiktok.orders liquido -> nao desconta de novo
+  const tk = paraPedidosLiquidos({
+    kpis: { total_orders: 110, total_gmv: 1, avg_ticket: 1, cancel_rate_pct: 1 },
+    tk: { orders: 60, canceled: 5, gmv: 1, cancel_rate_pct: 1, delivered: null },
+    ml: { orders: 50, canceled: 5, gmv: 1, cancel_rate_pct: 1, delivered: null },
+  });
+  assert.deepEqual([tk.kpis!.total_orders, tk.tk!.orders, tk.ml!.orders], [100, 60, 45]);
+  assert.deepEqual(paraPedidosLiquidos({ kpis: null, tk: null, ml: null }), { kpis: null, tk: null, ml: null });
+  // por marca: total da API (tk + ml + ml_canceled) sem os cancelados do ML
+  const m = marca("a", "BARBOURS", { ml_orders: 17_890, ml_canceled: 684, total_orders: 18_574, total_gmv: 1_000 });
+  assert.equal(pedidosLiquidosDaMarca(m), 17_890);
+  assert.equal(linhasPorMarca("total_pedidos", [m], AMBOS)[0].valor, "17,9 mil");
+  assert.equal(TITULO_DETALHE.total_pedidos, "Pedidos (sem cancelados)");
+  const cart = ler("src/components/pedidos/PedidosCartoes.tsx");
+  assert.ok(!cart.includes('"Total de pedidos"') && cart.includes("rotulo={TITULO_DETALHE.total_pedidos}"));
+  assert.ok(ler("app/pedidos/page.tsx").includes("paraPedidosLiquidos({ kpis, tk, ml })"));
+});

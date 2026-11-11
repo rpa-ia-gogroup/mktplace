@@ -39,10 +39,10 @@ def dre_filters(
     """Filtros da DRE. Difere do `filters_query` comum SO' no periodo padrao.
 
     O padrao dos endpoints agregados e' o mes anterior — que, pela regra de
-    maturidade M+2 (D5), NUNCA e' maduro: a DRE abriria sempre NAO_CALCULAVEL.
+    maturidade M+2 (D5), NUNCA e' maduro: a DRE abriria sempre em PREVIA.
     Sem periodo informado, a DRE usa a competencia madura mais recente. Periodo
-    informado e' sempre respeitado, inclusive mes imaturo (que sai
-    NAO_CALCULAVEL com o motivo). `filters_query` nao muda: os outros
+    informado e' sempre respeitado, inclusive mes imaturo (que sai PREVIA, com
+    valores e `fecha_em`; T-0090). `filters_query` nao muda: os outros
     endpoints continuam com o mes anterior.
     """
     today = today_brt()  # relogio lido uma unica vez por request

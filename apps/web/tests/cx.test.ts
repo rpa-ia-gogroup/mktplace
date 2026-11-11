@@ -787,7 +787,8 @@ test("pareto: linha de total da tabela por marca", () => {
     { ...v.total, reembolsado: v.total.reembolsado.replace(/\s/g, " ") },
     {
       pedidos: "1.300", cancelamentosPct: "1,8%", cancelamentoDelta: { texto: "▲ 1,0 p.p.", sentido: "piorou" },
-      cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
+      cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", pedidosDevolucao: "1.000", marcasDevolucao: { lidas: 1, total: 2 },
+      reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
     },
   );
 });
@@ -802,7 +803,7 @@ test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalh
   assert.doesNotMatch(tela, /subtitle=/, "subtitulo virou chip");
   // revisao do Prumo: sem cartao sem numero na faixa; um nome so' para a taxa; Pareto com 2 numeros por motivo
   assert.doesNotMatch(tela, /rotulo="Reenvio"/);
-  assert.ok(tela.includes("grid grid-cols-1 gap-3 sm:grid-cols-3"));
+  assert.ok(tela.includes("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"));
   assert.ok(tela.includes(">{ROTULO_INDICADOR.resposta}</ThAjuda>") && !tela.includes("% respondido</ThAjuda>"));
   assert.doesNotMatch(tela, /· acum\. \{i\.acumulado\}/);
   assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
@@ -963,4 +964,12 @@ test("Gerencial: card Reembolso com o % no numero e o R$ embaixo, como na /cx", 
   assert.match(resumo, /card\("reembolso", SPAN_BASE, r\.reembolsoPct \?\? "—", r\.reembolsado !== "—" \?/);
   assert.match(resumo, /`\$\{r\.reembolsado\} reembolsado`/);
   assert.doesNotMatch(resumo, /whitespace-nowrap">\{r\.reembolsado\}/, "sem nowrap: o texto quebra em vez de passar por baixo do grafico");
+});
+
+test("Shopee: card Devolução na faixa (entre Cancelamento e Reembolso), com detalhe por marca e sem legenda solta", () => {
+  const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
+  const ordem = ['tile("cancelamento"', 'rotulo="Devolução"', 'tile("reembolso"'].map((x) => tela.indexOf(x));
+  assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "Cancelamento, Devolução, Reembolso");
+  assert.match(tela, /pareto\.total\.devolucoesPct/);
+  assert.match(tela, /<DetalheDevolucao/);
 });

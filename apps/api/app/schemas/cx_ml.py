@@ -18,7 +18,7 @@ from app.schemas.performance_oficial import ContaOficial, ContaSemFoto, EstadoCa
 
 #: Fonte: `dado` ou `erro` (a fonte falhou nesta carga; os campos dela ficam None).
 EstadoFonte = Literal["dado", "erro"]
-IndicadorMl = Literal["resposta", "reclamacao", "cancelamento", "mediacao", "reembolso"]
+IndicadorMl = Literal["resposta", "reclamacao", "cancelamento", "mediacao", "reembolso", "devolucao"]
 
 
 class LinhaMl(BaseModel):
@@ -34,6 +34,8 @@ class LinhaMl(BaseModel):
     valor_reembolsado: Optional[float] = None
     #: Reclamacoes que chegaram a mediacao (etapa `dispute`).
     mediacoes: Optional[int] = None
+    #: Devolucoes na janela (`devolucoes` da view). None = algum dia sem leitura, nunca 0.
+    devolucoes: Optional[int] = None
     perguntas: Optional[int] = None
     #: Perguntas da janela que ja' tem resposta (taxa de resposta = respondidas / perguntas).
     perguntas_respondidas: Optional[int] = None
@@ -45,6 +47,7 @@ class LinhaMl(BaseModel):
     cancelamentos_anterior: Optional[int] = None
     reembolsos_anterior: Optional[int] = None
     mediacoes_anterior: Optional[int] = None
+    devolucoes_anterior: Optional[int] = None
     #: AGORA (nao segue a janela): reclamacoes abertas com acao pendente do vendedor.
     aguardando_nos: Optional[int] = None
     #: Das que aguardam, as com prazo ja' vencido e as que vencem nas proximas 24 h.
@@ -79,6 +82,7 @@ class PontoDiaMl(BaseModel):
     cancelamentos: Optional[int] = None
     reembolsos: Optional[int] = None
     mediacoes: Optional[int] = None
+    devolucoes: Optional[int] = None
 
 
 class ReputacaoMl(BaseModel):

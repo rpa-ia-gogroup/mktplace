@@ -22,6 +22,8 @@
  */
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { janelaDaUrl, urlComJanela } from "@/lib/full-janela-url";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { Ban, CircleDollarSign, Package, ShoppingBag, Truck } from "lucide-react";
@@ -101,7 +103,12 @@ function Aviso({ children }: { children: React.ReactNode }) {
 
 function FullMLPageInner() {
   const hoje = useMemo(hojeIsoBrt, []);
-  const inicial = useMemo(() => presetRange(30, hoje), [hoje]);
+  // B2-02: a janela vem da URL (`date_from`/`date_to`); sem ela, ou invalida, 30 dias.
+  const busca = useSearchParams();
+  const inicial = useMemo(
+    () => janelaDaUrl(busca.toString(), presetRange(30, hoje), (f, t) => validateRange(f, t, hoje)),
+    [hoje], // eslint-disable-line react-hooks/exhaustive-deps -- so' no mount; depois a tela escreve na URL
+  );
 
   const [from, setFrom] = useState(inicial.from);
   const [to, setTo] = useState(inicial.to);
@@ -145,6 +152,13 @@ function FullMLPageInner() {
       });
     return () => ctrl.abort();
   }, [from, to, marca, erroJanela]);
+
+  // B2-02: a janela valida vai para a URL (replaceState: preserva `?aba=` e nao
+  // re-renderiza a rota do servidor), para o reload e o link manterem o recorte.
+  useEffect(() => {
+    if (erroJanela) return;
+    window.history.replaceState(null, "", urlComJanela(window.location.href, { from, to }));
+  }, [from, to, erroJanela]);
 
   const aplicarPreset = useCallback(
     (dias: number) => {

@@ -29,7 +29,16 @@ import { STATUS_CHIP, fmtPctDre, fmtReais, type CelulaDRE, type DreResponse, typ
 // ---------------------------------------------------------------------------
 
 export type EstadoCenario = "calculavel" | "parcial" | "nao_calculavel";
-export type OrigemLinha = "realizado" | "premissa" | "decomposicao" | "indisponivel" | "calculado" | "misto";
+/** T-0090: `parcial` e `extrapolado` sao novos. */
+export type OrigemLinha =
+  | "realizado"
+  | "parcial"
+  | "premissa"
+  | "extrapolado"
+  | "decomposicao"
+  | "indisponivel"
+  | "calculado"
+  | "misto";
 
 export interface LinhaCenario {
   linha: string;
@@ -71,6 +80,8 @@ export interface CenarioPremissas {
   margem_contribuicao_estimada_pct: number | null;
   fonte_premissas: FontePremissas;
   celulas: number;
+  /** T-0090 — celulas do recorte sem premissa publicada (opcional). */
+  celulas_sem_premissa?: number;
 }
 
 export interface ResumoPremissas {
@@ -98,12 +109,34 @@ export const ESTADO_CENARIO_CHIP: Record<EstadoCenario, { rotulo: string; tom: T
 
 export const ORIGEM_ROTULO: Record<OrigemLinha, string> = {
   realizado: "Realizado",
+  parcial: "Parcial",
   premissa: "Premissa",
+  extrapolado: "Extrapolado",
   decomposicao: "Decomposição",
   indisponivel: "Indisponível",
   calculado: "Calculado",
   misto: "Misto",
 };
+
+/** T-0090 — tom do selo de origem. Origem desconhecida: neutro, por extenso. */
+const ORIGEM_TOM: Record<OrigemLinha, Tom> = {
+  realizado: "bom",
+  parcial: "atencao",
+  premissa: "neutro",
+  extrapolado: "atencao",
+  decomposicao: "neutro",
+  indisponivel: "ausente",
+  calculado: "neutro",
+  misto: "neutro",
+};
+
+/** Selo de origem de uma linha do cenario: rotulo + tom, nunca escondido. */
+export function chipDaOrigem(origem: string): { rotulo: string; tom: Tom } {
+  if (origem in ORIGEM_ROTULO) {
+    return { rotulo: ORIGEM_ROTULO[origem as OrigemLinha], tom: ORIGEM_TOM[origem as OrigemLinha] };
+  }
+  return { rotulo: origem, tom: "neutro" };
+}
 
 /** Status proprios das linhas do cenario. Os da DRE realizada vem de `STATUS_CHIP`. */
 const STATUS_CENARIO: Record<string, { rotulo: string; tom: Tom } | null> = {
