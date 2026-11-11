@@ -41,17 +41,24 @@ export interface MarcaTendencia extends Tendencia {
   brand: string;
   /** A mesma conta por canal; ausente em respostas antigas da API. */
   por_canal?: (Tendencia & { channel: Marketplace })[];
+  /** Canais da marca fora da conta (sem hora de pedido: Kokeshi na Shopee); ausente em respostas antigas. */
+  canais_fora?: Marketplace[];
 }
 
 /**
  * Tendencia de fechamento somando SO' os canais que o card mostra ao lado
  * (ex.: so' os que tem meta): hoje ate' HHh x (ontem inteiro / ontem ate' HHh).
  * Sem venda ontem ate' o corte nesses canais, `null`: sem ritmo, sem palpite.
+ * Se algum desses canais ficou fora da conta da marca (`canais_fora`), a tendencia
+ * seria menor que o que ela ja' vendeu: `null`, salvo `soParte` (o total do topo,
+ * que soma o que tem hora e diz o que ficou de fora).
  */
 export function tendenciaNosCanais(
   m: MarcaTendencia,
   canais: readonly Marketplace[],
+  soParte = false,
 ): { projecao: number; ontemDia: number } | null {
+  if (!soParte && (m.canais_fora ?? []).some((c) => canais.includes(c))) return null;
   const partes = (m.por_canal ?? []).filter((p) => canais.includes(p.channel));
   const soma = (k: keyof Tendencia) => partes.reduce((a, p) => a + (p[k] ?? 0), 0);
   const ate = soma("ontem_mesma_hora");
@@ -158,6 +165,10 @@ export interface TendenciaConsolidada {
   /** Marcas somadas / marcas esperadas; parcial quando `somadas < total`. */
   somadas: number;
   total: number;
+  /** Marcas somadas so' nos canais com hora de pedido, e os canais que ficaram de fora delas. */
+  soParte: { id: string; canais: Marketplace[] }[];
+  /** Marcas esperadas que nao entraram (sem ritmo ainda). */
+  semRitmo: string[];
 }
 
 /**
@@ -173,13 +184,20 @@ export function tendenciaConsolidada(
   let projecao = 0;
   let meta = 0;
   let somadas = 0;
+  const soParte: TendenciaConsolidada["soParte"] = [];
+  const semRitmo: string[] = [];
   for (const id of ids) {
     const e = esperadas[id]!;
-    const t = marcas?.[id] ? tendenciaNosCanais(marcas[id], e.canais) : null;
-    if (!t) continue;
+    const t = marcas?.[id] ? tendenciaNosCanais(marcas[id], e.canais, true) : null;
+    if (!t) {
+      semRitmo.push(id);
+      continue;
+    }
     projecao += t.projecao;
     meta += e.meta;
     somadas++;
+    const fora = (marcas![id].canais_fora ?? []).filter((c) => e.canais.includes(c));
+    if (fora.length) soParte.push({ id, canais: fora });
   }
-  return somadas ? { projecao, meta: meta > 0 ? meta : null, somadas, total: ids.length } : null;
+  return somadas ? { projecao, meta: meta > 0 ? meta : null, somadas, total: ids.length, soParte, semRitmo } : null;
 }

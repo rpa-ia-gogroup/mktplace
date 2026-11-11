@@ -101,7 +101,7 @@ test("tendencia so' com os canais mostrados: com TikTok fora do valor, TikTok fi
   assert.equal(tendenciaNosCanais(m, ["ml", "shopee", "tiktok"])!.ontemDia, 340);
 });
 
-import { tendenciaConsolidada } from "../src/lib/gerencial/hoje-por-hora.ts";
+import { tendenciaConsolidada, tendenciaNosCanais } from "../src/lib/gerencial/hoje-por-hora.ts";
 
 const marca = (brand: string, hoje: number, ate: number, dia: number) => ({
   brand, hoje, ontem_mesma_hora: ate, ontem_dia: dia, projecao: null,
@@ -129,4 +129,21 @@ test("tendencia consolidada: marca sem projecao nao vira zero, fica parcial", ()
   assert.deepEqual([c.somadas, c.total], [1, 3]);
   assert.equal(tendenciaConsolidada({ b: marca("b", 30, 0, 0) }, { b: esp(100) }), null);
   assert.equal(tendenciaConsolidada(null, { b: esp(100) }), null);
+});
+
+test("Kokeshi: o card com a Shopee nao usa a tendencia so' do ML; o topo soma o ML e diz o que ficou fora", () => {
+  const k = { ...marca("kokeshi", 50, 100, 200), canais_fora: ["shopee" as const] };
+  // Card que mostra ML + Shopee: sem tendencia (seria menor que o ja' vendido).
+  assert.equal(tendenciaNosCanais(k, ["ml", "shopee"]), null);
+  assert.deepEqual(tendenciaNosCanais(k, ["ml"]), { projecao: 100, ontemDia: 200 });
+  const c = tendenciaConsolidada(
+    { kokeshi: k, a: marca("a", 50, 100, 200) },
+    { kokeshi: { meta: 100, canais: ["ml", "shopee"] }, a: esp(200) },
+  )!;
+  assert.equal(c.projecao, 200);
+  assert.deepEqual([c.somadas, c.total], [2, 2]);
+  assert.deepEqual(c.soParte, [{ id: "kokeshi", canais: ["shopee"] }]);
+  assert.deepEqual(c.semRitmo, []);
+  const sem = tendenciaConsolidada({ a: marca("a", 50, 100, 200) }, { a: esp(200), b: esp(100) })!;
+  assert.deepEqual([sem.soParte, sem.semRitmo], [[], ["b"]]);
 });
