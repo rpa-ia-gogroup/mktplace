@@ -548,3 +548,78 @@ test("C1-01: a fila e o dialogo usam o aviso de ROAS sem venda", () => {
   const pagina = readFileSync(new URL("../app/inteligencia/page.tsx", import.meta.url), "utf8");
   assert.match(pagina, /roasSemVendaNaFotografia\(it\) && <DataQualityNote note=\{ROAS_SEM_VENDA_TITLE\} \/>/);
 });
+
+// ---------------------------------------------------------------------------
+// T-0096 — rotulos honestos do bloco `parar` (urgent). A gold entrega o
+// ACUMULADO (Ads desde 27/01/2026), titulo nulo em parte dos itens, ROAS de
+// atribuicao (inclui vendas de outros itens) e `days_advertised` inflado.
+// ---------------------------------------------------------------------------
+
+test("T-0096: titulo do bloco e rotulos de janela e ROAS atribuido", async () => {
+  const q = await import("../src/lib/inteligencia/queue.ts");
+  assert.equal(q.PARAR_TITLE, "Anúncios sem venda própria registrada (acumulado)");
+  assert.equal(q.PARAR_JANELA, "acumulado; Ads desde 27/01/2026");
+  assert.equal(q.ROAS_ATRIBUIDO_LABEL, "ROAS atribuído (inclui vendas de outros itens)");
+  assert.ok(!/desperd/i.test(q.KIND_LABELS.parar), q.KIND_LABELS.parar);
+  assert.ok(!/desperd/i.test(q.KIND_RULES.parar), q.KIND_RULES.parar);
+  const card = buildPriorities(DATA, BRAND_ALL).find((p) => p.kind === "parar")!;
+  assert.equal(card.title, q.PARAR_TITLE);
+  assert.ok(card.reason.includes(q.PARAR_JANELA), card.reason);
+
+  const pagina = readFileSync(new URL("../app/inteligencia/page.tsx", import.meta.url), "utf8");
+  const fila = readFileSync(new URL("../src/components/inteligencia/EvidenceQueue.tsx", import.meta.url), "utf8");
+  for (const [nome, src] of [["page.tsx", pagina], ["EvidenceQueue.tsx", fila]] as const) {
+    assert.ok(!/desperdício de ads/i.test(src), `${nome} ainda diz "desperdício de Ads"`);
+  }
+  assert.match(pagina, /title: PARAR_TITLE, rows: worst/);
+  assert.match(pagina, /periodLabel=\{parar \? PARAR_JANELA : "sem janela temporal"\}/);
+  assert.match(pagina, /label=\{parar \? ROAS_ATRIBUIDO_LABEL : "ROAS"\}/);
+  assert.match(fila, /ad_roas: \{ label: ROAS_ATRIBUIDO_CURTO/);
+});
+
+test("T-0096: sem titulo, o produto e' rotulado pelo MLB (item_id)", async () => {
+  const { buildQueue: bq, productLabel } = await import("../src/lib/inteligencia/queue.ts");
+  assert.equal(productLabel({ title: null, item_id: "MLB123" }), "MLB123");
+  assert.equal(productLabel({ title: "", item_id: "MLB123" }), "MLB123");
+  assert.equal(productLabel({ title: "Shampoo", item_id: "MLB123" }), "Shampoo", "titulo tem precedencia");
+  assert.equal(productLabel({ title: null, item_id: null }), null, "sem nenhum dos dois a UI decide o traco");
+  assert.equal(productLabel({ title: null }), null, "payload antigo sem item_id");
+
+  const semTitulo = { ...sig("barbours", "x", { gmv: 0 }), title: null, item_id: "MLB999" };
+  const d = { ...DATA, urgent: [semTitulo] } as unknown as InteligenciaData;
+  const fila = bq(d, BRAND_ALL).filter((r) => r.kind === "parar");
+  assert.equal(fila.length, 1);
+  assert.equal(productLabel(fila[0]), "MLB999");
+
+  const pagina = readFileSync(new URL("../app/inteligencia/page.tsx", import.meta.url), "utf8");
+  const filaSrc = readFileSync(new URL("../src/components/inteligencia/EvidenceQueue.tsx", import.meta.url), "utf8");
+  assert.match(filaSrc, /truncate\(productLabel\(row\), 44\)/);
+  assert.match(filaSrc, /truncate\(productLabel\(row\), 60\)/);
+  assert.doesNotMatch(filaSrc, /truncate\(row\.title/);
+  assert.doesNotMatch(pagina, /r\.title \?\? "—"/);
+  assert.match(pagina, /productLabel\(dialog\.item\) \?\? "Produto"/);
+});
+
+test("T-0096: coluna 'Dias com ads' fora do bloco parar", () => {
+  for (const l of LENSES) {
+    assert.ok(!LENS_COLUMNS[l].includes("days_advertised"), `lente ${l} ainda tem days_advertised`);
+  }
+  const fila = readFileSync(new URL("../src/components/inteligencia/EvidenceQueue.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(fila, /Dias c\/ ads|days_advertised/);
+  const pagina = readFileSync(new URL("../app/inteligencia/page.tsx", import.meta.url), "utf8");
+  // No dialogo de evidencia, so' as lentes que nao sao `parar` mostram a medida.
+  assert.match(pagina, /\{!parar && <Medida label="Dias com ads"/);
+});
+
+test("T-0096: aviso do #387 fala em atribuicao, sem acusar as fontes", async () => {
+  const { roasSemVendaNote, ROAS_SEM_VENDA_TITLE } = await import("../src/lib/inteligencia/queue.ts");
+  const row = sig("barbours", "X", { gmv: 0, ad_spend: 543.22, ad_roas: 18.67, units_sold: 0 });
+  const nota = roasSemVendaNote([row])!;
+  assert.ok(nota.includes("ROAS > 0 com GMV R$ 0"), "a regra do #387 continua nomeada");
+  assert.ok(nota.includes("ROAS atribuído") && nota.includes("atribuição possivelmente indireta"), nota);
+  assert.ok(nota.includes("outros itens"), nota);
+  for (const texto of [nota, ROAS_SEM_VENDA_TITLE]) {
+    assert.ok(!/não fecham|origem ser corrigida/.test(texto), `texto ainda trata como defeito: ${texto}`);
+  }
+  assert.ok(ROAS_SEM_VENDA_TITLE.includes("ROAS atribuído"));
+});

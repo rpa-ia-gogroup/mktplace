@@ -19,6 +19,8 @@ import {
   KIND_ORDER,
   KIND_RULES,
   LIST_LIMITS,
+  PARAR_JANELA,
+  PARAR_TITLE,
   queueForLens,
   sampleNote,
   sortForLens,
@@ -48,13 +50,13 @@ export interface Priority {
 }
 
 const TITLES: Record<EvidenceKind, string> = {
-  parar: "Desperdício de Ads",
+  parar: PARAR_TITLE,
   escalar: "Oportunidade de escala",
   testar: "Oportunidade de teste orgânico",
 };
 
 const REASONS: Record<EvidenceKind, string> = {
-  parar: "gasto em mídia sem nenhuma venda registrada",
+  parar: `gasto em mídia sem venda própria registrada (${PARAR_JANELA})`,
   escalar: "ROAS alto com ads já ativos",
   testar: "vende bem sem nenhum investimento em mídia",
 };

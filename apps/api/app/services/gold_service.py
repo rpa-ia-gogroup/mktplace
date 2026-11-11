@@ -2398,7 +2398,7 @@ def get_inteligencia(db: Session, ml_brands: tuple | list | None = None) -> dict
             ml_snapshot_refreshed_at = alvo.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         urgent_sql = f"""
-            SELECT brand, title, pareto_bucket, revenue_velocity,
+            SELECT brand, item_id, title, pareto_bucket, revenue_velocity,
                    COALESCE(gross_revenue, 0) AS gmv,
                    COALESCE(ad_spend, 0)      AS ad_spend,
                    ad_roas, ad_acos_pct, cancel_rate_pct,
@@ -2424,12 +2424,15 @@ def get_inteligencia(db: Session, ml_brands: tuple | list | None = None) -> dict
                 "units_sold": int(_float(r["units_sold"])) if r.get("units_sold") is not None else None,
                 "days_advertised": int(_float(r["days_advertised"])) if r.get("days_advertised") is not None else None,
                 "ad_efficiency": r.get("ad_efficiency"),
+                # T-0096: aditivo, no fim. Parte dos itens chega sem `title` na
+                # gold; o MLB e' a identidade estavel para a tela nao mostrar um traco.
+                "item_id": r.get("item_id"),
             }
             for r in _query(db, urgent_sql)
         ]
 
         scale_sql = f"""
-            SELECT brand, title, pareto_bucket, revenue_velocity,
+            SELECT brand, item_id, title, pareto_bucket, revenue_velocity,
                    COALESCE(gross_revenue, 0) AS gmv,
                    COALESCE(ad_spend, 0)      AS ad_spend,
                    ad_roas, ad_acos_pct, cancel_rate_pct,
@@ -2456,12 +2459,13 @@ def get_inteligencia(db: Session, ml_brands: tuple | list | None = None) -> dict
                 "units_sold": int(_float(r["units_sold"])) if r.get("units_sold") is not None else None,
                 "days_advertised": int(_float(r["days_advertised"])) if r.get("days_advertised") is not None else None,
                 "ad_efficiency": r.get("ad_efficiency"),
+                "item_id": r.get("item_id"),
             }
             for r in _query(db, scale_sql)
         ]
 
         organic_sql = f"""
-            SELECT brand, title, pareto_bucket, revenue_velocity,
+            SELECT brand, item_id, title, pareto_bucket, revenue_velocity,
                    COALESCE(gross_revenue, 0) AS gmv,
                    COALESCE(ad_spend, 0)      AS ad_spend,
                    ad_roas, ad_acos_pct, cancel_rate_pct,
@@ -2488,6 +2492,7 @@ def get_inteligencia(db: Session, ml_brands: tuple | list | None = None) -> dict
                 "units_sold": int(_float(r["units_sold"])) if r.get("units_sold") is not None else None,
                 "days_advertised": int(_float(r["days_advertised"])) if r.get("days_advertised") is not None else None,
                 "ad_efficiency": r.get("ad_efficiency"),
+                "item_id": r.get("item_id"),
             }
             for r in _query(db, organic_sql)
         ]

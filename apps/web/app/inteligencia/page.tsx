@@ -45,8 +45,8 @@ import {
   buildLensHref, INTELIGENCIA_ANCHORS, LENSES, LENS_LABELS, parseLens, readSingleParam, type Lens,
 } from "@/lib/inteligencia/lens";
 import {
-  buildQueue, KIND_LABELS, KIND_RULES, lensSampleNote, listSampleNote, queueForLens,
-  ROAS_SEM_VENDA_TITLE, roasSemVendaNaFotografia, sampleNote, sortForLens, tkSampleNote, type EvidenceItem,
+  buildQueue, KIND_LABELS, KIND_RULES, lensSampleNote, listSampleNote, PARAR_JANELA, PARAR_TITLE, productLabel,
+  queueForLens, ROAS_ATRIBUIDO_LABEL, ROAS_SEM_VENDA_TITLE, roasSemVendaNaFotografia, sampleNote, sortForLens, tkSampleNote, type EvidenceItem,
 } from "@/lib/inteligencia/queue";
 import { buildPriorities, priorityLimit, receivedByKind, type Priority } from "@/lib/inteligencia/priorities";
 import {
@@ -355,7 +355,7 @@ function InteligenciaPageInner() {
     : dialog.kind === "matrix" ? `Mapa de oportunidades · ${scope}`
     : dialog.kind === "point"
       ? `${dialog.highlight.title ?? dialog.highlight.item_id} · ${brandLabel(dialog.highlight.brand)}`
-    : `${dialog.item.title ?? "Produto"} · ${brandLabel(dialog.item.brand)}`;
+    : `${productLabel(dialog.item) ?? "Produto"} · ${brandLabel(dialog.item.brand)}`;
 
   // Identidade do conteúdo do diálogo, não da abertura. Abaixo de 640 a matriz
   // mora dentro do diálogo, e clicar num quadrante, faixa ou ponto troca
@@ -534,7 +534,7 @@ function InteligenciaPageInner() {
               o LIMIT do backend — "de N" sugeriria que N é o portfólio. */}
           <section id={INTELIGENCIA_ANCHORS.produtos} className="scroll-mt-24 grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
             {([
-              { title: "Maior desperdício de Ads", rows: worst, kind: "parar" as const, total: displayData?.urgent_total_count ?? null },
+              { title: PARAR_TITLE, rows: worst, kind: "parar" as const, total: displayData?.urgent_total_count ?? null },
               { title: "Maior retorno com Ads", rows: best, kind: "escalar" as const, total: displayData?.scale_total_count ?? null },
             ]).map((panel) => {
               const received = counts[panel.kind];
@@ -564,9 +564,15 @@ function InteligenciaPageInner() {
                                       : roasBr(r.ad_roas))}
                               </p>
                             </div>
-                            <p className="text-sm text-slate-700 leading-snug" title={r.title ?? undefined}>
-                              {r.title && r.title.length > 46 ? `${r.title.slice(0, 46)}…` : (r.title ?? "—")}
-                            </p>
+                            {(() => {
+                              // T-0096: sem titulo na gold, o MLB identifica o item.
+                              const rotulo = productLabel(r);
+                              return (
+                                <p className="text-sm text-slate-700 leading-snug" title={rotulo ?? undefined}>
+                                  {rotulo && rotulo.length > 46 ? `${rotulo.slice(0, 46)}…` : (rotulo ?? "—")}
+                                </p>
+                              );
+                            })()}
                             <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden" aria-hidden="true">
                               <div
                                 className={panel.kind === "parar" ? "tc-barra h-full bg-rose-400" : "tc-barra h-full bg-emerald-400"}
@@ -576,7 +582,7 @@ function InteligenciaPageInner() {
                             <button
                               type="button"
                               onClick={() => setDialog({ kind: "evidence", item: r })}
-                              aria-label={`Detalhe de ${r.title ?? "produto sem título"}, marca ${brandLabel(r.brand)}`}
+                              aria-label={`Detalhe de ${r.title ?? r.item_id ?? "produto sem título"}, marca ${brandLabel(r.brand)}`}
                               className="mt-2 inline-flex items-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                             >
                               Detalhe
@@ -587,6 +593,9 @@ function InteligenciaPageInner() {
                     </ul>
                   )}
                   <div className="px-4 sm:px-6 py-3 border-t border-slate-100 flex flex-col gap-1">
+                    {panel.kind === "parar" && (
+                      <p className="text-xs text-slate-500">Janela: {PARAR_JANELA}.</p>
+                    )}
                     <p className="text-xs text-slate-500">
                       {panel.rows.length === 0
                         ? "Sem registros nesta lista."
@@ -932,7 +941,7 @@ function InteligenciaPageInner() {
                 rotulo={p.amountLabel}
                 contexto={
                   <>
-                    <DrilldownContextLine leading={`${scope} · fotografia ML`} periodLabel="sem janela temporal" refreshedAt={null} />
+                    <DrilldownContextLine leading={`${scope} · fotografia ML`} periodLabel={p.kind === "parar" ? PARAR_JANELA : "sem janela temporal"} refreshedAt={null} />
                     <Selo>{p.received === 1 ? "1 registro exibido" : `${p.received} registros exibidos`}</Selo>
                   </>
                 }
@@ -946,7 +955,7 @@ function InteligenciaPageInner() {
                     return (
                       <EvidenceRow
                         key={`${c.brand}-${i}`}
-                        label={`${brandLabel(c.brand)} · ${c.title}`}
+                        label={`${brandLabel(c.brand)} · ${productLabel(c) ?? "—"}`}
                         pct={v != null && p.amount > 0 ? (v / p.amount) * 100 : null}
                         value={v == null ? "Sem dado" : fmtBrlCurto(v)}
                         tone={v == null ? "muted" : "value"}
@@ -1027,7 +1036,7 @@ function InteligenciaPageInner() {
                 contexto={
                   <DrilldownContextLine
                     leading={`${KIND_LABELS[it.kind]} · fotografia ML`}
-                    periodLabel="sem janela temporal"
+                    periodLabel={parar ? PARAR_JANELA : "sem janela temporal"}
                     refreshedAt={null}
                   />
                 }
@@ -1045,9 +1054,10 @@ function InteligenciaPageInner() {
               <DrilldownSecao titulo="Mídia">
                 <ul className="flex flex-col">
                   {!parar && <Medida label="Ad spend" v={it.ad_spend} fmt={fmtBrlCurto} />}
-                  <Medida label="ROAS" v={it.ad_roas} fmt={roasBr} />
+                  <Medida label={parar ? ROAS_ATRIBUIDO_LABEL : "ROAS"} v={it.ad_roas} fmt={roasBr} />
                   <Medida label="ACOS" v={it.ad_acos_pct} fmt={pctBr} />
-                  <Medida label="Dias com ads" v={it.days_advertised} fmt={contagemExata} />
+                  {/* T-0096: no bloco `parar` o numero e' inflado na origem (conta dias com custo 0). */}
+                  {!parar && <Medida label="Dias com ads" v={it.days_advertised} fmt={contagemExata} />}
                 </ul>
                 {roasSemVendaNaFotografia(it) && <DataQualityNote note={ROAS_SEM_VENDA_TITLE} />}
               </DrilldownSecao>

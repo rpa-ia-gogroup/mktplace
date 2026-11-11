@@ -9,7 +9,8 @@ import { brandLabel } from "@/lib/inteligencia/brands";
 import { fractionAsPctBr, pctBr, roasBr } from "@/lib/inteligencia/format";
 import { LENS_LABELS, type Lens } from "@/lib/inteligencia/lens";
 import {
-  KIND_LABELS, LENS_COLUMNS, ROAS_SEM_VENDA_TITLE, roasSemVendaNaFotografia, roasSemVendaNote, type EvidenceItem,
+  KIND_LABELS, LENS_COLUMNS, productLabel, ROAS_ATRIBUIDO_CURTO, ROAS_ATRIBUIDO_LABEL, ROAS_SEM_VENDA_TITLE,
+  roasSemVendaNaFotografia, roasSemVendaNote, type EvidenceItem,
 } from "@/lib/inteligencia/queue";
 
 /** `null` vira "—" com título explicativo; zero continua zero. */
@@ -97,12 +98,11 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
     brand: "text", title: "text", kind: "text",
     gmv: "numeric", ad_spend: "numeric", ad_roas: "numeric", ad_acos_pct: "numeric",
     revenue_share_pct: "numeric", units_sold: "numeric", cancel_rate_pct: "numeric",
-    days_advertised: "numeric",
   };
   function getValue(row: EvidenceItem, column: string): string | number | null {
     switch (column) {
       case "brand": return brandLabel(row.brand);
-      case "title": return row.title ?? "";
+      case "title": return productLabel(row) ?? "";
       case "kind": return KIND_LABELS[row.kind];
       case "gmv": return row.gmv;
       case "ad_spend": return row.ad_spend;
@@ -111,7 +111,6 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
       case "revenue_share_pct": return row.revenue_share_pct;
       case "units_sold": return row.units_sold;
       case "cancel_rate_pct": return row.cancel_rate_pct;
-      case "days_advertised": return row.days_advertised;
       default: return null;
     }
   }
@@ -123,12 +122,11 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
     title: { label: "Produto", align: "left", sortable: true },
     gmv: { label: "GMV", align: "right", sortable: true },
     ad_spend: { label: "Ad spend", align: "right", sortable: true },
-    ad_roas: { label: "ROAS", align: "right", sortable: true },
+    ad_roas: { label: ROAS_ATRIBUIDO_CURTO, align: "right", sortable: true },
     ad_acos_pct: { label: "ACOS", align: "right", sortable: true },
     revenue_share_pct: { label: "Part. GMV", align: "right", sortable: true },
     units_sold: { label: "Unidades", align: "right", sortable: true },
     cancel_rate_pct: { label: "Cancel.", align: "right", sortable: true },
-    days_advertised: { label: "Dias c/ ads", align: "right", sortable: true },
     pareto_bucket: { label: "Pareto", align: "left", sortable: false },
     revenue_velocity: { label: "Velocidade", align: "left", sortable: false },
   };
@@ -140,7 +138,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
       case "brand":
         return <span className="text-xs font-semibold text-slate-700 whitespace-nowrap">{brandLabel(row.brand)}</span>;
       case "title":
-        return <span className="text-sm text-slate-700" title={row.title ?? undefined}>{truncate(row.title, 44)}</span>;
+        return <span className="text-sm text-slate-700" title={productLabel(row) ?? undefined}>{truncate(productLabel(row), 44)}</span>;
       case "gmv":
         return <span className="text-sm font-semibold text-slate-900 tabular-nums">{n(row.gmv, fmtBrl)}</span>;
       case "ad_spend":
@@ -154,7 +152,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
           );
         }
         return (
-          <span className="text-sm font-semibold text-slate-800 tabular-nums" title={row.ad_roas == null ? "sem dado" : undefined}>
+          <span className="text-sm font-semibold text-slate-800 tabular-nums" title={row.ad_roas == null ? "sem dado" : ROAS_ATRIBUIDO_LABEL}>
             {row.ad_roas == null ? "—" : roasBr(row.ad_roas)}
           </span>
         );
@@ -166,8 +164,6 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
         return <span className="text-sm text-slate-600 tabular-nums">{n(row.units_sold, fmtNumber)}</span>;
       case "cancel_rate_pct":
         return <span className="text-sm text-slate-600 tabular-nums">{pct(row.cancel_rate_pct)}</span>;
-      case "days_advertised":
-        return <span className="text-sm text-slate-600 tabular-nums">{n(row.days_advertised, fmtNumber)}</span>;
       case "pareto_bucket":
         return <BucketChip v={row.pareto_bucket} />;
       case "revenue_velocity":
@@ -242,7 +238,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
                       <button
                         type="button"
                         onClick={() => onOpenDetail(row)}
-                        aria-label={`Detalhe de ${row.title ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
+                        aria-label={`Detalhe de ${productLabel(row) ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
                         className="inline-flex items-center justify-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                       >
                         Detalhe
@@ -263,7 +259,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-500">{brandLabel(row.brand)}</p>
-                <p className="text-sm text-slate-800 leading-snug">{truncate(row.title, 60)}</p>
+                <p className="text-sm text-slate-800 leading-snug">{truncate(productLabel(row), 60)}</p>
               </div>
               <BucketChip v={row.pareto_bucket} />
             </div>
@@ -275,7 +271,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">{row.kind === "escalar" ? "ROAS" : "Velocidade"}</dt>
+                <dt className="text-xs text-slate-500">{row.kind === "escalar" ? ROAS_ATRIBUIDO_CURTO : "Velocidade"}</dt>
                 <dd className="text-sm font-semibold text-slate-900 tabular-nums m-0">
                   {row.kind === "escalar"
                     ? (row.ad_roas == null ? "—" : roasBr(row.ad_roas))
@@ -286,7 +282,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
             <button
               type="button"
               onClick={() => onOpenDetail(row)}
-              aria-label={`Detalhe de ${row.title ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
+              aria-label={`Detalhe de ${productLabel(row) ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
               className="self-start inline-flex items-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
             >
               Detalhe

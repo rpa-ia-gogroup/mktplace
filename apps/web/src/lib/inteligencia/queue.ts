@@ -5,7 +5,8 @@
 //
 // - NAO deduplica. Cada linha recebida do payload aparece exatamente uma vez.
 //   O grao da tabela-fonte e' `(brand, item_id)`, e o payload NAO entrega
-//   `item_id` — so' `brand` e `title`. Logo, duas linhas com o mesmo
+//   `item_id` — so' `brand` e `title` (T-0096: o `item_id` passou a vir, e por
+//   ora so' rotula o produto sem titulo). Logo, duas linhas com o mesmo
 //   `(brand, title)` podem ser DOIS produtos distintos, e o frontend nao tem
 //   como provar o contrario. Uma versao anterior deste modulo deduplicava por
 //   `(brand, title)` "como guarda" e, com isso, apagava registros legitimos:
@@ -27,9 +28,47 @@ import type { Lens } from "./lens.ts";
 /** Origem da evidencia — espelha o `product_status` que a formou no SQL. */
 export type EvidenceKind = "parar" | "escalar" | "testar";
 
-export interface EvidenceItem extends ProductSignalRow {
+/**
+ * T-0096: forma REAL da linha de `urgent`/`scale`/`organic`. A API passou a
+ * entregar `item_id` (MLB) e a gold entrega `title` nulo em parte dos itens
+ * (31 de 36 no `urgent` medido). `ProductSignalRow` em `api-client.ts` ainda
+ * declara `title: string` e nao tem `item_id`; ate' ele ser ajustado, este
+ * tipo local e' o contrato que a Inteligencia usa.
+ */
+export type ProductRow = Omit<ProductSignalRow, "title"> & {
+  title: string | null;
+  item_id?: string | null;
+};
+
+export interface EvidenceItem extends ProductRow {
   kind: EvidenceKind;
 }
+
+/**
+ * Rotulo do produto na tela: o titulo; sem titulo, o MLB (`item_id`); sem
+ * nenhum dos dois, `null` (a UI decide o traco).
+ */
+export function productLabel(row: Pick<ProductRow, "title" | "item_id">): string | null {
+  if (row.title) return row.title;
+  if (row.item_id) return row.item_id;
+  return null;
+}
+
+/**
+ * T-0096: o bloco `parar` NAO e' "desperdicio corrente". E' o acumulado da
+ * gold (vendas sem corte de data; Ads desde 27/01/2026), em que a maior parte
+ * dos itens nem gastou nos ultimos 30 dias. O texto da janela e' fixo porque
+ * o payload nao traz a data de inicio do Ads.
+ */
+export const PARAR_TITLE = "Anúncios sem venda própria registrada (acumulado)";
+export const PARAR_JANELA = "acumulado; Ads desde 27/01/2026";
+
+/**
+ * ROAS do relatorio de Ads do ML: atribui ao anuncio vendas de OUTROS itens
+ * (atribuicao indireta). Por isso ROAS > 0 convive com GMV 0 do proprio item.
+ */
+export const ROAS_ATRIBUIDO_LABEL = "ROAS atribuído (inclui vendas de outros itens)";
+export const ROAS_ATRIBUIDO_CURTO = "ROAS atribuído";
 
 /**
  * Limites REAIS das tres listas, como estao no SQL de `get_inteligencia`
@@ -44,13 +83,13 @@ export const LIST_LIMITS: Record<EvidenceKind, number> = {
 
 /** Regra real que formou cada lista, para o texto do bloco e do dialogo. */
 export const KIND_RULES: Record<EvidenceKind, string> = {
-  parar: "produtos com ad spend e nenhuma venda (product_status = ad_spend_no_sales)",
+  parar: "produtos com ad spend acumulado e nenhuma venda própria registrada (product_status = ad_spend_no_sales)",
   escalar: "produtos com ads ativos e ROAS ≥ 8 (product_status = sells+advertised)",
   testar: "produtos que vendem sem ads (product_status = sells_organic_only)",
 };
 
 export const KIND_LABELS: Record<EvidenceKind, string> = {
-  parar: "Desperdício de Ads",
+  parar: "Sem venda própria (acumulado)",
   escalar: "Oportunidade de escala",
   testar: "Teste de mídia em orgânico",
 };
@@ -61,27 +100,28 @@ export const KIND_ORDER: readonly EvidenceKind[] = ["parar", "escalar", "testar"
 /**
  * C1-01 (QA 11/11): linha com ROAS > 0 e GMV zero na MESMA fotografia.
  *
- * ROAS > 0 implica receita atribuida pelo relatorio de Ads, e GMV 0 com
- * `units_sold` 0 diz que nao houve venda. As duas medidas vem da mesma linha
- * de `marts.fact_ml_produto_ranking` (copia da gold `ml_produto_ranking`) e
- * nao fecham; a causa e' de origem (API/gold), nao do front. O front nao corrige o dado: so' impede que o ROAS
- * apareca como numero confiavel sem aviso. `gmv` nulo NAO conta (ausencia nao
- * e' zero) e ROAS zero ou nulo tambem nao (nao ha contradicao).
+ * ROAS > 0 e' receita ATRIBUIDA pelo relatorio de Ads; GMV 0 com
+ * `units_sold` 0 diz que o proprio item nao vendeu. T-0096 provou que nao e'
+ * defeito de origem: o GMV 0 e' real e, na maioria dos casos, o ROAS vem de
+ * atribuicao indireta (o clique no anuncio vendeu OUTRO item). O front nao
+ * corrige nada: so' impede que esse ROAS seja lido como venda deste item.
+ * `gmv` nulo NAO conta (ausencia nao e' zero) e ROAS zero ou nulo tambem nao.
  */
 export function roasSemVendaNaFotografia(row: Pick<ProductSignalRow, "gmv" | "ad_roas">): boolean {
   return row.gmv === 0 && row.ad_roas != null && row.ad_roas > 0;
 }
 
 export const ROAS_SEM_VENDA_TITLE =
-  "ROAS do relatório de Ads com GMV R$ 0 nesta fotografia: as fontes não fecham para este produto.";
+  "ROAS atribuído pelo relatório de Ads com GMV R$ 0: a receita atribuída pode ser de outros itens "
+  + "(atribuição possivelmente indireta), não venda própria deste produto.";
 
-/** Aviso do bloco, ou `null` quando nenhuma linha recebida tem a contradicao. */
+/** Aviso do bloco, ou `null` quando nenhuma linha recebida tem ROAS > 0 com GMV 0. */
 export function roasSemVendaNote(rows: readonly Pick<ProductSignalRow, "gmv" | "ad_roas">[]): string | null {
   const n = rows.filter(roasSemVendaNaFotografia).length;
   if (n === 0) return null;
   const sujeito = n === 1 ? "1 produto tem" : `${n} produtos têm`;
-  return `* ${sujeito} ROAS > 0 com GMV R$ 0 na fotografia ML. O ROAS vem do relatório de Ads e o GMV das vendas; `
-    + "as duas fontes não fecham para esses itens. Não use esse ROAS para decidir até a origem ser corrigida.";
+  return `* ${sujeito} ROAS > 0 com GMV R$ 0 na fotografia ML. É ROAS atribuído pelo relatório de Ads e pode `
+    + "incluir vendas de outros itens (atribuição possivelmente indireta); não é venda própria desses produtos.";
 }
 
 function tag(rows: readonly ProductSignalRow[] | undefined, kind: EvidenceKind): EvidenceItem[] {
@@ -146,7 +186,8 @@ export function sortForLens(rows: readonly EvidenceItem[], lens: Lens): Evidence
 
 /** Colunas relevantes por lente — nao repetimos as 9 colunas em todas. */
 export const LENS_COLUMNS: Record<Lens, readonly string[]> = {
-  parar: ["brand", "title", "ad_spend", "days_advertised", "pareto_bucket", "revenue_velocity"],
+  // T-0096: sem `days_advertised` — a gold conta dias com custo 0 (~24x).
+  parar: ["brand", "title", "ad_spend", "pareto_bucket", "revenue_velocity"],
   escalar: ["brand", "title", "gmv", "ad_roas", "ad_acos_pct", "revenue_share_pct", "revenue_velocity"],
   testar: ["brand", "title", "gmv", "units_sold", "cancel_rate_pct", "pareto_bucket"],
   todos: ["kind", "brand", "title", "gmv", "ad_spend", "ad_roas", "pareto_bucket"],

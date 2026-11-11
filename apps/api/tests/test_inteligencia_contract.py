@@ -248,11 +248,16 @@ LINHA_PRODUTO = {
     "ad_roas": 5.5555, "ad_acos_pct": 18.0044, "cancel_rate_pct": 2.3456,
     "revenue_share_pct": 0.123456, "units_sold": 77, "days_advertised": 30,
     "ad_efficiency": "eficiente", "unique_buyers": 70,
+    "item_id": "MLB1234567890",
 }
 
 CAMPOS_PRODUTO = ["brand", "title", "pareto_bucket", "revenue_velocity", "gmv",
                   "ad_spend", "ad_roas", "ad_acos_pct", "cancel_rate_pct",
-                  "revenue_share_pct", "units_sold", "days_advertised", "ad_efficiency"]
+                  "revenue_share_pct", "units_sold", "days_advertised", "ad_efficiency",
+                  # T-0096: mudanca DELIBERADA de contrato, aditiva e no fim. O
+                  # MLB substitui o titulo nulo na tela (31 de 36 itens do bloco
+                  # urgent chegam sem `title` da gold).
+                  "item_id"]
 
 
 @pytest.mark.parametrize("bloco", ["urgent", "scale", "organic"])
@@ -261,6 +266,19 @@ def test_i09_blocos_de_produto_tem_os_mesmos_campos(fixar, bloco):
     dados[bloco] = [dict(LINHA_PRODUTO)]
     linha = gs.get_inteligencia(object())[bloco][0]
     assert list(linha) == CAMPOS_PRODUTO
+
+
+@pytest.mark.parametrize("bloco", ["urgent", "scale", "organic"])
+def test_i09b_blocos_de_produto_projetam_item_id(fixar, bloco):
+    """T-0096: o `item_id` (MLB) sai da fonte e chega ao payload nas tres
+    listas, inclusive quando o `title` vem nulo."""
+    dados, vistas = fixar
+    dados[bloco] = [dict(LINHA_PRODUTO, title=None)]
+    linha = gs.get_inteligencia(object())[bloco][0]
+    assert linha["item_id"] == "MLB1234567890"
+    assert linha["title"] is None
+    select = _sql_de(vistas, bloco).lower().split(" from ")[0]
+    assert "item_id" in select
 
 
 @pytest.mark.parametrize("bloco", ["urgent", "scale", "organic"])
