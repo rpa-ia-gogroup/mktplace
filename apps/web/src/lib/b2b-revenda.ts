@@ -345,9 +345,9 @@ export function textoCobertura(c: CoberturaIdentificacao): { contexto: string; n
  * colunas (o ultimo ocupa a linha inteira) e 5 colunas a partir de xl.
  */
 export function classesGradeKpis(n: number): string {
-  const base = "grid grid-cols-1 gap-3 sm:grid-cols-2";
+  const base = "grid grid-cols-2 gap-3";
   if (n === 6) return `${base} xl:grid-cols-3 2xl:grid-cols-6`;
-  if (n === 5) return `${base} xl:grid-cols-5 sm:[&>*:last-child]:col-span-2 xl:[&>*:last-child]:col-span-1`;
+  if (n === 5) return `${base} [&>*:last-child]:col-span-2 xl:grid-cols-5 xl:[&>*:last-child]:col-span-1`;
   return `${base} xl:grid-cols-3`;
 }
 
