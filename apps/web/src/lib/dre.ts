@@ -119,6 +119,14 @@ export interface Margem {
   componentes_parciais?: string[];
   /** T-0090 — aviso do backend sobre a margem (opcional). */
   aviso?: string | null;
+  /**
+   * T-0101 — custo obrigatorio (taxas, CMV) com insumo vencido/ausente; no
+   * agregado, alguma celula assim. `valor` vem null. Opcional: API anterior
+   * nao manda e a tela segue a regra antiga.
+   */
+  suspensa?: boolean | null;
+  /** T-0101 — "insumo vencido: cmv; margem suspensa até a republicação (publicado em 09/11/2026)". */
+  motivo_suspensao?: string | null;
 }
 
 export interface CelulaDRE {
@@ -129,6 +137,8 @@ export interface CelulaDRE {
   marca?: string | null;
   marca_label?: string | null;
   celulas?: number | null;
+  /** T-0101 — so' agregados: celulas com a margem conhecida suspensa. Opcional. */
+  celulas_suspensas?: number | null;
   classificacao: Classificacao;
   /** T-0090 — data (YYYY-MM-DD) em que a previa fecha. Opcional. */
   fecha_em?: string | null;
@@ -894,6 +904,9 @@ export function elegivelParaRanking(c: CelulaDRE): Comparabilidade {
   if (c.classificacao === "NAO_CALCULAVEL") {
     return { comparavel: false, motivo: c.motivos_classificacao[0] ?? "não calculável" };
   }
+  if (margemSuspensa(c)) {
+    return { comparavel: false, motivo: textoSuspensao(m.motivo_suspensao) };
+  }
   if (m.valor === null || m.pct_receita === null) {
     return { comparavel: false, motivo: "margem não informada pela API" };
   }
@@ -1009,6 +1022,40 @@ export function rotuloAusentes(c: CelulaDRE): string {
 
 export const TEXTO_NAO_CALCULAVEL_AGREGADO = "Não calculável — veja os canais";
 
+/**
+ * T-0101 — dado velho nao e' dado parcial: com o insumo de taxas/CMV vencido ou
+ * ausente a API SUSPENDE a margem (`suspensa: true`, valor null). A tela diz
+ * isso no lugar do numero — nunca "100%" nem "R$ 0". Sem o campo (API
+ * anterior), `false`: a regra antiga vale.
+ */
+export function margemSuspensa(c: CelulaDRE): boolean {
+  return c.margem_contribuicao_conhecida.suspensa === true;
+}
+
+/** Cenario estimado suspenso (T-0101). Le os campos opcionais sem exigir o tipo novo. */
+export function cenarioSuspenso(c: object | null | undefined): { suspensa: boolean; motivo: string | null } {
+  const x = (c ?? {}) as { suspensa?: unknown; motivo_suspensao?: unknown };
+  return {
+    suspensa: x.suspensa === true,
+    motivo: typeof x.motivo_suspensao === "string" && x.motivo_suspensao.trim() ? x.motivo_suspensao : null,
+  };
+}
+
+export const ROTULO_MARGEM_SUSPENSA = "Margem suspensa";
+
+/**
+ * "Margem suspensa: insumo vencido desde 09/11/2026" (ou "insumo ausente").
+ * A data vem do motivo da API; sem ela, de `publicadoEm` (ex.:
+ * `fontes.insumos_dre.publicado_em`); sem nenhuma, a frase sem data.
+ */
+export function textoSuspensao(motivo: string | null | undefined, publicadoEm?: string | null): string {
+  const m = motivo ?? "";
+  if (/insumo ausente/.test(m) && !/vencido/.test(m)) return `${ROTULO_MARGEM_SUSPENSA}: insumo ausente`;
+  const doMotivo = /publicado em (\d{2}\/\d{2}\/\d{4})/.exec(m)?.[1] ?? null;
+  const data = doMotivo ?? (publicadoEm ? fmtInstanteBrt(publicadoEm).slice(0, 10) : null);
+  return `${ROTULO_MARGEM_SUSPENSA}: insumo vencido${data ? ` desde ${data}` : ""}`;
+}
+
 /** Celula sem margem: classificacao nao calculavel ou valor nulo. */
 export function semMargem(c: CelulaDRE): boolean {
   return c.classificacao === "NAO_CALCULAVEL" || c.margem_contribuicao_conhecida.valor === null;
@@ -1016,12 +1063,14 @@ export function semMargem(c: CelulaDRE): boolean {
 
 /** Margem em R$ como texto. Sem margem: o status, NUNCA "R$ 0". */
 export function textoMargem(c: CelulaDRE): string {
+  if (margemSuspensa(c)) return textoSuspensao(c.margem_contribuicao_conhecida.motivo_suspensao);
   const v = c.margem_contribuicao_conhecida.valor;
   return semMargem(c) || v === null ? "Não calculável" : fmtReais(v);
 }
 
 /** Margem % como texto. Sem margem ou sem %: o status, nunca travessao. */
 export function textoMargemPct(c: CelulaDRE): string {
+  if (margemSuspensa(c)) return ROTULO_MARGEM_SUSPENSA;
   if (semMargem(c)) return "Não calculável";
   return fmtPctDre(c.margem_contribuicao_conhecida.pct_receita) ?? "Não calculável";
 }

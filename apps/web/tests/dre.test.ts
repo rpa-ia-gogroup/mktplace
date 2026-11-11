@@ -747,3 +747,40 @@ test("/dre esta na navegacao, com titulo proprio, e e' rota tematizada", () => {
     assert.equal(ehPrevia(SHOPEE), false);
   });
 }
+
+// ===========================================================================
+// T-0101 — margem suspensa por insumo vencido/ausente
+// ===========================================================================
+test("T-0101: textoMargem/Pct dizem 'Margem suspensa' com a data do motivo", async () => {
+  const fx = await import("./dre-fixtures.ts");
+  const d = await import("../src/lib/dre.ts");
+  const c = fx.TIKTOK_SUSPENSA;
+  assert.equal(d.margemSuspensa(c), true);
+  assert.equal(d.textoMargem(c), "Margem suspensa: insumo vencido desde 09/11/2026");
+  assert.equal(d.textoMargemPct(c), "Margem suspensa");
+  const r = d.elegivelParaRanking(c);
+  assert.equal(r.comparavel, false);
+  assert.match(r.motivo ?? "", /Margem suspensa/);
+  assert.equal(d.margemPrincipal(c).tipo, "conhecida");
+});
+
+test("T-0101: textoSuspensao — ausente sem data; data de publicado_em como reserva", async () => {
+  const d = await import("../src/lib/dre.ts");
+  assert.equal(d.textoSuspensao("insumo ausente: cmv; margem suspensa até a republicação"), "Margem suspensa: insumo ausente");
+  assert.equal(
+    d.textoSuspensao("1 de 2 células com margem suspensa (insumo vencido); margem suspensa até a republicação", "2026-11-09T13:00:00+00:00"),
+    "Margem suspensa: insumo vencido desde 09/11/2026",
+  );
+  assert.equal(d.cenarioSuspenso({ suspensa: true, motivo_suspensao: "x" }).suspensa, true);
+  assert.equal(d.cenarioSuspenso({}).suspensa, false);
+});
+
+test("T-0101: resposta sem os campos novos mantem 'Não calculável'", async () => {
+  const fx = await import("./dre-fixtures.ts");
+  const d = await import("../src/lib/dre.ts");
+  const { suspensa: _s, motivo_suspensao: _m, ...antiga } = fx.TIKTOK_SUSPENSA.margem_contribuicao_conhecida;
+  const c = { ...fx.TIKTOK_SUSPENSA, margem_contribuicao_conhecida: antiga };
+  assert.equal(d.margemSuspensa(c), false);
+  assert.equal(d.textoMargem(c), "Não calculável");
+  assert.equal(d.textoMargemPct(c), "Não calculável");
+});

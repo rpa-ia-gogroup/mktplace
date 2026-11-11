@@ -6,7 +6,7 @@ import { FileSpreadsheet } from "lucide-react";
 import Chip from "@/components/ui/Chip";
 import Panel from "@/components/ui/Panel";
 import Motivos from "@/components/dre/Motivos";
-import { AvisoMargem, ClassificacaoChip, StatusChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip, MargemSuspensaChip, StatusChip } from "@/components/dre/DreChips";
 import {
   ROTULO_MARGEM,
   avisoMargem,
@@ -17,7 +17,9 @@ import {
   fmtPctDre,
   fmtReais,
   linhasDre,
+  margemSuspensa,
   rotuloAusentes,
+  textoMargem,
   type CelulaDRE,
   type LinhaDre,
 } from "@/lib/dre";
@@ -186,6 +188,7 @@ export default function DreVertical({
                   fechaEm={c.fecha_em}
                   previa={c.previa}
                 />
+                {margemSuspensa(c) && <MargemSuspensaChip />}
                 {completudeExibida(c) === null && (
                   <span className="text-xs font-semibold text-ink-muted">— veja os canais</span>
                 )}
@@ -205,7 +208,13 @@ export default function DreVertical({
               )}
             </th>
             <td className="px-3 py-3 text-right text-sm font-semibold tabular-nums text-ink sm:whitespace-nowrap sm:px-4">
-              {naoCalc || m.valor === null ? <span className="text-ink-faint">Não calculável</span> : fmtReais(m.valor)}
+              {margemSuspensa(c) ? (
+                <span className="whitespace-normal text-ink-faint">{textoMargem(c)}</span>
+              ) : naoCalc || m.valor === null ? (
+                <span className="text-ink-faint">Não calculável</span>
+              ) : (
+                fmtReais(m.valor)
+              )}
               {!naoCalc && fmtPctDre(m.pct_receita) && (
                 <span className="block text-xs text-ink-muted sm:hidden">{fmtPctDre(m.pct_receita)}</span>
               )}
