@@ -38,11 +38,8 @@ import {
   TIKTOK_QUALITY_UNAVAILABLE_NOTE,
   qualityLoadedAnnouncement,
 } from "@/lib/quality-availability";
-
-function fmtRate(v: number | null): string {
-  if (v == null) return "—";
-  return fmtPctSimples(v);
-}
+// T-0088: "—" para taxa nula e "parcial (N de M marcas)" da devolucao Shopee (helper puro, testavel no node --test).
+import { avisoCoberturaDevolucao, fmtRate } from "./cobertura-devolucao";
 
 const fmtDays = fmtDias;
 
@@ -289,6 +286,16 @@ function QualityPageInner() {
               {showTiktok && <GrupoQualidade canal="tiktok" kpis={displayKpis} onAbrir={setDetalhe} />}
               {showMl && <GrupoQualidade canal="ml" kpis={displayKpis} onAbrir={setDetalhe} />}
               {showShopee && <GrupoQualidade canal="shopee" kpis={displayKpis} onAbrir={setDetalhe} />}
+              {/* T-0088: o % de devolucao so' cobre as marcas com o dado; diz quantas. */}
+              {showShopee && (() => {
+                const aviso = avisoCoberturaDevolucao(displayKpis?.shopee_return_cobertura, displayBrands);
+                return aviso && (
+                  <p className="-mt-1 flex items-center gap-1.5 text-xs text-warn-ink">
+                    {aviso.texto}
+                    <InfoDica texto={aviso.dica} />
+                  </p>
+                );
+              })()}
             </>
           )}
         </div>

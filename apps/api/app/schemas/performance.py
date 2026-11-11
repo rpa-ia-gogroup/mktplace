@@ -188,6 +188,10 @@ class QualityKpis(BaseModel):
     ml_avg_delivery_days: Optional[float] = None
     shopee_cancel_rate_pct: Optional[float] = None
     shopee_return_rate_pct: Optional[float] = None
+    # T-0088: quantas marcas com pedido Shopee entraram no % de devolucao
+    # consolidado (numerador e denominador so' das marcas com devolucao
+    # medida). `None` = Shopee sem pedido no recorte. Opcional e aditivo.
+    shopee_return_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class QualityBrandRow(BaseModel):
@@ -389,6 +393,9 @@ class CoberturaMarcas(BaseModel):
 
 
 FinanceiroKpis.model_rebuild()
+# T-0088: a Qualidade reusa o mesmo contrato de cobertura.
+QualityKpis.model_rebuild()
+QualityResponse.model_rebuild()
 
 
 class FinanceiroBrandRow(BaseModel):
