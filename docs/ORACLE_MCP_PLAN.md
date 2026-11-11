@@ -3265,3 +3265,30 @@ canônica (5), mais metadata alinhada (2 casos compostos cobrindo 12 situações
 Cinco testes anteriores foram corrigidos para reproduzir Preview e produção de
 forma **realista** — `NODE_ENV=development` não é mais aceito como contraprova
 de Preview.
+
+---
+
+## Nota T-0080 P1 (11/11/2026)
+
+Validação contra a produção em 11/11/2026: as 8 tools respondem com contrato ok, mas o conector estava fora do ar
+(402 no domínio antigo) e duas tools ignoravam dado novo. Três mudanças:
+
+1. **Domínio canônico.** `CANONICAL_MCP_RESOURCE` passa a ser `https://mktplace-ten.vercel.app/api/mcp` (o projeto
+   Vercel migrou; `mktplace-gobeaute.vercel.app` responde 402 `DEPLOYMENT_DISABLED`). O guardrail de audience exata
+   continua, e a audience antiga agora é recusada (teste explícito). As linhas de medição histórica deste plano que
+   citam o domínio antigo (Apêndice A, checklist da Vercel, §2) ficam como estavam, porque registram o que foi
+   medido na época. Os passos do proprietário (Auth0 API nova, Action, envs da Vercel, URL do conector) e o smoke
+   estão no `docs/ORACLE_AUTH0_ACCESS_RUNBOOK.md` §8.
+2. **Maturação no `torre_desempenho_marketplaces`.** O contrato do `/performance/brands` lê `tiktok_maturacao` e
+   `ml_maturacao`. Se o período pedido cruza `em_maturacao_desde` de um canal pedido, a tool emite a limitação
+   `gmv_em_maturacao` (canal e intervalo) e um aviso em `warnings`. Campo ausente ou `null` não gera limitação.
+3. **`torre_estoque_full` lê o estoque Full real do ML.** Novo bloco `ml_estoque` sobre
+   `/performance/ml-full-estoque` (allowlist: `brands`, `limite`; `limite` sempre enviado). Por inventário: SKU,
+   título, curva ABC, disponível, cobertura e classificação. Ausência continua ausência: inventário sem leitura e
+   marca sem fotografia ficam `null` com a limitação `estoque_ml_ausente`; só `sem_estoque_full` é zero medido. O
+   bloco `ml_full` deixa de dizer "fonte não integrada" e continua sendo só modalidade de envio.
+
+**Ficou para P2:** tool de DRE (payload de 415 KB acima do teto de 256 KB, e a decisão de expor CMV/margem é do
+Mário), marcas menores via Bling (`performance/marcas-menores`, enum próprio), curva ABC e situação na Shopee, e LDR
+Shopee/ML na expedição. Também fica pendente o timeout por endpoint: a 1ª chamada a frio do `ml-full-estoque` levou
+~6,5 s, contra 8 s de timeout único no adapter, e hoje não há timeout por endpoint.
