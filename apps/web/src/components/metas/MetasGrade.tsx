@@ -96,10 +96,7 @@ export default function MetasGrade({ rascunho, salvo, analise, realizado, desabi
                 {fmtCompacto(t.porCanal[c.id])}
               </td>
             ))}
-            <td className="px-4 py-3 text-right tabular-nums">
-              <span className="block text-xs font-semibold uppercase tracking-wide text-ink-faint">Meta global</span>
-              <span className="text-lg font-bold text-accent">{fmtCompacto(t.global)}</span>
-            </td>
+            <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">{fmtCompacto(t.global)}</td>
           </tr>
         </tfoot>
       </table>
