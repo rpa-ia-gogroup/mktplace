@@ -13,8 +13,11 @@ import { exportJWK, generateKeyPair, SignJWT, type JWK, type KeyObject } from "j
 
 import { evaluateAccess, type AccessEnv } from "../src/server/oracle/access.ts";
 import { handleMcpRequest } from "../src/server/oracle/handler.ts";
+import { OAuthError, OAuthErrorCode } from "@modelcontextprotocol/server";
+
 import {
   ALLOWED_AUTH_ISSUER_HOSTNAME, CANONICAL_MCP_RESOURCE, CANONICAL_ORACLE_SCOPE,
+  CORPORATE_ACCESS_CLAIM, CORPORATE_ACCESS_VALUE, createAuth0Verifier,
   effectiveScopes,
   hasRequiredScope, normalizeIssuer, parseOAuthConfig, protectedResourceMetadata,
   protectedResourceMetadataUrl, pseudonymizeSubject,
@@ -82,6 +85,8 @@ type TokenOverrides = {
   notBefore?: number;
   alg?: string;
   omitExp?: boolean;
+  /** Claims adicionais (ex.: claim corporativo, `gty`). */
+  extra?: Record<string, unknown>;
 };
 
 /** Emite um access token sintetico no formato que o Auth0 produz. */
@@ -97,6 +102,7 @@ async function mintToken(o: TokenOverrides = {}): Promise<string> {
   if (o.sub !== null) claims.sub = o.sub ?? "auth0|synthetic-subject";
   if (o.scope !== null) claims.scope = o.scope ?? SCOPE;
   if (o.permissions !== null) claims.permissions = o.permissions ?? [SCOPE];
+  if (o.extra) Object.assign(claims, o.extra);
 
   let jwt = new SignJWT(claims)
     .setProtectedHeader({ alg: o.alg ?? "RS256", kid, typ: "JWT" })
@@ -1059,4 +1065,171 @@ test("scope canonico: token continua exigindo oracle:read como elemento completo
   }
   const ok = await mintToken();
   assert.equal((await call(`Bearer ${ok}`)).res.status, 200);
+});
+
+// ===========================================================================
+// T-0100 — claim corporativo da Action v4 em token de USUARIO
+//
+// Cliente DCR third-party pede so' `openid profile email`; o Auth0 descarta o
+// `oracle:read`. O claim corporativo substitui SO' a permission — nenhuma das
+// validacoes do token.
+// ===========================================================================
+
+const CORP = { [CORPORATE_ACCESS_CLAIM]: CORPORATE_ACCESS_VALUE };
+
+/** Token de usuario do cliente DCR: sem `oracle:read` em scope nem permissions. */
+function corporateUserToken(o: TokenOverrides = {}): Promise<string> {
+  return mintToken({
+    scope: "openid profile email",
+    permissions: null,
+    ...o,
+    extra: { ...CORP, ...o.extra },
+  });
+}
+
+async function verifier() {
+  const cfg = parseOAuthConfig(OAUTH_ENV);
+  assert.ok(cfg);
+  const keyResolver = await localKeyResolver();
+  return { cfg, v: createAuth0Verifier(cfg, { keyResolver: keyResolver as never }) };
+}
+
+async function assertInsufficientScope(token: string, label: string) {
+  const { v } = await verifier();
+  await assert.rejects(
+    v.verifyAccessToken(token),
+    (e: unknown) =>
+      e instanceof OAuthError &&
+      e.code === OAuthErrorCode.InsufficientScope &&
+      e.message === "permissao insuficiente",
+    `${label}: verificador deveria recusar com InsufficientScope`,
+  );
+  const { res, calls } = await call(`Bearer ${token}`);
+  assert.equal(res.status, 403, `${label}: deveria dar 403`);
+  assert.match(res.headers.get("www-authenticate") ?? "", /error="insufficient_scope"/, label);
+  assert.equal(calls.length, 0, `${label}: backend nao e' tocado`);
+}
+
+test("corporativo: constantes do claim e do valor", () => {
+  assert.equal(CORPORATE_ACCESS_CLAIM, "https://mktplace-ten.vercel.app/oracle_access");
+  assert.equal(CORPORATE_ACCESS_VALUE, "corporate");
+});
+
+test("corporativo: claim `corporate` em token de usuario sem scope e' aceito com oracle:read", async () => {
+  const token = await corporateUserToken();
+  const { cfg, v } = await verifier();
+  const info = await v.verifyAccessToken(token);
+
+  assert.ok(info.scopes.includes(cfg.requiredScope), "scopes inclui a permission exigida");
+  assert.equal(info.scopes.filter((s) => s === cfg.requiredScope).length, 1);
+  assert.deepEqual([...info.scopes].sort(), ["email", "openid", "oracle:read", "profile"]);
+  // Nenhum claim anexado ao AuthInfo.
+  assert.deepEqual(Object.keys(info).sort(), ["clientId", "expiresAt", "scopes", "token"]);
+  assert.ok(!JSON.stringify(info.scopes).includes(CORPORATE_ACCESS_CLAIM));
+
+  const { res, body } = await call(`Bearer ${token}`);
+  assert.equal(res.status, 200, "requiredScopes do SDK tambem confere");
+  assert.ok(body.includes("torre_desempenho_marketplaces"));
+});
+
+test("corporativo: claim + scope ja presente e' aceito sem duplicar o scope", async () => {
+  const token = await mintToken({ scope: `openid ${SCOPE}`, permissions: [SCOPE], extra: CORP });
+  const { cfg, v } = await verifier();
+  const info = await v.verifyAccessToken(token);
+  assert.equal(info.scopes.filter((s) => s === cfg.requiredScope).length, 1);
+  assert.deepEqual([...info.scopes].sort(), ["openid", "oracle:read"]);
+  assert.equal((await call(`Bearer ${token}`)).res.status, 200);
+});
+
+test("corporativo: valor diferente de `corporate` -> 403 InsufficientScope", async () => {
+  for (const value of ["Corporate", "corporate ", " corporate", "CORPORATE", "admin", "", "corporate,admin"]) {
+    const token = await corporateUserToken({ extra: { [CORPORATE_ACCESS_CLAIM]: value } });
+    await assertInsufficientScope(token, `valor ${JSON.stringify(value)}`);
+  }
+});
+
+test("corporativo: tipo errado no claim -> 403 InsufficientScope", async () => {
+  for (const value of [true, ["corporate"], {}, { corporate: true }, 1, null]) {
+    const token = await corporateUserToken({ extra: { [CORPORATE_ACCESS_CLAIM]: value } });
+    await assertInsufficientScope(token, `tipo ${JSON.stringify(value)}`);
+  }
+});
+
+test("corporativo: claim com nome parecido -> 403 InsufficientScope", async () => {
+  for (const name of [
+    "oracle_access",
+    "https://mktplace-gobeaute.vercel.app/oracle_access",
+    "https://mktplace-ten.vercel.app/oracle_access/",
+    "https://MKTPLACE-TEN.vercel.app/oracle_access",
+    "http://mktplace-ten.vercel.app/oracle_access",
+    "https://mktplace-ten.vercel.app/oracle_acess",
+  ]) {
+    const token = await mintToken({
+      scope: "openid profile email",
+      permissions: null,
+      extra: { [name]: "corporate" },
+    });
+    await assertInsufficientScope(token, `claim ${name}`);
+  }
+});
+
+test("corporativo: token M2M com o claim -> 403 InsufficientScope", async () => {
+  const cases: Array<[string, TokenOverrides]> = [
+    ["gty client-credentials", { extra: { gty: "client-credentials" } }],
+    ["sub @clients", { sub: "abc@clients" }],
+    ["gty array com client-credentials", { extra: { gty: ["password", "client-credentials"] } }],
+    ["gty + sub @clients", { sub: "abc@clients", extra: { gty: "client-credentials" } }],
+  ];
+  for (const [label, o] of cases) {
+    await assertInsufficientScope(await corporateUserToken(o), label);
+  }
+});
+
+test("corporativo: sem claim e sem scope -> 403 InsufficientScope", async () => {
+  const token = await mintToken({ scope: "openid profile email", permissions: null });
+  await assertInsufficientScope(token, "sem claim e sem scope");
+});
+
+test("corporativo: M2M COM oracle:read segue a regra de scope (inalterada)", async () => {
+  // A exclusao de maquina vale so' para o caminho do claim.
+  const token = await mintToken({ sub: "abc@clients", extra: { gty: "client-credentials" } });
+  assert.equal((await call(`Bearer ${token}`)).res.status, 200);
+});
+
+test("corporativo: o claim NAO dispensa nenhuma validacao do token (401 invalid_token)", async () => {
+  const otherKey = await generateKeyPair("RS256", { extractable: true });
+  const now = Math.floor(Date.now() / 1000);
+  const signedByOtherKey = await new SignJWT({
+    iss: ISSUER, aud: AUDIENCE, sub: "auth0|synthetic-subject", scope: "openid", ...CORP,
+  })
+    .setProtectedHeader({ alg: "RS256", kid: "test-key-1", typ: "JWT" })
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
+    .sign(otherKey.privateKey);
+
+  const good = await corporateUserToken();
+  const cases: Array<[string, string]> = [
+    ["assinatura adulterada", good.slice(0, -6) + "AAAAAA"],
+    ["assinada por outra chave", signedByOtherKey],
+    ["audience errada", await corporateUserToken({ audience: "https://outro.vercel.app/api/mcp" })],
+    ["audience do dominio antigo", await corporateUserToken({ audience: "https://mktplace-gobeaute.vercel.app/api/mcp" })],
+    ["issuer errado", await corporateUserToken({ issuer: "https://outro-tenant.us.auth0.com/" })],
+    ["expirado", await corporateUserToken({ expiresIn: -600 })],
+    ["nbf no futuro", await corporateUserToken({ notBefore: 3600 })],
+    ["sub ausente", await corporateUserToken({ sub: null })],
+    ["sub vazio", await corporateUserToken({ sub: "   " })],
+    ["exp ausente", await corporateUserToken({ omitExp: true })],
+  ];
+
+  const { v } = await verifier();
+  for (const [label, token] of cases) {
+    await assert.rejects(
+      v.verifyAccessToken(token),
+      (e: unknown) => e instanceof OAuthError && e.code === OAuthErrorCode.InvalidToken,
+      `${label}: deveria ser invalid_token`,
+    );
+    const { res, calls } = await call(`Bearer ${token}`);
+    assert.equal(res.status, 401, `${label}: deveria dar 401`);
+    assert.equal(calls.length, 0, label);
+  }
 });
