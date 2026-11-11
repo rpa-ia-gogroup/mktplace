@@ -370,7 +370,7 @@ const NOME_CANAL = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" } as const;
 function foraDaTendencia(t: TendenciaConsolidada): string {
   const partes = [
     ...t.soParte.map((p) => `${NOME_MARCA[p.id] ?? p.id} na ${p.canais.map((c) => NOME_CANAL[c]).join(" e ")} (sem hora de pedido)`),
-    ...t.semRitmo.map((id) => `${NOME_MARCA[id] ?? id} (sem ritmo ainda)`),
+    ...t.semRitmo.map((id) => `${NOME_MARCA[id] ?? id} (sem venda ontem até esta hora)`),
   ];
   return partes.length ? ` Ficou de fora: ${partes.join("; ")}.` : "";
 }
