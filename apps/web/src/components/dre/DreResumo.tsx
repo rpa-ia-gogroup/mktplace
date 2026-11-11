@@ -1,17 +1,18 @@
 import { CircleDollarSign, Percent, ShieldCheck, TrendingUp } from "lucide-react";
 
-import Chip from "@/components/ui/Chip";
 import KpiTile from "@/components/ui/KpiTile";
-import { ClassificacaoChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip } from "@/components/dre/DreChips";
 import type { ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
 import {
   ROTULO_MARGEM,
   STATUS_CHIP,
   TEXTO_NAO_CALCULAVEL_AGREGADO,
+  avisoMargem,
   completudeExibida,
   custosAusentes,
   fmtReais,
   juntarNomes,
+  margemPrincipal,
   rotuloAusentes,
   semMargem,
   textoMargem,
@@ -32,6 +33,15 @@ import {
  * conhecido"); diz "Não calculável — veja os canais" e nomeia os canais que
  * bloqueiam. Margem calculavel traz "Parcial" e o que falta no PROPRIO tile,
  * para o numero grande nunca parecer margem completa.
+ *
+ * T-0090: competencia imatura chega como PREVIA, com numero. O tile mostra a
+ * margem com o selo "Prévia · fecha em DD/MM/AAAA" e, se a margem inclui custo
+ * parcial, diz quais e o aviso do backend.
+ *
+ * T-0090 (supervisor, 11/11): na PREVIA com cenario estimado, a margem
+ * ESTIMADA e' o numero principal (`margemPrincipal`); a conhecida desce para
+ * a linha "Conhecida: X% (sem impostos, devoluções e parte do CMV)", com o
+ * aviso. Mes maduro e PREVIA sem cenario: a conhecida segue no destaque.
  */
 export default function DreResumo({
   total,
@@ -51,6 +61,8 @@ export default function DreResumo({
   const faltam = custosAusentes(total);
   const motivo = total.motivos_classificacao[0] ?? null;
   const completude = completudeExibida(total);
+  const principal = margemPrincipal(total);
+  const estimada = principal.tipo === "estimada" ? principal : null;
   const bloqueio = bloqueadores.length
     ? `Bloqueado por ${juntarNomes(bloqueadores)}`
     : motivo
@@ -60,15 +72,17 @@ export default function DreResumo({
   const leituraMargem = sem ? (
     bloqueio
   ) : (
-    <span className="flex flex-wrap items-center gap-1.5">
-      <Chip tom={total.classificacao === "COMPLETA" ? "bom" : "atencao"} ponto>
-        {total.classificacao === "COMPLETA" ? "Completa" : "Parcial"}
-      </Chip>
-      <span>
-        {faltam.length
-          ? `${rotuloAusentes(total)}: ${faltam.join(", ")}`
-          : "Todos os custos aplicáveis na conta"}
+    <span className="flex flex-col items-start gap-1.5">
+      <span className="flex flex-wrap items-center gap-1.5">
+        <ClassificacaoChip classificacao={total.classificacao} fechaEm={total.fecha_em} previa={total.previa} />
+        <span>
+          {faltam.length
+            ? `${rotuloAusentes(total)}: ${faltam.join(", ")}`
+            : "Todos os custos aplicáveis na conta"}
+        </span>
       </span>
+      {estimada && <span className="text-xs font-semibold text-ink-muted">{estimada.secundaria}</span>}
+      <AvisoMargem aviso={avisoMargem(total)} />
     </span>
   );
 
@@ -89,8 +103,8 @@ export default function DreResumo({
         variante="gerencial"
         identidade="roas"
         icone={TrendingUp}
-        rotulo={ROTULO_MARGEM}
-        valor={textoMargem(total)}
+        rotulo={estimada ? estimada.rotulo : ROTULO_MARGEM}
+        valor={estimada ? estimada.valor : textoMargem(total)}
         tom={sem ? "ausente" : "neutro"}
         comparacao={leituraMargem}
         onAbrir={onAbrir ? () => onAbrir("margem") : undefined}
@@ -100,9 +114,11 @@ export default function DreResumo({
         identidade="ticket"
         icone={Percent}
         rotulo="% da receita"
-        valor={textoMargemPct(total)}
+        valor={estimada ? estimada.pct : textoMargemPct(total)}
         tom={sem ? "ausente" : "neutro"}
-        comparacao={sem ? "Depende da margem ao lado" : "Margem conhecida ÷ receita"}
+        comparacao={
+          estimada ? "Margem estimada ÷ receita" : sem ? "Depende da margem ao lado" : "Margem conhecida ÷ receita"
+        }
       />
       <KpiTile
         variante="gerencial"
@@ -112,7 +128,12 @@ export default function DreResumo({
         rotulo="Classificação"
         valor={
           <span className="flex flex-wrap items-center gap-2 text-base">
-            <ClassificacaoChip classificacao={total.classificacao} completude={completude} />
+            <ClassificacaoChip
+              classificacao={total.classificacao}
+              completude={completude}
+              fechaEm={total.fecha_em}
+              previa={total.previa}
+            />
             {completude === null ? (
               <span className="text-sm font-semibold text-ink-muted">{TEXTO_NAO_CALCULAVEL_AGREGADO.replace("Não calculável ", "")}</span>
             ) : (

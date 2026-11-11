@@ -67,3 +67,15 @@ test("cobertura: sem Shopee selecionada -> ambos false, independente de TikTok/M
     showShopeeOnly: false, showShopeeMixed: false,
   });
 });
+
+test("B1-05: aviso da selecao mista cita so' os canais selecionados (ML + Shopee nao fala de TikTok)", async () => {
+  const { avisoCoberturaShopee } = await import("../src/lib/pedidos-request-key.ts");
+  const ml = avisoCoberturaShopee({ showTiktok: false, showMl: true, showShopee: true });
+  assert.equal(ml, "Shopee sem cobertura em Pedidos: os números são só de Mercado Livre");
+  assert.ok(!ml!.includes("TikTok"));
+  assert.equal(avisoCoberturaShopee({ showTiktok: true, showMl: false, showShopee: true }), "Shopee sem cobertura em Pedidos: os números são só de TikTok Shop");
+  assert.equal(avisoCoberturaShopee({ showTiktok: true, showMl: true, showShopee: true }), "Shopee sem cobertura em Pedidos: os números são só de TikTok Shop e Mercado Livre");
+  // sem Shopee no filtro, ou so' Shopee (estado vazio proprio): sem aviso
+  assert.equal(avisoCoberturaShopee({ showTiktok: false, showMl: true, showShopee: false }), null);
+  assert.equal(avisoCoberturaShopee({ showTiktok: false, showMl: false, showShopee: true }), null);
+});

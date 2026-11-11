@@ -32,8 +32,8 @@ import {
 } from "@/lib/dre";
 import {
   ESTADO_CENARIO_CHIP,
-  ORIGEM_ROTULO,
   ROTULO_MARGEM_ESTIMADA,
+  chipDaOrigem,
   fmtTaxaPremissa,
   hashCurto,
   linhasEstimadas,
@@ -158,7 +158,7 @@ export function ComparacaoCenarios({ celula, cenario }: { celula: CelulaDRE; cen
           </dd>
           <dd className="text-xs text-ink-muted">% da receita: {textoMargemPct(celula)}</dd>
           <dd>
-            <ClassificacaoChip classificacao={celula.classificacao} />
+            <ClassificacaoChip classificacao={celula.classificacao} fechaEm={celula.fecha_em} previa={celula.previa} />
           </dd>
           <dd className="text-xs text-ink-muted">Só componentes realizados (oficiais). {m.faltam.length ? "Faltam custos sem fonte." : ""}</dd>
         </div>
@@ -210,6 +210,7 @@ function LinhaTabela({ x }: { x: LinhaEstimadaExibida }) {
   const l = x.l;
   const pct = fmtPctDre(l.pct_receita ?? null);
   const taxa = fmtTaxaPremissa(l.percentual);
+  const origem = chipDaOrigem(l.origem);
   return (
     <tr className={`align-top ${x.subtotal ? "bg-raised/60" : ""}`}>
       <th
@@ -218,9 +219,9 @@ function LinhaTabela({ x }: { x: LinhaEstimadaExibida }) {
       >
         <span className={`block ${x.subtotal ? "font-semibold text-ink" : x.recuo ? "text-ink-muted" : "text-ink"}`}>{l.rotulo}</span>
         {/* Mobile: origem e taxa moram aqui (as colunas somem abaixo de sm). */}
-        <span className="mt-0.5 block text-xs text-ink-faint sm:hidden">
-          {ORIGEM_ROTULO[l.origem] ?? l.origem}
-          {taxa && <> · premissa {taxa}</>}
+        <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-ink-faint sm:hidden">
+          <Chip tom={origem.tom}>{origem.rotulo}</Chip>
+          {taxa && <span>premissa {taxa}</span>}
         </span>
         {(x.foraDaSoma || (x.chip && l.valor !== null)) && (
           <span className="mt-1 flex flex-wrap items-center gap-1.5">
@@ -235,7 +236,7 @@ function LinhaTabela({ x }: { x: LinhaEstimadaExibida }) {
         )}
       </th>
       <td className="hidden whitespace-nowrap px-3 py-2.5 text-xs text-ink-muted sm:table-cell sm:px-4">
-        {ORIGEM_ROTULO[l.origem] ?? l.origem}
+        <Chip tom={origem.tom}>{origem.rotulo}</Chip>
       </td>
       <td className="hidden whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-ink-muted sm:table-cell sm:px-4">
         {taxa ?? ""}
@@ -347,6 +348,13 @@ export function DreVerticalEstimada({
                   {c.componentes_ausentes
                     .map((a) => (c.linhas.find((l) => l.linha === a.linha)?.rotulo ?? a.linha).replace(/^\([-=]\)\s*/, ""))
                     .join(", ")}
+                </span>
+              )}
+              {typeof c.celulas_sem_premissa === "number" && c.celulas_sem_premissa > 0 && (
+                <span className="mt-0.5 block text-xs font-normal text-ink-muted">
+                  {c.celulas_sem_premissa === 1
+                    ? "1 célula sem premissa publicada"
+                    : `${c.celulas_sem_premissa} células sem premissa publicada`}
                 </span>
               )}
             </th>

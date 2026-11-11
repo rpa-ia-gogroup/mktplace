@@ -227,11 +227,11 @@ def test_mes_em_andamento_e_previa_e_nunca_calculavel():
     cen = cel["cenario_premissas"]
     assert cen["previa"] is True and cen["estado"] == DP.PARCIAL and cen["competencia_premissas"] == "2026-10"
     assert any("previa" in m for m in cen["motivos"])
-    assert cel["classificacao"] == dre.NAO_CALCULAVEL     # a DRE realizada continua imatura
+    assert cel["classificacao"] == dre.PREVIA     # a DRE realizada continua imatura (T-0090: PREVIA)
 
 
 def test_outubro_em_andamento_com_receita_cmv_e_taxas_tem_margem_estimada_previa():
-    """Antes da maturidade M+2: cenario parcial/previa COM valor; a DRE realizada segue sem margem."""
+    """Antes da maturidade M+2: cenario parcial/previa COM valor; a DRE realizada e' PREVIA com margem (T-0090)."""
     hoje = date(2026, 10, 16)
     body = montar([ml(mes=OUT, gmv=500_000.0) | {"dias": 16}],
                   premissas=prem(OUT, "kokeshi", padrao=0.01),
@@ -243,14 +243,14 @@ def test_outubro_em_andamento_com_receita_cmv_e_taxas_tem_margem_estimada_previa
     # 500.000 - 16 x 1% x 500.000 - CMV 300.000 - Ads 40.000 - taxas 150.000
     assert cen["margem_contribuicao_estimada"] == 500_000 - 16 * 5_000 - 300_000 - 40_000 - 150_000
     assert cen["margem_contribuicao_estimada_pct"] is not None
-    # A DRE conhecida obedece integralmente a M+2: imatura, sem margem.
-    assert cel["classificacao"] == dre.NAO_CALCULAVEL
-    assert cel["margem_contribuicao_conhecida"]["valor"] is None
+    # T-0090: a DRE conhecida imatura e' PREVIA, com margem e data de fechamento.
+    assert cel["classificacao"] == dre.PREVIA and cel["fecha_em"] == "2026-12-31"
+    assert cel["margem_contribuicao_conhecida"]["valor"] is not None
     assert any("mes imaturo" in m for m in cel["motivos_classificacao"])
     # A maturidade nao apaga o valor nos agregados.
     for recorte in (body["total"], body["por_canal"][0], body["por_marca"][0]):
         assert recorte["cenario_premissas"]["margem_contribuicao_estimada"] == cen["margem_contribuicao_estimada"]
-        assert recorte["margem_contribuicao_conhecida"]["valor"] is None
+        assert recorte["margem_contribuicao_conhecida"]["valor"] == cel["margem_contribuicao_conhecida"]["valor"]
 
 
 def test_competencia_encerrada_mas_imatura_continua_parcial():
@@ -260,12 +260,16 @@ def test_competencia_encerrada_mas_imatura_continua_parcial():
     assert cen["previa"] is False and cen["competencia_madura"] is False and cen["estado"] == DP.PARCIAL
 
 
-def test_cmv_ausente_torna_nao_calculavel_sem_fabricar_zero():
+def test_cmv_ausente_deixa_o_cenario_parcial_sem_fabricar_zero():
     body = montar([ml()], premissas=prem(JUL, "kokeshi"), insumos=[])
     cen = body["celulas_base"][0]["cenario_premissas"]
-    assert cen["estado"] == DP.NAO_CALCULAVEL and cen["margem_contribuicao_estimada"] is None
-    assert L(cen, "cmv")["valor"] is None
-    assert L(cen, "icms")["valor"] == 10_000.0       # a premissa continua visivel, a margem nao
+    # T-0090: CMV sem valor e' linha ausente; o cenario segue com numero, parcial.
+    assert cen["estado"] == DP.PARCIAL
+    assert L(cen, "cmv")["valor"] is None and L(cen, "cmv")["origem"] == "indisponivel"
+    assert {"linha": "cmv", "motivo": "snapshot_ausente"} in cen["componentes_ausentes"]
+    assert L(cen, "icms")["valor"] == 10_000.0
+    # sem CMV na soma: 16 premissas a 1% + Ads + taxas
+    assert cen["margem_contribuicao_estimada"] == 1_000_000 - 16 * 10_000 - 40_000 - 150_000
 
 
 def test_lote_de_premissa_invalido_torna_nao_calculavel():
@@ -275,11 +279,16 @@ def test_lote_de_premissa_invalido_torna_nao_calculavel():
     assert body["fontes"]["premissas_dre"]["estado"] == "lote_invalido"
 
 
-def test_recorte_que_mistura_celula_sem_premissa_nao_e_calculavel():
+def test_recorte_que_mistura_celula_sem_premissa_e_parcial_so_com_as_celulas_com_premissa():
     body = montar([ml("kokeshi"), ml("barbours", 500_000.0)], premissas=prem(JUL, "kokeshi"),
                   insumos=ins_ml("kokeshi") + ins_ml("barbours", 500_000.0))
     total = body["total"]["cenario_premissas"]
-    assert total["estado"] == DP.NAO_CALCULAVEL and total["margem_contribuicao_estimada"] is None
+    kok = next(c for c in body["celulas_base"] if c["marca"] == "kokeshi")["cenario_premissas"]
+    # T-0090: soma so' a kokeshi; barbours fica fora (premissa nunca estendida).
+    assert total["estado"] == DP.PARCIAL and total["celulas_sem_premissa"] == 1
+    assert total["margem_contribuicao_estimada"] == kok["margem_contribuicao_estimada"]
+    assert total["receita_base"] == 1_000_000.0
+    assert "1 célula(s) sem premissa publicada ficaram fora do cenário (premissa nunca é estendida)" in total["motivos"]
     barbours = next(c for c in body["por_marca"] if c["marca"] == "barbours")
     assert barbours["cenario_premissas"] is None
 

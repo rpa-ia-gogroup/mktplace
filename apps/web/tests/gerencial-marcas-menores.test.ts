@@ -192,6 +192,69 @@ test("pagina: so' menores no filtro cai na Gerencial do Bling, sem as fontes do 
   assert.doesNotMatch(so, /useGerencialSources/);
 });
 
+// ---- C1-03: canal sem base no anterior (Shopee no Bling so' desde 22/10) ----
+import { motivoSemBaseDoRecorte } from "../src/lib/gerencial/marcas-menores-gerencial.ts";
+import { linhasDeMarcasMenores } from "../src/lib/gerencial/marcas-menores-adaptador.ts";
+
+const C103 = {
+  disponivel: true,
+  marcas: [
+    comPedidos("yenzah", "Yenzah", { SHOPEE: 100, TIKTOK: 50 }, { SHOPEE: 4, TIKTOK: 2 }, { TIKTOK: 40 }, { TIKTOK: 2 }),
+    comPedidos("aua", "Auá", { TIKTOK: 30 }, { TIKTOK: 1 }, { TIKTOK: 30 }, { TIKTOK: 1 }),
+  ],
+} as never;
+const SEM_SHOPEE = "sem dado de Shopee no período anterior";
+
+test("C1-03 Gerencial com grandes: Shopee sem base no anterior tira o percentual das menores, com motivo", () => {
+  const m = ok(C103);
+  assert.equal(m.marcas[0].anterior, null);
+  assert.equal(m.marcas[0].motivo, SEM_SHOPEE);
+  assert.equal(m.marcas[1].motivo, null); // Auá: TikTok nos dois periodos
+  assert.equal(m.anterior, null);
+  assert.equal(m.motivo, SEM_SHOPEE);
+  assert.deepEqual(m.anteriorPorCanal, { tiktok: 70 }); // o canal sem base sai; o TikTok segue comparavel
+  const topo = gmvComMenores({ gmv: 1000, prevGmv: 900, momPct: 11.1 }, m, true);
+  assert.deepEqual([topo.gmv, topo.prevGmv, topo.momPct, topo.variacaoInclui], [1180, null, 11.1, false]);
+  assert.deepEqual(canalComMenores("shopee", 400, 300, 33, m, true), { gmv: 500, variacao: 33 }); // sem as menores
+  assert.ok(Math.abs(canalComMenores("tiktok", 100, 90, 7, m, true).variacao! - ((180 - 160) / 160) * 100) < 1e-9);
+  assert.match(notaMenores(m, topo.variacaoInclui, false, (v) => `R$ ${v}`)!, /A variação não as inclui \(sem dado de Shopee no período anterior\)/);
+  const [y] = linhasDeMarcasMenores(m.marcas, true);
+  assert.equal(y.mom_pct, null); // nada de +x% somando a Shopee inteira como crescimento
+  assert.equal(y.tiktok_gmv_prev, 40);
+  // so' TikTok no filtro: canais iguais nos dois periodos, comparacao normal
+  const tk = ok(C103, ["tiktok"]);
+  assert.deepEqual([tk.motivo, tk.anterior, tk.marcas[0].anterior], [null, 70, 40]);
+});
+
+test("C1-03 Gerencial so' menores: sem percentual no consolidado, motivo para a tela; caso normal intacto", () => {
+  const f = filtrarMarcasMenores(C103, ["yenzah", "aua"], TODOS);
+  assert.equal(f.consolidado?.total_anterior, null);
+  assert.deepEqual(f.consolidado?.por_plataforma_anterior, { TIKTOK: 70 });
+  const ov = overviewDeMenores(f, TODOS)!;
+  assert.equal(ov.gmv, 180);
+  assert.equal(ov.gmv_mom_pct, null);
+  assert.equal(ov.prev_orders, null);
+  assert.equal(motivoSemBaseDoRecorte(f), SEM_SHOPEE);
+  // so' TikTok: comparacao volta
+  const tk = filtrarMarcasMenores(C103, ["yenzah", "aua"], ["tiktok"]);
+  assert.equal(motivoSemBaseDoRecorte(tk), null);
+  assert.ok(Math.abs(overviewDeMenores(tk, ["tiktok"])!.gmv_mom_pct! - ((80 - 70) / 70) * 100) < 1e-9);
+  // normal (Shopee e TikTok nos dois periodos): nada muda
+  const normal = filtrarMarcasMenores(R, ["yenzah", "aua"], TODOS);
+  assert.equal(motivoSemBaseDoRecorte(normal), null);
+  assert.deepEqual(normal.consolidado?.por_plataforma_anterior, { SHOPEE: 110, TIKTOK: 40 });
+  assert.ok(Math.abs(overviewDeMenores(normal, TODOS)!.gmv_mom_pct! - ((180 - 150) / 150) * 100) < 1e-9);
+  const m = ok(R);
+  assert.deepEqual([m.motivo, m.anterior], [null, 150]);
+  assert.ok(Math.abs(linhasDeMarcasMenores(m.marcas, true)[0].mom_pct! - ((150 - 120) / 120) * 100) < 1e-9);
+});
+
+test("C1-03 tela so' menores: '—' com o motivo visivel quando nao ha base", () => {
+  const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
+  assert.match(so, /motivoSemBaseDoRecorte\(f\)/);
+  assert.match(so, /\{ texto: `Variação: — \(\$\{semBase\}\)`, aviso: true \}/);
+});
+
 test("produtos das menores pedem com os mesmos canais e marcas do GMV (Gerencial)", () => {
   const cliente = readFileSync(new URL("../src/lib/api-client.ts", import.meta.url), "utf8");
   assert.match(cliente, /qs\.set\("canais"/);

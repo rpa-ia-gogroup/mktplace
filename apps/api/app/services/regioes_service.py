@@ -15,6 +15,9 @@ Regras de negocio fixadas no Gate 6A/6B, nao redescobrir aqui:
   armazenados prontos. Denominador 0 vira `None` (N/A), nunca 0%.
 - seller_shipping_cost e NULL para Shopee (sem campo equivalente na fonte);
   SUM() em SQL ja ignora NULL, entao "quando aplicavel" sai de graca.
+- `coverage_level` = pior(nivel de UF, frescor por canal) — canal com fonte
+  `defasada`/`sem_carga` nunca deixa sair "ok" (T-0088). O nivel so' de UF
+  fica em `uf_coverage_level`. Regra em `coverage_level_frescor`.
 """
 from __future__ import annotations
 
@@ -236,6 +239,52 @@ def build_cobertura_canais(
     }
 
 
+# ---------------------------------------------------------------------------
+# Nivel de cobertura exposto ao cliente (T-0088)
+#
+# `coverage_level` era so' o preenchimento de UF (`uf_fill_pct`). Com o ML
+# parado em 25/10 e a Shopee em 24/08, out/2026 saia "ok" (100% dos pedidos
+# CARREGADOS tinham UF) enquanto os dois canais estavam defasados. Agora:
+#
+#   coverage_level = pior(nivel de UF, nivel de frescor por canal)
+#
+# Nivel de frescor (so' canais com fonte regional; TikTok fica de fora, ja'
+# esta em `channels_sem_cobertura_regional`):
+#   - nenhum canal `defasada`/`sem_carga`        -> "ok" (nao rebaixa nada);
+#   - algum, mas nao todos                       -> "partial";
+#   - todos os canais com fonte                  -> "low".
+# `atraso_leve` (D-2) NAO rebaixa: e' horario de carga, ja' sinalizado em
+# `canais_com_atraso`. O nivel de UF puro continua em `uf_coverage_level`.
+# ---------------------------------------------------------------------------
+STATUS_DEFASADO = ("defasada", "sem_carga")
+_ORDEM_NIVEL = {"ok": 0, "partial": 1, "low": 2}
+
+
+def coverage_level_frescor(cobertura_por_canal: list[dict]) -> str:
+    """Nivel de frescor dos canais com fonte regional: "ok" se nenhum esta
+    `defasada`/`sem_carga`, "low" se todos estao, "partial" no meio. Sem canal
+    com fonte (so' TikTok) -> "ok": nao ha frescor a cobrar."""
+    com_fonte = [c for c in cobertura_por_canal if c["status"] != "sem_cobertura"]
+    defasados = [c for c in com_fonte if c["status"] in STATUS_DEFASADO]
+    if not defasados:
+        return "ok"
+    if len(defasados) == len(com_fonte):
+        return "low"
+    return "partial"
+
+
+def pior_coverage_level(uf_level: str, frescor_level: str) -> str:
+    """O pior entre o nivel de UF e o de frescor. Frescor "ok" devolve o nivel
+    de UF intacto (inclusive "not_applicable"). Sem pedido elegivel no periodo
+    (UF "not_applicable") e canal defasado, vale o frescor: a falta de pedido
+    ai' e' falta de carga, nao "nao se aplica"."""
+    if frescor_level == "ok":
+        return uf_level
+    if uf_level not in _ORDEM_NIVEL:
+        return frescor_level
+    return max(uf_level, frescor_level, key=_ORDEM_NIVEL.__getitem__)
+
+
 def _cobertura(
     db: Session, mkt_ids: list[int], brand_keys: list[str] | None, period: EffectivePeriod,
     hoje: date | None,
@@ -297,9 +346,10 @@ def get_summary(
     cost_covered = int(_f(row.get("shipping_cost_covered_orders")))
     cost_eligible = int(_f(row.get("shipping_cost_eligible_orders")))
     uf_fill_pct = _pct(uf_known, uf_eligible)
-    level = coverage_level(uf_fill_pct)
+    uf_level = coverage_level(uf_fill_pct)
 
     cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
+    level = pior_coverage_level(uf_level, coverage_level_frescor(cob["cobertura_por_canal"]))
     return {
         "gmv": round(_f(row.get("gmv")), 2),
         "orders": int(_f(row.get("orders"))),
@@ -314,6 +364,7 @@ def get_summary(
         "seller_shipping_cost": _round_or_none(row.get("seller_shipping_cost")),
         "coverage_level": level,
         "coverage_warning": coverage_warning(level),
+        "uf_coverage_level": uf_level,
         "date_from": period.start,
         "date_to": period.end,
         "filters": {"channels": channels, "brands": brand_keys},
@@ -356,6 +407,9 @@ def get_by_uf(
         ORDER BY f.uf
     """)
     rows = db.execute(sql, params).mappings().all()
+    cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
+    # Toda UF soma os mesmos canais pedidos: o frescor e' o do pedido inteiro.
+    frescor = coverage_level_frescor(cob["cobertura_por_canal"])
 
     data = []
     for r in rows:
@@ -364,7 +418,8 @@ def get_by_uf(
         cost_covered = int(_f(r["shipping_cost_covered_orders"]))
         cost_eligible = int(_f(r["shipping_cost_eligible_orders"]))
         uf_fill_pct = _pct(uf_known, uf_eligible)
-        level = coverage_level(uf_fill_pct)
+        uf_level = coverage_level(uf_fill_pct)
+        level = pior_coverage_level(uf_level, frescor)
         data.append({
             "uf": r["uf"],
             "gmv": round(_f(r["gmv"]), 2),
@@ -381,9 +436,9 @@ def get_by_uf(
             "shipping_cost_coverage_pct": _pct(cost_covered, cost_eligible),
             "coverage_level": level,
             "coverage_warning": coverage_warning(level),
+            "uf_coverage_level": uf_level,
         })
 
-    cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
     return {
         "data": data,
         "date_from": period.start,
@@ -425,6 +480,7 @@ def get_by_brand(
         ORDER BY l.brand_key, f.marketplace_id
     """)
     rows = db.execute(sql, params).mappings().all()
+    cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
 
     data = []
     for r in rows:
@@ -433,7 +489,12 @@ def get_by_brand(
         cost_covered = int(_f(r["shipping_cost_covered_orders"]))
         cost_eligible = int(_f(r["shipping_cost_eligible_orders"]))
         uf_fill_pct = _pct(uf_known, uf_eligible)
-        level = coverage_level(uf_fill_pct)
+        uf_level = coverage_level(uf_fill_pct)
+        # A linha e' de UM canal: so' o frescor dele conta (o `dados_ate` e' o
+        # do canal no filtro de marcas pedido, nao o da marca da linha).
+        frescor = coverage_level_frescor(
+            [c for c in cob["cobertura_por_canal"] if c["marketplace_id"] == r["marketplace_id"]])
+        level = pior_coverage_level(uf_level, frescor)
         brand = r["brand_key"]
         data.append({
             "brand": brand,
@@ -451,9 +512,9 @@ def get_by_brand(
             "shipping_cost_coverage_pct": _pct(cost_covered, cost_eligible),
             "coverage_level": level,
             "coverage_warning": coverage_warning(level),
+            "uf_coverage_level": uf_level,
         })
 
-    cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
     return {
         "data": data,
         "date_from": period.start,

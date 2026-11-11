@@ -66,6 +66,6 @@ test("Gerencial: CX (so' Shopee) recebe os canais do filtro e mostra o aviso com
 test("Pedidos: o aviso fixo 'Shopee fora: só TikTok Shop e Mercado Livre' saiu; usa o helper", () => {
   const src = fonte("app/pedidos/page.tsx");
   assert.doesNotMatch(src, /Shopee fora: só TikTok Shop e Mercado Livre/);
-  assert.match(src, /showShopeeMixed && <AvisoCanaisSemDado selecao=\{filters\.channels\} cobertos=\{PEDIDOS_CANAIS_COBERTOS\}/);
-  assert.match(src, /PEDIDOS_CANAIS_COBERTOS: readonly Marketplace\[\] = \["tiktok", "ml"\]/);
+  // T-0095 (#386) ja' corrigiu o B1-05 com avisoCoberturaShopee (texto a partir da selecao).
+  assert.match(src, /avisoCoberturaShopee\(/);
 });

@@ -40,7 +40,16 @@ import type { CenarioPremissas, ResumoPremissas } from "./dre-estimada";
 // Tipos — espelham `apps/api/app/schemas/dre.py`
 // ---------------------------------------------------------------------------
 
-export type Classificacao = "COMPLETA" | "PARCIAL" | "NAO_CALCULAVEL";
+/**
+ * T-0090: `PREVIA` = competencia imatura (fecha depois de M+2), COM valores.
+ * `NAO_CALCULAVEL` passa a significar so' "sem receita". Uma API anterior a
+ * T-0090 ainda manda `NAO_CALCULAVEL` para mes imaturo e custo parcial — a tela
+ * continua lendo os dois contratos.
+ */
+export type Classificacao = "COMPLETA" | "PARCIAL" | "PREVIA" | "NAO_CALCULAVEL";
+
+/** T-0090 — de onde veio o valor do componente na DRE realizada. */
+export type OrigemComponente = "realizado" | "parcial" | "extrapolado" | "indisponivel" | "nao_aplicavel";
 
 export type StatusComponente =
   | "disponivel"
@@ -83,6 +92,20 @@ export interface Componente {
    */
   cobertura?: number | null;
   cmv_pct_receita_coberta?: number | null;
+  /**
+   * T-0090 — opcionais (`undefined` = API anterior; a tela cai na regra antiga).
+   * `origem`: realizado | parcial | indisponivel | nao_aplicavel;
+   * `entra_na_margem`: o backend diz se o custo entrou na margem conhecida;
+   * `cobertura_rotulo`: "escrow em 93,0% dos pedidos", "NF cobre 25% do GMV".
+   */
+  origem?: OrigemComponente | null;
+  entra_na_margem?: boolean | null;
+  cobertura_rotulo?: string | null;
+  /**
+   * T-0090 (11/11), so' CMV: custo medido cru. Com `origem = extrapolado`,
+   * `valor` e' o estendido a' receita inteira e este e' o medido.
+   */
+  valor_medido?: number | null;
 }
 
 export interface Margem {
@@ -92,6 +115,10 @@ export interface Margem {
   formula: string | null;
   componentes_usados: string[];
   faltam: string[];
+  /** T-0090 — custos que entraram na margem com origem parcial (opcional). */
+  componentes_parciais?: string[];
+  /** T-0090 — aviso do backend sobre a margem (opcional). */
+  aviso?: string | null;
 }
 
 export interface CelulaDRE {
@@ -103,12 +130,17 @@ export interface CelulaDRE {
   marca_label?: string | null;
   celulas?: number | null;
   classificacao: Classificacao;
+  /** T-0090 — data (YYYY-MM-DD) em que a previa fecha. Opcional. */
+  fecha_em?: string | null;
+  /** T-0090 — competencia imatura. Opcional. */
+  previa?: boolean | null;
   motivos_classificacao: string[];
   avisos_qualidade: string[];
   componentes: Record<NomeComponente, Componente>;
   componentes_disponiveis: string[];
   componentes_ausentes: { componente: string; status: StatusComponente; motivo: string | null }[];
-  completude: { usados: number; aplicaveis: number; texto: string };
+  /** `texto` pode vir "N de M custos (K parciais)"; `parciais` e' opcional (T-0090). */
+  completude: { usados: number; aplicaveis: number; texto: string; parciais?: number };
   margem_contribuicao_conhecida: Margem;
   data_maxima: {
     receita_ultimo_dia?: string | null;
@@ -210,8 +242,74 @@ export const STATUS_CHIP: Record<StatusComponente, { rotulo: string; tom: Tom } 
 export const CLASSIFICACAO_CHIP: Record<Classificacao, { rotulo: string; tom: Tom }> = {
   COMPLETA: { rotulo: "Completa", tom: "bom" },
   PARCIAL: { rotulo: "Parcial", tom: "atencao" },
+  PREVIA: { rotulo: "Prévia", tom: "atencao" },
   NAO_CALCULAVEL: { rotulo: "Não calculável", tom: "critico" },
 };
+
+/**
+ * T-0090 — selo de origem do componente na DRE realizada. `nao_aplicavel` nao
+ * tem selo: o status ja' diz "N/A".
+ */
+export const ORIGEM_CHIP: Record<OrigemComponente, { rotulo: string; tom: Tom } | null> = {
+  realizado: { rotulo: "Realizado", tom: "bom" },
+  parcial: { rotulo: "Parcial", tom: "atencao" },
+  extrapolado: { rotulo: "Extrapolado", tom: "atencao" },
+  indisponivel: { rotulo: "Indisponível", tom: "ausente" },
+  nao_aplicavel: null,
+};
+
+// ---------------------------------------------------------------------------
+// T-0090 — previa, origem e aviso da margem (campos opcionais)
+// ---------------------------------------------------------------------------
+
+/** Celula de competencia imatura: classificacao `PREVIA` ou `previa: true`. */
+export function ehPrevia(c: Pick<CelulaDRE, "classificacao" | "previa">): boolean {
+  return c.classificacao === "PREVIA" || c.previa === true;
+}
+
+/**
+ * Texto do selo de previa: "Prévia · fecha em 31/12/2026". Sem `fecha_em`
+ * valido, so' "Prévia". `null` = nao e' previa (inclusive API anterior).
+ */
+export function textoPrevia(c: Pick<CelulaDRE, "classificacao" | "previa" | "fecha_em">): string | null {
+  if (!ehPrevia(c)) return null;
+  const f = c.fecha_em;
+  return typeof f === "string" && /^\d{4}-\d{2}-\d{2}$/.test(f) ? `Prévia · fecha em ${fmtInstanteBrt(f)}` : "Prévia";
+}
+
+/** Selo de origem do componente. `null` = API anterior ou origem sem selo. */
+export function seloOrigem(comp: Componente): { rotulo: string; tom: Tom } | null {
+  const o = comp.origem;
+  if (typeof o !== "string" || !(o in ORIGEM_CHIP)) return null;
+  return ORIGEM_CHIP[o as OrigemComponente];
+}
+
+/** Rotulo de cobertura do componente parcial ("escrow em 93,0% dos pedidos"). */
+export function coberturaRotulo(comp: Componente): string | null {
+  const r = comp.cobertura_rotulo;
+  return typeof r === "string" && r.trim() ? r : null;
+}
+
+export interface AvisoMargem {
+  /** Custos parciais na margem, por nome curto ("CMV", "frete"). */
+  parciais: string[];
+  /** Aviso do backend, como veio. */
+  aviso: string | null;
+}
+
+/**
+ * Margem que inclui custo parcial precisa DIZER isso. `null` = nada a avisar
+ * (inclusive API anterior, sem os campos).
+ */
+export function avisoMargem(c: CelulaDRE): AvisoMargem | null {
+  const m = c.margem_contribuicao_conhecida;
+  const parciais = Array.isArray(m.componentes_parciais)
+    ? m.componentes_parciais.filter((n): n is string => typeof n === "string").map((n) => NOME_CURTO[n] ?? n)
+    : [];
+  const aviso = typeof m.aviso === "string" && m.aviso.trim() ? m.aviso : null;
+  if (!parciais.length && !aviso) return null;
+  return { parciais, aviso };
+}
 
 // ---------------------------------------------------------------------------
 // Filtros <-> URL <-> API
@@ -336,8 +434,8 @@ export function mesCorrenteBrt(agora: Date): { ano: number; mes: number } {
 
 /**
  * Meses oferecidos no seletor: do mes corrente em Brasilia para tras. Mes
- * imaturo continua selecionavel — a API responde `NAO_CALCULAVEL` com o motivo,
- * que e' informacao, nao erro. Um `mes` vindo da URL fora da janela entra na
+ * imaturo continua selecionavel — a API responde `PREVIA` com os numeros e a
+ * data em que fecha (antes da T-0090, `NAO_CALCULAVEL` com o motivo). Um `mes` vindo da URL fora da janela entra na
  * lista para o seletor nao mentir sobre o que esta aplicado.
  */
 export function mesesSelecionaveis(agora: Date, quantidade = 12, extra: string | null = null): string[] {
@@ -454,7 +552,7 @@ export function falhaDePayload(problema: string): FalhaDre {
 // Validacao estrutural minima da resposta (sem dependencia)
 // ---------------------------------------------------------------------------
 
-const CLASSIFICACOES: readonly string[] = ["COMPLETA", "PARCIAL", "NAO_CALCULAVEL"];
+const CLASSIFICACOES: readonly string[] = ["COMPLETA", "PARCIAL", "PREVIA", "NAO_CALCULAVEL"];
 const STATUS_VALIDOS: readonly string[] = [
   "disponivel", "parcial", "indisponivel", "snapshot_ausente", "snapshot_vencido",
   "nao_reconciliado", "nao_confirmado", "provisorio", "sinal_inesperado", "nao_aplicavel",
@@ -631,6 +729,17 @@ export interface LinhaDre {
   custo: boolean;
   componente: Componente;
   chip: { rotulo: string; tom: Tom } | null;
+  /**
+   * T-0090 — selo de origem (realizado / parcial / indisponivel). `null` com
+   * API anterior, e tambem quando repetiria o selo de status da coluna Valor.
+   */
+  origem: { rotulo: string; tom: Tom } | null;
+  /** T-0090 — rotulo de cobertura, exibido ao lado do selo de origem. */
+  cobertura: string | null;
+  /** T-0090 — CMV extrapolado: "medido: R$ …" (o custo cru). `null` nos demais. */
+  medido: string | null;
+  /** Selo de status ao lado do rotulo (so' com valor e se nao repete a origem). */
+  mostrarStatus: boolean;
   /** Texto para `valor === null`: status + motivo. Nunca "R$ 0". */
   ausencia: string | null;
 }
@@ -638,8 +747,9 @@ export interface LinhaDre {
 /**
  * Celula -> linhas da DRE vertical, na ordem do contrato.
  *
- * `naMargem` vem de `margem.componentes_usados` (o backend decide o que
- * entrou). Afiliado NUNCA esta na margem: ja' esta dentro de taxas.
+ * `naMargem` vem de `entra_na_margem` quando a API o manda (T-0090); senao,
+ * de `margem.componentes_usados` (o backend decide o que entrou). Afiliado
+ * NUNCA esta na margem: ja' esta dentro de taxas.
  */
 export function linhasDre(c: CelulaDRE): LinhaDre[] {
   const usados = new Set(c.margem_contribuicao_conhecida.componentes_usados);
@@ -647,14 +757,26 @@ export function linhasDre(c: CelulaDRE): LinhaDre[] {
     const comp = c.componentes[nome];
     const chip = STATUS_CHIP[comp.status];
     const afiliado = nome === "afiliados";
+    const entra = typeof comp.entra_na_margem === "boolean" ? comp.entra_na_margem : usados.has(nome);
+    // Sem valor, a coluna Valor ja' mostra o selo de status: a origem so'
+    // aparece se disser algo diferente ("Indisponível" duas vezes e' ruido).
+    const selo = seloOrigem(comp);
+    const origem = selo && comp.valor === null && chip?.rotulo === selo.rotulo ? null : selo;
     return {
       chave: nome,
       rotulo: ROTULO_COMPONENTE[nome],
       recuo: afiliado,
-      naMargem: !afiliado && nome !== "receita" && comp.somavel && usados.has(nome),
+      naMargem: !afiliado && nome !== "receita" && comp.somavel && entra,
       custo: nome !== "receita",
       componente: comp,
       chip,
+      origem,
+      cobertura: coberturaRotulo(comp),
+      medido:
+        comp.origem === "extrapolado" && typeof comp.valor_medido === "number" && Number.isFinite(comp.valor_medido)
+          ? `medido: ${fmtReais(comp.valor_medido)}`
+          : null,
+      mostrarStatus: comp.valor !== null && chip !== null && chip.rotulo !== origem?.rotulo,
       ausencia:
         comp.valor === null
           ? `${chip?.rotulo ?? "Sem valor"}${comp.motivo ? ` — ${comp.motivo}` : ""}`
@@ -689,8 +811,13 @@ export interface ResumoCoberturaCmv {
   cobertura: string | null;
   /** "24,0%" — CMV / receita com custo. `null` sem denominador. */
   pctCoberto: string | null;
-  /** CMV `parcial`: cobertura abaixo do minimo, fora da margem. */
+  /** CMV `parcial`: cobertura abaixo do minimo. */
   parcial: boolean;
+  /**
+   * T-0090 — o backend diz que o CMV parcial ENTROU na margem
+   * (`entra_na_margem`). `false` com API anterior: parcial ficava fora.
+   */
+  naMargem: boolean;
   /** Frase curta para o chip. */
   texto: string;
 }
@@ -709,7 +836,13 @@ export function resumoCoberturaCmv(c: CelulaDRE): ResumoCoberturaCmv | null {
     pctCoberto ? `CMV ${pctCoberto} s/ receita com custo` : "CMV % s/ receita com custo indisponível",
     cobertura ? `cobertura ${cobertura}` : "cobertura não publicada",
   ];
-  return { cobertura, pctCoberto, parcial: cmv.status === "parcial", texto: partes.join(" · ") };
+  return {
+    cobertura,
+    pctCoberto,
+    parcial: cmv.status === "parcial",
+    naMargem: cmv.entra_na_margem === true,
+    texto: partes.join(" · "),
+  };
 }
 
 /** Custos ausentes, por nome curto, em ordem do contrato. Afiliado nao e' custo. */
@@ -834,27 +967,18 @@ export function rankingDeMargem(celulas: CelulaDRE[]): ItemRanking[] {
 // Agregado x celulas
 // ---------------------------------------------------------------------------
 
-/**
- * Canais calculaveis escondidos por um agregado NAO_CALCULAVEL.
- *
- * A classificacao do total e' a PIOR entre as celulas: com a Shopee no
- * filtro, o total sai nao calculavel mesmo com ML e TikTok calculaveis. A
- * tela nomeia esses canais e oferece filtrar so' por eles — o agregado deles
- * a API calcula de verdade, sem soma feita aqui.
+/*
+ * T-0090: saiu `canaisCalculaveisOcultos` (e o botao "Ver só <canais>"). Ele
+ * so' existia para um total NAO_CALCULAVEL com canais calculaveis — e desde a
+ * T-0090 NAO_CALCULAVEL significa "sem receita": se o total nao tem receita,
+ * nenhum canal tem, e o atalho nunca teria o que oferecer.
  */
-export function canaisCalculaveisOcultos(resp: DreResponse): Marketplace[] {
-  if (!resp.total || resp.total.classificacao !== "NAO_CALCULAVEL") return [];
-  const ok = resp.por_canal
-    .filter((c) => c.classificacao !== "NAO_CALCULAVEL" && c.canal)
-    .map((c) => c.canal as Marketplace);
-  if (!ok.length || ok.length === resp.por_canal.length) return [];
-  return canonicalizeSelection(ok);
-}
 
 /**
  * Canais que IMPEDEM o agregado: os nao calculaveis de `por_canal`, so'
  * quando o total e' nao calculavel. E' leitura do que a API ja' classificou —
- * nenhuma regra nova.
+ * nenhuma regra nova. Com a API da T-0090 isso so' acontece sem receita; com
+ * uma API anterior (deploy fora de ordem) ainda nomeia o canal que bloqueia.
  */
 export function canaisBloqueadores(resp: DreResponse): string[] {
   if (!resp.total || resp.total.classificacao !== "NAO_CALCULAVEL") return [];
@@ -900,6 +1024,33 @@ export function textoMargem(c: CelulaDRE): string {
 export function textoMargemPct(c: CelulaDRE): string {
   if (semMargem(c)) return "Não calculável";
   return fmtPctDre(c.margem_contribuicao_conhecida.pct_receita) ?? "Não calculável";
+}
+
+export const ROTULO_MARGEM_ESTIMADA_PREVIA = "Margem de contribuição estimada";
+
+/**
+ * T-0090 (supervisor, delegada pelo Mario) — qual margem e' o DESTAQUE.
+ *
+ * Na PREVIA com cenario estimado (premissa publicada e margem estimada com
+ * numero), a ESTIMADA e' o numero principal: a conhecida, sem impostos,
+ * devolucoes e parte do CMV, vira detalhe secundario. Mes maduro
+ * (COMPLETA/PARCIAL) e PREVIA sem cenario: o destaque continua a conhecida.
+ */
+export type MargemPrincipal =
+  | { tipo: "conhecida" }
+  | { tipo: "estimada"; rotulo: string; valor: string; pct: string; secundaria: string };
+
+export function margemPrincipal(c: CelulaDRE): MargemPrincipal {
+  const cen = c.cenario_premissas;
+  const v = cen?.margem_contribuicao_estimada;
+  if (!ehPrevia(c) || !cen || typeof v !== "number" || !Number.isFinite(v)) return { tipo: "conhecida" };
+  return {
+    tipo: "estimada",
+    rotulo: ROTULO_MARGEM_ESTIMADA_PREVIA,
+    valor: fmtReais(v),
+    pct: fmtPctDre(cen.margem_contribuicao_estimada_pct) ?? "Sem %",
+    secundaria: `Conhecida: ${textoMargemPct(c)} (sem impostos, devoluções e parte do CMV)`,
+  };
 }
 
 /** Share como texto. Sem receita (do recorte ou total): diz por que. */

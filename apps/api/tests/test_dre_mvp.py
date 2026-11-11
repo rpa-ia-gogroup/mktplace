@@ -6,7 +6,8 @@ O que se prova aqui:
   * ausencia != zero em todos os componentes;
   * afiliado TikTok nunca entra na margem (ja esta dentro de taxas);
   * comissao do ML entra uma unica vez;
-  * classificacao COMPLETA / PARCIAL / NAO_CALCULAVEL com motivo objetivo;
+  * classificacao COMPLETA / PARCIAL / PREVIA / NAO_CALCULAVEL com motivo objetivo
+    (T-0090: NAO_CALCULAVEL so' sem receita; mes imaturo e' PREVIA);
   * insumo publicado ausente, vencido ou de lote nao concluido falha fechado,
     sem cair para o `total_fees` congelado do mart (DRE-DATA-BRIDGE-1);
   * a rota nao toca o Data Mart;
@@ -155,13 +156,16 @@ def test_dia_negativo_na_comissao_ml_vira_sinal_inesperado_e_tira_a_margem():
     c = celula("ml", m=mart("ml", fees_neg_n=1))
     assert c["componentes"]["taxas"]["status"] == dre.SINAL_INESPERADO
     assert c["componentes"]["taxas"]["valor"] is None
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    # T-0090: celula com receita sai PARCIAL; a taxa nao entra na margem.
+    assert c["classificacao"] == dre.PARCIAL
+    assert "taxas" in c["margem_contribuicao_conhecida"]["faltam"]
+    assert c["componentes"]["taxas"]["entra_na_margem"] is False
 
 
 def test_repasse_tiktok_positivo_vira_sinal_inesperado():
     c = celula("tiktok", m=mart("tiktok"), r=repasse(fee_and_tax=290_000.0))
     assert c["componentes"]["taxas"]["status"] == dre.SINAL_INESPERADO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
 
 
 def test_ads_negativo_na_shopee_vira_sinal_inesperado():
@@ -177,8 +181,11 @@ def test_comissao_ml_nao_carregada_e_nula_nao_zero():
     c = celula("ml", m=mart("ml", fees=None, fees_n=0))
     tx = c["componentes"]["taxas"]
     assert tx["valor"] is None and tx["status"] == dre.INDISPONIVEL
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
-    assert c["margem_contribuicao_conhecida"]["valor"] is None
+    # T-0090: margem sem a taxa (nunca como se ela fosse zero de proposito: fica em `faltam`).
+    assert c["classificacao"] == dre.PARCIAL
+    m = c["margem_contribuicao_conhecida"]
+    assert m["valor"] == pytest.approx(1_000_000 - 40_000 - 130_000 - 300_000)
+    assert "taxas" in m["faltam"] and "taxas" not in m["componentes_usados"]
 
 
 def test_comissao_ml_medida_zero_e_zero_disponivel():
@@ -187,10 +194,13 @@ def test_comissao_ml_medida_zero_e_zero_disponivel():
     assert tx["valor"] == 0.0 and tx["status"] == dre.DISPONIVEL
 
 
-def test_comissao_ml_em_parte_dos_dias_e_parcial_e_fica_fora_da_margem():
+def test_comissao_ml_em_parte_dos_dias_e_parcial_e_entra_como_parcial():
     c = celula("ml", m=mart("ml", fees_n=5))
-    assert c["componentes"]["taxas"]["status"] == dre.COBERTURA_PARCIAL
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    tx = c["componentes"]["taxas"]
+    assert tx["status"] == dre.COBERTURA_PARCIAL
+    assert (tx["origem"], tx["entra_na_margem"], tx["cobertura_rotulo"]) == ("parcial", True, "presente em 5 de 31 dias")
+    assert c["classificacao"] == dre.PARCIAL
+    assert c["margem_contribuicao_conhecida"]["componentes_parciais"] == ["taxas"]
 
 
 def test_ads_ausente_nao_vira_zero_e_entra_em_faltam():
@@ -242,16 +252,18 @@ def test_teste_negativo_somar_afiliado_daria_outra_margem():
     assert errado != m  # o teste detectaria a regressao, nao so' passa
 
 
-def test_afiliado_maior_que_a_taxa_aborta_a_celula():
+def test_afiliado_maior_que_a_taxa_mantem_o_motivo_sem_derrubar_a_celula():
     c = celula("tiktok", m=mart("tiktok"), r=repasse(fee_and_tax=-50_000.0))
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL  # T-0090: motivo mantido, nao vira NAO_CALCULAVEL
     assert any("afiliado maior que a taxa" in m for m in c["motivos_classificacao"])
 
 
 def test_identidade_do_repasse_violada_tira_a_taxa_tiktok():
     c = celula("tiktok", m=mart("tiktok"), r=repasse(residuo=150.0))
     assert c["componentes"]["taxas"]["status"] == dre.NAO_RECONCILIADO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["componentes"]["taxas"]["valor"] is None
+    assert c["classificacao"] == dre.PARCIAL
+    assert "taxas" in c["margem_contribuicao_conhecida"]["faltam"]
 
 
 def test_afiliado_expoe_as_tres_partes_em_magnitude():
@@ -287,7 +299,7 @@ def test_ml_maduro_com_cmv_reconciliado_e_parcial_nunca_completa():
     c = celula("ml")
     assert c["classificacao"] == dre.PARCIAL
     assert c["motivos_classificacao"] == []
-    assert c["completude"] == {"usados": 4, "aplicaveis": 6, "texto": "4 de 6 custos"}
+    assert c["completude"] == {"usados": 4, "aplicaveis": 6, "parciais": 0, "texto": "4 de 6 custos"}
 
 
 def test_completa_e_inalcancavel_enquanto_impostos_nao_ratificados():
@@ -296,10 +308,11 @@ def test_completa_e_inalcancavel_enquanto_impostos_nao_ratificados():
         assert c["classificacao"] != dre.COMPLETA
 
 
-def test_mes_imaturo_nao_e_calculavel():
+def test_mes_imaturo_e_previa_com_valores():
     ago = date(2026, 8, 1)
     c = celula("ml", m=mart("ml", mes=ago), c=cmv("ml", mes=ago))
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PREVIA and c["fecha_em"] == "2026-10-31"
+    assert c["margem_contribuicao_conhecida"]["valor"] is not None
     assert any("mes imaturo" in m for m in c["motivos_classificacao"])
 
 
@@ -310,17 +323,20 @@ def test_regra_de_maturacao_m_mais_2():
     assert dre.mes_maduro(date(2026, 8, 1), date(2026, 11, 1)) is True
 
 
-def test_shopee_nao_calculavel_por_taxa_sem_contraprova():
+def test_shopee_parcial_por_taxa_sem_contraprova():
     c = celula("shopee", m=mart("shopee"), c=cmv("shopee"))
     assert c["componentes"]["taxas"]["status"] == dre.NAO_CONFIRMADO
     assert c["componentes"]["frete"]["status"] == dre.NAO_CONFIRMADO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
+    assert c["margem_contribuicao_conhecida"]["componentes_parciais"] == ["taxas", "frete"]
 
 
-def test_cmv_fora_da_faixa_de_reconciliacao_nao_e_usado():
+def test_cmv_fora_da_faixa_de_reconciliacao_entra_como_parcial():
     c = celula("ml", c=cmv("ml", receita_fiscal=450_000.0))
-    assert c["componentes"]["cmv"]["status"] == dre.NAO_RECONCILIADO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    cm = c["componentes"]["cmv"]
+    assert cm["status"] == dre.NAO_RECONCILIADO
+    assert (cm["origem"], cm["entra_na_margem"], cm["cobertura_rotulo"]) == ("parcial", True, "NF cobre 45% do GMV")
+    assert c["classificacao"] == dre.PARCIAL
 
 
 @pytest.mark.parametrize("fiscal,status", [(950_000.0, dre.DISPONIVEL), (1_050_000.0, dre.DISPONIVEL),
@@ -332,7 +348,7 @@ def test_faixa_de_reconciliacao_do_cmv_e_inclusiva(fiscal, status):
 def test_cmv_integralmente_provisorio_nao_fecha_o_mes():
     c = celula("ml", c=cmv("ml", custo=300_000.0, prov=300_000.0))
     assert c["componentes"]["cmv"]["status"] == dre.PROVISORIO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
 
 
 def test_cmv_parcialmente_provisorio_e_usado_com_aviso():
@@ -341,10 +357,11 @@ def test_cmv_parcialmente_provisorio_e_usado_com_aviso():
     assert any("10% do CMV" in a for a in c["avisos_qualidade"])
 
 
-def test_receita_com_dias_faltando_nao_e_calculavel():
+def test_receita_com_dias_faltando_e_parcial():
     c = celula("ml", m=mart("ml", dias=28))
     assert c["componentes"]["receita"]["status"] == dre.COBERTURA_PARCIAL
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["componentes"]["receita"]["cobertura_rotulo"] == "presente em 28 de 31 dias"
+    assert c["classificacao"] == dre.PARCIAL
 
 
 def test_duas_lojas_por_dia_cobertura_mede_linhas():
@@ -361,7 +378,8 @@ def test_sem_insumo_publicado_nao_usa_total_fees_do_mart():
     assert c["componentes"]["taxas"]["status"] == dre.SNAPSHOT_AUSENTE
     assert c["componentes"]["taxas"]["valor"] is None
     assert c["componentes"]["cmv"]["status"] == dre.SNAPSHOT_AUSENTE
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
+    assert c["margem_contribuicao_conhecida"]["componentes_usados"] == []
 
 
 def test_lote_vencido_nao_e_exibido_como_atual():
@@ -371,7 +389,8 @@ def test_lote_vencido_nao_e_exibido_como_atual():
     assert cm["status"] == dre.SNAPSHOT_VENCIDO and cm["valor"] is None
     assert "limite de 54 h" in cm["motivo"]
     assert cm["publicado_em"] == velho
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
+    assert cm["entra_na_margem"] is False and "cmv" in c["margem_contribuicao_conhecida"]["faltam"]
 
 
 # ---------------------------------------------------------------------------
@@ -432,8 +451,10 @@ def test_ausencia_nunca_vira_zero_em_nenhum_lado_do_limite(idade):
         if tt["componentes"][comp]["status"] != dre.DISPONIVEL:
             assert tt["componentes"][comp]["valor"] is None, comp
     if idade > dre.INSUMO_IDADE_MAXIMA:
-        assert tt["classificacao"] == dre.NAO_CALCULAVEL
-        assert tt["margem_contribuicao_conhecida"]["valor"] is None
+        # T-0090: margem so' com a receita; vencido nao entra (nunca como zero medido).
+        assert tt["classificacao"] == dre.PARCIAL
+        m = tt["margem_contribuicao_conhecida"]
+        assert m["componentes_usados"] == [] and {"taxas", "frete", "cmv"} <= set(m["faltam"])
 
 
 def test_regras_expoem_54h_e_oraculo_usa_o_mesmo_limite():
@@ -469,10 +490,11 @@ def test_ausente_na_origem_e_indisponivel_nao_zero():
     assert c["componentes"]["cmv"]["valor"] is None
 
 
-def test_cmv_publicado_como_nao_reconciliado_nao_e_usado():
+def test_cmv_publicado_como_nao_reconciliado_entra_como_parcial():
     c = celula("ml", c=cmv("ml", status="nao_reconciliado"))
     assert c["componentes"]["cmv"]["status"] == dre.NAO_RECONCILIADO
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
+    assert c["classificacao"] == dre.PARCIAL
+    assert "cmv" in c["margem_contribuicao_conhecida"]["componentes_parciais"]
 
 
 def test_razao_e_conferida_de_novo_com_o_gmv_atual():
@@ -581,11 +603,12 @@ def test_agregado_por_marca_soma_margens_e_nao_descarta_ads_do_ml():
     assert kok["componentes"]["ads"]["status"] == dre.COBERTURA_PARCIAL
 
 
-def test_nao_calculavel_contamina_o_agregado():
+def test_celula_parcial_deixa_o_agregado_parcial_com_margem_somada():
     res = montar(mart_rows=[mart("ml", "kokeshi"), mart("shopee", "kokeshi")],
                  cmv_rows=[cmv("ml", "kokeshi"), cmv("shopee", "kokeshi")], canais=("ml", "shopee"))
-    assert res["total"]["classificacao"] == dre.NAO_CALCULAVEL
-    assert res["total"]["margem_contribuicao_conhecida"]["valor"] is None
+    assert res["total"]["classificacao"] == dre.PARCIAL
+    assert res["total"]["margem_contribuicao_conhecida"]["valor"] == pytest.approx(
+        sum(c["margem_contribuicao_conhecida"]["valor"] for c in res["celulas_base"]))
     assert any("shopee" in m for m in res["total"]["motivos_classificacao"])
 
 
@@ -602,7 +625,7 @@ def test_varios_meses_somam_e_herdam_a_pior_classificacao():
     assert res["periodo"]["meses"] == ["2026-07", "2026-08"]
     tot = res["total"]
     assert tot["componentes"]["receita"]["valor"] == 2_000_000.0
-    assert tot["classificacao"] == dre.NAO_CALCULAVEL  # agosto imaturo
+    assert tot["classificacao"] == dre.PREVIA and tot["fecha_em"] == "2026-10-31"  # agosto imaturo
 
 
 def test_resposta_valida_no_schema():
@@ -781,7 +804,7 @@ def test_rota_periodo_informado_e_respeitado_e_marcado(cliente):
     assert body["periodo"]["origem"] == "informado" and body["periodo"]["meses"] == ["2026-07"]
 
 
-def test_rota_mes_imaturo_explicito_continua_nao_calculavel(monkeypatch):
+def test_rota_mes_imaturo_explicito_sai_previa(monkeypatch):
     ago = date(2026, 8, 1)
     neon = FakeNeon(mart_rows=[mart("ml", "kokeshi", mes=ago)], insumos=cmv("ml", "kokeshi", mes=ago))
     app.dependency_overrides[get_db] = lambda: neon
@@ -793,7 +816,8 @@ def test_rota_mes_imaturo_explicito_continua_nao_calculavel(monkeypatch):
         app.dependency_overrides.pop(get_db, None)
     assert body["periodo"]["meses"] == ["2026-08"] and body["periodo"]["origem"] == "informado"
     ml = body["por_canal"][0]
-    assert ml["classificacao"] == "NAO_CALCULAVEL"
+    assert ml["classificacao"] == "PREVIA" and ml["fecha_em"] == "2026-10-31" and ml["previa"] is True
+    assert ml["margem_contribuicao_conhecida"]["valor"] is not None
     assert any("mes imaturo" in m for m in ml["motivos_classificacao"])
 
 
@@ -862,7 +886,8 @@ def test_rota_sem_migration_responde_e_falha_fechado(monkeypatch):
     assert body["fontes"]["insumos_dre"]["estado"] == "tabela_ausente"
     ml = body["por_canal"][0]
     assert ml["componentes"]["cmv"]["status"] == "snapshot_ausente"
-    assert ml["classificacao"] == "NAO_CALCULAVEL"
+    assert ml["classificacao"] == "PARCIAL"
+    assert "cmv" in ml["margem_contribuicao_conhecida"]["faltam"]
 
 
 def test_rota_sem_banco_e_503():

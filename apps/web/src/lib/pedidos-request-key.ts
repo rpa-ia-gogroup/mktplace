@@ -37,3 +37,12 @@ export function computePedidosCoverage(input: PedidosCoverageInput): PedidosCove
   const showShopeeMixed = input.showShopee && (input.showTiktok || input.showMl);
   return { showShopeeOnly, showShopeeMixed };
 }
+
+/** Aviso da selecao mista (B1-05, QA 2026-11-11): diz de quais canais SELECIONADOS
+ * sao os numeros, sem citar canal fora do filtro. "ML + Shopee" vira "so' Mercado
+ * Livre", nunca "so' TikTok Shop e Mercado Livre". `null` quando nao ha aviso. */
+export function avisoCoberturaShopee(input: PedidosCoverageInput): string | null {
+  if (!computePedidosCoverage(input).showShopeeMixed) return null;
+  const presentes = [input.showTiktok && "TikTok Shop", input.showMl && "Mercado Livre"].filter(Boolean).join(" e ");
+  return `Shopee sem cobertura em Pedidos: os números são só de ${presentes}`;
+}

@@ -410,11 +410,7 @@ def _build_risks(quality: dict, canais: dict, regioes_summary: dict, no_data: bo
             "type": "low_regional_coverage",
             "severity": "warning" if level == "low" else "info",
             "title": "Cobertura regional baixa" if level == "low" else "Cobertura regional parcial",
-            "description": (
-                f"Cobertura de UF em {uf_fill_pct:.1f}% no período (nível: {level})."
-                if uf_fill_pct is not None
-                else f"Cobertura de UF indisponível no período (nível: {level})."
-            ),
+            "description": _descricao_cobertura_regional(regioes_summary, level, uf_fill_pct),
             "brand": None,
             "marketplace": None,
             "metric_value": uf_fill_pct,
@@ -423,6 +419,50 @@ def _build_risks(quality: dict, canais: dict, regioes_summary: dict, no_data: bo
         })
 
     return risks
+
+
+def _fmt_data_br(valor) -> str | None:
+    """date ou "AAAA-MM-DD" -> "DD/MM/AAAA"; ausente -> None."""
+    if valor is None:
+        return None
+    if isinstance(valor, str):
+        try:
+            valor = date.fromisoformat(valor[:10])
+        except ValueError:
+            return None
+    return valor.strftime("%d/%m/%Y")
+
+
+def _descricao_cobertura_regional(regioes_summary: dict, level: str, uf_fill_pct: float | None) -> str:
+    """T-0088: desde que `coverage_level` passou a ser pior(UF, frescor por
+    canal), o motivo do nivel baixo pode ser canal defasado com UF 100%. A
+    descricao cita o motivo certo: canal defasado (e ate quando tem dado)
+    quando houver; o % de UF quando o nivel SO' de UF (`uf_coverage_level`,
+    ou `coverage_level` na API antiga) tambem estiver baixo/parcial."""
+    defasados = regioes_summary.get("canais_defasados") or []
+    uf_level = regioes_summary.get("uf_coverage_level") or level
+    if uf_fill_pct is not None:
+        frase_uf = f"Cobertura de UF em {uf_fill_pct:.1f}% no período (nível de UF: {uf_level})."
+    else:
+        frase_uf = f"Cobertura de UF indisponível no período (nível de UF: {uf_level})."
+    if not defasados:
+        return frase_uf
+
+    dados_ate = {
+        c.get("channel"): c.get("dados_ate") for c in regioes_summary.get("cobertura_por_canal") or []
+    }
+    partes = []
+    for canal in defasados:
+        nome = _MKT_DISPLAY.get(canal, canal)
+        ate = _fmt_data_br(dados_ate.get(canal))
+        partes.append(f"{nome} até {ate}" if ate else f"{nome} sem dado carregado")
+    descricao = (
+        f"Canal com dado regional defasado: {'; '.join(partes)}. "
+        "Os números regionais do período não incluem esses canais depois dessas datas."
+    )
+    if uf_level in ("low", "partial"):
+        descricao += f" {frase_uf}"
+    return descricao
 
 
 def _append_cancel_risks(risks: list[dict], quality: dict, marketplace: str, field: str) -> None:

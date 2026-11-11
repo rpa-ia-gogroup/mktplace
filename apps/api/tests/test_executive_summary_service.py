@@ -529,6 +529,52 @@ def test_risco_cobertura_regional_baixa():
     assert risks[0]["href"] == "/regioes"
 
 
+def _regioes_summary_t0088(coverage_level, uf_coverage_level, uf_fill_pct, canais_defasados, cobertura_por_canal):
+    return {
+        **_regioes_summary(coverage_level=coverage_level, uf_fill_pct=uf_fill_pct),
+        "uf_coverage_level": uf_coverage_level,
+        "canais_defasados": canais_defasados,
+        "cobertura_por_canal": cobertura_por_canal,
+    }
+
+
+def test_t0088_risco_cobertura_regional_por_frescor_cita_canais_defasados_e_datas():
+    # Producao 11/11/2026, out/2026: UF 100% nos pedidos carregados, mas o ML
+    # so' ate 25/10 e a Shopee ate 24/08. O motivo e' o frescor, nao a UF.
+    resumo = _regioes_summary_t0088(
+        "low", "ok", 100.0, ["ml", "shopee"],
+        [
+            {"channel": "ml", "status": "defasada", "dados_ate": date(2026, 10, 25)},
+            {"channel": "shopee", "status": "defasada", "dados_ate": "2026-08-24"},  # tambem aceita ISO
+        ],
+    )
+    risk = next(r for r in _compose(regioes_summary=resumo)["risks"] if r["type"] == "low_regional_coverage")
+    assert risk["severity"] == "warning"
+    assert "Mercado Livre até 25/10/2026; Shopee até 24/08/2026" in risk["description"]
+    # UF em dia: o % de UF nao aparece como se fosse a causa.
+    assert "Cobertura de UF" not in risk["description"]
+
+
+def test_t0088_risco_cobertura_regional_por_uf_continua_com_pct_e_nivel_de_uf():
+    resumo = _regioes_summary_t0088("partial", "partial", 62.5, [], [
+        {"channel": "ml", "status": "atualizada", "dados_ate": date(2026, 10, 31)},
+    ])
+    risk = next(r for r in _compose(regioes_summary=resumo)["risks"] if r["type"] == "low_regional_coverage")
+    assert risk["severity"] == "info"
+    assert risk["description"] == "Cobertura de UF em 62.5% no período (nível de UF: partial)."
+    assert "defasado" not in risk["description"]
+
+
+def test_t0088_risco_cobertura_regional_frescor_e_uf_baixos_cita_os_dois():
+    resumo = _regioes_summary_t0088("low", "low", 20.0, ["shopee"], [
+        {"channel": "ml", "status": "atualizada", "dados_ate": date(2026, 10, 31)},
+        {"channel": "shopee", "status": "sem_carga", "dados_ate": None},
+    ])
+    risk = next(r for r in _compose(regioes_summary=resumo)["risks"] if r["type"] == "low_regional_coverage")
+    assert "Shopee sem dado carregado" in risk["description"]
+    assert "Cobertura de UF em 20.0% no período (nível de UF: low)." in risk["description"]
+
+
 def test_risco_cobertura_regional_ok_nao_gera_risco():
     result = _compose(regioes_summary=_regioes_summary(coverage_level="ok", uf_fill_pct=95.0))
     assert not any(r["type"] == "low_regional_coverage" for r in result["risks"])

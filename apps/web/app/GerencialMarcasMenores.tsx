@@ -29,7 +29,7 @@ import { toISODate } from "@/lib/filters/presets";
 import type { GlobalFilters } from "@/lib/filters/types";
 import { buildKpiBand } from "@/lib/gerencial/kpi-band";
 import { linhasDeMarcasMenores, seriesDeMenores, topProdutosDeMenores } from "@/lib/gerencial/marcas-menores-adaptador";
-import { filtrarMarcasMenores, menoresNaGerencial, overviewDeMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { filtrarMarcasMenores, menoresNaGerencial, motivoSemBaseDoRecorte, overviewDeMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import type { TrendMetric } from "@/lib/gerencial/request-key";
 import { mergeChannelSeries, reconcileSeriesTotal } from "@/lib/gerencial/trend-series";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
@@ -89,6 +89,8 @@ export default function GerencialMarcasMenores({
   const prod = useProdutosMarcasMenores(filters.dateFrom, filters.dateTo, !semCanalDelas, { canais, marcas: escopo.menores });
 
   const overview = useMemo(() => (f ? overviewDeMenores(f, canais) : null), [f, canais]);
+  // Canal sem receita no anterior (ex.: Shopee no Bling so' desde 22/10): sem percentual, "—" e o motivo visivel.
+  const semBase = comparar && f ? motivoSemBaseDoRecorte(f) : null;
   const kpis = useMemo(() => buildKpiBand(overview, canais, comparar), [overview, canais, comparar]);
   // A Evolucao so' tem os canais onde elas vendem (Shopee e TikTok): um canal sem venda possivel (ML) nao e' uma
   // serie "vazia" a reconciliar, e' um canal que nao existe para estas marcas.
@@ -169,7 +171,13 @@ export default function GerencialMarcasMenores({
             shareFull={null}
             semMetaDaMarca
             notaMenores={NOTA_FONTE}
-            linhaMenores={emAndamento ? { texto: "inclui hoje, dia em andamento", aviso: false } : null}
+            linhaMenores={
+              emAndamento
+                ? { texto: "inclui hoje, dia em andamento", aviso: false }
+                : semBase
+                  ? { texto: `Variação: — (${semBase})`, aviso: true }
+                  : null
+            }
           />
           <KpiBand kpis={kpis} loading={false} error={false} onOpen={abrirAbaMenores} onRetry={() => setRecarga((n) => n + 1)} semGmv />
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">

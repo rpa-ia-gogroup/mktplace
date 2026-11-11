@@ -518,3 +518,33 @@ test("V3-1A pt-BR: format.ts nao acrescenta sinal de delta como fmtPct compartil
   assert.ok(!roasBr(12).startsWith("+"));
   assert.equal(pctBr(-3), "-3,0%", "negativo mantem o sinal proprio");
 });
+
+// C1-01 (QA 11/11): a API entrega linhas de `urgent` com `gmv 0` e ROAS > 0
+// (ex.: BARBOURS R$ 543,22 de ads, 18,67x). O front nao corrige a origem, mas
+// nao pode exibir esse ROAS como numero confiavel sem aviso.
+test("C1-01: ROAS > 0 com GMV zero e' sinalizado; nulo e ROAS zero nao", async () => {
+  const { roasSemVendaNaFotografia, roasSemVendaNote } = await import("../src/lib/inteligencia/queue.ts");
+  const contraditoria = sig("barbours", "X", { gmv: 0, ad_spend: 543.22, ad_roas: 18.67, units_sold: 0 });
+  assert.equal(roasSemVendaNaFotografia(contraditoria), true);
+  assert.equal(roasSemVendaNaFotografia(sig("b", "Y", { gmv: 0, ad_roas: 0 })), false, "ROAS zero nao contradiz");
+  assert.equal(roasSemVendaNaFotografia(sig("b", "Y", { gmv: 0, ad_roas: null })), false, "ROAS ausente nao contradiz");
+  assert.equal(
+    roasSemVendaNaFotografia({ gmv: null as unknown as number, ad_roas: 5 }),
+    false,
+    "gmv ausente nao e' zero",
+  );
+  assert.equal(roasSemVendaNaFotografia(sig("b", "Z", { gmv: 100, ad_roas: 5 })), false);
+
+  assert.equal(roasSemVendaNote([sig("b", "Z")]), null, "sem contradicao, sem aviso");
+  const nota = roasSemVendaNote([contraditoria, contraditoria, sig("b", "Z")]);
+  assert.ok(nota && nota.includes("2 produtos têm ROAS > 0 com GMV R$ 0"), String(nota));
+  assert.ok(roasSemVendaNote([contraditoria])!.includes("1 produto tem"));
+});
+
+test("C1-01: a fila e o dialogo usam o aviso de ROAS sem venda", () => {
+  const fila = readFileSync(new URL("../src/components/inteligencia/EvidenceQueue.tsx", import.meta.url), "utf8");
+  assert.match(fila, /roasSemVendaNaFotografia\(row\)/);
+  assert.match(fila, /roasSemVendaNote\(rows\)/);
+  const pagina = readFileSync(new URL("../app/inteligencia/page.tsx", import.meta.url), "utf8");
+  assert.match(pagina, /roasSemVendaNaFotografia\(it\) && <DataQualityNote note=\{ROAS_SEM_VENDA_TITLE\} \/>/);
+});

@@ -18,7 +18,10 @@ import {
   TEXTO_NAO_CALCULAVEL_AGREGADO,
   avisoFotografia,
   canaisBloqueadores,
-  canaisCalculaveisOcultos,
+  avisoMargem,
+  ehPrevia,
+  seloOrigem,
+  textoPrevia,
   classificarFalha,
   completudeExibida,
   custosAusentes,
@@ -212,21 +215,15 @@ test("fotografia: cada estado do lote vira uma faixa propria; ok nao mostra nada
 test("total nao calculavel nao esconde os canais calculaveis", () => {
   const r = resposta();
   assert.equal(r.total!.classificacao, "NAO_CALCULAVEL");
-  assert.deepEqual(canaisCalculaveisOcultos(r), ["tiktok", "ml"]);
   // Cada canal mantem a propria classificacao e margem.
   assert.equal(r.por_canal.find((c) => c.canal === "ml")!.margem_contribuicao_conhecida.valor, 42_000);
   assert.equal(r.por_canal.find((c) => c.canal === "tiktok")!.margem_contribuicao_conhecida.valor, 24_000);
 });
 
-test("sem canal calculavel, ou com total calculavel, nao ha oferta de refiltro", () => {
-  assert.deepEqual(canaisCalculaveisOcultos(resposta({ por_canal: [SHOPEE] })), []);
-  assert.deepEqual(canaisCalculaveisOcultos(resposta({ total: ML, por_canal: [ML] })), []);
-});
-
-test("o atalho de refiltro (resumo e ranking) passa pelo mesmo `aplicar` que escreve a URL", () => {
+test("T-0090: o botao de recorte calculavel saiu (com receita nada e' NAO_CALCULAVEL)", () => {
   const src = semComentarios(fonte("app/dre/DreClient.tsx"));
-  assert.match(src, /<BotaoRecorteCalculavel canais=\{ocultos\} aoAplicar=\{\(canais\) => aplicar\(\{ canais \}\)\} \/>/);
-  assert.match(src, /calculaveis=\{ocultos\}\s*aoFiltrar=\{\(canais\) => aplicar\(\{ canais \}\)\}/);
+  assert.doesNotMatch(src, /BotaoRecorteCalculavel|canaisCalculaveisOcultos|aoFiltrar/);
+  assert.doesNotMatch(semComentarios(fonte("src/components/dre/DreMarcas.tsx")), /BotaoRecorteCalculavel|aoFiltrar/);
 });
 
 // ===========================================================================
@@ -668,5 +665,85 @@ test("/dre esta na navegacao, com titulo proprio, e e' rota tematizada", () => {
     assert.match(lib.FORMULA_CMV_COBERTO, /NF fiscal, base de item/);
     assert.match(lib.FORMULA_CMV_COBERTO, /cobertura = receita com custo \/ receita fiscal/);
     assert.match(lib.FORMULA_CMV_COBERTO, /CMV ÷ receita da DRE/);
+  });
+}
+
+// ===========================================================================
+// T-0090 — PREVIA no lugar de NAO_CALCULAVEL (campos novos opcionais)
+// ===========================================================================
+{
+  const PREVIA_ML = {
+    ...ML,
+    classificacao: "PREVIA" as const,
+    fecha_em: "2026-12-31",
+    previa: true,
+    componentes: {
+      ...ML.componentes,
+      taxas: { ...ML.componentes.taxas, origem: "realizado" as const, entra_na_margem: true },
+      cmv: {
+        ...ML.componentes.cmv,
+        status: "parcial" as const,
+        origem: "parcial" as const,
+        entra_na_margem: true,
+        cobertura_rotulo: "NF cobre 25% do GMV",
+      },
+      impostos: { ...ML.componentes.impostos, origem: "indisponivel" as const, entra_na_margem: false },
+    },
+    margem_contribuicao_conhecida: {
+      ...ML.margem_contribuicao_conhecida,
+      componentes_parciais: ["cmv"],
+      aviso: "margem com custo parcial: CMV cobre 25% do GMV",
+    },
+  };
+
+  test("T-0090: PREVIA e' classificacao valida, com selo e data; margem com numero", () => {
+    assert.equal(problemaNaResposta(resposta({ total: PREVIA_ML, por_canal: [PREVIA_ML] })), null);
+    assert.equal(CLASSIFICACAO_CHIP.PREVIA.rotulo, "Prévia");
+    assert.equal(ehPrevia(PREVIA_ML), true);
+    assert.equal(textoPrevia(PREVIA_ML), "Prévia · fecha em 31/12/2026");
+    assert.equal(textoPrevia({ ...PREVIA_ML, fecha_em: null }), "Prévia");
+    assert.equal(textoPrevia({ classificacao: "PARCIAL", previa: true, fecha_em: "2027-01-31" }), "Prévia · fecha em 31/01/2027");
+    assert.equal(textoPrevia(ML), null, "API anterior: sem selo");
+    assert.equal(textoMargem(PREVIA_ML), fmtReais(42_000));
+    assert.doesNotMatch(textoMargemPct(PREVIA_ML), /Não calculável/);
+    assert.equal(elegivelParaRanking(PREVIA_ML).comparavel, true);
+    assert.equal(completudeExibida(PREVIA_ML), "4 de 6 custos");
+  });
+
+  test("T-0090: origem por componente, cobertura e entra_na_margem", () => {
+    const l = linhasDre(PREVIA_ML);
+    const cmv = l.find((x) => x.chave === "cmv")!;
+    assert.deepEqual(cmv.origem, { rotulo: "Parcial", tom: "atencao" });
+    assert.equal(cmv.cobertura, "NF cobre 25% do GMV");
+    assert.equal(cmv.mostrarStatus, false, "status 'Parcial' nao repete o selo de origem");
+    assert.equal(cmv.naMargem, true, "parcial que entra na margem conta");
+    assert.equal(l.find((x) => x.chave === "taxas")!.origem?.rotulo, "Realizado");
+    // Sem valor, a origem nao repete o selo de status da coluna Valor.
+    assert.equal(l.find((x) => x.chave === "impostos")!.origem, null);
+    assert.equal(seloOrigem({ ...ML.componentes.taxas, origem: "nao_aplicavel" }), null);
+    assert.equal(seloOrigem({ ...ML.componentes.taxas, origem: "xpto" as never }), null);
+    // entra_na_margem=false manda mais que componentes_usados.
+    const fora = { ...PREVIA_ML, componentes: { ...PREVIA_ML.componentes, ads: { ...ML.componentes.ads, entra_na_margem: false } } };
+    assert.equal(linhasDre(fora).find((x) => x.chave === "ads")!.naMargem, false);
+  });
+
+  test("T-0090: aviso da margem conhecida com custos parciais", () => {
+    assert.deepEqual(avisoMargem(PREVIA_ML), { parciais: ["CMV"], aviso: "margem com custo parcial: CMV cobre 25% do GMV" });
+    assert.equal(avisoMargem(ML), null, "API anterior: nada a avisar");
+  });
+
+  test("T-0090: resposta antiga (sem campos novos) continua igual", () => {
+    for (const c of [ML, TIKTOK, SHOPEE]) {
+      for (const x of linhasDre(c)) {
+        assert.equal(x.origem, null);
+        assert.equal(x.cobertura, null);
+        assert.equal(x.mostrarStatus, x.componente.valor !== null && x.chip !== null);
+      }
+    }
+    assert.deepEqual(
+      linhasDre(ML).filter((x) => x.naMargem).map((x) => x.chave),
+      ["taxas", "ads", "frete", "cmv"],
+    );
+    assert.equal(ehPrevia(SHOPEE), false);
   });
 }

@@ -26,18 +26,13 @@ import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
 import { fmtBrlCurto, fmtPctSimples, fmtNumCurto } from "@/lib/formatters";
-import { seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
+import { paraPedidosLiquidos, pedidosLiquidosDaMarca, seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
 import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
-import { buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
+import { avisoCoberturaShopee, buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
-import AvisoCanaisSemDado from "@/components/ui/AvisoCanaisSemDado";
-import type { Marketplace } from "@/lib/mock-data";
-
-/** A fonte de Pedidos cobre TikTok Shop e Mercado Livre; Shopee nao. */
-const PEDIDOS_CANAIS_COBERTOS: readonly Marketplace[] = ["tiktok", "ml"];
 
 function fmtNum(v: number | null): string {
   if (v == null) return "—";
@@ -74,7 +69,7 @@ function getBrandSortValue(row: PedidosBrandRow, column: string): string | numbe
     case "ml_cancel":
       return row.ml_cancel_rate_pct;
     case "total_orders":
-      return row.total_orders;
+      return pedidosLiquidosDaMarca(row);
     case "total_gmv":
       return row.total_gmv;
     default:
@@ -153,7 +148,7 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
                   </>
                 )}
                 <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-800">
-                  {fmtNum(row.total_orders)}
+                  {fmtNum(pedidosLiquidosDaMarca(row))}
                 </td>
                 <td className="px-5 py-3 text-right tabular-nums text-slate-700">{fmtBrlCurto(row.total_gmv)}</td>
               </tr>
@@ -266,7 +261,8 @@ function PedidosPageInner() {
 
   const selecao = { tiktok: showTiktokSel, ml: showMlSel };
   const series = useMemo(() => seriesDoPeriodo(daily, selecao), [daily, showTiktokSel, showMlSel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const dadosCartoes = { kpis, tk, ml };
+  // B1-04: pedidos liquidos (sem cancelados) em toda a tela, como o grafico e o ticket.
+  const dadosCartoes = paraPedidosLiquidos({ kpis, tk, ml });
 
   return (
     <PageContainer>
@@ -300,9 +296,11 @@ function PedidosPageInner() {
 
         {/* Shopee isolada: o selo do cabecalho e o estado vazio abaixo ja dizem
             que nao ha cobertura. Selecao mista: os numeros nunca incluem Shopee. */}
-        {/* T-0089/B1-05: o texto sai da selecao atual (com ML + Shopee diz
-            "mostrando só Mercado Livre", nao cita o TikTok fora do filtro). */}
-        {showShopeeMixed && <AvisoCanaisSemDado selecao={filters.channels} cobertos={PEDIDOS_CANAIS_COBERTOS} />}
+        {showShopeeMixed && (
+          <p className="w-fit rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
+            {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
+          </p>
+        )}
 
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState

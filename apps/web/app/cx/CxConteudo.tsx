@@ -23,10 +23,13 @@
  * Um dialogo unico (`KpiDrilldownDialog`) para todos os detalhes.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessagesSquare, Undo2 } from "lucide-react";
+import { Ban, MessageCircle, MessagesSquare, PackageX, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
+import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
+import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
+import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
 import { LinhaSemComparacao, notasDoTile, pilula, rodapeComparacao, type RodapeCard } from "@/components/gerencial/CxResumo";
 import PageHeader from "@/components/layout/PageHeader";
@@ -36,6 +39,7 @@ import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
+import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
 import {
@@ -156,7 +160,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
 // ---------------------------------------------------------------------------
 // Corpo: um dialogo unico para todos os detalhes
 // ---------------------------------------------------------------------------
-type Dialogo = { marca: string } | { indicador: IndicadorCx };
+type Dialogo = { marca: string } | { indicador: IndicadorCx } | { devolucao: true };
 
 function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtros: FiltrosCx; avaliacoes: ReactNode }) {
   const v = montarAtendimentoCx(dados, brandLabel);
@@ -174,9 +178,11 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
   const marcaAberta = dialogo && "marca" in dialogo ? status.find((s) => s.chave === dialogo.marca) ?? null : null;
   const titulo = !dialogo
     ? ""
-    : "indicador" in dialogo
-      ? `${ROTULO_INDICADOR[dialogo.indicador]} por marca · Shopee`
-      : `${marcaAberta?.marca ?? brandLabel(dialogo.marca)} · Saúde da Conta`;
+    : "devolucao" in dialogo
+      ? "Devolução por marca · Shopee"
+      : "indicador" in dialogo
+        ? `${ROTULO_INDICADOR[dialogo.indicador]} por marca · Shopee`
+        : `${marcaAberta?.marca ?? brandLabel(dialogo.marca)} · Saúde da Conta`;
 
   return (
     <>
@@ -204,7 +210,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
         meio={status.length ? <SaudePorMarca itens={status} abrir={(m) => setDialogo({ marca: m })} /> : undefined}
       />
 
-      <Faixa r={r} dias={filtros.dias} heroiMostraSemComparacao={!r.comparacao.resposta?.delta && r.totais.resposta != null && !!r.semAnterior.resposta} abrir={(i) => setDialogo({ indicador: i })} />
+      <Faixa r={r} dias={filtros.dias} pareto={pareto} heroiMostraSemComparacao={!r.comparacao.resposta?.delta && r.totais.resposta != null && !!r.semAnterior.resposta} abrir={(i) => setDialogo({ indicador: i })} abrirDevolucao={() => setDialogo({ devolucao: true })} />
 
       <FilaAtencao
         titulo={
@@ -247,6 +253,9 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
       </MaisDetalhes>
 
       <KpiDrilldownDialog open={dialogo != null} onClose={() => setDialogo(null)} title={titulo}>
+        {dialogo && "devolucao" in dialogo && (
+          <DetalheDevolucao v={pareto} periodo={janela} geradoEm={dados.gerado_em} />
+        )}
         {dialogo && "indicador" in dialogo && (
           <CxDrilldownContent
             indicador={dialogo.indicador}
@@ -419,7 +428,7 @@ export function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFi
 //    Reenvio sem fonte (cartao sem numero nao entra na 1a dobra; a nota esta'
 //    em Mais detalhes)
 // ---------------------------------------------------------------------------
-function Faixa({ r, dias, heroiMostraSemComparacao, abrir }: { r: ResumoCx; dias: number; heroiMostraSemComparacao: boolean; abrir: (i: IndicadorCx) => void }) {
+function Faixa({ r, dias, pareto, heroiMostraSemComparacao, abrir, abrirDevolucao }: { r: ResumoCx; dias: number; pareto: VisaoPareto; heroiMostraSemComparacao: boolean; abrir: (i: IndicadorCx) => void; abrirDevolucao: () => void }) {
   // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
   const visto = new Set<string>(heroiMostraSemComparacao && r.semAnterior.resposta ? [r.semAnterior.resposta.texto] : []);
   const tile = (
@@ -460,14 +469,55 @@ function Faixa({ r, dias, heroiMostraSemComparacao, abrir }: { r: ResumoCx; dias
   };
   return (
     <section aria-label="Indicadores do período">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="cx-faixa">
         {/* cor de identidade (spec do Prumo, 09/11): a mesma do card CX da Gerencial */}
         {tile("contactRate", "atendimento", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null, dias > 30 ? {} : rodapeComparacao(r, "contactRate"))}
         {tile("cancelamento", "ads", Ban, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
+        {/* devolucoes (sem as que o comprador cancelou) ÷ pedidos: a mesma conta da coluna Devol. da tabela por marca; sem periodo anterior medido na API */}
+        <KpiTile
+          variante="gerencial"
+          identidade="pedidos"
+          icone={PackageX}
+          rotulo="Devolução"
+          valor={pareto.total.devolucoesPct}
+          tom={pareto.total.devolucoesPct === "—" ? "ausente" : "neutro"}
+          comparacao={
+            pareto.total.devolucoes === "—"
+              ? "Sem leitura de devoluções"
+              : `${pareto.total.devolucoes} devoluções${pareto.total.marcasDevolucao.lidas < pareto.total.marcasDevolucao.total ? ` · ${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas` : ""}`
+          }
+          ajuda={<InfoDica emControle texto={AJUDA_DEVOLUCAO} />}
+          onAbrir={pareto.total.devolucoesPct === "—" ? undefined : abrirDevolucao}
+        />
         {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
         {tile("reembolso", "gmv", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
       </div>
     </section>
+  );
+}
+
+const AJUDA_DEVOLUCAO =
+  "Pedidos que o comprador pediu para devolver no período ÷ pedidos do período, somando as marcas. Os que o próprio comprador cancelou ficam de fora. Cálculo da Torre.";
+
+/** Detalhe do card Devolução: o valor exato e a taxa de cada loja (so' o que o payload ja' traz). */
+function DetalheDevolucao({ v, periodo, geradoEm }: { v: VisaoPareto; periodo: string; geradoEm: string }) {
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
+          <NumeroAnimado texto={v.total.devolucoesPct} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
+          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{v.total.devolucoes === "—" ? "" : `${v.total.devolucoes} de ${v.total.pedidosDevolucao} pedidos`}</span>
+        </div>
+        <DrilldownContextLine leading="Shopee" periodLabel={periodo} refreshedAt={geradoEm} dica={<InfoDica texto={AJUDA_DEVOLUCAO} />} />
+      </div>
+      <DrilldownSecao titulo="Por marca">
+        <ul className="flex flex-col list-none p-0 m-0">
+          {v.linhas.map((l) => (
+            <EvidenceRow key={l.chave} label={l.marca} value={l.devolucoesPct} reference={l.devolucoes === "—" ? undefined : `${l.devolucoes} de ${l.pedidos} pedidos`} />
+          ))}
+        </ul>
+      </DrilldownSecao>
+    </div>
   );
 }
 

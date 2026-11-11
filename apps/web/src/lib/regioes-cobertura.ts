@@ -16,7 +16,7 @@
 // aceita `undefined` e cai no comportamento anterior ("Atualizado em"), sem
 // quebrar. Status desconhecido (API mais nova que o front) conta como atraso:
 // na duvida, nunca chamar o total de atualizado.
-import type { CoberturaCanal } from "./api-client";
+import type { CoberturaCanal, CoverageLevel } from "./api-client";
 
 const NOMES: Record<string, string> = { tiktok: "TikTok Shop", ml: "Mercado Livre", shopee: "Shopee" };
 
@@ -78,9 +78,33 @@ export function normalizarCobertura(resp: RespostaComCobertura | null | undefine
   };
 }
 
+// ---------------------------------------------------------------------------
+// T-0088 — nivel de cobertura segue o frescor por canal. A API ja' devolve
+// `coverage_level` = pior(UF, frescor) (regioes_service.coverage_level_frescor);
+// aqui a MESMA regra so' escolhe o rotulo do resumo visivel do aviso: algum
+// canal com fonte `defasada`/`sem_carga` -> "partial"; todos eles -> "low";
+// D-2 (`atraso_leve`) nao rebaixa; TikTok (`sem_cobertura`) nao conta.
+// ---------------------------------------------------------------------------
+type NivelFrescor = "ok" | "partial" | "low";
+
+export function nivelFrescor(cobertura: readonly CoberturaCanal[]): NivelFrescor {
+  const comFonte = cobertura.filter((c) => grupo(c.status) !== "estrutural");
+  const graves = comFonte.filter((c) => grupo(c.status) === "grave");
+  if (graves.length === 0) return "ok";
+  return graves.length === comFonte.length ? "low" : "partial";
+}
+
+/** Nivel so' do preenchimento de UF: `uf_coverage_level` (API T-0088) ou,
+ * na API antiga, o `coverage_level`, que ate' entao era so' de UF. */
+export function nivelUf(resp: { coverage_level: CoverageLevel; uf_coverage_level?: CoverageLevel | null }): CoverageLevel {
+  return resp.uf_coverage_level ?? resp.coverage_level;
+}
+
 export interface AvisoCobertura {
   severidade: "leve" | "alerta" | "critico";
   titulo: string;
+  /** Linha VISIVEL (T-0088): nivel + cada canal afetado e ate quando tem dado. */
+  resumo: string;
   mensagem: string;
   /** Motivo de cada canal atrasado/parado, como veio da API. */
   detalhes: string[];
@@ -123,9 +147,17 @@ export function buildAvisoCobertura(cobertura: readonly CoberturaCanal[]): Aviso
     ? "critico"
     : graves.length > 0 ? "alerta" : "leve";
 
+  const frescor = nivelFrescor(cobertura);
+  const prefixo = frescor === "low" ? "Cobertura baixa" : frescor === "partial" ? "Cobertura parcial" : "Atraso de 1 dia";
+  const porCanal = afetados.map((c) =>
+    c.dados_ate ? `${nomeCanal(c.channel)} até ${fmtDataBr(c.dados_ate)}` : `${nomeCanal(c.channel)} sem dado carregado`,
+  );
+  const resumo = `${prefixo}: ${porCanal.join("; ")}`;
+
   return {
     severidade,
     titulo,
+    resumo,
     mensagem,
     detalhes: afetados.map((c) => c.motivo_detalhe).filter((d): d is string => !!d),
   };

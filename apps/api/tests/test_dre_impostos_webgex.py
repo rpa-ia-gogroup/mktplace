@@ -10,7 +10,7 @@ O que se prova:
   * com realizado: valor = ICMS + DIFAL + PIS/COFINS, `partes`, `cobertura` e
     `fonte` do webgex; `disponivel` entra na margem conhecida;
   * `imposto parcial: ` no motivo, cobertura < 98% ou componente faltando ->
-    `parcial`, fora da margem, valor medido sem extrapolar; nulo nunca vira 0;
+    `parcial`, na margem como parcial (T-0090), valor medido sem extrapolar; nulo nunca vira 0;
   * lote vencido/nao concluido falha fechado; sinal inesperado nao e' corrigido;
   * agregado: soma, partes, cobertura pela razao das somas, e `parcial` se
     alguma celula for parcial; margem = soma das margens das celulas;
@@ -148,8 +148,10 @@ def test_imposto_zero_medido_e_zero_e_disponivel():
 # ---------------------------------------------------------------------------
 
 def _fora_da_margem(c):
+    """T-0090: imposto parcial ENTRA na margem como parcial (o nome ficou pelo historico)."""
     m = c["margem_contribuicao_conhecida"]
-    return "impostos" in m["faltam"] and "impostos" not in m["componentes_usados"]
+    return ("impostos" in m["componentes_parciais"] and "impostos" in m["componentes_usados"]
+            and imp(c)["origem"] == "parcial" and imp(c)["entra_na_margem"] is True)
 
 
 def test_cobertura_abaixo_do_minimo_e_parcial_sem_extrapolar():
@@ -233,7 +235,8 @@ def test_agregado_com_celula_parcial_nao_se_diz_completo():
     # margem do total = soma das margens das celulas (so' a kokeshi desconta imposto)
     cel = {c["marca"]: c["margem_contribuicao_conhecida"]["valor"] for c in body["celulas_base"]}
     assert body["total"]["margem_contribuicao_conhecida"]["valor"] == round(sum(cel.values()), 2)
-    assert "impostos" in body["total"]["margem_contribuicao_conhecida"]["faltam"]
+    # T-0090: o parcial da barbours entra; no total o imposto e' parcial, nao falta.
+    assert "impostos" in body["total"]["margem_contribuicao_conhecida"]["componentes_parciais"]
 
 
 def test_agregado_com_uma_celula_sem_realizado_fica_parcial_e_sem_cobertura():

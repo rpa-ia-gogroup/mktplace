@@ -49,8 +49,12 @@ class RegioesSummaryResponse(_CoberturaCampos):
     shipping_cost_eligible_orders: int
     shipping_cost_coverage_pct: Optional[float] = None
     seller_shipping_cost: Optional[float] = None
+    #: Pior entre o nivel de UF e o frescor dos canais pedidos (T-0088): canal
+    #: defasado/sem carga nunca deixa sair "ok". Ver regioes_service.
     coverage_level: CoverageLevel
     coverage_warning: bool
+    #: So' o preenchimento de UF (`uf_fill_pct`), sem o frescor por canal.
+    uf_coverage_level: Optional[CoverageLevel] = None
     date_from: date
     date_to: date
     filters: FiltersEcho
@@ -72,8 +76,12 @@ class RegiaoUfRow(BaseModel):
     shipping_cost_eligible_orders: int
     uf_fill_pct: Optional[float] = None
     shipping_cost_coverage_pct: Optional[float] = None
+    #: Pior entre o nivel de UF e o frescor dos canais pedidos (T-0088): canal
+    #: defasado/sem carga nunca deixa sair "ok". Ver regioes_service.
     coverage_level: CoverageLevel
     coverage_warning: bool
+    #: So' o preenchimento de UF (`uf_fill_pct`), sem o frescor por canal.
+    uf_coverage_level: Optional[CoverageLevel] = None
 
 
 class RegioesByUfResponse(_CoberturaCampos):
@@ -99,8 +107,12 @@ class RegiaoBrandRow(BaseModel):
     shipping_cost_covered_orders: int
     shipping_cost_eligible_orders: int
     shipping_cost_coverage_pct: Optional[float] = None
+    #: Pior entre o nivel de UF e o frescor dos canais pedidos (T-0088): canal
+    #: defasado/sem carga nunca deixa sair "ok". Ver regioes_service.
     coverage_level: CoverageLevel
     coverage_warning: bool
+    #: So' o preenchimento de UF (`uf_fill_pct`), sem o frescor por canal.
+    uf_coverage_level: Optional[CoverageLevel] = None
 
 
 class RegioesByBrandResponse(_CoberturaCampos):

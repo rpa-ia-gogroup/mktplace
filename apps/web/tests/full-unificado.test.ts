@@ -1043,3 +1043,25 @@ test("T-0085 marca sem foto e' ausencia: — na celula, nunca R$ 0/dia", () => {
   const tela = fonte("app/full/VisaoGeralFull.tsx");
   assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*><Ausente motivo="sem fotografia no dia" \/><\/span>;/);
 });
+
+test("B2-02: a janela do Envio ML e do Desempenho Shopee vai para a URL e volta no reload", async () => {
+  const { janelaDaUrl, urlComJanela } = await import("../src/lib/full-janela-url.ts");
+  const padrao = { from: "2026-10-12", to: "2026-11-10" };
+  const valida = (f: string, t: string) => (f <= t ? null : "invalida");
+  // reload com 90 dias na URL: a tela abre com 90 dias, nao com o padrao
+  assert.deepEqual(janelaDaUrl("?aba=envio-ml&date_from=2026-08-13&date_to=2026-11-10", padrao, valida), { from: "2026-08-13", to: "2026-11-10" });
+  // ausente, incompleta ou invalida: padrao (nunca vira requisicao)
+  assert.deepEqual(janelaDaUrl("?aba=envio-ml", padrao, valida), padrao);
+  assert.deepEqual(janelaDaUrl("?date_from=2026-08-13", padrao, valida), padrao);
+  assert.deepEqual(janelaDaUrl("?date_from=2026-11-10&date_to=2026-08-13", padrao, valida), padrao);
+  // gravar preserva a aba
+  assert.equal(
+    urlComJanela("https://x.test/full?aba=desempenho-shopee", { from: "2026-08-13", to: "2026-11-10" }),
+    "/full?aba=desempenho-shopee&date_from=2026-08-13&date_to=2026-11-10",
+  );
+  for (const rel of ["app/full-ml/FullMLClient.tsx", "app/full-shopee/FullShopeeClient.tsx"]) {
+    const src = readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8");
+    assert.ok(src.includes("janelaDaUrl(busca.toString()"), `${rel} le a janela da URL no mount`);
+    assert.ok(src.includes("urlComJanela(window.location.href, { from, to })"), `${rel} grava a janela na URL`);
+  }
+});

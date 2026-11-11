@@ -19,7 +19,6 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
   fetchOperacoes,
   type OperacoesData,
-  type TkDailyRow,
   type CreatorRow,
   type LiveRow,
 } from "@/lib/api-client";
@@ -28,6 +27,7 @@ import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table"
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
+import { buildChartData } from "@/lib/operacoes-trend";
 import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 
@@ -96,26 +96,6 @@ function PctLiveColor({ v }: { v: number | null }) {
       ? "text-warn-ink font-semibold"
       : "text-crit font-semibold";
   return <span className={`tabular-nums ${cls}`}>{fmtPctSimples(v)}</span>;
-}
-
-// Build a pivot table for the trend chart: date → { brand: gmv }
-function buildChartData(rows: TkDailyRow[]): Record<string, number | string>[] {
-  const byDate: Record<string, Record<string, number>> = {};
-  for (const r of rows) {
-    const label = formatDateLabel(r.ref_date);
-    if (!byDate[label]) byDate[label] = {};
-    byDate[label][r.brand] = (byDate[label][r.brand] ?? 0) + r.gmv;
-  }
-  return Object.entries(byDate)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, brands]) => ({ date, ...brands }));
-}
-
-function formatDateLabel(iso: string): string {
-  // iso is YYYY-MM-DD
-  const parts = iso.split("-");
-  if (parts.length < 3) return iso;
-  return `${parts[2]}/${parts[1]}`;
 }
 
 export default function OperacoesPage() {

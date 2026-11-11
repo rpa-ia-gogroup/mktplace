@@ -133,23 +133,52 @@ o influencer é `nao_aplicavel`; na Shopee fica indisponível ou não confirmado
 
 **Competência exata.** A premissa vale só para a competência publicada: setembro não recebe a de outubro, e
 novembro não herda outubro. Célula sem premissa → `cenario_premissas = null`. Um agregado que mistura células
-com e sem premissa → `nao_calculavel`.
+com e sem premissa → `parcial`, somando só as células com premissa (§6.2, T-0090; antes `nao_calculavel`).
 
 ## 6. Estados
 
 | estado | quando |
 |---|---|
-| `calculavel` | receita, CMV, taxas e Ads aplicável utilizáveis; todas as premissas presentes; nenhuma regra de dupla contagem falhou; competência madura (M+2) e encerrada |
-| `parcial` | há margem sobre os componentes conhecidos, mas: mês em andamento (**prévia**), competência imatura, receita parcial, CMV provisório/parcial, taxa parcial ou não confirmada, Ads ausente, premissa ausente ou decomposição TikTok insegura |
-| `nao_calculavel` | falta receita, CMV utilizável ou taxa utilizável, ou o lote de premissas é inválido (não concluído, misto ou de mais de uma fonte). `margem_contribuicao_estimada = null` |
+| `calculavel` | receita, CMV, taxas e Ads aplicável realizados; todas as premissas presentes; nenhuma regra de dupla contagem falhou; competência madura (M+2) e encerrada |
+| `parcial` | há margem sobre os componentes conhecidos, mas: mês em andamento (**prévia**), competência imatura, receita parcial, CMV parcial/provisório/não reconciliado (extrapolado ou como medido), CMV ou taxa sem valor (linha ausente), taxa parcial ou não confirmada, Ads ausente, premissa ausente, decomposição TikTok insegura, ou recorte com célula sem premissa |
+| `nao_calculavel` | **só** quando a receita é nula ou o lote de premissas é inválido (não concluído, misto ou de mais de uma fonte). `margem_contribuicao_estimada = null` |
 
-Zero nunca é fabricado para tornar o cenário calculável. A regra de maturidade da DRE realizada não muda; a
-célula realizada de outubro continua `NAO_CALCULAVEL`.
+Zero nunca é fabricado: CMV ou taxa sem valor ficam fora da soma, como linha ausente (`componentes_ausentes`),
+e o cenário fica `parcial` (T-0090; antes era `nao_calculavel`).
 
-**Maturidade não apaga o valor estimado.** Com receita, CMV e taxas presentes, outubro em andamento devolve
-`margem_contribuicao_estimada` com valor, `estado = parcial` e `previa = true`. Isso vale também nos
-agregados. Ao mesmo tempo, `margem_contribuicao_conhecida` continua `null` e a célula realizada continua
-`NAO_CALCULAVEL` pela regra M+2. Ambos os pontos são provados por teste.
+**Maturidade não apaga o valor.** Com receita, outubro em andamento devolve `margem_contribuicao_estimada` com
+valor, `estado = parcial` e `previa = true`, também nos agregados. Desde a T-0090 a célula realizada imatura
+sai `PREVIA`, com `margem_contribuicao_conhecida` e `fecha_em` (`docs/dre_contrato_0.md` §8.1).
+
+### 6.1 Origem das linhas realizadas e extrapolação — T-0090 (11/11/2026)
+
+`origem` de cada linha ∈ `realizado`, `parcial`, `premissa`, `extrapolado`, `decomposicao`, `indisponivel`,
+`calculado` (e `misto` no agregado).
+
+- **CMV:** `disponivel` → `realizado`. `nao_reconciliado`, `parcial` ou `provisorio` com a razão CMV ÷ receita
+  com custo conhecida (`cmv_pct_receita_coberta`; o serviço usa o valor não arredondado custo ÷ receita com
+  custo) → **`extrapolado`** = razão × receita da célula, com motivo "extrapolado: CMV de X% da receita com
+  custo aplicado à receita inteira (NF cobre Y% do GMV)". Sem essa base (cobertura não publicada) → o valor
+  como está, `parcial`. Sem valor → linha ausente (`indisponivel`), estado `parcial`.
+- **Taxas (`despesas_marketplace`):** `disponivel` → `realizado`. Escrow da Shopee `parcial` com a fração de
+  pedidos com escrow conhecida (0 < f < 1) → **`extrapolado`** = valor ÷ f, com motivo "extrapolado: taxa do
+  escrow (N% dos pedidos) estendida à parte sem escrow". Outros parciais (ex.: `nao_confirmado`) → `parcial`
+  com o valor como está. Sem valor → linha ausente, estado `parcial`. A decomposição TikTok afiliado × taxa não
+  mudou.
+- **Mídia Online:** `realizado` ou `parcial` conforme o status do Ads realizado.
+- **Devoluções e impostos:** `premissa`, como antes. **Fora do escopo da T-0090:** usar o imposto realizado
+  (webgex) no cenário.
+
+A extrapolação existe **só no cenário estimado**. A DRE realizada (`margem_contribuicao_conhecida`) nunca
+extrapola: lá o parcial entra pelo valor medido, com aviso.
+
+### 6.2 Recorte misto — T-0090
+
+Quando parte das células do recorte não tem premissa publicada, `agregar_cenarios` não devolve mais
+`nao_calculavel`: soma só as células com cenário (`receita_base` dessas), o estado fica no máximo `parcial`,
+o novo campo `celulas_sem_premissa` conta as que ficaram fora e os motivos dizem "N célula(s) sem premissa
+publicada ficaram fora do cenário (premissa nunca é estendida)". Recorte sem nenhum cenário continua `null`.
+A premissa nunca é estendida a outra marca ou competência.
 
 ## 7. Contrato da API (aditivo)
 
@@ -171,9 +200,11 @@ competencia_madura     regra M+2 da DRE realizada
 receita_base           receita bruta da célula (ou soma, no agregado)
 fonte_cmv              "dre_realizada"
 linhas[]               linha, rotulo, tipo (item|subtotal|informativo), valor, pct_receita,
-                       origem (realizado|premissa|decomposicao|indisponivel|calculado|misto),
+                       origem (realizado|parcial|premissa|extrapolado|decomposicao|indisponivel|
+                       calculado|misto),
                        percentual (só na célula base), status, motivo, somavel
 componentes_ausentes[] linha, motivo
+celulas_sem_premissa   células do recorte sem premissa, fora do cenário (T-0090; 0 na célula base)
 motivos[], avisos[]
 margem_contribuicao_estimada, margem_contribuicao_estimada_pct
 fonte_premissas        rotulo ("Premissas de outubro/2026"), competencia, data_fonte, source_sha256,
@@ -228,8 +259,8 @@ o #77:
 3. Publicar outubro: rodar o comando da seção 4 em dry-run e conferir o manifesto; depois o mesmo com `--apply`.
 4. Deploy da API no Render.
 5. Integrar a tela no #77, conforme a seção 9.
-6. Para o cenário passar de `nao_calculavel`: CMV e repasse de outubro publicados pela ponte da DRE (depois do
-   fechamento do mês). Para virar `calculavel`: maturidade M+2 e Ads TikTok, ou aceitar o cenário como
+6. Desde a T-0090 o cenário só é `nao_calculavel` sem receita ou com premissa inválida; CMV e taxa
+   ausentes deixam-no `parcial`. Para virar `calculavel`: maturidade M+2 e Ads TikTok, ou aceitar o cenário como
    `parcial`.
 
 ## 11. Pendências de negócio
