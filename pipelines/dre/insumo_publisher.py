@@ -24,8 +24,12 @@ CONTRATO
 --------
   * dry-run por padrao; escrever exige `--apply`;
   * origem read-only (`SET TRANSACTION READ ONLY`);
-  * uma transacao no Neon, com `pg_try_advisory_xact_lock` tomado ANTES de ler
-    a fonte — sem espera, sem retry;
+  * uma transacao de escrita no Neon, com `pg_try_advisory_xact_lock` — sem
+    espera, sem retry. O lock NAO e' mais tomado antes de ler a fonte (T-0087):
+    a leitura da origem leva minutos e o Neon derrubava a conexao ociosa. O
+    universo esperado e o CHECK sao lidos numa conexao curta antes da origem e
+    relidos sob o lock; se as marcas ou o CHECK mudaram, a publicacao e'
+    recusada antes do DELETE (o GMV relido sob o lock e' o que vale);
   * reconciliacao ANTES de qualquer escrita; se ela recusar, nada e' escrito;
   * a publicacao SUBSTITUI o escopo `competencias x canais` inteiro: chave que
     sumiu da fonte some da tabela, e chave esperada sem dado na fonte e'
@@ -1281,6 +1285,23 @@ def _marcas(esperado: list[dict]) -> list[str]:
     return sorted({r["marca"] for r in esperado})
 
 
+def _deriva(esperado_antes: list[dict], esperado_lock: list[dict],
+            aceita_antes: tuple[bool, bool], aceita_lock: tuple[bool, bool]) -> list[str]:
+    """T-0087: motivos de recusa quando o Neon mudou entre a pre-leitura e o lock.
+
+    So' compara o que a leitura da origem usou: as marcas e os `aceita_*`. O
+    GMV e as linhas do esperado vem da releitura sob o lock (`montar_lote`), entao
+    um sync que reescreva o GMV no meio nao recusa a publicacao.
+    """
+    motivos = []
+    if _marcas(esperado_antes) != _marcas(esperado_lock):
+        motivos.append("o conjunto de marcas esperado no Neon mudou durante a leitura da origem; rode de novo")
+    if tuple(aceita_antes) != tuple(aceita_lock):
+        motivos.append("o contrato do Neon (CHECK ck_fdim_componente) mudou durante a leitura da origem; "
+                       "rode de novo")
+    return motivos
+
+
 # ---------------------------------------------------------------------------
 # Execucao
 # ---------------------------------------------------------------------------
@@ -1360,13 +1381,35 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
              remover: frozenset = frozenset(),
              agora: Optional[datetime] = None,
              antes_do_commit: Optional[Callable[[Any], None]] = None) -> dict:
-    """`--apply`: transacao unica no Neon, lock antes da leitura, recusa antes da escrita.
+    """`--apply` em tres fases: pre-leitura curta no Neon, leitura da origem sem
+    conexao do Neon aberta, e escrita numa transacao unica sob o lock.
+
+    T-0087: a leitura da origem leva ~6-7 min; com a transacao do Neon aberta
+    durante ela, o Neon derrubava a conexao ociosa (SSL closed). Por isso o lock
+    so' cobre a escrita: sob ele, o universo esperado e o contrato (CHECK) sao
+    relidos e, se as marcas ou o CHECK mudaram desde a fase 1, a publicacao e'
+    RECUSADA antes do DELETE; o lote usa o esperado relido (GMV atual) e a
+    fotografia publicada (`publicadas`) lida sob o lock.
 
     `antes_do_commit` existe so' para teste: injeta falha DEPOIS da escrita e
     ANTES do commit, para provar que o rollback desfaz tudo.
     """
     agora = agora or datetime.now(timezone.utc)
     try:
+        # Fase 1: pre-leitura no Neon, curta e READ ONLY, fechada antes da origem.
+        with alvo_engine.connect() as conn:
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            if not conn.execute(SQL_TABELA_EXISTE).scalar_one():
+                raise MigrationAusente(f"{TABELA} nao existe: aplique a migration 025 antes do --apply")
+            esperado = _esperado(conn, comps, canais)
+            aceita_tx = check_aceita_taxa_shopee(conn)
+            aceita_imp = check_aceita_impostos(conn)
+            conn.rollback()
+        # Fase 2: leituras longas da origem, SEM conexao do Neon aberta.
+        cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado), aceita_tx)
+        impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado), aceita_imp)
+        numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
+        # Fase 3: escrita, transacao unica e conexao nova.
         with alvo_engine.begin() as conn:
             if not conn.execute(SQL_LOCK).scalar_one():
                 raise LockOcupado(f"advisory lock {LOCK_KEY} ocupado por outra publicacao")
@@ -1374,17 +1417,17 @@ def publicar(alvo_engine, fonte_engine, comps: list[date], canais: list[str], *,
                 raise MigrationAusente(f"{TABELA} nao existe: aplique a migration 025 antes do --apply")
             lote_id = conn.execute(SQL_AUDIT_ABRE, {"fonte": SOURCE_NAME, "agora": agora,
                                                     "min_date": comps[0], "max_date": ultimo_dia(comps[-1])}).scalar_one()
-            esperado = _esperado(conn, comps, canais)
+            esperado_lock = _esperado(conn, comps, canais)
             # Fotografia atual lida DENTRO da transacao e sob o lock: e' contra
             # ela que a guarda por marca compara o novo universo.
             publicadas = frozenset(
                 (_mes_de(r["competencia"]), r["canal"], r["marca"])
                 for r in _rows(conn, SQL_PUBLICADAS, {"competencias": comps, "canais": canais}))
-            cmv, contraprova, repasse, taxa_shopee = ler_fonte(fonte_engine, comps, canais, _marcas(esperado),
-                                                               check_aceita_taxa_shopee(conn))
-            impostos, estado_imp = ler_impostos(fonte_engine, comps, canais, _marcas(esperado),
-                                                check_aceita_impostos(conn))
-            numeracao, estado_nf = ler_numeracao_nf(fonte_engine, comps, _marcas(esperado))
+            deriva = _deriva(esperado, esperado_lock, (aceita_tx, aceita_imp),
+                             (check_aceita_taxa_shopee(conn), check_aceita_impostos(conn)))
+            if deriva:  # ANTES do DELETE: a origem foi lida para outro universo/contrato
+                raise PublicacaoRecusada(deriva)
+            esperado = esperado_lock
             lote = montar_lote(esperado=esperado, cmv=cmv, contraprova=contraprova, repasse=repasse, canais=canais,
                                comps=comps, sem_vendas=sem_vendas, publicadas=publicadas, remover=remover,
                                taxa_shopee=taxa_shopee, numeracao_nf=numeracao, impostos=impostos)
@@ -1517,8 +1560,12 @@ def _engines():
     # pyproject.toml raiz). Sem ele, a Connection do 1.4 nao tem `rollback()`
     # nem transacao implicita, e o `SET TRANSACTION READ ONLY` valeria so' para
     # o proprio comando. No 2.x o parametro e' aceito e nao muda nada.
-    alvo = create_engine(url_psycopg2(settings.database_url), pool_pre_ping=True, future=True)
-    fonte = (create_engine(url_psycopg2(settings.datamart_url), pool_pre_ping=True, future=True)
+    # Keepalive TCP (T-0087): conexao ociosa atras de proxy/NAT nao morre calada.
+    keepalives = {"keepalives": 1, "keepalives_idle": 30, "keepalives_interval": 10, "keepalives_count": 5}
+    alvo = create_engine(url_psycopg2(settings.database_url), pool_pre_ping=True, future=True,
+                         connect_args=keepalives)
+    fonte = (create_engine(url_psycopg2(settings.datamart_url), pool_pre_ping=True, future=True,
+                           connect_args=keepalives)
              if settings.datamart_url else None)
     return alvo, fonte
 
