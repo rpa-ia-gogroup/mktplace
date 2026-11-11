@@ -3,14 +3,16 @@
  *
  * Cobertura, ruptura, estoque baixo/alto e itens prioritarios do Full.
  *
- * TRES FONTES, TRES NATUREZAS — e a tool nao mistura:
+ * QUATRO FONTES, DUAS NATUREZAS — e a tool nao mistura:
  * - Shopee ESTOQUE (`/shopee-fbs-estoque`): fotografia fisica por produto no CD
- *   da Shopee, com classificacao da Torre. E' a unica fonte de ESTOQUE.
+ *   da Shopee, com classificacao da Torre.
+ * - Mercado Livre ESTOQUE (`/ml-full-estoque`, T-0080): fotografia fisica por
+ *   INVENTARIO no CD do ML, com SKU/titulo do anuncio-ancora e curva ABC.
+ *   Marca sem fotografia no dia e inventario sem leitura chegam NULOS e
+ *   continuam nulos; so' `sem_estoque_full` e' zero medido.
  * - Shopee FBS (`/shopee-fbs`): participacao FBS nas vendas do periodo.
- * - Mercado Livre Full (`/ml-fulfillment`): MODALIDADE do envio. A fonte nao
- *   mede estoque. Estoque Full do ML e' APLICAVEL, mas sem fonte integrada:
- *   `estoque: "sem_dado"` com `estoque_motivo: "fonte_nao_integrada"`, nunca
- *   zero (DISCOVERY-2, 16/10/2026 — antes era `nao_aplicavel`).
+ * - Mercado Livre Full (`/ml-fulfillment`): MODALIDADE do envio. Nao mede
+ *   estoque; o share Full nunca substitui o bloco `ml_estoque`.
  *
  * QUATRO ESTADOS que o modelo precisa distinguir, por item e por bloco:
  *   zero_real       mediu e deu zero (ex.: estoque vendavel 0 com venda)
@@ -27,7 +29,8 @@ import { z } from "zod";
 
 import { buildEnvelope } from "./envelope.ts";
 import {
-  STOCK_ML_NOT_STOCK, STOCK_PARTIAL_SCOPE, STOCK_TOWER_COVERAGE, type Limitation,
+  mlStockMissing, STOCK_ML_NOT_STOCK, STOCK_ML_TOWER_COVERAGE, STOCK_PARTIAL_SCOPE,
+  STOCK_TOWER_COVERAGE, type Limitation,
 } from "./limitations.ts";
 import { BRANDS, isoDate, noDuplicates, todayInAppTimezone, inclusiveDays } from "./schemas.ts";
 import { envelopeSchema, limitationSchema, ok, safeText, safeTexts, type OracleTool, type ToolDeps } from "./tool-kit.ts";
@@ -35,7 +38,8 @@ import { decOrNull, numOrNull } from "./torre-client.ts";
 import { toolError } from "./errors.ts";
 import { parseUpstream } from "./upstream.ts";
 import {
-  CLASSIFICACOES_ESTOQUE, mlFulfillmentContract, shopeeEstoqueContract, shopeeFbsContract,
+  CLASSIFICACOES_ESTOQUE, CURVAS_ABC, mlFulfillmentContract, mlFullEstoqueContract,
+  shopeeEstoqueContract, shopeeFbsContract,
 } from "./upstream-operacional.ts";
 
 export const ESTOQUE_MAX_ITENS = 50;
@@ -188,13 +192,81 @@ const shopeeFbsBlock = z.object({
   definicao_gmv: z.string(),
 });
 
+const mlEstoqueItemSchema = z.object({
+  posicao: z.number(),
+  brand: z.string(),
+  /** SKU/titulo do anuncio-ancora. null = sem identificacao, nunca "". */
+  sku: z.string().nullable(),
+  titulo: z.string().nullable(),
+  /** Curva ABC da planilha de sortimento. null = sem curva (ver curva_motivo), nunca "C". */
+  curva: z.enum(CURVAS_ABC).nullable(),
+  curva_motivo: z.string().nullable(),
+  classificacao: z.string(),
+  /** null = inventario sem leitura. 0 = mediu e deu zero. */
+  disponivel: z.number().nullable(),
+  estado_estoque: z.enum(ESTADOS),
+  /** O inventario serve a mais de um anuncio; o estoque aparece uma vez so'. */
+  compartilhado: z.boolean(),
+  unidades_vendidas_28d: z.number(),
+  media_diaria_28d: z.number().nullable(),
+  cobertura_dias: z.number().nullable(),
+  estado_cobertura: z.enum(ESTADOS),
+});
+
+const mlEstoqueBlock = z.object({
+  disponibilidade: z.enum(["available", "unavailable"]),
+  estado: z.enum(ESTADOS),
+  motivo_indisponivel: z.string().nullable(),
+  escopo: z.string(),
+  fotografia: z
+    .object({
+      ref_date: z.string(),
+      publicada_em: z.string().nullable(),
+      dias_desde_a_fotografia: z.number(),
+    })
+    .nullable(),
+  /** true = o total nao cobre o escopo inteiro (marca sem fotografia, sem leitura). */
+  total_parcial: z.boolean().nullable(),
+  motivos_total_parcial: z.array(z.string()),
+  indicadores: z
+    .object({
+      /** Soma das marcas COM medicao. null se nenhuma mediu. */
+      disponivel_full: z.number().nullable(),
+      inventarios_full: z.number(),
+      inventarios_sem_leitura: z.number(),
+      inventarios_ruptura: z.number(),
+      inventarios_baixo: z.number(),
+      inventarios_excesso: z.number(),
+      inventarios_sem_giro: z.number(),
+      inventarios_suficientes: z.number(),
+      inventarios_sem_demanda_medida: z.number(),
+      inventarios_exigem_acao: z.number(),
+    })
+    .nullable(),
+  limiares_provisorios: z
+    .object({ baixo_abaixo_de_dias: z.number(), excesso_a_partir_de_dias: z.number() })
+    .nullable(),
+  marcas: z.array(
+    z.object({
+      brand: z.string(),
+      /** sem_fotografia = ausencia (numeros nulos); sem_estoque_full = zero medido. */
+      estado: z.enum(["com_inventario", "sem_estoque_full", "sem_fotografia"]),
+      estado_estoque: z.enum(ESTADOS),
+      ultima_fotografia: z.string().nullable(),
+      inventarios: z.number().nullable(),
+      disponivel_full: z.number().nullable(),
+    }),
+  ),
+  itens: z.array(mlEstoqueItemSchema),
+  itens_no_filtro: z.number().nullable(),
+  /** false = planilha de curva nao lida: toda curva vem nula. null = fonte nao informou. */
+  curva_disponivel: z.boolean().nullable(),
+  marcas_nao_cobertas: z.array(z.string()),
+  notas_da_fonte: z.array(z.string()),
+});
+
 const mlFullBlock = z.object({
   estado: z.enum(ESTADOS),
-  /** Estoque Full do ML: aplicavel, sem fonte integrada. `sem_dado`, nunca
-   *  zero; os shares abaixo sao modalidade de venda, nao estoque. */
-  estoque: z.literal("sem_dado"),
-  estoque_aplicavel: z.literal(true),
-  estoque_motivo: z.literal("fonte_nao_integrada"),
   periodo_efetivo: z.object({ start: z.string(), end: z.string() }),
   marcas: z.array(z.string()),
   gmv_pago_total: z.number().nullable(),
@@ -237,10 +309,13 @@ const estoqueOutput = envelopeSchema(
   z.object({
     shopee_estoque: shopeeEstoqueBlock.nullable(),
     shopee_fbs: shopeeFbsBlock.nullable(),
+    ml_estoque: mlEstoqueBlock.nullable(),
     ml_full: mlFullBlock.nullable(),
     limitations: z.array(limitationSchema),
   }),
 );
+
+type MlEstoqueBlock = z.infer<typeof mlEstoqueBlock>;
 
 type ShopeeEstoqueBlock = z.infer<typeof shopeeEstoqueBlock>;
 type ShopeeFbsBlock = z.infer<typeof shopeeFbsBlock>;
@@ -423,6 +498,132 @@ async function shopeeFbs(
   };
 }
 
+function bloqueioMlEstoque(motivo: string, escopo: string, naoCobertas: string[], notas: string[] = []): MlEstoqueBlock {
+  return {
+    disponibilidade: "unavailable", estado: "sem_dado", motivo_indisponivel: motivo, escopo,
+    fotografia: null, total_parcial: null, motivos_total_parcial: [], indicadores: null,
+    limiares_provisorios: null, marcas: [], itens: [], itens_no_filtro: null,
+    curva_disponivel: null, marcas_nao_cobertas: naoCobertas, notas_da_fonte: notas,
+  };
+}
+
+/** Estado de uma quantidade medida (ou nao): null e' ausencia, 0 e' zero real. */
+function estadoDe(v: number | null): "sem_dado" | "zero_real" | "medido" {
+  return v === null ? "sem_dado" : v === 0 ? "zero_real" : "medido";
+}
+
+async function mlEstoque(input: EstoqueInput, deps: ToolDeps): Promise<MlEstoqueBlock> {
+  let marcas: string[] | undefined;
+  let naoCobertasPedidas: string[] = [];
+  if (input.marcas) {
+    // A fonte RECUSA marca fora da sua allowlist (422). A cobertura e' lida da
+    // propria resposta sem filtro (`marcas[]` = allowlist da fonte), nunca de
+    // uma lista fixa nossa — mesmo desenho do estoque Shopee.
+    const pre = parseUpstream(mlFullEstoqueContract, await deps.client.get("mlFullEstoque", { limite: 1 }));
+    if (pre.status === "unavailable") {
+      return bloqueioMlEstoque(safeText(pre.unavailable_reason) ?? "indisponivel", pre.scope_label, [], safeTexts(pre.limitacoes));
+    }
+    const cobertas = new Set(pre.marcas.map((m) => m.brand));
+    naoCobertasPedidas = input.marcas.filter((b) => !cobertas.has(b));
+    marcas = input.marcas.filter((b) => cobertas.has(b));
+    if (marcas.length === 0) {
+      return bloqueioMlEstoque(
+        "Nenhuma das marcas pedidas tem estoque Full do Mercado Livre nesta fonte.",
+        pre.scope_label, naoCobertasPedidas,
+      );
+    }
+  }
+
+  const p = parseUpstream(
+    mlFullEstoqueContract,
+    await deps.client.get("mlFullEstoque", {
+      brands: marcas ? [...marcas].sort() : undefined,
+      limite: input.limite,
+    }),
+  );
+  if (p.status === "unavailable") {
+    return bloqueioMlEstoque(
+      safeText(p.unavailable_reason) ?? "indisponivel", p.scope_label, naoCobertasPedidas, safeTexts(p.limitacoes),
+    );
+  }
+
+  // A fonte ja ordena por prioridade operacional; a ordem e' preservada.
+  const itens = p.inventarios.slice(0, input.limite).map((r, i) => {
+    const disponivel = r.read_status === "OK" ? numOrNull(r.disponivel) : null;
+    const cobertura = decOrNull(r.cobertura_torre_dias);
+    const semDemanda =
+      r.classificacao_torre === "SEM_DEMANDA_MEDIDA" || r.classificacao_torre === "SEM_LEITURA" || cobertura === null;
+    return {
+      posicao: i + 1,
+      brand: r.brand,
+      sku: safeText(r.sku),
+      titulo: safeText(r.titulo),
+      curva: r.curva ?? null,
+      curva_motivo: r.curva ? null : safeText(r.curva_motivo),
+      classificacao: r.classificacao_torre,
+      disponivel,
+      estado_estoque: estadoDe(disponivel),
+      compartilhado: r.compartilhado,
+      unidades_vendidas_28d: r.unidades_28d,
+      media_diaria_28d: decOrNull(r.media_diaria_28d),
+      cobertura_dias: semDemanda ? null : cobertura,
+      estado_cobertura: semDemanda ? ("sem_dado" as const) : estadoDe(cobertura),
+    };
+  });
+
+  const marcasOut = p.marcas.map((m) => {
+    // Sem fotografia: TODOS os numeros sao nulos, mesmo que a fonte mande algo.
+    if (m.estado == null) {
+      return {
+        brand: m.brand, estado: "sem_fotografia" as const, estado_estoque: "sem_dado" as const,
+        ultima_fotografia: m.ultima_fotografia ?? null, inventarios: null, disponivel_full: null,
+      };
+    }
+    const disp = numOrNull(m.disponivel_full);
+    return {
+      brand: m.brand, estado: m.estado, estado_estoque: estadoDe(disp),
+      ultima_fotografia: m.ultima_fotografia ?? null, inventarios: numOrNull(m.inventarios), disponivel_full: disp,
+    };
+  });
+
+  const ind = p.indicadores;
+  return {
+    disponibilidade: "available",
+    estado: "medido",
+    motivo_indisponivel: null,
+    escopo: p.scope_label,
+    fotografia: {
+      ref_date: p.frescor.ref_date,
+      publicada_em: p.frescor.published_at ?? null,
+      dias_desde_a_fotografia: p.frescor.dias_desde_a_fotografia,
+    },
+    total_parcial: ind.total_parcial,
+    motivos_total_parcial: safeTexts(ind.motivos_total_parcial, 400),
+    indicadores: {
+      disponivel_full: numOrNull(ind.disponivel_full),
+      inventarios_full: ind.inventarios_full,
+      inventarios_sem_leitura: ind.inventarios_sem_leitura,
+      inventarios_ruptura: ind.inventarios_ruptura,
+      inventarios_baixo: ind.inventarios_baixo,
+      inventarios_excesso: ind.inventarios_excesso,
+      inventarios_sem_giro: ind.inventarios_sem_giro,
+      inventarios_suficientes: ind.inventarios_suficientes,
+      inventarios_sem_demanda_medida: ind.inventarios_sem_demanda_medida,
+      inventarios_exigem_acao: ind.inventarios_exigem_acao,
+    },
+    limiares_provisorios: {
+      baixo_abaixo_de_dias: p.limites.cobertura_baixa_dias,
+      excesso_a_partir_de_dias: p.limites.cobertura_excesso_dias,
+    },
+    marcas: marcasOut,
+    itens,
+    itens_no_filtro: p.total_no_filtro,
+    curva_disponivel: p.curva_meta ? p.curva_meta.disponivel : null,
+    marcas_nao_cobertas: naoCobertasPedidas,
+    notas_da_fonte: safeTexts(p.limitacoes, 400),
+  };
+}
+
 async function mlFull(
   input: EstoqueInput, periodo: { start: string; end: string }, deps: ToolDeps,
 ): Promise<MlFullBlock> {
@@ -440,9 +641,6 @@ async function mlFull(
   const n = (v: number | null) => (semRegistro ? null : v);
   return {
     estado: semRegistro ? "sem_dado" : "medido",
-    estoque: "sem_dado",
-    estoque_aplicavel: true,
-    estoque_motivo: "fonte_nao_integrada",
     periodo_efetivo: { start: p.date_from, end: p.date_to },
     marcas: p.brands,
     gmv_pago_total: n(decOrNull(p.paid_gmv_total)),
@@ -492,7 +690,8 @@ export const estoqueTool: OracleTool = {
     description: [
       "Use para 'o que esta em ruptura ou com estoque baixo no Full', 'cobertura em dias', 'excesso de estoque', 'quanto das vendas sai pelo Full/FBS' e 'quais anuncios do ML migrar para o Full'.",
       "Shopee: shopee_estoque e' a fotografia FISICA no CD (unica fonte de estoque), com itens ordenados por risco (no maximo 50); shopee_fbs e' a participacao FBS nas vendas do periodo.",
-      "Mercado Livre: ml_full mede a MODALIDADE do envio (Full x nao-Full), nao estoque. Estoque Full do ML e' aplicavel mas sem fonte integrada (estoque='sem_dado', estoque_motivo='fonte_nao_integrada') — nunca diga que o estoque ML e' zero nem use o share Full como estoque.",
+      "Mercado Livre: ml_estoque e' a fotografia FISICA no CD por INVENTARIO, com sku, titulo e curva ABC (AA/A/B/C) quando a fonte identifica o item (null = sem identificacao ou sem curva, nunca 'C'); ml_full mede a MODALIDADE do envio (Full x nao-Full), nao estoque — nunca use o share Full como estoque.",
+      "Estoque ML: marca com estado 'sem_fotografia' ou item sem leitura vem com numeros NULOS (ausencia; o total vira parcial), nunca zero; so' 'sem_estoque_full' e' zero medido. Os filtros classificacoes/severidade valem so' para a Shopee.",
       "Cada item e bloco declara estado: zero_real (mediu zero), sem_dado (sem medicao), nao_conciliado (kits) ou nao_aplicavel. Nenhum dos tres ultimos vira zero.",
       "Cobertura e classificacao sao calculo da Torre com limiares PROVISORIOS, nao numero oficial da Shopee. Marcas fora da esteira vem em marcas_nao_cobertas e NAO estao nos totais.",
       "Escopo sem nenhum pedido no periodo (FBS ou Full ML) sai como sem_dado, de proposito: a fonte devolve 0 tanto para marca sem loja quanto para janela sem serie, e o conector nao afirma venda zero que nao consegue distinguir de ausencia.",
@@ -506,14 +705,19 @@ export const estoqueTool: OracleTool = {
     const periodo = resolveClosedPeriod(input, deps.now());
     const canais = input.canais ?? ["ml", "shopee"];
 
-    const [estoque, fbs, ml] = await Promise.all([
+    const [estoque, fbs, mlEst, ml] = await Promise.all([
       canais.includes("shopee") ? shopeeEstoque(input, deps) : null,
       canais.includes("shopee") ? shopeeFbs(input, periodo, deps) : null,
+      canais.includes("ml") ? mlEstoque(input, deps) : null,
       canais.includes("ml") ? mlFull(input, periodo, deps) : null,
     ]);
 
     const limitations: Limitation[] = [];
     if (ml) limitations.push(STOCK_ML_NOT_STOCK);
+    if (mlEst?.disponibilidade === "available") limitations.push(STOCK_ML_TOWER_COVERAGE);
+    if (mlEst?.disponibilidade === "unavailable") limitations.push(mlStockMissing(null));
+    const mlSemFoto = (mlEst?.marcas ?? []).filter((m) => m.estado === "sem_fotografia").map((m) => m.brand);
+    if (mlSemFoto.length > 0) limitations.push(mlStockMissing(mlSemFoto));
     if (estoque?.disponibilidade === "available") limitations.push(STOCK_TOWER_COVERAGE);
     if ((estoque?.marcas_nao_cobertas.length ?? 0) > 0 || (fbs?.marcas_nao_cobertas.length ?? 0) > 0) {
       limitations.push(STOCK_PARTIAL_SCOPE);
@@ -540,10 +744,30 @@ export const estoqueTool: OracleTool = {
     if (fbs?.estado === "sem_dado") warnings.push("Shopee FBS: sem serie no periodo/escopo — ausencia, nao venda zero.");
     if (ml && ml.frescor.status !== "fresh") warnings.push(`Mercado Livre Full: frescor '${ml.frescor.status}'.`);
     if (ml?.estado === "sem_dado") warnings.push("Mercado Livre Full: nenhum pedido pago no escopo — ausencia, nao venda zero.");
+    if (mlEst?.disponibilidade === "unavailable") {
+      warnings.push(`Estoque Full ML indisponivel: ${mlEst.motivo_indisponivel ?? "sem motivo"} — nao trate como estoque zero.`);
+    }
+    if ((mlEst?.marcas_nao_cobertas.length ?? 0) > 0) {
+      warnings.push(`Estoque Full ML: ${mlEst!.marcas_nao_cobertas.join(", ")} fora da fonte — ausencia, nao estoque zero.`);
+    }
+    if (mlSemFoto.length > 0) {
+      warnings.push(`Estoque Full ML sem fotografia no dia para ${mlSemFoto.join(", ")}: numeros nulos e total PARCIAL — nao e' estoque zero.`);
+    }
+    const diasMl = mlEst?.fotografia?.dias_desde_a_fotografia ?? null;
+    if (diasMl !== null && diasMl >= 1) {
+      warnings.push(`A fotografia de estoque Full do ML tem ${diasMl} dia(s): o estoque atual pode ser outro.`);
+    }
+    if (mlEst?.curva_disponivel === false) warnings.push("Curva ABC do ML indisponivel nesta resposta: curva nula em todos os itens, nao 'C'.");
 
-    const stamps = [estoque?.fotografia?.publicada_em, fbs?.frescor.publicado_em, ml?.frescor.publicado_em]
-      .filter((s): s is string => typeof s === "string").sort();
-    const itens = estoque?.itens.length ?? 0;
+    const stamps = [
+      estoque?.fotografia?.publicada_em, mlEst?.fotografia?.publicada_em, fbs?.frescor.publicado_em, ml?.frescor.publicado_em,
+    ].filter((s): s is string => typeof s === "string").sort();
+    const blocosItens = [estoque, mlEst].filter((b): b is NonNullable<typeof b> => b !== null);
+    const itens = blocosItens.reduce((n, b) => n + b.itens.length, 0);
+    // Total verdadeiro so' quando TODO bloco de itens presente informou o seu.
+    const totais = blocosItens.map((b) => b.itens_no_filtro);
+    const totalItens = totais.length > 0 && totais.every((t) => t !== null)
+      ? totais.reduce((n: number, t) => n + (t as number), 0) : null;
 
     const env = buildEnvelope({
       period: { start: periodo.start, end: periodo.end, inclusive: true },
@@ -555,14 +779,14 @@ export const estoqueTool: OracleTool = {
         busca: null,
       },
       metricDefinition:
-        "Estoque Full Shopee = soma do estoque VENDAVEL no CD; cobertura = vendavel / media diaria de 28 dias (calculo da Torre). Shares FBS/Full = participacao da modalidade no GMV, pedidos ou unidades do periodo. O periodo vale para FBS e Full ML; o estoque e' a ultima fotografia.",
+        "Estoque Full Shopee = soma do estoque VENDAVEL no CD; estoque Full ML = disponivel no CD por inventario (contado uma vez); cobertura = estoque / media diaria de 28 dias (calculo da Torre). Shares FBS/Full = participacao da modalidade no GMV, pedidos ou unidades do periodo. O periodo vale para FBS e Full ML; o estoque e' a ultima fotografia.",
       refreshedAt: stamps[0] ?? null,
-      coverage: `ate ${input.limite} itens de maior risco do estoque Shopee; Shopee na cobertura da esteira API`,
+      coverage: `ate ${input.limite} itens de maior risco por canal de estoque (Shopee e ML); Shopee na cobertura da esteira API`,
       limit: input.limite,
       returnedCount: itens,
-      totalCount: estoque?.itens_no_filtro ?? null,
+      totalCount: totalItens,
       warnings,
-      data: { shopee_estoque: estoque, shopee_fbs: fbs, ml_full: ml, limitations },
+      data: { shopee_estoque: estoque, shopee_fbs: fbs, ml_estoque: mlEst, ml_full: ml, limitations },
     });
 
     const partes: string[] = [];
@@ -571,7 +795,12 @@ export const estoqueTool: OracleTool = {
     } else if (estoque) {
       partes.push("Estoque Shopee indisponivel");
     }
-    if (ml) partes.push("estoque Full do Mercado Livre sem fonte integrada (ausente, nao zero; o share Full mede modalidade, nao estoque)");
+    if (mlEst?.indicadores) {
+      partes.push(`Estoque Full ML: ${mlEst.indicadores.inventarios_ruptura} inventario(s) em ruptura, ${mlEst.indicadores.inventarios_baixo} baixo, ${mlEst.indicadores.inventarios_excesso} em excesso (limiares provisorios)${mlEst.total_parcial ? ", total PARCIAL" : ""}`);
+    } else if (mlEst) {
+      partes.push("Estoque Full ML indisponivel (ausente, nao zero)");
+    }
+    if (ml) partes.push("o share Full do ML mede modalidade, nao estoque");
     return ok(`Full e estoque. ${partes.join("; ")}.`, env);
   },
 };

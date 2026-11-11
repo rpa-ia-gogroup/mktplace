@@ -351,6 +351,107 @@ const estoqueIndisponivel = z.object({
 export const shopeeEstoqueContract = z.discriminatedUnion("status", [estoqueOk, estoqueIndisponivel]);
 
 // ---------------------------------------------------------------------------
+// Estoque Full do Mercado Livre — fotografia por INVENTARIO (T-0080)
+//
+// Espelha `MLFullEstoqueResponse` (apps/api/app/schemas/ml_full_stock.py) so'
+// nos campos consumidos. Ausencia chega como `null` (inventario SEM_LEITURA,
+// marca sem fotografia) e o contrato NAO a converte: `count.nullish()`.
+// ---------------------------------------------------------------------------
+
+/** Dominio FECHADO da 029 (`CLASSIFICACOES` do servico). */
+export const CLASSIFICACOES_ESTOQUE_ML = [
+  "RUPTURA_CANDIDATA",
+  "BAIXO_CANDIDATO",
+  "EXCESSO_CANDIDATO",
+  "SEM_GIRO_CANDIDATO",
+  "SUFICIENTE",
+  "SEM_DEMANDA_MEDIDA",
+  "SEM_LEITURA",
+  "FORA_DO_FULL",
+] as const;
+
+/** Curva da planilha "Sortimento Gobeaute". Ausencia e' `null`, nunca "C". */
+export const CURVAS_ABC = ["AA", "A", "B", "C"] as const;
+
+const mlEstoqueMarca = z
+  .object({
+    brand: id,
+    tem_fotografia_no_dia: z.boolean(),
+    // `null` = sem fotografia no dia (ausencia). Nao e' um valor do enum.
+    estado: z.enum(["com_inventario", "sem_estoque_full"]).nullish(),
+    ultima_fotografia: z.string().nullish(),
+    inventarios: count.nullish(),
+    disponivel_full: count.nullish(),
+  })
+  // Sem fotografia <=> sem estado. Uma marca "sem fotografia" com estado (ou o
+  // inverso) e' contrato quebrado: a leitura de ausencia x zero depende disso.
+  .refine((m) => (m.estado == null) === !m.tem_fotografia_no_dia);
+
+const mlEstoqueOk = z.object({
+  status: z.literal("ok"),
+  marketplace: z.literal("ml"),
+  scope_label: z.string(),
+  frescor: z.object({
+    ref_date: id,
+    published_at: optStamp,
+    dias_desde_a_fotografia: count,
+  }),
+  cobertura: z.object({
+    marcas_com_fotografia: z.array(z.string()),
+    marcas_sem_fotografia: z.array(z.string()),
+  }),
+  indicadores: z.object({
+    disponivel_full: count.nullish(),
+    total_parcial: z.boolean(),
+    motivos_total_parcial: z.array(z.string()),
+    inventarios_full: count,
+    inventarios_sem_leitura: count,
+    inventarios_ruptura: count,
+    inventarios_baixo: count,
+    inventarios_excesso: count,
+    inventarios_sem_giro: count,
+    inventarios_suficientes: count,
+    inventarios_sem_demanda_medida: count,
+    inventarios_exigem_acao: count,
+  }),
+  marcas: z.array(mlEstoqueMarca),
+  inventarios: z.array(
+    z.object({
+      posicao: z.number().int().positive(),
+      brand: id,
+      read_status: z.string(),
+      disponivel: count.nullish(),
+      compartilhado: z.boolean(),
+      unidades_28d: count,
+      media_diaria_28d: decimal,
+      cobertura_torre_dias: optDecimal,
+      classificacao_torre: z.enum(CLASSIFICACOES_ESTOQUE_ML),
+      sku: z.string().nullish(),
+      titulo: z.string().nullish(),
+      curva: z.enum(CURVAS_ABC).nullish(),
+      curva_motivo: z.string().nullish(),
+    }),
+  ),
+  total_no_filtro: count,
+  truncado: z.boolean(),
+  limites: z.object({ cobertura_baixa_dias: count, cobertura_excesso_dias: count }),
+  limitacoes: z.array(z.string()),
+  curva_meta: z.object({ disponivel: z.boolean(), motivo: z.string().nullish() }).nullish(),
+});
+
+const mlEstoqueIndisponivel = z.object({
+  status: z.literal("unavailable"),
+  unavailable_reason: z.string(),
+  motivo_tecnico: z.enum([
+    "feature_flag_desligada", "fato_inexistente", "sem_fotografia_publicada", "sem_fotografia_na_data",
+  ]),
+  scope_label: z.string(),
+  limitacoes: z.array(z.string()).nullish(),
+});
+
+export const mlFullEstoqueContract = z.discriminatedUnion("status", [mlEstoqueOk, mlEstoqueIndisponivel]);
+
+// ---------------------------------------------------------------------------
 // Monitoramento de precos (PMA)
 // ---------------------------------------------------------------------------
 

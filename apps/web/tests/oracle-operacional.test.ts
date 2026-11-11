@@ -17,7 +17,7 @@ import { DRE_ENDPOINT_PATH, DRE_TOOL_NAME, dreInput, projectDre } from "../src/s
 import { CANAIS, FIXED_NOW } from "./oracle-fixtures.ts";
 import {
   AFFILIATE_COSTS, dreCelula, dreResponse, EXP_ML, EXP_SHOPEE, EXP_TIKTOK, EXP_TREND_ML,
-  EXP_TREND_SHOPEE, ML_FULL, ML_FULL_SEM_PEDIDO, PMA, SHOPEE_ESTOQUE, SHOPEE_ESTOQUE_INDISPONIVEL,
+  EXP_TREND_SHOPEE, ML_FULL, ML_FULL_ESTOQUE, ML_FULL_SEM_PEDIDO, PMA, SHOPEE_ESTOQUE, SHOPEE_ESTOQUE_INDISPONIVEL,
   SHOPEE_FBS, SHOPEE_FBS_SEM_SERIE, TIKTOK_DISCOUNTS,
 } from "./oracle-fixtures-operacional.ts";
 
@@ -49,6 +49,7 @@ const EXP_ROUTES: Record<string, Route> = {
 
 const STOCK_ROUTES: Record<string, Route> = {
   "/api/v1/performance/ml-fulfillment": ML_FULL,
+  "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE,
   "/api/v1/performance/shopee-fbs": SHOPEE_FBS,
   "/api/v1/performance/shopee-fbs-estoque": SHOPEE_ESTOQUE,
 };
@@ -244,19 +245,18 @@ test("expedicao: limites de janela e parametro desconhecido falham ANTES do GET"
 // Full e estoque
 // ===========================================================================
 
-test("estoque: ML Full e' aplicavel sem fonte (sem_dado, nunca zero); tempos sem amostra sao nulos", async () => {
+test("estoque: ml_full mede modalidade (nao estoque); o estoque ML vive em ml_estoque; tempos sem amostra sao nulos", async () => {
   const env = await call(await connect(STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"] });
   const ml = env.data.ml_full;
-  assert.equal(ml.estoque, "sem_dado");
-  assert.notEqual(ml.estoque, 0);
-  assert.equal(ml.estoque_aplicavel, true);
-  assert.equal(ml.estoque_motivo, "fonte_nao_integrada");
+  // T-0080: o bloco de modalidade nao carrega mais "fonte_nao_integrada".
+  assert.ok(!("estoque_motivo" in ml) && !("estoque" in ml));
+  assert.equal(env.data.ml_estoque.disponibilidade, "available");
   // O share Full (modalidade de venda) segue medido e NAO e' estoque.
   assert.equal(typeof ml.share_full_gmv, "number");
-  assert.ok(!("disponivel" in ml) && !("cobertura_dias" in ml), "nenhum campo de estoque inventado");
+  assert.ok(!("disponivel" in ml) && !("cobertura_dias" in ml), "nenhum campo de estoque no bloco de modalidade");
   const lim = env.data.limitations.find((l: any) => l.topic === "full_ml_nao_e_estoque");
-  assert.match(lim.description, /APLICAVEL/);
-  assert.match(lim.description, /nunca zero/);
+  assert.match(lim.description, /ml_estoque/);
+  assert.doesNotMatch(lim.description, /nao esta integrada/);
   assert.match(lim.description, /MODALIDADE do envio/);
   assert.equal(ml.gmv_pago_total, 1000.5, "Decimal em string vira numero");
   const unknown = ml.por_modalidade.find((m: any) => m.modalidade === "unknown");

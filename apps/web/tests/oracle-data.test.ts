@@ -14,6 +14,8 @@ import {
   BRANDS, CANAIS, FIXED_NOW, HEALTH, jsonFetch, OVERVIEW, PRODUTOS_ML,
   QUALITY, REFRESHED_AT, REGIOES_BY_UF, REGIOES_SUMMARY, TREND, type CallLog,
 } from "./oracle-fixtures.ts";
+import { ML_FULL, ML_FULL_ESTOQUE, ML_FULL_ESTOQUE_INDISPONIVEL } from "./oracle-fixtures-operacional.ts";
+import { mlFullEstoqueContract } from "../src/server/oracle/upstream-operacional.ts";
 
 const ROUTES = {
   "/api/v1/performance/overview": OVERVIEW,
@@ -508,4 +510,108 @@ test("a chave de servico nunca aparece nos erros do TorreClient", async () => {
       return true;
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// T-0080 — torre_estoque_full le o estoque Full REAL do Mercado Livre
+// ---------------------------------------------------------------------------
+
+const ML_STOCK_ROUTES = {
+  "/api/v1/performance/ml-fulfillment": ML_FULL,
+  "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE,
+};
+
+test("T-0080 estoque ML: marca com itens projeta SKU, titulo e curva; zero medido continua 0", async () => {
+  const env = await call(await connect(ML_STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"] });
+  const est = env.data.ml_estoque;
+  assert.equal(est.disponibilidade, "available");
+  assert.equal(est.fotografia.ref_date, "2026-08-18");
+  const [ruptura, suficiente, semLeitura] = est.itens;
+  assert.equal(suficiente.sku, "40125");
+  assert.equal(suficiente.titulo, "Kit Skincare Kokeshi");
+  assert.equal(suficiente.curva, "A");
+  assert.equal(suficiente.disponivel, 12);
+  assert.equal(suficiente.cobertura_dias, 12);
+  assert.equal(suficiente.estado_estoque, "medido");
+  // Sem curva: null com motivo, nunca "C".
+  assert.equal(ruptura.curva, null);
+  assert.equal(ruptura.curva_motivo, "sem_ponte");
+  assert.equal(ruptura.disponivel, 0, "ruptura medida e' zero real");
+  assert.equal(ruptura.estado_estoque, "zero_real");
+  assert.equal(ruptura.cobertura_dias, 0);
+  // Inventario sem leitura: nulo, nunca 0.
+  assert.equal(semLeitura.disponivel, null);
+  assert.equal(semLeitura.estado_estoque, "sem_dado");
+  assert.equal(semLeitura.cobertura_dias, null);
+  assert.equal(semLeitura.sku, null);
+  assert.equal(env.meta.total_count, 3);
+  assert.ok(env.data.limitations.some((l: any) => l.topic === "estoque_ml_cobertura_torre"));
+});
+
+test("T-0080 estoque ML: marca sem fotografia vem NULA com limitacao; sem_estoque_full e' zero medido", async () => {
+  const env = await call(await connect(ML_STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"] });
+  const est = env.data.ml_estoque;
+  const marca = Object.fromEntries(est.marcas.map((m: any) => [m.brand, m]));
+  assert.equal(marca.barbours.estado, "sem_fotografia");
+  assert.equal(marca.barbours.disponivel_full, null);
+  assert.notEqual(marca.barbours.disponivel_full, 0);
+  assert.equal(marca.barbours.estado_estoque, "sem_dado");
+  assert.equal(marca.rituaria.estado, "sem_estoque_full");
+  assert.equal(marca.rituaria.disponivel_full, 0);
+  assert.equal(marca.rituaria.estado_estoque, "zero_real");
+  assert.equal(est.total_parcial, true);
+  const lim = env.data.limitations.find((l: any) => l.topic === "estoque_ml_ausente");
+  assert.ok(lim, "limitacao de ausencia presente");
+  assert.match(lim.scope, /barbours/);
+  assert.doesNotMatch(lim.scope, /rituaria/, "sem_estoque_full nao e' ausencia");
+  assert.ok(env.meta.warnings.some((w: string) => /sem fotografia no dia para barbours/.test(w)));
+});
+
+test("T-0080 estoque ML: fonte indisponivel vira sem_dado + limitacao, nunca estoque zero", async () => {
+  const env = await call(
+    await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE_INDISPONIVEL }),
+    "torre_estoque_full",
+    { canais: ["ml"] },
+  );
+  const est = env.data.ml_estoque;
+  assert.equal(est.disponibilidade, "unavailable");
+  assert.equal(est.estado, "sem_dado");
+  assert.equal(est.indicadores, null);
+  assert.deepEqual(est.itens, []);
+  assert.ok(env.data.limitations.some((l: any) => l.topic === "estoque_ml_ausente" && /fonte indisponivel/.test(l.scope)));
+});
+
+test("T-0080 estoque ML: contrato rejeita formato quebrado (vira erro, nao sucesso vazio)", async () => {
+  assert.equal(mlFullEstoqueContract.safeParse(ML_FULL_ESTOQUE).success, true);
+  const inv = ML_FULL_ESTOQUE.inventarios[1];
+  const quebrados = [
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, disponivel: "12" }] },
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, curva: "D" }] },
+    { ...ML_FULL_ESTOQUE, inventarios: [{ ...inv, classificacao_torre: "PROVAVELMENTE_OK" }] },
+    // Marca "sem fotografia" com estado: ausencia x zero ficaria ambigua.
+    { ...ML_FULL_ESTOQUE, marcas: [{ ...ML_FULL_ESTOQUE.marcas[0], estado: "sem_estoque_full" }] },
+    { ...ML_FULL_ESTOQUE, indicadores: undefined },
+    { status: "unavailable", scope_label: "x" },
+  ];
+  for (const q of quebrados) assert.equal(mlFullEstoqueContract.safeParse(q).success, false, JSON.stringify(q).slice(0, 80));
+  const res = await (await connect({ ...ML_STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": quebrados[0] }))
+    .callTool({ name: "torre_estoque_full", arguments: { canais: ["ml"] } });
+  assert.equal(res.isError, true);
+});
+
+test("T-0080 estoque ML: limite sempre enviado; ref_date/incluir_fora_do_full nunca; marca fora da fonte nao vai ao GET", async () => {
+  const log: CallLog = [];
+  const env = await call(await connect(ML_STOCK_ROUTES, log), "torre_estoque_full", {
+    canais: ["ml"], marcas: ["kokeshi", "apice"], limite: 5,
+  });
+  const est = log.filter((c) => c.url.includes("/ml-full-estoque")).map((c) => new URL(c.url));
+  assert.equal(est.length, 2, "preflight + chamada filtrada");
+  assert.equal(est[0].searchParams.get("limite"), "1");
+  assert.deepEqual(est[1].searchParams.getAll("brands"), ["kokeshi"]);
+  assert.equal(est[1].searchParams.get("limite"), "5");
+  for (const u of est) {
+    assert.equal(u.searchParams.has("ref_date"), false);
+    assert.equal(u.searchParams.has("incluir_fora_do_full"), false);
+  }
+  assert.deepEqual(env.data.ml_estoque.marcas_nao_cobertas, ["apice"]);
 });

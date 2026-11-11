@@ -39,6 +39,8 @@ export const ENDPOINTS = {
   mlFulfillment: "/api/v1/performance/ml-fulfillment",
   shopeeFbs: "/api/v1/performance/shopee-fbs",
   shopeeFbsEstoque: "/api/v1/performance/shopee-fbs-estoque",
+  // T-0080: estoque FISICO no CD do ML, por inventario (nao e' a modalidade).
+  mlFullEstoque: "/api/v1/performance/ml-full-estoque",
   monitoramentoPreco: "/api/v1/performance/monitoramento-preco",
 } as const;
 
@@ -79,6 +81,10 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
   mlFulfillment: new Set(["brands", "date_from", "date_to"]),
   shopeeFbs: new Set(["brands", "date_from", "date_to"]),
   shopeeFbsEstoque: new Set(["brands", "classificacoes", "somente_acao", "limite"]),
+  // `ref_date` e `incluir_fora_do_full` ficam FORA: a tool le sempre a ultima
+  // fotografia, so' de inventario Full, e sempre com `limite` (o default da
+  // fonte e' 1000 linhas, perto do teto de bytes).
+  mlFullEstoque: new Set(["brands", "limite"]),
   monitoramentoPreco: new Set([
     "marketplace", "brand", "status", "product_type", "observed_date", "limit",
   ]),
