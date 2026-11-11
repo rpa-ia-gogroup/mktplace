@@ -33,4 +33,5 @@ test("pagina: grupos gerenciais com as identidades existentes, estados no padrao
   assert.ok(P.includes("<GrupoVelocidade") && P.includes("<GrupoSemDados"));
   assert.ok(P.includes('tipo="erro"') && P.includes('tipo="indisponivel"') && P.includes("<RetryButton"));
   assert.ok(!P.includes("Erro de carregamento"), "o banner duplicado do erro saiu");
+  assert.ok(!/fmtBrl\(|fmtNumber\(|toFixed/.test(P), "formato da casa em toda a pagina (alertas, tabelas e eixo)");
 });

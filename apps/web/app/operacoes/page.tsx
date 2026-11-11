@@ -23,7 +23,7 @@ import {
   type CreatorRow,
   type LiveRow,
 } from "@/lib/api-client";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -88,7 +88,7 @@ function GpmBadge({ v }: { v: number | null }) {
       : "bg-rose-100 text-rose-700";
   return (
     <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-semibold ${cls}`}>
-      {fmtBrl(v)}
+      {fmtBrlCurto(v)}
     </span>
   );
 }
@@ -101,7 +101,7 @@ function PctLiveColor({ v }: { v: number | null }) {
       : v >= 5
       ? "text-amber-700 font-semibold"
       : "text-rose-600 font-semibold";
-  return <span className={`tabular-nums ${cls}`}>{v.toFixed(1)}%</span>;
+  return <span className={`tabular-nums ${cls}`}>{fmtPctSimples(v)}</span>;
 }
 
 // Build a pivot table for the trend chart: date → { brand: gmv }
@@ -376,7 +376,7 @@ export default function OperacoesPage() {
                     <div className="text-right shrink-0">
                       <p className="text-xs text-rose-500 font-medium">Ad Spend</p>
                       <p className="text-sm font-bold text-rose-800 tabular-nums">
-                        {fmtBrl(a.ad_spend)}
+                        {fmtBrlCurto(a.ad_spend)}
                       </p>
                     </div>
                   )}
@@ -405,7 +405,7 @@ export default function OperacoesPage() {
                     <div className="text-right shrink-0">
                       <p className="text-xs text-amber-500 font-medium">ROAS</p>
                       <p className="text-sm font-bold text-amber-800 tabular-nums">
-                        {a.roas.toFixed(1)}x
+                        {fmtVezes(a.roas)}
                       </p>
                     </div>
                   )}
@@ -511,16 +511,16 @@ export default function OperacoesPage() {
                     {r.creator}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
-                    {fmtBrl(r.gmv)}
+                    {fmtBrlCurto(r.gmv)}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.videos > 0 ? fmtBrl(r.gmv_video) : <span className="text-slate-300">—</span>}
+                    {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.lives > 0 ? fmtBrl(r.gmv_live) : <span className="text-slate-300">—</span>}
+                    {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.views > 0 ? fmtNumber(r.views) : <span className="text-slate-300">—</span>}
+                    {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
                     {r.videos > 0 ? r.videos : <span className="text-slate-300">—</span>}
@@ -630,20 +630,20 @@ export default function OperacoesPage() {
                     {r.total_lives}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {(r.total_minutes / 60).toFixed(1)}h
+                    {(r.total_minutes / 60).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}h
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-900 font-semibold text-sm">
-                    {fmtBrl(r.live_gmv)}
+                    {fmtBrlCurto(r.live_gmv)}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <PctLiveColor v={r.pct_live} />
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
-                    {r.gmv_per_live != null ? fmtBrl(r.gmv_per_live) : "—"}
+                    {r.gmv_per_live != null ? fmtBrlCurto(r.gmv_per_live) : "—"}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600 text-sm">
                     {r.gmv_per_minute != null
-                      ? `R$ ${r.gmv_per_minute.toFixed(2)}`
+                      ? fmtBrlCurto(r.gmv_per_minute)
                       : "—"}
                   </td>
                 </tr>
@@ -718,7 +718,7 @@ export default function OperacoesPage() {
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(v) => fmtBrl(v as number)}
+                    tickFormatter={(v) => fmtBrlCurto(v as number)}
                     tick={{ fontSize: 11, fill: "#94a3b8" }}
                     axisLine={false}
                     tickLine={false}
@@ -726,7 +726,7 @@ export default function OperacoesPage() {
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [
-                      fmtBrl(value),
+                      fmtBrlCurto(value),
                       BRAND_LABELS[name] ?? name,
                     ]}
                     contentStyle={{
