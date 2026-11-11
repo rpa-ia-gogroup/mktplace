@@ -83,7 +83,8 @@ export default function PageHeader({ title, subtitle, icon: Icon, meta, scopeLin
               {!meta && scopeLine && <p className="text-xs text-ink-muted mt-0.5 tabular-nums">{scopeLine}</p>}
             </div>
           </div>
-          {meta ? <div className="flex flex-wrap items-center gap-1.5">{meta}</div> : status}
+          {/* Com `meta`, o `status` (ex.: "API offline") vem junto, nunca some. */}
+          {meta ? <div className="flex flex-wrap items-center gap-1.5">{meta}{status}</div> : status}
         </div>
       </div>
 

@@ -250,13 +250,13 @@ function RegioesPageInner() {
             <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />
             {/* A UF e' filtro/acao DESTA pagina: fica na barra, entra na
                 identidade da requisicao local e nao vira filtro global. */}
-            <div className="flex items-center gap-1.5 bg-white border border-violet-100 rounded-xl px-3 py-1.5 shadow-sm">
-              <label htmlFor="uf-filter" className="text-xs text-slate-500 font-medium">UF</label>
+            <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm">
+              <label htmlFor="uf-filter" className="text-ink-muted">UF</label>
               <select
                 id="uf-filter"
                 value={ufFilter}
                 onChange={(e) => setUfFilter(e.target.value)}
-                className="text-sm font-semibold text-violet-700 bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                className="rounded bg-transparent font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 <option value="">Todas</option>
                 {ALL_UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
