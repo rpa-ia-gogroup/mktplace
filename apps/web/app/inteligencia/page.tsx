@@ -582,7 +582,7 @@ function InteligenciaPageInner() {
                             <button
                               type="button"
                               onClick={() => setDialog({ kind: "evidence", item: r })}
-                              aria-label={`Detalhe de ${productLabel(r) ?? "produto sem título"}, marca ${brandLabel(r.brand)}`}
+                              aria-label={`Detalhe de ${r.title ?? r.item_id ?? "produto sem título"}, marca ${brandLabel(r.brand)}`}
                               className="mt-2 inline-flex items-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                             >
                               Detalhe
