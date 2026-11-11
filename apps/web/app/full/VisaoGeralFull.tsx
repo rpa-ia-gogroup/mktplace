@@ -93,6 +93,7 @@ import {
   type FiltroCurva,
   heroiRuptura,
   kpiImpacto,
+  marcaSemFoto,
   kpiParamVenda,
   pctDestaque,
   perdaDestaque,
@@ -152,7 +153,9 @@ function Fracao({ parte, base, motivo }: { parte: number | null; base: number | 
 }
 
 /** Segunda linha da celula de marca: so' o R$/dia; % do Full da marca e "sem preço" no title + sr-only. */
-function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedorTemEstoque: boolean; m: { perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number } }) {
+function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedorTemEstoque: boolean; m: { rupturas: number | null; perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number | null } }) {
+  // T-0085: marca sem fotografia no dia nao foi medida: "—", nunca "R$ 0/dia (0,0%)".
+  if (marcaSemFoto(m)) return <span className="block text-xs text-ink-muted"><Ausente motivo="sem fotografia no dia" /></span>;
   // R$ 0 porque o vendedor cobre as rupturas: diz o porque, nao "R$ 0/dia".
   if (vendedorTemEstoque) {
     return <Escondido texto="vendedor tem estoque" detalhe={`${fmtReais(m.perda_dia)}/dia potencial no Full, sem contar o estoque do vendedor`} className="block text-xs text-ink-muted" />;
@@ -160,7 +163,7 @@ function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedor
   const v = perdaDestaque(canal, m);
   if (v === null) return <span className="block text-xs text-ink-muted"><Ausente motivo="sem preço" /></span>;
   const p = pctDestaque(canal, m);
-  const detalhe = [p !== null ? `${fmtPct(p)} do Full da marca` : null, m.sem_preco > 0 ? `${fmtInt(m.sem_preco)} sem preço` : null].filter(Boolean).join(" · ");
+  const detalhe = [p !== null ? `${fmtPct(p)} do Full da marca` : null, m.sem_preco != null && m.sem_preco > 0 ? `${fmtInt(m.sem_preco)} sem preço` : null].filter(Boolean).join(" · ");
   return <Escondido texto={`${fmtReais(v)}/dia`} detalhe={detalhe || null} className="block whitespace-nowrap text-xs text-ink-muted" />;
 }
 

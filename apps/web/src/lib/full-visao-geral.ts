@@ -456,8 +456,9 @@ export interface ItemImpacto {
 
 export interface MarcaImpacto {
   brand: string;
-  rupturas: number;
-  sem_preco: number;
+  /** T-0085: `null` = marca sem fotografia no dia (nao medida), nunca 0. */
+  rupturas: number | null;
+  sem_preco: number | null;
   perda_dia: number | null;
   perda_dia_sem_vendedor: number | null;
   gmv_full_dia: number | null;
@@ -484,12 +485,52 @@ export interface CanalImpactoOk {
   pct_gmv_full_sem_vendedor: number | null;
   motivo_pct: string | null;
   marcas: MarcaImpacto[];
+  /** T-0085 (so' ML): marcas com foto no dia. O total soma e divide so' as medidas. */
+  cobertura?: CoberturaImpacto | null;
   itens: ItemImpacto[];
   /** API-4 (so' com `?anterior=true`): os totais na foto anterior, mesmo recorte. */
   anterior?: ImpactoAnterior | null;
   motivo_anterior?: string | null;
   /** So' com recorte diferente: marcas (ML) ou contas (Shopee) que so' existem numa das fotos. */
   diferenca_recorte?: { ref_date_anterior: string; so_na_atual: string[]; so_na_anterior: string[] } | null;
+}
+
+export interface CoberturaImpacto {
+  /** "completa" | "parcial" (string: valor novo nao quebra a tela). */
+  status: string;
+  marcas_com_foto: number;
+  marcas_total: number;
+  marcas_sem_foto?: string[];
+}
+
+/**
+ * T-0085: "parcial (2 de 4 marcas)". Usado pelo Full e pelo Financeiro: mora
+ * aqui porque `api-client.ts` nao carrega no `node --test` (import sem extensao).
+ */
+export function textoParcialMarcas(com: number, total: number): string {
+  return `parcial (${com} de ${total} ${total === 1 ? "marca" : "marcas"})`;
+}
+
+/** Total do canal sem todas as marcas com foto: "parcial (N de M marcas)"; senao `null`. */
+export function textoCoberturaImpacto(c: CoberturaImpacto | null | undefined): string | null {
+  if (!c || c.status !== "parcial") return null;
+  return textoParcialMarcas(c.marcas_com_foto, c.marcas_total);
+}
+
+/**
+ * Financeiro: % consolidado de taxa/repasse que so' cobre parte das marcas.
+ * `null` com cobertura completa, sem dado (o % ja' e' "—") ou sem cobertura.
+ */
+export function textoCoberturaFinanceiro(
+  c: { status: string; marcas_com_dado: number; marcas_total: number } | null | undefined,
+): string | null {
+  if (!c || c.status !== "parcial") return null;
+  return textoParcialMarcas(c.marcas_com_dado, c.marcas_total);
+}
+
+/** Marca do bloco de impacto sem fotografia no dia: tudo "—", nunca R$ 0 / 0,0%. */
+export function marcaSemFoto(m: Pick<MarcaImpacto, "rupturas">): boolean {
+  return m.rupturas === null;
 }
 
 export interface ImpactoAnterior {
@@ -569,14 +610,20 @@ export function kpiImpacto(
   const v = perdaDestaque(canal, c);
   if (v === null) return { valor: "—", comparacao: "sem preço" };
   const p = pctDestaque(canal, c);
+  // T-0085: total so' das marcas com foto; a tela diz "parcial (N de M marcas)" e quem ficou fora.
+  const parcial = textoCoberturaImpacto(c.cobertura);
+  const fora = parcial && c.cobertura?.marcas_sem_foto?.length ? ` · sem fotografia no dia: ${c.cobertura.marcas_sem_foto.join(", ")}` : "";
   // % nulo = faturamento Full da janela incompleto (a API so' calcula com os 28 dias): diz quantos.
   if (p === null) {
     const m = motivoSemPct(c, impacto!.janela_gmv_dias);
-    return { valor: `${fmtReais(v)}/dia`, comparacao: m.texto, detalhe: m.detalhe };
+    return { valor: `${fmtReais(v)}/dia`, comparacao: parcial ? `${m.texto} · ${parcial}` : m.texto, detalhe: m.detalhe };
   }
   // Na tela so' o R$/dia; base do % e janela deslocada vao no title.
   const base = canal === "ml" ? "do faturamento Full" : "só quem para a venda";
-  return { valor: fmtPct(p), comparacao: `${fmtReais(v)}/dia`, detalhe: base + janelaDeslocada(c) };
+  return {
+    valor: fmtPct(p), comparacao: parcial ? `${fmtReais(v)}/dia · ${parcial}` : `${fmtReais(v)}/dia`,
+    detalhe: base + janelaDeslocada(c) + fora,
+  };
 }
 
 /**

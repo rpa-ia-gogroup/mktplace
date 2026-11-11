@@ -1253,6 +1253,51 @@ def get_canais(
 # Financeiro
 # ---------------------------------------------------------------------------
 
+def _pct_da_marca(base: float, gmv: float) -> float | None:
+    """Razao base/GMV de UMA marca, em %. T-0085: ausencia nunca vira 0.
+
+    A fato chega com `COALESCE(SUM(...), 0)`, e a resposta ja' publica o
+    valor-base zerado como nulo (`fees or None`). O % segue a mesma regra:
+    sem valor-base (zero/nulo) ou sem GMV, o % e' nulo -- antes saia 0,0%.
+    """
+    if not base or gmv <= 0:
+        return None
+    return round(base / gmv * 100, 2)
+
+
+def _marcas_do_canal(brand_rows: list[dict], gmv_field: str) -> list[dict]:
+    """Marcas com GMV no canal: o universo da cobertura."""
+    return [r for r in brand_rows if (r.get(gmv_field) or 0) > 0]
+
+
+def _pct_coberto(brand_rows: list[dict], base_field: str, gmv_field: str) -> float | None:
+    """Consolidado: Σ base(marcas COM dado) / Σ GMV(das MESMAS marcas), em %.
+
+    T-0085: o denominador era o GMV de todas as marcas do canal, e a taxa de
+    uma marca saia diluida pelo GMV das marcas sem dado (Shopee out/26: 16,1%
+    com a taxa real da unica marca medida em 25,27%).
+    """
+    com_dado = [r for r in _marcas_do_canal(brand_rows, gmv_field) if r.get(base_field) is not None]
+    num = sum(_f(r[base_field]) for r in com_dado)
+    den = sum(_f(r[gmv_field]) for r in com_dado)
+    return _pct_da_marca(num, den)
+
+
+def _cobertura_marcas(brand_rows: list[dict], base_field: str, gmv_field: str) -> dict | None:
+    """Quantas marcas com GMV no canal entraram no % consolidado.
+
+    `None` = canal sem GMV no recorte (nao ha' o que cobrir). `status`:
+    `completa` (todas), `parcial` (algumas) ou `sem_dado` (nenhuma).
+    """
+    marcas = _marcas_do_canal(brand_rows, gmv_field)
+    if not marcas:
+        return None
+    sem = sorted(r["brand"] for r in marcas if r.get(base_field) is None)
+    com = len(marcas) - len(sem)
+    status = "completa" if not sem else ("parcial" if com else "sem_dado")
+    return {"status": status, "marcas_com_dado": com, "marcas_total": len(marcas), "marcas_sem_dado": sem}
+
+
 def get_financeiro(
     db: Session, marketplace: str, year: int, month: int, *,
     brand_keys: list[str] | None = None,
@@ -1312,8 +1357,9 @@ def get_financeiro(
                 "tiktok_gmv": tk_gmv or None,
                 "tiktok_settlement": tk_settlement or None,
                 "tiktok_fees": tk_fees or None,
-                "tiktok_avg_fee_pct": round(tk_fees / tk_gmv * 100, 2) if tk_gmv > 0 else None,
-                "tiktok_avg_settlement_pct": round(tk_settlement / tk_gmv * 100, 2) if tk_gmv > 0 else None,
+                # T-0085: sem o valor-base, o % e' nulo (nunca 0,0%).
+                "tiktok_avg_fee_pct": _pct_da_marca(tk_fees, tk_gmv),
+                "tiktok_avg_settlement_pct": _pct_da_marca(tk_settlement, tk_gmv),
             })
 
         if ml:
@@ -1364,7 +1410,7 @@ def get_financeiro(
                 # deste PR.
                 "ml_total_cost_pct": round((ml_spend + ml_shipping) / ml_gmv * 100, 2) if ml_gmv > 0 else None,
                 "ml_fees": ml_fees or None,
-                "ml_avg_fee_pct": round(ml_fees / ml_gmv * 100, 2) if ml_gmv > 0 and ml_fees > 0 else None,
+                "ml_avg_fee_pct": _pct_da_marca(ml_fees, ml_gmv),
             })
 
         if sh:
@@ -1378,8 +1424,9 @@ def get_financeiro(
                 "shopee_gmv": sh_gmv or None,
                 "shopee_settlement": sh_settlement or None,
                 "shopee_fees": sh_fees or None,
-                "shopee_avg_fee_pct": round(sh_fees / sh_gmv * 100, 2) if sh_gmv > 0 else None,
-                "shopee_avg_settlement_pct": round(sh_settlement / sh_gmv * 100, 2) if sh_gmv > 0 else None,
+                # T-0085: marca sem taxa/repasse na fato saia com 0,0% e barra.
+                "shopee_avg_fee_pct": _pct_da_marca(sh_fees, sh_gmv),
+                "shopee_avg_settlement_pct": _pct_da_marca(sh_settlement, sh_gmv),
                 "shopee_ad_spend": sh_spend or None,
                 "shopee_ad_revenue": sh_revenue or None,
                 "shopee_roas": round(sh_revenue / sh_spend, 2) if sh_spend > 0 else None,
@@ -1414,8 +1461,14 @@ def get_financeiro(
         "tiktok_gmv": tk_gmv_t or None,
         "tiktok_settlement": tk_set_t or None,
         "tiktok_fees": tk_fees_t or None,
-        "tiktok_avg_fee_pct": round(tk_fees_t / tk_gmv_t * 100, 2) if tk_gmv_t > 0 else None,
-        "tiktok_avg_settlement_pct": round(tk_set_t / tk_gmv_t * 100, 2) if tk_gmv_t > 0 else None,
+        # T-0085: as razoes de taxa/repasse do consolidado dividem SO' pelo GMV
+        # das marcas que tem o valor-base. Com o GMV cheio no denominador, a
+        # taxa de uma marca era diluida pelo GMV das marcas sem dado. A
+        # cobertura (`*_cobertura`) diz quantas marcas entraram.
+        "tiktok_avg_fee_pct": _pct_coberto(brand_rows, "tiktok_fees", "tiktok_gmv"),
+        "tiktok_avg_settlement_pct": _pct_coberto(brand_rows, "tiktok_settlement", "tiktok_gmv"),
+        "tiktok_fee_cobertura": _cobertura_marcas(brand_rows, "tiktok_fees", "tiktok_gmv"),
+        "tiktok_settlement_cobertura": _cobertura_marcas(brand_rows, "tiktok_settlement", "tiktok_gmv"),
         "ml_gmv": ml_gmv_t or None,
         "ml_ad_spend": ml_spend_t or None,
         "ml_ad_revenue": ml_rev_t or None,
@@ -1424,12 +1477,15 @@ def get_financeiro(
         "ml_cpc": round(ml_spend_t / ml_clicks_t, 4) if ml_clicks_t > 0 else None,
         "ml_total_cost_pct": round((ml_spend_t + ml_ship_t) / ml_gmv_t * 100, 2) if ml_gmv_t > 0 else None,
         "ml_fees": ml_fees_t or None,
-        "ml_avg_fee_pct": round(ml_fees_t / ml_gmv_t * 100, 2) if ml_gmv_t > 0 and ml_fees_t > 0 else None,
+        "ml_avg_fee_pct": _pct_coberto(brand_rows, "ml_fees", "ml_gmv"),
+        "ml_fee_cobertura": _cobertura_marcas(brand_rows, "ml_fees", "ml_gmv"),
         "shopee_gmv": sh_gmv_t or None,
         "shopee_settlement": sh_set_t or None,
         "shopee_fees": sh_fees_t or None,
-        "shopee_avg_fee_pct": round(sh_fees_t / sh_gmv_t * 100, 2) if sh_gmv_t > 0 else None,
-        "shopee_avg_settlement_pct": round(sh_set_t / sh_gmv_t * 100, 2) if sh_gmv_t > 0 else None,
+        "shopee_avg_fee_pct": _pct_coberto(brand_rows, "shopee_fees", "shopee_gmv"),
+        "shopee_avg_settlement_pct": _pct_coberto(brand_rows, "shopee_settlement", "shopee_gmv"),
+        "shopee_fee_cobertura": _cobertura_marcas(brand_rows, "shopee_fees", "shopee_gmv"),
+        "shopee_settlement_cobertura": _cobertura_marcas(brand_rows, "shopee_settlement", "shopee_gmv"),
         "shopee_ad_spend": sh_spend_t or None,
         "shopee_roas": round(sh_rev_t / sh_spend_t, 2) if sh_spend_t > 0 else None,
     }

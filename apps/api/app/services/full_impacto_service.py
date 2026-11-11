@@ -146,6 +146,14 @@ SQL_ML_GMV = text(f"""
      GROUP BY brand
 """)
 
+#: T-0085: marcas COM fotografia no dia. Marca so' com GMV (sem foto) nao foi
+#: medida: sai nula, fora do total. Mesmo SQL do recorte do API-4, mas com nome
+#: proprio: a chamada padrao nao calcula a foto anterior.
+SQL_ML_MARCAS_NA_FOTO = text(f"""
+    SELECT ARRAY_AGG(DISTINCT brand ORDER BY brand) FROM {ml_stock_svc.INVENTORY_TABLE}
+     WHERE brand = ANY(CAST(:brands AS text[])) AND ref_date = :ref_date
+""")
+
 SQL_SHOPEE_ULTIMA_FOTO = text(
     f"SELECT MAX(ref_date) FROM {fbs_stock_svc.FACT_TABLE}")
 
@@ -225,9 +233,24 @@ def _soma(valores) -> Decimal:
     return sum((v for v in valores if v is not None), Decimal(0))
 
 
+def _cobertura(marcas: list[dict], com_foto: set[str]) -> dict:
+    """T-0085: quantas marcas do bloco tem fotografia no dia."""
+    sem = sorted(m["brand"] for m in marcas if m["brand"] not in com_foto)
+    return {"status": "parcial" if sem else "completa",
+            "marcas_com_foto": len(marcas) - len(sem), "marcas_total": len(marcas),
+            "marcas_sem_foto": sem}
+
+
 def _montar_canal(canal: str, ref: date, itens: list[dict],
-                  gmv_rows: list[dict], fallback: int) -> dict:
-    """Agrega por marca e no canal. `itens` ja' tem `perda_dia` (ou None)."""
+                  gmv_rows: list[dict], fallback: int,
+                  marcas_com_foto: Optional[set[str]] = None) -> dict:
+    """Agrega por marca e no canal. `itens` ja' tem `perda_dia` (ou None).
+
+    `marcas_com_foto` (T-0085, so' ML): marca fora do conjunto nao foi medida
+    no dia -- rupturas/perda/% nulos (nunca 0) e GMV fora do denominador do
+    total. `None` = recorte por marca nao medido: todas contam, como antes.
+    """
+    medida = (lambda b: True) if marcas_com_foto is None else (lambda b: b in marcas_com_foto)
     gmv = {r["brand"]: (_dec(r["gmv"]) or Decimal(0), int(r["dias"])) for r in gmv_rows}
     dias = max((d for _, d in gmv.values()), default=0)
     gmv_ok = dias >= JANELA_GMV_DIAS
@@ -247,6 +270,15 @@ def _montar_canal(canal: str, ref: date, itens: list[dict],
         sem_vend = (_soma(i["perda_dia"] for i in its if i.get("estoque_vendedor") == 0)
                     if canal == "shopee" else None)
         base = gmv_dia(gmv[brand][0]) if brand in gmv else None
+        if not medida(brand):
+            # Sem foto no dia: ausencia, nao "0 rupturas, R$ 0/dia, 0,0%".
+            marcas.append({
+                "brand": brand, "rupturas": None, "sem_preco": None,
+                "perda_dia": None, "perda_dia_sem_vendedor": None,
+                "gmv_full_dia": _dinheiro(base),
+                "pct_gmv_full": None, "pct_gmv_full_sem_vendedor": None,
+            })
+            continue
         marcas.append({
             "brand": brand,
             "rupturas": len(its),
@@ -261,7 +293,10 @@ def _montar_canal(canal: str, ref: date, itens: list[dict],
     perda = _soma(i["perda_dia"] for i in itens)
     sem_vend = (_soma(i["perda_dia"] for i in itens if i.get("estoque_vendedor") == 0)
                 if canal == "shopee" else None)
-    base = gmv_dia(_soma(g for g, _ in gmv.values())) if gmv else None
+    # Denominador do total: so' o GMV das marcas medidas (T-0085). Com o GMV
+    # da marca sem foto, o % do canal saia diluido (ML: 8,18% x ~16,9%).
+    gmv_medido = [g for b, (g, _) in gmv.items() if medida(b)]
+    base = gmv_dia(_soma(gmv_medido)) if gmv_medido else None
     ordenados = sorted(itens, key=lambda i: (i["perda_dia"] is None, -(i["perda_dia"] or 0)))
     return {
         "canal": canal,
@@ -282,6 +317,7 @@ def _montar_canal(canal: str, ref: date, itens: list[dict],
         "pct_gmv_full_sem_vendedor": _fracao(sem_vend, base),
         "motivo_pct": None if gmv_ok else MOTIVO_GMV_INCOMPLETO,
         "marcas": marcas,
+        "cobertura": None if marcas_com_foto is None else _cobertura(marcas, marcas_com_foto),
         "itens": [{**i, "perda_dia": _dinheiro(i["perda_dia"]),
                    "preco_medio": _dinheiro(i["preco_medio"])} for i in ordenados],
     }
@@ -329,7 +365,8 @@ def _ml_na_foto(db: Session, marcas: list[str], ref: date) -> dict:
     # Brinde e descontinuado nao sao perda de venda: fora do impacto (planilha BD; sem leitura, todos contam).
     itens = curva_abc_svc.fora_da_fila(itens, db)
     gmv = db.execute(SQL_ML_GMV, p).mappings().all()
-    return _montar_canal("ml", ref, itens, gmv, fallback)
+    com_foto = set(db.execute(SQL_ML_MARCAS_NA_FOTO, p).scalar() or [])
+    return _montar_canal("ml", ref, itens, gmv, fallback, com_foto)
 
 
 def _shopee(db: Session, com_anterior: bool = False) -> dict:
