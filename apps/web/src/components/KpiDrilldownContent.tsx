@@ -206,11 +206,10 @@ const seg = (partes: FullDaMarca["full"]): Segmento[] =>
 const somaPartes = (partes: FullDaMarca["full"]) => CANAIS_FULL.reduce((a, c) => a + (partes[c] ?? 0), 0);
 
 const DICA_FULL_GMV =
-  "Full = ML Full + Shopee FBS, pela proporção de GMV medida até ontem aplicada ao valor do período (estimativa, não contagem); TikTok entra em Sem Full. Canal sem medida (Kokeshi na Shopee, que chega por arquivo) fica fora do %.";
-const DICA_FULL_PEDIDOS_REAL =
-  "Full = pedidos do ML Full + Shopee FBS, contados pedido a pedido nas fatos de modalidade (medida real); o resto, TikTok incluso, é Sem Full. Marca sem medida de Full (Kokeshi na Shopee) fica sem divisão e fora do %.";
-const DICA_FULL_PEDIDOS_APROX =
-  "Full = pedidos do ML Full + Shopee FBS, contados nas fatos de modalidade até ontem. O período inclui o dia em andamento, que ainda não tem modalidade: o total usa a proporção medida (estimativa, não contagem de hoje); TikTok entra em Sem Full. Marca sem medida de Full (Kokeshi na Shopee) fica sem divisão e fora do %.";
+  "Estimativa: a % de Full medida até ontem, aplicada ao GMV do período. Full = ML Full + Shopee FBS. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+const DICA_FULL_PEDIDOS =
+  "Full = pedidos enviados pelo ML Full e pela Shopee FBS, contados um a um. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+const DICA_FULL_PEDIDOS_HOJE = `${DICA_FULL_PEDIDOS} Hoje ainda não tem tipo de envio: o dia usa a proporção até ontem (estimativa).`;
 
 function GmvBreakdown({
   overview,
@@ -238,7 +237,7 @@ function GmvBreakdown({
   const escala = Math.max(0, ...ds.map((d) => (d ? Math.max(somaPartes(d.full), somaPartes(d.semFull), somaPartes(d.semDado)) : 0)));
   return (
     <>
-      <FullResumo full={tot.f} semFull={tot.s} semMedida={tot.n} fmt={fmtBrlCurto} dica={DICA_FULL_GMV} />
+      <FullResumo full={tot.f} semFull={tot.s} semMedida={tot.n} fmt={fmtBrlCurto} dica={DICA_FULL_GMV} estimado />
       <DrilldownSecao titulo="Por canal">
         <ul className="flex flex-col">
           {byChannel.map((c) => (
@@ -311,7 +310,8 @@ function OrdersBreakdown({ brands, full }: { brands: BrandRow[]; full: FullDoDet
         semFull={tot.s}
         semMedida={tot.n}
         fmt={fmtNumCurto}
-        dica={full?.aproximado ? DICA_FULL_PEDIDOS_APROX : DICA_FULL_PEDIDOS_REAL}
+        dica={full?.aproximado ? DICA_FULL_PEDIDOS_HOJE : DICA_FULL_PEDIDOS}
+        estimado={full?.aproximado}
       />
       <DrilldownSecao titulo="Por marca" acao={<span>{byBrand.length}</span>}>
         <ul className="flex flex-col">
