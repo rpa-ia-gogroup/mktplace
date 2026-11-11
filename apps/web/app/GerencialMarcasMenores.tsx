@@ -125,7 +125,7 @@ export default function GerencialMarcasMenores({
       ) : !dados.disponivel ? (
         <StateBlock
           tipo="indisponivel"
-          titulo="Marcas menores indisponíveis"
+          titulo="Demais marcas indisponíveis"
           descricao={dados.motivo ?? undefined}
           acao={
             <button type="button" onClick={() => setRecarga((n) => n + 1)} className="min-h-11 text-xs font-semibold text-accent-ink hover:underline">
@@ -135,7 +135,7 @@ export default function GerencialMarcasMenores({
         />
       ) : !comDado || !overview ? (
         semCanalDelas ? (
-          <StateBlock tipo="vazio" titulo="Sem dado das marcas menores no canal selecionado" descricao="As marcas menores vendem só na Shopee e no TikTok." />
+          <StateBlock tipo="vazio" titulo="Sem dado das demais marcas no canal selecionado" descricao="As demais marcas vendem só na Shopee e no TikTok." />
         ) : (
           <StateBlock tipo="vazio" titulo="Sem dado no período" descricao="Nenhum pedido das marcas escolhidas chegou do Bling neste recorte." />
         )
