@@ -35,7 +35,7 @@ interface Props {
  */
 export default function ScopeQualityBanner({ quality, loading }: Props) {
   if (loading && !quality) {
-    return <div className="mx-6 mt-3 h-4 w-56 rounded bg-slate-50 animate-pulse" aria-hidden />;
+    return <div className="mx-6 mt-3 h-4 w-56 rounded bg-raised animate-pulse" aria-hidden />;
   }
   if (!quality) return null;
 
@@ -60,14 +60,14 @@ export default function ScopeQualityBanner({ quality, loading }: Props) {
 
   if (calmo || (quality.warnings.length === 0 && !parcial)) {
     return (
-      <div className="flex items-center gap-1.5 px-6 pt-2 text-xs text-slate-500" data-testid="scope-quality-ok">
+      <div className="flex items-center gap-1.5 px-6 pt-2 text-xs text-ink-muted" data-testid="scope-quality-ok">
         <span>Competência madura nos seis eixos.</span>
         {dica}
       </div>
     );
   }
 
-  const tom = pior === "critical" ? "text-rose-700" : pior === "warning" ? "text-amber-700" : "text-slate-600";
+  const tom = pior === "critical" ? "text-crit-ink" : pior === "warning" ? "text-warn-ink" : "text-ink-muted";
 
   return (
     <div

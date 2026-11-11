@@ -506,7 +506,7 @@ function ProdutosPageInner() {
         // estao buscando, mostra um estado neutro em vez do `isLive` antigo.
         status={
           activeLoading ? (
-            <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
+            <span className="text-xs text-ink-muted bg-raised border border-line rounded-lg px-3 py-1.5 font-medium">
               Atualizando dados...
             </span>
           ) : (
@@ -523,14 +523,14 @@ function ProdutosPageInner() {
           loading, nunca quando os dois falham (o estado de erro/offline de
           cada componente ja cobre esse caso). */}
       {activePartialWarning && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2.5">
-          <p className="text-xs text-amber-800">{activePartialWarning}</p>
+        <div className="bg-warn-soft border border-warn/30 rounded-2xl px-4 py-2.5">
+          <p className="text-xs text-warn-ink">{activePartialWarning}</p>
         </div>
       )}
 
         {/* ML view */}
         {tab === "ml" && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
             <ProductFilterBar>
               <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
                 <option value="">Todas as marcas</option>
@@ -562,7 +562,7 @@ function ProdutosPageInner() {
               <ProductCount total={mlDisplayData?.total ?? null} />
             </ProductFilterBar>
 
-            <p className="px-6 pt-3 text-[11px] text-slate-400">
+            <p className="px-6 pt-3 text-[11px] text-ink-faint">
               {formatProdutosScope({
                 channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel: null,
                 total: mlDisplayData?.total ?? null, offset: mlOffset, limit: PAGE_SIZE,
@@ -586,7 +586,7 @@ function ProdutosPageInner() {
               dica={`Sem competência mensal na fonte: ranking acumulado atual. ${DICA_PARETO} ${marginUnavailableNote("ml")}`}
             />
 
-            <div className="flex items-center px-6 py-2 border-b border-violet-50">
+            <div className="flex items-center px-6 py-2 border-b border-line">
               <ProductExportButton
                 rows={mlDisplayData?.items ?? null}
                 loading={mlTableAvail !== "available"}
@@ -608,7 +608,7 @@ function ProdutosPageInner() {
 
         {/* TikTok view */}
         {tab === "tiktok" && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
             <ProductFilterBar>
               <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
                 <option value="">Todas as marcas</option>
@@ -618,14 +618,14 @@ function ProdutosPageInner() {
               <ProductCount total={tkDisplayData?.total ?? null} />
             </ProductFilterBar>
 
-            <p className="px-6 pt-3 text-[11px] text-slate-400">
+            <p className="px-6 pt-3 text-[11px] text-ink-faint">
               {formatProdutosScope({
                 channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
                 total: tkDisplayData?.total ?? null, offset: tkOffset, limit: PAGE_SIZE,
               })}
             </p>
 
-            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-amber-800" role="status">{progressoBling}</p>}
+            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
             <ProductParetoSummary
               buckets={tkDisplaySummary?.buckets ?? null}
               loading={tkSummaryAvail === "loading"}
@@ -638,7 +638,7 @@ function ProdutosPageInner() {
               dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("tiktok")}`}
             />
 
-            <div className="flex items-center px-6 py-2 border-b border-violet-50">
+            <div className="flex items-center px-6 py-2 border-b border-line">
               <ProductExportButton
                 rows={tkDisplayData?.items ?? null}
                 loading={tkTableAvail !== "available"}
@@ -660,7 +660,7 @@ function ProdutosPageInner() {
 
         {/* Shopee view */}
         {tab === "shopee" && (
-          <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
             <ProductFilterBar>
               <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
                 <option value="">Todas as marcas</option>
@@ -671,7 +671,7 @@ function ProdutosPageInner() {
               <ProductCount total={shUnavailable ? null : shDisplayData?.total ?? null} />
             </ProductFilterBar>
 
-            <p className="px-6 pt-3 text-[11px] text-slate-400">
+            <p className="px-6 pt-3 text-[11px] text-ink-faint">
               {formatProdutosScope({
                 channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
                 total: shUnavailable ? null : shDisplayData?.total ?? null, offset: shOffset, limit: PAGE_SIZE,
@@ -687,7 +687,7 @@ function ProdutosPageInner() {
               loading={shSummaryAvail === "loading"}
             />
 
-            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-amber-800" role="status">{progressoBling}</p>}
+            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
             <ProductParetoSummary
               buckets={shDisplaySummary?.buckets ?? null}
               loading={shSummaryAvail === "loading"}
@@ -701,7 +701,7 @@ function ProdutosPageInner() {
               dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
             />
 
-            <div className="flex items-center px-6 py-2 border-b border-violet-50">
+            <div className="flex items-center px-6 py-2 border-b border-line">
               <ProductExportButton
                 rows={shDisplayData?.items ?? null}
                 loading={shTableAvail !== "available"}
@@ -724,15 +724,15 @@ function ProdutosPageInner() {
       {/* "Todas as marcas": as menores (Bling) entram aqui, no MESMO layout, abaixo do ranking do Data Mart.
           Nao entram no ranking nem no A/B/C/D de cima: aquele e' calculado e paginado no servidor. */}
       {brand === "" && canalBling != null && blingTodas.produtos !== undefined && (blingTodas.produtos === null || !blingTodas.produtos.disponivel) && (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">Marcas menores indisponíveis agora (Bling).</p>
+        <p className="rounded-2xl border border-dashed border-line-strong bg-raised px-4 py-3 text-xs text-ink-muted">Marcas menores indisponíveis agora (Bling).</p>
       )}
       {brand === "" && canalBling != null && linhasTodasMenores.length > 0 && (
-        <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-6 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-slate-800">Marcas menores · {activeChannelLabel}</h2>
+            <h2 className="text-sm font-semibold text-ink">Marcas menores · {activeChannelLabel}</h2>
             <InfoDica texto={DICA_BLING_TODAS} />
           </div>
-          {progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-amber-800" role="status">{progressoTodas}</p>}
+          {progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-warn-ink" role="status">{progressoTodas}</p>}
           {canalBling === "tiktok" ? (
             <TikTokProductTable
               items={listaTikTok(linhasTodasMenores, { refMonth: refMes, sortColumn: menoresSort.sort.column, sortDirection: menoresSort.sort.direction, offset: menoresOffset, limit: PAGE_SIZE })}
@@ -759,7 +759,7 @@ function ProdutosPageInner() {
 export default function ProdutosPage() {
   // `useSearchParams` exige limite de Suspense no App Router.
   return (
-    <Suspense fallback={<PageContainer><p className="text-sm text-slate-500">Carregando produtos…</p></PageContainer>}>
+    <Suspense fallback={<PageContainer><p className="text-sm text-ink-muted">Carregando produtos…</p></PageContainer>}>
       <ProdutosPageInner />
     </Suspense>
   );

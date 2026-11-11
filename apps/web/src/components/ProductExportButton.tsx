@@ -54,7 +54,7 @@ export default function ProductExportButton<T>({ rows, loading, columns, toRecor
   return (
     <div className="flex items-center gap-2 ml-auto">
       {error && (
-        <span role="alert" aria-live="assertive" className="text-xs text-rose-600">
+        <span role="alert" aria-live="assertive" className="text-xs text-crit">
           {error}
         </span>
       )}
@@ -62,7 +62,7 @@ export default function ProductExportButton<T>({ rows, loading, columns, toRecor
         type="button"
         onClick={handleExport}
         disabled={disabled}
-        className="text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg px-3 py-1.5 hover:bg-violet-50 disabled:opacity-40 disabled:cursor-default transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 whitespace-nowrap"
+        className="text-xs font-semibold text-accent-ink border border-line rounded-lg px-3 py-1.5 hover:bg-accent-soft disabled:opacity-40 disabled:cursor-default transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent whitespace-nowrap"
       >
         {exporting ? "Exportando..." : "Exportar página (.csv)"}
       </button>

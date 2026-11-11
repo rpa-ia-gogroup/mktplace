@@ -9,7 +9,7 @@ interface Props {
 export default function ProductCount({ total, label = "produtos" }: Props) {
   if (total == null) return null;
   return (
-    <span className="text-xs text-slate-500 tabular-nums ml-auto">
+    <span className="text-xs text-ink-muted tabular-nums ml-auto">
       {fmtNumber(total)} {label}
     </span>
   );
