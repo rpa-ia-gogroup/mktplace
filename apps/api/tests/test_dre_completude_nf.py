@@ -29,8 +29,8 @@ def test_buraco_poe_o_cmv_em_parcial_sem_mudar_o_valor():
     assert cm["valor"] == 300_000.0  # o publicado, nada extrapolado
     assert cm["motivo"].startswith(BURACO + ": notas ausentes da base fiscal")
     assert "(publicacao: reconciliado)" in cm["motivo"]
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
-    assert c["margem_contribuicao_conhecida"]["valor"] is None
+    assert c["classificacao"] == dre.PARCIAL  # T-0090: entra na margem como parcial
+    assert c["margem_contribuicao_conhecida"]["componentes_parciais"] == ["cmv"]
     assert any(m.startswith("cmv parcial") for m in c["motivos_classificacao"])
 
 

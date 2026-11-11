@@ -57,9 +57,11 @@ def test_cobertura_abaixo_do_limiar_vira_parcial_sem_extrapolar():
     assert "94.67%" in cm["motivo"] and "extrapolado" in cm["motivo"]
     assert cm["cobertura"] == pytest.approx(0.9467)
     assert cm["cmv_pct_receita_coberta"] == pytest.approx(round(300_000 / 946_700 * 100, 2))
-    # CMV fora da margem -> sem margem conhecida, com motivo nomeado
-    assert c["classificacao"] == dre.NAO_CALCULAVEL
-    assert c["margem_contribuicao_conhecida"]["valor"] is None
+    # T-0090: CMV parcial entra na margem como parcial, com aviso e motivo nomeado
+    assert c["classificacao"] == dre.PARCIAL
+    assert cm["origem"] == "parcial" and cm["cobertura_rotulo"] == "custo em 94,7% da receita fiscal"
+    assert c["margem_contribuicao_conhecida"]["componentes_parciais"] == ["cmv"]
+    assert c["margem_contribuicao_conhecida"]["aviso"] is not None
     assert any(m.startswith("cmv parcial") for m in c["motivos_classificacao"])
 
 
@@ -127,7 +129,7 @@ def test_agregado_com_celula_parcial_por_cobertura_e_parcial():
         canais=("ml",),
     )
     assert r["total"]["componentes"]["cmv"]["status"] == dre.COBERTURA_PARCIAL
-    assert r["total"]["classificacao"] == dre.NAO_CALCULAVEL
+    assert r["total"]["classificacao"] == dre.PARCIAL
 
 
 def test_contrato_serializa_campos_e_descarta_chaves_internas():

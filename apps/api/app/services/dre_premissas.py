@@ -30,6 +30,12 @@ REGRAS
 - **Realizado intacto.** Receita, CMV, Ads e taxas vem da celula realizada,
   com o status dela. Nenhuma regra de maturidade e' enfraquecida: mes em
   andamento e' PREVIA, mes imaturo nunca e' `calculavel`.
+- **Sempre com numeros (T-0090).** `nao_calculavel` so' sem receita ou com
+  premissa invalida. CMV ou taxa sem valor viram linha ausente e o cenario
+  fica `parcial`. So' NO CENARIO: CMV nao reconciliado/parcial/provisorio e'
+  EXTRAPOLADO pela razao CMV / receita com custo, e a taxa do escrow Shopee
+  parcial e' estendida aos pedidos sem escrow (`origem = extrapolado`). A DRE
+  realizada nunca extrapola.
 """
 from __future__ import annotations
 
@@ -47,6 +53,8 @@ NAO_CALCULAVEL = "nao_calculavel"
 _ORDEM = {NAO_CALCULAVEL: 0, PARCIAL: 1, CALCULAVEL: 2}
 
 ORIGEM_REALIZADO = "realizado"
+ORIGEM_PARCIAL = "parcial"           # T-0090: valor realizado incompleto, como medido
+ORIGEM_EXTRAPOLADO = "extrapolado"   # T-0090: realizado parcial estendido ao todo (so' no cenario)
 ORIGEM_PREMISSA = "premissa"
 ORIGEM_DECOMPOSICAO = "decomposicao"
 ORIGEM_INDISPONIVEL = "indisponivel"
@@ -126,7 +134,13 @@ ANTES_LUCRO_BRUTO = SUBTOTAL_ATE["receita_liquida_estimada"] + (
 
 #: Status da celula realizada que tornam o componente utilizavel no cenario.
 USAVEL_OK = ("disponivel",)
-USAVEL_PARCIAL = ("parcial", "provisorio", "nao_confirmado")
+USAVEL_PARCIAL = ("parcial", "provisorio", "nao_confirmado", "nao_reconciliado")
+#: T-0090: status de CMV extrapolavel pela razao CMV / receita com custo.
+CMV_EXTRAPOLAVEL = ("nao_reconciliado", "parcial", "provisorio")
+
+
+def _pct_br(fracao: float, casas: int = 1) -> str:
+    return f"{fracao * 100:.{casas}f}".replace(".", ",") + "%"
 
 
 # ---------------------------------------------------------------------------
@@ -283,14 +297,17 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
     uso = _uso(cmv)
     e = por_linha["cmv"]
     if uso == "inutilizavel":
-        motivos_nc.append(f"cmv {cmv['status']}: {cmv['motivo']}")
+        # T-0090: linha ausente, cenario parcial; nunca mais nao_calculavel.
+        motivos_parcial.append(f"cmv {cmv['status']}: {cmv['motivo']}")
         linhas["cmv"] = _linha(e, status=cmv["status"], motivo=cmv["motivo"])
         ausentes.append({"linha": "cmv", "motivo": cmv["status"]})
-    else:
+    elif uso == "ok":
         linhas["cmv"] = _linha(e, valor=cmv["valor"], origem=ORIGEM_REALIZADO, status=cmv["status"],
                                motivo=cmv["motivo"])
-        if uso == "parcial":
-            motivos_parcial.append(f"cmv {cmv['status']}")
+    else:
+        linhas["cmv"] = _cmv_parcial(e, cmv, receita)
+        extra = " extrapolado" if linhas["cmv"]["origem"] == ORIGEM_EXTRAPOLADO else ""
+        motivos_parcial.append(f"cmv {cmv['status']}{extra}")
 
     # --- Midia Online (Ads realizado) --------------------------------------
     ads = comps["ads"]
@@ -302,8 +319,9 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
         ausentes.append({"linha": "midia_online", "motivo": ads["status"]})
         motivos_parcial.append(f"midia online {ads['status']}: {ads['motivo']}")
     else:
-        linhas["midia_online"] = _linha(e, valor=ads["valor"], origem=ORIGEM_REALIZADO, status=ads["status"],
-                                        motivo=ads["motivo"])
+        linhas["midia_online"] = _linha(e, valor=ads["valor"],
+                                        origem=ORIGEM_PARCIAL if _uso(ads) == "parcial" else ORIGEM_REALIZADO,
+                                        status=ads["status"], motivo=ads["motivo"])
         if _uso(ads) == "parcial":
             motivos_parcial.append(f"midia online {ads['status']}")
 
@@ -312,14 +330,17 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
     e_mk, e_in = por_linha["despesas_marketplace"], por_linha["influencer"]
     uso_tx = _uso(tx)
     if uso_tx == "inutilizavel":
-        motivos_nc.append(f"taxas {tx['status']}: {tx['motivo']}")
+        # T-0090: linha ausente, cenario parcial; nunca mais nao_calculavel.
+        motivos_parcial.append(f"taxas {tx['status']}: {tx['motivo']}")
         linhas["despesas_marketplace"] = _linha(e_mk, status=tx["status"], motivo=tx["motivo"])
         ausentes.append({"linha": "despesas_marketplace", "motivo": tx["status"]})
-    else:
-        if uso_tx == "parcial":
-            motivos_parcial.append(f"taxas {tx['status']}")
+    elif uso_tx == "ok":
         linhas["despesas_marketplace"] = _linha(e_mk, valor=tx["valor"], origem=ORIGEM_REALIZADO,
                                                 status=tx["status"], motivo=tx["motivo"])
+    else:
+        linhas["despesas_marketplace"] = _taxas_parciais(e_mk, tx, canal)
+        extra = " extrapolado" if linhas["despesas_marketplace"]["origem"] == ORIGEM_EXTRAPOLADO else ""
+        motivos_parcial.append(f"taxas {tx['status']}{extra}")
     if canal == "tiktok":
         af_ok = af["status"] == "disponivel" and af["valor"] is not None
         if af_ok and uso_tx != "inutilizavel" and af["valor"] <= tx["valor"] + 0.01:
@@ -390,7 +411,39 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
                             "source_sha256": next(iter(premissa["sha"]), None),
                             "carregado_em": premissa["carregado_em"]},
         "celulas": 1,
+        "celulas_sem_premissa": 0,
     }
+
+
+def _cmv_parcial(e: dict, cmv: dict, receita: float | None) -> dict:
+    """CMV com valor mas nao `disponivel` no cenario (T-0090).
+
+    Com a razao CMV / receita COM custo conhecida, o cenario a aplica a'
+    receita inteira (`extrapolado`): a NF que cobre so' parte do GMV nao vira
+    custo baixo. Sem essa base, o valor medido entra como esta (`parcial`).
+    """
+    rcc = cmv.get("_receita_com_custo")
+    pct = cmv.get("cmv_pct_receita_coberta")
+    razao = (cmv["valor"] / rcc) if rcc else (None if pct is None else pct / 100)
+    if cmv["status"] in CMV_EXTRAPOLAVEL and razao is not None and receita is not None:
+        nf = cmv.get("_razao_nf_gmv")
+        motivo = (f"extrapolado: CMV de {_pct_br(razao)} da receita com custo aplicado à receita inteira"
+                  + (f" (NF cobre {nf * 100:.0f}% do GMV)" if nf is not None else ""))
+        return _linha(e, valor=_r2(razao * receita), origem=ORIGEM_EXTRAPOLADO, status=cmv["status"], motivo=motivo)
+    return _linha(e, valor=cmv["valor"], origem=ORIGEM_PARCIAL, status=cmv["status"], motivo=cmv["motivo"])
+
+
+def _taxas_parciais(e: dict, tx: dict, canal: str) -> dict:
+    """Taxa com valor mas nao `disponivel` no cenario (T-0090).
+
+    Escrow Shopee parcial com a fracao de pedidos conhecida: valor / fracao
+    (`extrapolado`). Outros parciais: o valor medido (`parcial`).
+    """
+    frac = tx.get("_cobertura_pedidos")
+    if canal == "shopee" and tx["status"] == "parcial" and frac is not None and 0 < frac < 1:
+        return _linha(e, valor=_r2(tx["valor"] / frac), origem=ORIGEM_EXTRAPOLADO, status=tx["status"],
+                      motivo=f"extrapolado: taxa do escrow ({_pct_br(frac)} dos pedidos) estendida à parte sem escrow")
+    return _linha(e, valor=tx["valor"], origem=ORIGEM_PARCIAL, status=tx["status"], motivo=tx["motivo"])
 
 
 def _subtotais(linhas: dict[str, dict], receita: float | None, *, calcular: bool) -> None:
@@ -418,9 +471,10 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
     """Soma os cenarios das celulas base do recorte.
 
     - todas sem cenario -> None;
-    - parte sem cenario -> `nao_calculavel`: o recorte mistura celulas sem
-      premissa (outra competencia ou marca fora da matriz) e a margem nao pode
-      ser comparada;
+    - parte sem cenario (T-0090) -> no maximo `parcial`: soma so' as celulas
+      COM cenario (`receita_base` delas), conta as demais em
+      `celulas_sem_premissa` e diz isso nos motivos. A premissa nunca e'
+      estendida a celula sem premissa;
     - senao: cada linha e' a SOMA dos valores das celulas; o percentual da
       marca nao existe no agregado (`percentual=None`), so' o efetivo
       `pct_receita`; margem = soma das margens das celulas, e so' se nenhuma
@@ -429,7 +483,7 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
     if not cenarios or all(c is None for c in cenarios):
         return None
     validos = [c for c in cenarios if c is not None]
-    misto = len(validos) != len(cenarios)
+    sem_premissa = len(cenarios) - len(validos)
     receita = sum(c["receita_base"] for c in validos if c["receita_base"] is not None)
     linhas = []
     for i, e in enumerate(ESTRUTURA + INFORMATIVAS):
@@ -446,9 +500,11 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
                        "somavel": partes[0]["somavel"], "pct_receita": _pct(valor, receita)})
     estado = min((c["estado"] for c in validos), key=_ORDEM.get)
     motivos = []
-    if misto:
-        estado = NAO_CALCULAVEL
-        motivos.append("o recorte mistura celulas sem premissa publicada; premissa nunca e' estendida")
+    if sem_premissa:
+        if estado == CALCULAVEL:
+            estado = PARCIAL
+        motivos.append(f"{sem_premissa} célula(s) sem premissa publicada ficaram fora do cenário "
+                       "(premissa nunca é estendida)")
     for c in validos:
         for m in c["motivos"]:
             if m not in motivos:
@@ -480,6 +536,7 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
         "margem_contribuicao_estimada_pct": _pct(margem, receita),
         "fonte_premissas": validos[0]["fonte_premissas"],
         "celulas": sum(c["celulas"] for c in validos),
+        "celulas_sem_premissa": sem_premissa,
     }
 
 

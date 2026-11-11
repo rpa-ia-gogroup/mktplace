@@ -114,7 +114,7 @@ def test_rota_serve_insumo_publicado_sem_data_mart(ambiente):
     assert tk["componentes"]["afiliados"]["somavel"] is False
     assert "afiliados" not in tk["margem_contribuicao_conhecida"]["componentes_usados"]
     sh = _cel(res, "shopee", "kokeshi")
-    assert sh["classificacao"] == "NAO_CALCULAVEL"
+    assert sh["classificacao"] == "PARCIAL"  # T-0090: com receita, nunca NAO_CALCULAVEL
     assert sh["componentes"]["cmv"]["status"] == "nao_reconciliado"
 
 
@@ -140,7 +140,8 @@ def test_lote_vencido_vira_indisponivel_na_rota(ambiente):
         cel = _cel(res, canal, "kokeshi")
         assert cel["componentes"]["cmv"]["status"] == "snapshot_vencido"
         assert cel["componentes"]["cmv"]["valor"] is None
-        assert cel["classificacao"] == "NAO_CALCULAVEL"
+        assert cel["classificacao"] == "PARCIAL"  # T-0090: vencido sai da margem, a celula nao
+        assert cel["componentes"]["cmv"]["entra_na_margem"] is False
 
 
 def test_lote_que_falhou_depois_nao_apaga_o_anterior_mas_ele_vence(ambiente):
