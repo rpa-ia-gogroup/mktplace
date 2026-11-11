@@ -26,7 +26,7 @@ const { default: DreFiltros } = await import("../src/components/dre/DreFiltros.t
 const { DreMarcasTabela, DreMarcaCanalMatriz, CelulaNaoCalculavel, explicacaoRanking } = await import(
   "../src/components/dre/DreMarcas.tsx"
 );
-const { canaisBloqueadores, canaisCalculaveisOcultos, FILTROS_PADRAO } = await import("../src/lib/dre.ts");
+const { canaisBloqueadores, FILTROS_PADRAO } = await import("../src/lib/dre.ts");
 const fx = await import("./dre-fixtures.ts");
 
 /** HTML -> texto legivel (tags fora, entidades basicas resolvidas). */
@@ -102,7 +102,7 @@ test("canais: TikTok e ML com margem real; Shopee sem R$ 0; ausencias qualificad
   assert.match(sh, /Por que não é calculável/);
 });
 
-test("marcas: ranking vazio explicado, mesmo botao do resumo, status no lugar do travessao", () => {
+test("marcas: ranking vazio explicado, status no lugar do travessao (T-0090: sem botao de recorte)", () => {
   const r = fx.resposta();
   const naoCalc = [
     fx.MARCA_C,
@@ -113,8 +113,6 @@ test("marcas: ranking vazio explicado, mesmo botao do resumo, status no lugar do
       marcas: naoCalc,
       total: r.total,
       bloqueadores: canaisBloqueadores(r),
-      calculaveis: canaisCalculaveisOcultos(r),
-      aoFiltrar: () => {},
     }),
   );
   const t = texto(html);
@@ -122,7 +120,7 @@ test("marcas: ranking vazio explicado, mesmo botao do resumo, status no lugar do
   assert.doesNotMatch(t, /Custos ausentes/);
   assert.match(t, /Ranking vazio: nenhuma marca é comparável neste recorte porque Shopee não é calculável/);
   assert.match(t, /Receita e share continuam válidos/);
-  assert.match(t, /Ver só TikTok Shop \+ Mercado Livre/);
+  assert.doesNotMatch(t, /Ver só/, "T-0090: o botao de recorte saiu");
   assert.match(t, /Não comparável/);
   assert.doesNotMatch(t, R_ZERO);
   // nenhuma celula de margem/share com travessao solto
@@ -149,12 +147,11 @@ test("fotografia vencida (medido em 16/10): todos os canais bloqueiam, sem canal
   const vencido = (c: typeof fx.ML) => ({ ...c, classificacao: "NAO_CALCULAVEL" as const, motivos_classificacao: ["taxas snapshot_vencido"], margem_contribuicao_conhecida: { ...c.margem_contribuicao_conhecida, valor: null, pct_receita: null, componentes_usados: [] } });
   const r = fx.resposta({ por_canal: [vencido(fx.TIKTOK), vencido(fx.ML), fx.SHOPEE] }, "vencido");
   assert.deepEqual(canaisBloqueadores(r), ["TikTok Shop", "Mercado Livre", "Shopee"]);
-  assert.deepEqual(canaisCalculaveisOcultos(r), [], "nenhum canal para oferecer");
   const t = texto(
-    render(h(DreMarcasTabela, { marcas: [fx.MARCA_C], total: r.total, bloqueadores: canaisBloqueadores(r), calculaveis: canaisCalculaveisOcultos(r), aoFiltrar: () => {} })),
+    render(h(DreMarcasTabela, { marcas: [fx.MARCA_C], total: r.total, bloqueadores: canaisBloqueadores(r) })),
   );
   assert.match(t, /TikTok Shop, Mercado Livre e Shopee não são calculáveis e entram/);
-  assert.doesNotMatch(t, /Ver só/, "sem canal calculavel, sem botao vazio");
+  assert.doesNotMatch(t, /Ver só/);
   const html = render(h(DreCanais, { canais: r.por_canal, total: r.total }));
   assert.doesNotMatch(texto(html), R_ZERO, "canal vencido nunca vira R$ 0");
   assert.equal((texto(html).match(/Não calculável — veja os motivos/g) ?? []).length, 3);
@@ -162,7 +159,7 @@ test("fotografia vencida (medido em 16/10): todos os canais bloqueiam, sem canal
 
 test("com ranking preenchido, a tabela nao oferece o botao de recorte", () => {
   const t = texto(
-    render(h(DreMarcasTabela, { marcas: [fx.MARCA_A, fx.MARCA_B], total: TOTAL_PARCIAL, calculaveis: ["tiktok", "ml"], aoFiltrar: () => {} })),
+    render(h(DreMarcasTabela, { marcas: [fx.MARCA_A, fx.MARCA_B], total: TOTAL_PARCIAL })),
   );
   assert.match(t, /1º/);
   assert.doesNotMatch(t, /Ver só/);
@@ -314,5 +311,115 @@ test("seletor de competencia exibe MM/AAAA, inclusive a madura padrao", () => {
 
   test("C3: API sem os campos novos nao renderiza nada", () => {
     assert.equal(render(h(CmvCobertura, { celula: comCmv({}), rotulo: "Total" })), "");
+  });
+}
+
+// ===========================================================================
+// T-0090 — numeros sempre: PREVIA com selo, origem por linha, aviso da margem
+// ===========================================================================
+{
+  const { default: DreDetalheConta } = await import("../src/components/dre/DreDetalheConta.tsx");
+  const { default: CmvCobertura } = await import("../app/dre/CmvCobertura.tsx");
+  // Forma de out/26 depois da T-0090: mes imaturo com numero e custo parcial na margem.
+  const previa = <T extends typeof fx.ML>(c: T) => ({
+    ...c,
+    classificacao: "PREVIA" as const,
+    fecha_em: "2026-12-31",
+    previa: true,
+    motivos_classificacao: ["mes imaturo: fecha apos 2026-12-31 (regra M+2)"],
+    completude: { ...c.completude, parciais: 1, texto: "4 de 6 custos (1 parciais)" },
+    componentes: {
+      ...c.componentes,
+      taxas: { ...c.componentes.taxas, origem: "realizado" as const, entra_na_margem: true },
+      cmv: {
+        ...c.componentes.cmv,
+        status: "parcial" as const,
+        origem: "parcial" as const,
+        entra_na_margem: true,
+        cobertura_rotulo: "NF cobre 25% do GMV",
+        cobertura: 0.25,
+        cmv_pct_receita_coberta: 30,
+      },
+      impostos: { ...c.componentes.impostos, origem: "indisponivel" as const, entra_na_margem: false },
+    },
+    margem_contribuicao_conhecida: {
+      ...c.margem_contribuicao_conhecida,
+      componentes_parciais: ["cmv"],
+      aviso: "Margem inclui CMV parcial (NF cobre 25% do GMV).",
+    },
+  });
+  const TOTAL_PREVIA = previa(TOTAL_PARCIAL);
+  const ML_PREVIA = previa(fx.ML);
+  const vertical = (c: typeof fx.ML) =>
+    render(h(DreVertical, { opcoes: [{ valor: "total", rotulo: "Total", celula: c }], selecionado: "total", aoEscolher: () => {} }));
+
+  test("T-0090: com receita e PREVIA, a visao nao diz 'não calculável' e mostra margem e selo com data", () => {
+    const resumo = texto(render(h(DreResumo, { total: TOTAL_PREVIA, competencia: "10/2026", bloqueadores: [] })));
+    const canais = texto(render(h(DreCanais, { canais: [ML_PREVIA], total: TOTAL_PREVIA })));
+    const vert = texto(vertical(TOTAL_PREVIA));
+    const matriz = texto(render(h(DreMarcaCanalMatriz, { celulas: [{ ...ML_PREVIA, marca: "barbours" }], marcas: [{ ...ML_PREVIA, marca: "barbours", canal: null }], canais: ["ml"] })));
+    const detalhe = texto(render(h(DreDetalheConta, { chave: "margem", total: TOTAL_PREVIA, competencia: "10/2026", bloqueadores: [] })));
+    for (const [nome, t] of [["resumo", resumo], ["canais", canais], ["vertical", vert], ["matriz", matriz], ["detalhe", detalhe]] as const) {
+      assert.doesNotMatch(t, /não calculável/i, `${nome}: PREVIA com receita nao vira 'não calculável'`);
+      assert.doesNotMatch(t, /0 de 6 custos/, nome);
+    }
+    assert.match(resumo, /R\$\s?66\.000/);
+    assert.match(resumo, /Prévia · fecha em 31\/12\/2026/);
+    assert.match(resumo, /4 de 6 custos \(1 parciais\)/);
+    assert.match(canais, /R\$\s?42\.000/);
+    assert.match(canais, /Prévia · fecha em 31\/12\/2026/);
+    assert.match(vert, /R\$\s?66\.000/);
+    assert.match(vert, /Prévia · fecha em 31\/12\/2026/);
+    assert.match(matriz, /42,0%/);
+  });
+
+  test("T-0090: margem conhecida diz que inclui custos parciais, com o aviso", () => {
+    const resumo = texto(render(h(DreResumo, { total: TOTAL_PREVIA, competencia: "10/2026", bloqueadores: [] })));
+    for (const t of [resumo, texto(vertical(TOTAL_PREVIA))]) {
+      assert.match(t, /Inclui custos parciais CMV/);
+      assert.match(t, /Margem inclui CMV parcial \(NF cobre 25% do GMV\)\./);
+    }
+    // CMV parcial que ENTRA na margem nao e' descrito como "fora da margem".
+    const cmv = texto(render(h(CmvCobertura, { celula: TOTAL_PREVIA, rotulo: "Total" })));
+    assert.match(cmv, /entra na margem como custo parcial/);
+    assert.doesNotMatch(cmv, /fora da margem/);
+  });
+
+  test("T-0090: chips de origem por linha (realizado, parcial, indisponivel) com a cobertura ao lado", () => {
+    const t = texto(vertical(TOTAL_PREVIA));
+    assert.match(t, /Taxas do marketplace Realizado/);
+    assert.match(t, /CMV Parcial NF cobre 25% do GMV/);
+    assert.doesNotMatch(t, /NF cobre 25% do GMV Parcial/, "selo de status nao repete a origem");
+    assert.doesNotMatch(t, /NF cobre 25% do GMV fora da margem/, "parcial na margem nao e' 'fora da margem'");
+    // Impostos sem valor: o selo de status mora na coluna Valor, sem repetir.
+    assert.match(t, /Impostos Indisponível — |Impostos .*Indisponível/);
+  });
+
+  test("T-0090: NAO_CALCULAVEL sem receita continua com o estado vazio honesto", () => {
+    const semReceita = fx.celula({
+      classificacao: "NAO_CALCULAVEL",
+      motivos: ["sem receita na competencia"],
+      comps: { receita: fx.comp(null, "indisponivel", { somavel: false, motivo: "sem venda no recorte" }) },
+      margem: null,
+      usados: [],
+      faltam: [],
+    });
+    const t = texto(render(h(DreResumo, { total: semReceita, competencia: "11/2026", bloqueadores: [] })));
+    assert.match(t, /Não calculável/);
+    assert.match(t, /Motivo: sem receita na competencia/);
+    assert.doesNotMatch(t, R_ZERO, "sem receita nao vira R$ 0");
+    assert.doesNotMatch(t, /Prévia/);
+  });
+
+  test("T-0090: resposta antiga (sem os campos novos) continua renderizando como antes", () => {
+    const r = fx.resposta();
+    const resumo = texto(render(h(DreResumo, { total: r.total, competencia: "07/2026", bloqueadores: canaisBloqueadores(r) })));
+    assert.match(resumo, /Bloqueado por Shopee/);
+    const vert = texto(vertical(fx.ML));
+    assert.match(vert, /R\$\s?42\.000/);
+    assert.doesNotMatch(vert, /Realizado|Prévia|Inclui custos parciais/);
+    const canais = texto(render(h(DreCanais, { canais: r.por_canal, total: r.total })));
+    assert.match(canais, /R\$\s?42\.000/);
+    assert.doesNotMatch(canais, /Prévia/);
   });
 }

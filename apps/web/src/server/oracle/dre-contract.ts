@@ -75,6 +75,9 @@ const STATUS_FONTE = [
 
 const optStr = z.string().nullish();
 
+/** Dominio FECHADO da classificacao da celula (T-0090 incluiu PREVIA). */
+export const DRE_CLASSIFICACOES = ["COMPLETA", "PARCIAL", "PREVIA", "NAO_CALCULAVEL"] as const;
+
 const componente = z.object({
   valor: z.number().finite().nullish(),
   pct_receita: z.number().finite().nullish(),
@@ -104,7 +107,10 @@ const celula = z.object({
   mes: optStr,
   canal: optStr,
   marca: optStr,
-  classificacao: z.enum(["COMPLETA", "PARCIAL", "NAO_CALCULAVEL"]),
+  // T-0090: PREVIA = mes imaturo (M+2) com valores; NAO_CALCULAVEL so' sem receita.
+  classificacao: z.enum(DRE_CLASSIFICACOES),
+  /** T-0090 — data em que a previa fecha; ausente em API anterior. */
+  fecha_em: optStr,
   motivos_classificacao: z.array(z.string()),
   avisos_qualidade: z.array(z.string()),
   componentes: z.object(Object.fromEntries(NOMES.map((n) => [n, componente])) as Record<Nome, typeof componente>),
@@ -178,6 +184,8 @@ const celulaOut = z.object({
   canal: z.string().nullable(),
   marca: z.string().nullable(),
   classificacao_fonte: z.string(),
+  /** T-0090 — com classificacao PREVIA, a data em que a previa fecha; senao `null`. */
+  fecha_em: z.string().nullable(),
   motivos_classificacao: z.array(z.string()),
   avisos_qualidade: z.array(z.string()),
   receita: linha,
@@ -331,6 +339,7 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
     canal: c.canal ?? null,
     marca: c.marca ?? null,
     classificacao_fonte: c.classificacao,
+    fecha_em: safeText(c.fecha_em, 10),
     motivos_classificacao: textos(c.motivos_classificacao),
     avisos_qualidade: textos(c.avisos_qualidade),
     receita: l.receita, cmv: l.cmv, ads: l.ads, afiliados: l.afiliados, taxas: l.taxas,
@@ -570,7 +579,9 @@ function ultimoDia(mes: string): string {
 
 export function dreHeadline(env: Envelope<unknown>): string {
   const d = env.data as DreData;
-  const cls = d.total ? d.total.classificacao_fonte : "sem total";
+  const cls = d.total
+    ? `${d.total.classificacao_fonte}${d.total.fecha_em ? ` (fecha em ${d.total.fecha_em})` : ""}`
+    : "sem total";
   const corte = d.corte ? ` (${d.corte.celulas_omitidas} omitida(s) pelo teto de tamanho)` : "";
   return (
     `DRE ${d.ref_month}: total ${cls}; ${d.celulas.length} celula(s) canal x marca${corte}; ` +
@@ -588,7 +599,7 @@ export const dreTool: OracleTool = {
       "Um mes por chamada (ref_month YYYY-MM), com filtro opcional de canais e marcas. Devolve o total, por canal, por marca e as celulas canal x marca da DRE gerencial da Torre.",
       "Cada linha traz valor, status (CALCULADO, NAO_CALCULAVEL, NAO_APLICAVEL), status_fonte (o status real da API: parcial, nao_reconciliado, indisponivel...) e motivo. Valor nulo = nao calculado, nunca zero.",
       "Resultado = margem de contribuicao CONHECIDA, so' com CMV calculado; nao e' lucro. cenario_premissas e' ESTIMATIVA com premissas de orcamento, nao realizado.",
-      "Mes imaturo (regra M+2) aparece em motivos_classificacao; impostos e premissas nao publicados, insumos vencidos e qualquer corte por tamanho aparecem em limitations.",
+      "Mes imaturo (regra M+2) sai com classificacao_fonte PREVIA e fecha_em (data em que fecha), alem de motivos_classificacao; impostos e premissas nao publicados, insumos vencidos e qualquer corte por tamanho aparecem em limitations.",
     ].join(" "),
     inputSchema: dreInput,
     outputSchema: dreOutput,

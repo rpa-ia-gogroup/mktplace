@@ -302,3 +302,24 @@ test("a visao conhecida nao le o cenario estimado (componentes oficiais so')", (
   const usos = src.split("\n").filter((l) => /textoMargem\(|margem_contribuicao_conhecida/.test(l));
   assert.ok(usos.length >= 1 && usos.length <= 3, `uso restrito a comparacao: ${usos.length}`);
 });
+
+test("T-0090: DRE estimada mostra chips de origem para extrapolado e parcial; celulas sem premissa ditas", () => {
+  const base = fe.cenarioFx({ estado: "parcial", previa: true, margem: 18_000 });
+  const linhas = base.linhas.map((l) =>
+    l.linha === "icms" ? { ...l, origem: "extrapolado" as const } : l.linha === "cmv" ? { ...l, origem: "parcial" as const } : l,
+  );
+  const cen = { ...base, linhas, celulas_sem_premissa: 2 };
+  assert.deepEqual(est.chipDaOrigem("extrapolado"), { rotulo: "Extrapolado", tom: "atencao" });
+  assert.deepEqual(est.chipDaOrigem("parcial"), { rotulo: "Parcial", tom: "atencao" });
+  assert.deepEqual(est.chipDaOrigem("desconhecida"), { rotulo: "desconhecida", tom: "neutro" });
+  const r = fe.respostaEstimada({ estado: "parcial" });
+  const opcoes = [{ valor: "canal:ml", rotulo: "Canal: Mercado Livre", celula: { ...fx.ML, cenario_premissas: cen } }];
+  const html = render(
+    h(comp.DreVerticalEstimada, { opcoes, selecionado: "canal:ml", aoEscolher: () => {}, dispDe: (c: typeof fx.ML) => est.disponibilidade(c, r) }),
+  );
+  const t = texto(html);
+  assert.match(t, /ICMS Extrapolado/);
+  assert.match(t, /Parcial/);
+  assert.match(t, /Premissa/);
+  assert.match(t, /2 células sem premissa publicada/);
+});

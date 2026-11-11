@@ -8,7 +8,6 @@ import InfoDica from "@/components/ui/InfoDica";
 import Segmented from "@/components/ui/Segmented";
 import Chip from "@/components/ui/Chip";
 import TableScrollHint from "@/components/TableScrollHint";
-import BotaoRecorteCalculavel from "@/components/dre/BotaoRecorteCalculavel";
 import { ClassificacaoChip } from "@/components/dre/DreChips";
 import {
   ROTULO_CANAL,
@@ -25,7 +24,6 @@ import {
   type CelulaDRE,
   type ItemRanking,
 } from "@/lib/dre";
-import type { Marketplace } from "@/lib/mock-data";
 
 /**
  * DRE-UX-1/2 — comparacao entre marcas.
@@ -38,7 +36,8 @@ import type { Marketplace } from "@/lib/mock-data";
  *
  * DRE-UX-2: a coluna de faltantes diz "Ausente em ao menos um canal" — pelo
  * contrato, `faltam` de uma marca e' o que faltou em AO MENOS UMA celula dela.
- * Ranking vazio diz por que e oferece o mesmo recorte calculavel do resumo.
+ * Ranking vazio diz por que. (T-0090: o botao "Ver só <canais calculáveis>"
+ * saiu — com receita nada e' mais NAO_CALCULAVEL, ver `dre.ts`.)
  *
  * A matriz marca x canal existe porque a classificacao da marca e' a PIOR
  * entre os canais dela: com a Shopee no filtro, toda marca que vende na
@@ -83,16 +82,11 @@ export function DreMarcasTabela({
   marcas,
   total,
   bloqueadores = [],
-  calculaveis = [],
-  aoFiltrar,
 }: {
   marcas: CelulaDRE[];
   total: CelulaDRE;
   /** Canais nao calculaveis que impedem o agregado (rotulos). */
   bloqueadores?: string[];
-  /** Canais calculaveis escondidos pelo agregado — alvo do botao. */
-  calculaveis?: Marketplace[];
-  aoFiltrar?: (canais: Marketplace[]) => void;
 }) {
   const [ordem, setOrdem] = useState<Ordem>("receita");
   const ranking = useMemo(() => rankingDeMargem(marcas), [marcas]);
@@ -128,12 +122,7 @@ export function DreMarcasTabela({
       rodape={
         // Com ranking preenchido a regra fica no ⓘ; o rodape so' explica o
         // ranking vazio, que muda a leitura da coluna Posicao.
-        comparaveis < 2 ? (
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <span>{explicacaoRanking(comparaveis, bloqueadores)}</span>
-            {aoFiltrar && <BotaoRecorteCalculavel canais={calculaveis} aoAplicar={aoFiltrar} />}
-          </div>
-        ) : undefined
+        comparaveis < 2 ? <span>{explicacaoRanking(comparaveis, bloqueadores)}</span> : undefined
       }
     >
       <TableScrollHint>
@@ -171,7 +160,12 @@ export function DreMarcasTabela({
                     <Posicao item={item} />
                   </td>
                   <td className={TD}>
-                    <ClassificacaoChip classificacao={c.classificacao} completude={completudeExibida(c)} />
+                    <ClassificacaoChip
+                      classificacao={c.classificacao}
+                      completude={completudeExibida(c)}
+                      fechaEm={c.fecha_em}
+                      previa={c.previa}
+                    />
                   </td>
                   <td className={`${TD} whitespace-normal text-xs text-ink-muted`}>
                     {faltam.length ? faltam.join(", ") : "nenhum"}

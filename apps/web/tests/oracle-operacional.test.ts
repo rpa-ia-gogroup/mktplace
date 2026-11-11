@@ -985,3 +985,43 @@ test("m3: texto livre da fonte sai sem caractere de controle e com teto de taman
   assert.ok(env.data.shopee.notas_da_fonte.every((n: string) => n.length <= 200));
   assert.ok(env.meta.warnings.every((w: string) => w.length < 400));
 });
+
+// ===========================================================================
+// T-0090 — PREVIA no dominio de classificacao da DRE
+// ===========================================================================
+test("torre_dre: PREVIA (mes imaturo com valores) e campos novos sao aceitos; fecha_em sai na celula", async () => {
+  const previa = clone(DRE_REAL_2026_10) as any;
+  for (const c of previa.por_canal_marca) {
+    c.classificacao = "PREVIA";
+    c.fecha_em = "2026-12-31";
+    c.previa = true;
+    c.completude = { ...c.completude, parciais: 1, texto: "4 de 6 custos (1 parciais)" };
+    c.margem_contribuicao_conhecida = {
+      ...c.margem_contribuicao_conhecida, valor: 1000, componentes_parciais: ["cmv"], aviso: "margem com CMV parcial",
+    };
+    for (const k of Object.keys(c.componentes)) {
+      c.componentes[k] = { ...c.componentes[k], origem: "parcial", entra_na_margem: true, cobertura_rotulo: "NF cobre 25% do GMV" };
+    }
+    if (c.cenario_premissas) {
+      c.cenario_premissas.celulas_sem_premissa = 0;
+      if (Array.isArray(c.cenario_premissas.linhas)) c.cenario_premissas.linhas.push({ linha: "x", rotulo: "x", tipo: "item", valor: 1, origem: "extrapolado", status: "ok", somavel: true });
+    }
+  }
+  previa.total = { ...clone(previa.por_canal_marca[1]), canal: null, marca: null };
+  const env = await call(await connectDre(previa), "torre_dre", { ref_month: "2026-10" });
+  const [tk, ml] = env.data.celulas;
+  assert.equal(tk.classificacao_fonte, "PREVIA");
+  assert.equal(tk.fecha_em, "2026-12-31");
+  assert.equal(ml.fecha_em, "2026-12-31");
+  assert.equal(env.data.total.classificacao_fonte, "PREVIA");
+  // O conector continua conservador: componente com status nao-disponivel segue nulo, nunca 0.
+  assert.equal(tk.cmv.valor, null);
+
+  // Resposta antiga: sem fecha_em -> null; classificacao desconhecida continua falhando fechado.
+  const antiga = await call(await connectDre(DRE_REAL_2026_10), "torre_dre", { ref_month: "2026-10" });
+  assert.equal(antiga.data.celulas[0].fecha_em, null);
+  const desconhecida = clone(DRE_REAL_2026_10) as any;
+  desconhecida.por_canal_marca[0].classificacao = "TALVEZ";
+  const text = await callError(await connectDre(desconhecida), "torre_dre", { ref_month: "2026-10" });
+  assert.ok(text.length > 0);
+});

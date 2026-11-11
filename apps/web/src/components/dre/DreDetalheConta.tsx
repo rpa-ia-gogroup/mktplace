@@ -1,6 +1,6 @@
 "use client";
 
-import { ClassificacaoChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip } from "@/components/dre/DreChips";
 import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
@@ -11,6 +11,7 @@ import {
   ROTULO_COMPONENTE,
   ROTULO_MARGEM,
   STATUS_CHIP,
+  avisoMargem,
   completudeExibida,
   custosAusentes,
   juntarNomes,
@@ -59,10 +60,11 @@ export default function DreDetalheConta({
           <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
             <NumeroAnimado texto={valor} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
             <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{pct === "Não calculável" ? "" : `${pct} da receita`}</span>
+            <AvisoMargem aviso={avisoMargem(total)} />
           </div>
         ) : (
           <span className="flex flex-wrap items-center gap-2">
-            <ClassificacaoChip classificacao={total.classificacao} completude={completude} />
+            <ClassificacaoChip classificacao={total.classificacao} completude={completude} fechaEm={total.fecha_em} previa={total.previa} />
           </span>
         )}
         <DrilldownContextLine
