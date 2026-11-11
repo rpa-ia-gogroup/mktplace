@@ -797,8 +797,8 @@ export function montarPareto(
   const cancTotal = razaoPct(can.marcas.map((m) => [m.cancelamentos, m.pedidos]));
   const cancAntesTotal = razaoPct(comHist.map((m) => [m.cancelamentos_anterior, m.pedidos_anterior]));
   const cancAtualHist = razaoPct(comHist.map((m) => [m.cancelamentos, m.pedidos]));
-  const devTotal = somar(marcas.map((m) => liquidas(devMarca.get(m))));
   const comDev = marcas.filter((m) => liquidas(devMarca.get(m)) != null && canMarca.get(m)?.pedidos != null);
+  const devTotal = somar(comDev.map((m) => liquidas(devMarca.get(m))));
   const linhaTotal = {
     pedidos: inteiro(somar(can.marcas.map((m) => m.pedidos))),
     cancelamentosPct: pct(cancTotal),
