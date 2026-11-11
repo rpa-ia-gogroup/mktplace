@@ -432,7 +432,7 @@ function FaixaKpis({ resumo }: { resumo: ResumoOk }) {
       />
       <KpiTile
         variante="gerencial"
-        identidade="atendimento"
+        identidade="ads"
         icone={AlertTriangle}
         rotulo="Violação do PMA"
         valor={fmtPct(k.pct_violacao)}
@@ -462,7 +462,7 @@ function FaixaKpis({ resumo }: { resumo: ResumoOk }) {
       )}
       <KpiTile
         variante="gerencial"
-        identidade="ads"
+        identidade="atendimento"
         icone={UserCheck}
         rotulo="Sellers identificados"
         valor={fmtPct(cob.pct_sellers)}
