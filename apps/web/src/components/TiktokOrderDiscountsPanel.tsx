@@ -272,6 +272,8 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
               {view.windowLabel && <span className={SELO}>{view.windowLabel}</span>}
               {view.dayCountLabel && <span className={SELO}>{view.dayCountLabel}</span>}
               <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn-ink">Não somar</span>
+              {/* O ⓘ fica colado no ultimo selo: no celular quebra junto, nao sozinho na linha de baixo. */}
+              <span className="inline-flex items-center gap-1.5">
               {view.freshnessLabel && (
                 <span
                   className={`${SELO} inline-flex items-center gap-1 ${
@@ -287,6 +289,7 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
                   view.coverageIsIncomplete ? "" : ` ${COVERAGE_LIMIT_COPY}`
                 } ${block.limitation_note}`}
               />
+              </span>
             </p>
             {view.warnings.map((aviso) => (
               <DataQualityNote key={aviso} note={aviso} />

@@ -106,8 +106,11 @@ function DetalheAfiliados({
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
           {monthsLabel && <span className={SELO}>Competência {monthsLabel}</span>}
           <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn-ink">Não somar</span>
-          {children}
-          <InfoDica texto={[block.limitation_note, block.return_note, block.source_note].filter(Boolean).join(" ")} />
+          {/* O ⓘ fica colado no ultimo selo: no celular quebra junto, nao sozinho na linha de baixo. */}
+          <span className="inline-flex items-center gap-1.5">
+            {children}
+            <InfoDica texto={[block.limitation_note, block.return_note, block.source_note].filter(Boolean).join(" ")} />
+          </span>
         </p>
         <DataQualityNote note={coverageWarning} />
         {[...porMes.entries()].map(([mes, nota]) => (

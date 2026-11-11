@@ -58,3 +58,10 @@ test("valores contabeis de Afiliados e Descontos seguem por extenso (nao abrevia
   assert.ok(!/fmtBrlCurto|fmtNumCurto/.test(ler("src/components/TiktokOrderDiscountsPanel.tsx")));
   assert.ok(ler("src/lib/canais-tiktok-order-discounts.ts").includes("Nao abrevia"));
 });
+
+test("modais de Afiliados e Descontos: o ⓘ fica colado no ultimo selo (nao sozinho na linha de baixo no celular)", () => {
+  for (const f of ["src/components/AffiliateCostsPanel.tsx", "src/components/TiktokOrderDiscountsPanel.tsx"]) {
+    const src = ler(f);
+    assert.ok(/<span className="inline-flex items-center gap-1\.5">\n(?:.*\n)*?\s*<InfoDica/.test(src), `${f}: selo + ⓘ no mesmo grupo`);
+  }
+});
