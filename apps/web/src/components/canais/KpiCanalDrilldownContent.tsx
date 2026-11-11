@@ -41,10 +41,7 @@ export default function KpiCanalDrilldownContent({
           )}
           {texto.comparacao && <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{texto.comparacao}</span>}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} />
-          {def.dica && <InfoDica texto={def.dica} />}
-        </div>
+        <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} dica={def.dica ? <InfoDica texto={def.dica} /> : undefined} />
       </div>
 
       <DrilldownSecao titulo="Por marca" acao={<span className="tabular-nums">{linhas.length}</span>}>

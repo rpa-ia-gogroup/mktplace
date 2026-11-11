@@ -146,11 +146,14 @@ test("canal desconhecido no filtro nunca é assumido como coberto", () => {
 
 test("wiring: Regiões usa os rótulos novos e o escopo só com dado fresco", () => {
   const src = read("app/regioes/page.tsx");
-  assert.match(src, /label=\{REGIONAL_GMV_LABEL\}/);
-  assert.match(src, /label=\{UF_FILL_LABEL\}/);
+  // Os cartoes vivem em components/regioes/RegioesCartoes (padrao da Gerencial); a pagina so' os renderiza.
+  const cartoes = read("src/components/regioes/RegioesCartoes.tsx");
+  assert.match(cartoes, /rotulo=\{REGIONAL_GMV_LABEL\}/);
+  assert.match(cartoes, /rotulo=\{UF_FILL_LABEL\}/);
+  assert.match(src, /<CartoesRegioes resumo=\{displaySummary\}/);
   assert.doesNotMatch(src, /label="GMV Regional"/, "rótulo antigo não pode voltar");
   assert.match(src, /dataIsFresh\s*\?\s*buildRegionalScope\(/, "escopo derivado só com dado fresco");
-  assert.match(src, /dentro dos pedidos elegíveis/);
+  assert.match(cartoes, /dentro dos pedidos elegíveis/);
 });
 
 // ---------------------------------------------------------------------------

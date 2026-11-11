@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { RegiaoUfRow } from "@/lib/api-client";
 import { BRAZIL_UF_PATHS, BRAZIL_MAP_VIEWBOX, UF_NAME } from "@/lib/brazil-uf-paths";
 import { computeGmvIntensity, intensityToColor, coverageStrokeColor, topUfsByGmv } from "@/lib/regioes-map";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { fmtPctOrNA, coverageLabel, coverageBadgeClass, fmtShareOfTotalPct } from "@/lib/regioes-format";
 
 interface Props {
@@ -105,7 +105,7 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
-                  aria-label={`${name} (${uf}): GMV ${fmtBrl(gmv)}, ${fmtNumber(orders)} pedidos${share != null ? `, ${share.toFixed(1)}% de participação` : ""}. ${coverageLabel(level)}.`}
+                  aria-label={`${name} (${uf}): GMV ${fmtBrlCurto(gmv)}, ${fmtNumCurto(orders)} pedidos${share != null ? `, ${fmtPctSimples(share)} de participação` : ""}. ${coverageLabel(level)}.`}
                   className="cursor-pointer outline-none focus-visible:brightness-95 transition-[filter] duration-100"
                   style={{ filter: isActive ? "brightness(1.05)" : undefined }}
                   onMouseEnter={() => setHoverUf(uf)}
@@ -143,13 +143,13 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                 </span>
               </div>
               <dl className="flex flex-wrap lg:flex-col gap-x-4 gap-y-1.5 lg:gap-1.5">
-                <StatRow label="GMV" value={fmtBrl(active.gmv)} />
-                <StatRow label="Pedidos" value={fmtNumber(active.orders)} />
+                <StatRow label="GMV" value={fmtBrlCurto(active.gmv)} />
+                <StatRow label="Pedidos" value={fmtNumCurto(active.orders)} />
                 <StatRow
                   label="Participação"
                   value={(() => {
                     const s = fmtShareOfTotalPct(active.gmv, totalGmv);
-                    return s != null ? `${s.toFixed(1)}%` : "N/A";
+                    return s != null ? `${fmtPctSimples(s)}` : "N/A";
                   })()}
                 />
                 <StatRow label="Cobertura UF" value={fmtPctOrNA(active.uf_fill_pct)} />
@@ -168,7 +168,7 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                       <div key={row.uf} className="flex items-center justify-between gap-2 text-xs">
                         <span className="font-semibold text-slate-600">{i + 1}. {row.uf}</span>
                         <span className="tabular-nums text-slate-500">
-                          {fmtBrl(row.gmv)}{share != null && ` · ${share.toFixed(1)}%`}
+                          {fmtBrlCurto(row.gmv)}{share != null && ` · ${fmtPctSimples(share)}`}
                         </span>
                       </div>
                     );
@@ -183,7 +183,7 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
       {xx && (
         <div className="px-6 py-2.5 border-t border-slate-100 bg-slate-50/60">
           <p className="text-[11px] text-slate-500">
-            <span className="font-semibold text-slate-600">Sem UF (XX), fora do mapa:</span> {fmtBrl(xx.gmv)} · {fmtNumber(xx.orders)} pedidos
+            <span className="font-semibold text-slate-600">Sem UF (XX), fora do mapa:</span> {fmtBrlCurto(xx.gmv)} · {fmtNumCurto(xx.orders)} pedidos
           </p>
         </div>
       )}

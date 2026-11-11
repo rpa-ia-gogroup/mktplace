@@ -35,10 +35,7 @@ export default function QualidadeDrilldownContent({
         ) : (
           <NumeroAnimado texto={t.valor} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
         )}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} />
-          {def.dica && <InfoDica texto={def.dica} />}
-        </div>
+        <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} dica={def.dica ? <InfoDica texto={def.dica} /> : undefined} />
       </div>
 
       <DrilldownSecao titulo="Por marca" acao={<span className="tabular-nums">{linhas.length}</span>}>
