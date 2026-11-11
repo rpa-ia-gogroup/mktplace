@@ -34,13 +34,16 @@ def reputacao(marca="kokeshi", claims=0.0115, cor="green"):
 
 
 def diario(marca="kokeshi", dias=60, **extra):
-    """Uma linha por dia, de FIM para tras: 100 pedidos, 2 reclamacoes, 1 cancelamento, 1 mediacao."""
+    """Uma linha por dia, de FIM para tras: 100 pedidos, 2 reclamacoes, 2 pedidos cancelados,
+    3 reembolsos (R$ 150), 1 mediacao."""
     linhas = [{"marca": marca, "dia": d.isoformat() + "T00:00:00-03:00", "pedidos": 100, "reclamacoes": 2,
-               "cancelamentos": 1, "mediacoes": 1, "perguntas": 3, "perguntas_respondidas": 2,
+               "pedidos_cancelados": 2, "reembolsos": 3, "valor_reembolsado": 150.0, "mediacoes": 1,
+               "perguntas": 3, "perguntas_respondidas": 2, "perguntas_sem_resposta_24h": None,
                "tempo_resposta_min": None, "mensagens_pendentes": None} for d in _dias(dias)]
     # a foto da conta e' do dia de hoje
     linhas.append({"marca": marca, "dia": "2026-11-10T00:00:00-03:00", "pedidos": 10, "reclamacoes": 1,
-                   "cancelamentos": None, "mediacoes": None, "perguntas": None, "perguntas_respondidas": None,
+                   "pedidos_cancelados": None, "reembolsos": None, "valor_reembolsado": None, "mediacoes": None,
+                   "perguntas": None, "perguntas_respondidas": None, "perguntas_sem_resposta_24h": None,
                    "tempo_resposta_min": 2737.0, "mensagens_pendentes": 20})
     for linha in linhas:
         linha.update(extra)
@@ -92,8 +95,10 @@ def test_janela_e_tres_consultas_so():
 def test_totais_da_janela_e_do_periodo_anterior():
     r, _ = montar()
     k = next(m for m in r.marcas if m.marca == "kokeshi")
-    assert (k.pedidos, k.reclamacoes, k.cancelamentos, k.mediacoes, k.perguntas) == (3000, 60, 30, 30, 90)
-    assert (k.pedidos_anterior, k.reclamacoes_anterior, k.cancelamentos_anterior, k.mediacoes_anterior) == (3000, 60, 30, 30)
+    assert (k.pedidos, k.reclamacoes, k.cancelamentos, k.mediacoes, k.perguntas) == (3000, 60, 60, 30, 90)
+    assert (k.reembolsos, k.valor_reembolsado) == (90, 4500.0)
+    assert (k.pedidos_anterior, k.reclamacoes_anterior, k.cancelamentos_anterior, k.mediacoes_anterior) == (3000, 60, 60, 30)
+    assert k.reembolsos_anterior == 90
     assert r.sem_anterior == {}
 
 
@@ -104,11 +109,35 @@ def test_fila_vem_da_ultima_leitura_e_nao_da_janela():
     assert k.prazo_mais_antigo == AGORA - timedelta(days=3)
 
 
-def test_perguntas_sem_resposta_e_as_de_mais_de_24h_vem_do_estado_de_agora():
+def test_perguntas_sem_resposta_vem_do_estado_de_agora_e_as_de_24h_da_view_somando_todos_os_dias():
+    # cada pergunta conta no dia em que foi criada: uma recente (dentro da janela) e uma de 60 dias atras
+    diar = diario(dias=60)
+    diar[0]["perguntas_sem_resposta_24h"] = 1
+    diar[59]["perguntas_sem_resposta_24h"] = 2
+    diar[1]["perguntas_sem_resposta_24h"] = 0
+    r, _ = montar(Fonte(diar=diar), dias=7)
+    k = next(m for m in r.marcas if m.marca == "kokeshi")
+    assert (k.perguntas_sem_resposta, k.perguntas_sem_resposta_24h) == (4, 3)
+    assert k.pergunta_mais_antiga == AGORA - timedelta(days=2)
+
+
+def test_perguntas_de_24h_sem_leitura_na_view_e_none_nunca_zero():
+    r, _ = montar(dias=7)
+    assert next(m for m in r.marcas if m.marca == "kokeshi").perguntas_sem_resposta_24h is None
+
+
+def test_cancelamento_e_reembolso_vem_da_view_e_valor_reembolsado_soma_a_janela():
     r, _ = montar(dias=7)
     k = next(m for m in r.marcas if m.marca == "kokeshi")
-    assert (k.perguntas_sem_resposta, k.perguntas_sem_resposta_24h) == (4, 1)
-    assert k.pergunta_mais_antiga == AGORA - timedelta(days=2)
+    assert (k.pedidos, k.cancelamentos, k.reembolsos, k.valor_reembolsado) == (700, 14, 21, 1050.0)
+
+
+def test_reembolso_e_cancelado_sem_leitura_na_view_ficam_none_nunca_zero():
+    diar = [{**x, "pedidos_cancelados": None, "reembolsos": None, "valor_reembolsado": None} for x in diario()]
+    r, _ = montar(Fonte(diar=diar))
+    k = next(m for m in r.marcas if m.marca == "kokeshi")
+    assert k.pedidos == 3000 and k.cancelamentos is None and k.reembolsos is None and k.valor_reembolsado is None
+    assert k.reembolsos_anterior is None and k.cancelamentos_anterior is None
 
 
 def test_taxa_de_resposta_tem_respondidas_perguntas_e_o_anterior():
@@ -167,7 +196,7 @@ def test_apice_fica_fora_e_so_apice_nao_consulta_nada():
 
 def test_90_dias_nao_tem_anterior_porque_a_view_so_guarda_90():
     r, _ = montar(dias=90)
-    assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao"}
+    assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao", "reembolso"}
     assert r.sem_anterior["reclamacao"].a_partir_de is None
     k = next(m for m in r.marcas if m.marca == "kokeshi")
     assert k.pedidos_anterior is None and k.reclamacoes_anterior is None
@@ -178,23 +207,30 @@ def test_anterior_antes_da_coleta_diz_desde_quando_e_quando_passa_a_existir():
     sem = ml.sem_anterior_ml(
         ml.base.calcular_janela(30, datetime(2026, 9, 20, tzinfo=timezone.utc)),
         ml.Janela(inicio=date(2026, 7, 21), fim=date(2026, 8, 19), dias=30), date(2026, 9, 20))
-    assert sem.motivo == "coleta desde 12/08" and sem.a_partir_de == date(2026, 10, 11)
+    # so' o que depende da coleta de reclamacoes: cancelamento e reembolso vem da view de pedidos
+    assert set(sem) == {"resposta", "reclamacao", "mediacao"}
+    assert sem["reclamacao"].motivo == "coleta desde 12/08" and sem["reclamacao"].a_partir_de == date(2026, 10, 11)
 
 
 def test_janela_que_comeca_antes_da_coleta_nao_mostra_numero_parcial():
     antes = datetime(2026, 9, 1, 20, 0, tzinfo=timezone.utc)  # 30 d = 02/08 a 31/08: metade sem coleta
-    f = Fonte(dias=100)
+    f = Fonte(dias=140)
     r = ml.montar_cx_ml(dias=30, consultar=f, agora=antes)
     k = next(m for m in r.marcas if m.marca == "kokeshi")
-    assert k.reclamacoes is None and k.cancelamentos is None and k.mediacoes is None
+    assert k.reclamacoes is None and k.mediacoes is None
     assert r.reclamacoes_motivos.estado == "sem_fonte" and r.reclamacoes_motivos.itens == []
     assert all(p.reclamacoes is None for p in r.serie_diaria)
+    # cancelamento e reembolso nao dependem da coleta de reclamacoes: a janela e o anterior seguem medidos
+    assert (k.cancelamentos, k.reembolsos) == (60, 90) and (k.cancelamentos_anterior, k.reembolsos_anterior) == (60, 90)
+    assert k.reclamacoes_anterior is None and "cancelamento" not in r.sem_anterior and "reembolso" not in r.sem_anterior
+    assert all(p.cancelamentos == 2 and p.reembolsos == 3 for p in r.serie_diaria if p.marca == "kokeshi")
 
 
 def test_serie_diaria_um_ponto_por_dia_e_marca():
     r, _ = montar(dias=7, brands=["kokeshi"])
     assert len(r.serie_diaria) == 7 and r.serie_diaria[0].dia == date(2026, 11, 3)
     assert (r.serie_diaria[0].pedidos, r.serie_diaria[0].reclamacoes) == (100, 2)
+    assert (r.serie_diaria[0].cancelamentos, r.serie_diaria[0].reembolsos) == (2, 3)
 
 
 def test_dia_sem_linha_na_view_e_none_nunca_zero():
@@ -202,6 +238,7 @@ def test_dia_sem_linha_na_view_e_none_nunca_zero():
     r, _ = montar(Fonte(diar=sem_um), dias=7, brands=["kokeshi"])
     ponto = next(p for p in r.serie_diaria if p.dia == date(2026, 11, 5))
     assert ponto.pedidos is None and ponto.reclamacoes is None
+    assert ponto.cancelamentos is None and ponto.reembolsos is None
 
 
 def test_marca_sem_reclamacao_guardada_fica_sem_numero_de_reclamacao():
@@ -230,10 +267,17 @@ def test_coleta_velha_ganha_aviso():
     assert montar()[0].aviso_frescor is None
 
 
-def test_devolucao_e_pendencia_nunca_zero():
+def test_devolucao_e_pendencia_nunca_zero_e_reembolso_nao_e_mais():
     r, _ = montar()
-    assert [p.codigo for p in r.pendencias] == ["ml_reembolso", "ml_devolucoes"]
+    assert [p.codigo for p in r.pendencias] == ["ml_devolucoes"]
     assert "devolucoes" not in r.marcas[0].model_dump()
+
+
+def test_sql_diario_traz_as_colunas_novas_na_mesma_consulta_e_o_backlog_fora_da_janela():
+    for col in ("pedidos_cancelados", "reembolsos", "valor_reembolsado", "perguntas_sem_resposta_24h"):
+        assert col in ml.SQL_DIARIO
+    assert "devolucoes" not in ml.SQL_DIARIO
+    assert "dia >= :desde OR perguntas_sem_resposta_24h > 0" in ml.SQL_DIARIO
 
 
 def test_sql_de_reclamacao_so_le_e_usa_a_regra_da_view():

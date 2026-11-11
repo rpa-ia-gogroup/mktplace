@@ -53,6 +53,9 @@ class MarcaTendencia(BaseModel):
     projecao: Optional[float] = None
     #: A mesma conta por canal, para quem mostra so' alguns canais somar so' eles.
     por_canal: list[TendenciaDoCanal] = []
+    #: Canais da marca que ficaram FORA desta conta (sem hora de pedido): a tendencia
+    #: so' vale para os outros; quem soma tudo da marca nao pode usa-la como total dela.
+    canais_fora: list[str] = []
 
 
 class HojePorHoraResponse(BaseModel):

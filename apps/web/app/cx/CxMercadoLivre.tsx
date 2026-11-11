@@ -7,11 +7,11 @@
  *   1. heroi: Taxa de resposta (perguntas respondidas ÷ perguntas), selo da reputacao
  *      e Saude da Conta por marca (reputacao oficial do ML), como na Shopee;
  *   2. faixa, na mesma ordem da Shopee: Contact rate (reclamacoes ÷ pedidos),
- *      Cancelamento e Reembolso (sem fonte: o ML ainda nao coleta);
+ *      Cancelamento (pedidos cancelados ÷ pedidos) e Reembolso (reembolsos ÷ pedidos);
  *   3. "O que exige atencao agora": metrica fora do limite, prazos vencidos, perguntas;
  *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
  *   5. atendimento por loja: fila, prazo, perguntas, tempo de resposta;
- *   6. Mais detalhes: o que ainda falta (devolucoes) e a cobertura.
+ *   6. Mais detalhes: o que ainda falta (devolucoes, sem fonte) e a cobertura.
  * A metodologia mora nos ⓘ. Busca pelo navegador (`torreFetch`), como a Shopee.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -33,7 +33,7 @@ import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
-import { ROTULO_INDICADOR, inteiro, pctCx, type FiltrosCx } from "@/lib/cx";
+import { inteiro, pctCx, reais, type FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_ML,
   INDICADORES_ML,
@@ -244,17 +244,21 @@ const VISUAL_TAXA: Record<IndicadorTaxa, { identidade: IdentidadeKpi; icone: typ
   cancelamento: { identidade: "ads", icone: Ban },
   // sem cartao na faixa hoje; so' completa o tipo
   mediacao: { identidade: "prazo", icone: Ban },
+  reembolso: { identidade: "gmv", icone: Undo2 },
 };
+
+const ROTULO_CURTO: Record<IndicadorTaxa, string> = { reclamacao: "Reclam.", cancelamento: "Cancel.", mediacao: "Mediações", reembolso: "Reemb." };
 
 /** Detalhe de um cartao de taxa: o valor exato e a taxa de cada marca (so' dados que a resposta ja' traz). */
 function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r: ResumoMl; linhas: ReturnType<typeof montarProblemasMl>["linhas"]; periodo: string; geradoEm: string }) {
   const n = r.contagem[i];
+  const valor = i === "reembolso" && r.valorReembolsado != null ? ` · ${reais(r.valorReembolsado)} reembolsados` : "";
   return (
     <div className="flex flex-col gap-4 text-sm">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
           <NumeroAnimado texto={pctCx(r.taxa[i])} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
-          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{n == null ? "" : `${inteiro(n)} de ${inteiro(r.pedidos)} pedidos`}</span>
+          <span className="pb-0.5 text-xs text-ink-faint tabular-nums">{n == null ? "" : `${inteiro(n)} de ${inteiro(r.pedidos)} pedidos${valor}`}</span>
         </div>
         <DrilldownContextLine leading="Mercado Livre" periodLabel={periodo} refreshedAt={geradoEm} dica={<InfoDica texto={AJUDA_ML[i]} />} />
       </div>
@@ -262,7 +266,7 @@ function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r:
         <ul className="flex flex-col list-none p-0 m-0">
           {linhas.map((l) => {
             const c = l.celulas[i];
-            return <EvidenceRow key={l.chave} label={l.marca} value={c.pct} reference={[`${c.n} de ${l.pedidos} pedidos`, c.antes ? `antes ${c.antes}` : null].filter(Boolean).join(" · ")} />;
+            return <EvidenceRow key={l.chave} label={l.marca} value={c.pct} reference={[`${c.n} de ${l.pedidos} pedidos`, c.valor, c.antes ? `antes ${c.antes}` : null].filter(Boolean).join(" · ")} />;
           })}
         </ul>
       </DrilldownSecao>
@@ -313,18 +317,8 @@ function Faixa({ r, dias, semNoHeroi, abrir }: { r: ResumoMl; dias: number; semN
     <section aria-label="Indicadores do período">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" data-testid="cx-faixa">
         {taxa("reclamacao", "atendimento", MessagesSquare, n("reclamacao", "reclamação", "reclamações"))}
-        {taxa("cancelamento", "ads", Ban, n("cancelamento", "pedido de cancelamento", "pedidos de cancelamento"))}
-        {/* sem fonte: o ML ainda nao coleta reembolso; "—" e o motivo, nunca 0 */}
-        <KpiTile
-          variante="gerencial"
-          identidade="gmv"
-          icone={Undo2}
-          rotulo={ROTULO_INDICADOR.reembolso}
-          valor="—"
-          tom="ausente"
-          comparacao="Sem fonte"
-          ajuda={<InfoDica texto={AJUDA_ML.reembolso} />}
-        />
+        {taxa("cancelamento", "ads", Ban, n("cancelamento", "pedido cancelado", "pedidos cancelados"))}
+        {taxa("reembolso", "gmv", Undo2, n("reembolso", "reembolso", "reembolsos"))}
       </div>
     </section>
   );
@@ -391,14 +385,14 @@ function ProblemasPorMarca({ linhas, total, dias }: { linhas: ReturnType<typeof 
   return (
     <Panel titulo="Problemas por marca" aria-label="Problemas por marca" semPadding>
       <TableScrollHint>
-        <table className="w-full min-w-[460px] border-collapse text-sm" data-testid="cx-problemas-marca">
+        <table className="w-full min-w-[520px] border-collapse text-sm" data-testid="cx-problemas-marca">
           <caption className="sr-only">Problemas por marca, em % dos pedidos</caption>
           <thead className={THEAD}>
             <tr>
               <th scope="col" className={TH_MARCA}>Marca</th>
               <th scope="col" className={TH}>Pedidos</th>
               {INDICADORES_ML.map((i) => (
-                <ThAjuda key={i} ajuda={`${AJUDA_ML[i]} ${AJUDA_ML.comparacao(dias)}`}>{i === "reclamacao" ? "Reclam." : i === "cancelamento" ? "Cancel." : "Mediações"}</ThAjuda>
+                <ThAjuda key={i} ajuda={`${AJUDA_ML[i]} ${AJUDA_ML.comparacao(dias)}`}>{ROTULO_CURTO[i]}</ThAjuda>
               ))}
             </tr>
           </thead>

@@ -87,10 +87,12 @@ export function resolverTema(
  * FULL-TEMA-ESCURO (09/11/2026) acrescentou `/full`: os paineis de Full e de
  * estoque que ela carrega (ML e Shopee) e o grafico de share sairam dos
  * literais para os tokens.
+ * MONITORAMENTO-TEMA-ESCURO (11/11/2026) acrescentou `/monitoramento-preco`
+ * (o prefixo leva junto `/monitoramento-preco/revendedores`).
  * OPERACOES-TEMA-ESCURO (11/11/2026) acrescentou `/operacoes`; o grafico de
  * tendencia usa `temaDoGrafico`.
  */
-export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/operacoes"] as const;
+export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes"] as const;
 
 export function rotaTematizada(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
