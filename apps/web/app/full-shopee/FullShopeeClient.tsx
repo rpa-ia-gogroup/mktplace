@@ -296,13 +296,13 @@ function FullShopeeInner() {
               <InfoDica texto={`${AVISO_GMV_BRUTO} ${AVISO_DIVERGENCIA}`} />
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV bruto (total)" valor={fmtGmv(dados.totals.gross_gmv)} comparacao={"Não cancelados · inclui devolução e não pago"} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV bruto (total)" ajuda={<InfoDica texto="Não cancelados; inclui devolução e não pago." />} valor={fmtGmv(dados.totals.gross_gmv)} />
               <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV FBS" valor={fmtGmv(fbs?.gross_gmv ?? null)} comparacao={`Vendedor: ${fmtGmv(seller?.gross_gmv ?? null)}`} />
-              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Share FBS — GMV" valor={fmtShare(dados.shares.share_fbs_gmv)} comparacao={"FBS ÷ (FBS + vendedor)"} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Share FBS — GMV" ajuda={<InfoDica texto="FBS ÷ (FBS + vendedor)." />} valor={fmtShare(dados.shares.share_fbs_gmv)} comparacao={`FBS: ${fmtGmv(fbs?.gross_gmv ?? null)}`} />
               <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Share FBS — pedidos" valor={fmtShare(dados.shares.share_fbs_orders)} comparacao={`${fmtCount(dados.totals.eligible_orders)} pedidos elegíveis`} />
               <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Share FBS — unidades" valor={fmtShare(dados.shares.share_fbs_units)} comparacao={`${fmtCount(dados.totals.gross_units)} unidades`} />
               <KpiTile variante="gerencial" identidade="ads" icone={Ban} rotulo="Taxa de cancelamento" valor={fmtShare(dados.rates.cancellation_rate)} comparacao={`${fmtCount(dados.totals.cancelled_orders)} de ${fmtCount(dados.totals.created_orders)} pedidos criados`} />
-              <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Handling médio" valor={fmtHandling(dados.totals.handling)} comparacao={"Pagamento até a coleta — não é entrega"} />
+              <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Tempo até a coleta" ajuda={<InfoDica texto="Do pagamento até a coleta; não é entrega." />} valor={fmtHandling(dados.totals.handling)} />
               <KpiTile variante="gerencial" identidade="prazo" icone={Clock} rotulo="Cobertura do handling" valor={fmtShare(dados.totals.handling.coverage_ratio, 1)} comparacao={`${fmtCount(dados.totals.handling.sample_count)} pedidos com coleta registrada`} />
             </div>
           </section>

@@ -613,10 +613,10 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         icone={TrendingDown}
         identidade="gmv"
       >
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 [&>section:first-child]:border-t-0 [&>section:first-child]:pt-0">
           {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ da 1a secao, nao em rodape. */}
           {CANAIS.map((c, i) => (
-            <DrilldownSecao key={c} titulo={NOME_CANAL[c]} acao={i === 0 && abc?.status === "ok" ? <InfoDica texto={dicaCurva(abc, impacto)} /> : undefined}>
+            <DrilldownSecao key={c} titulo={NOME_CANAL_LONGO[c]} acao={i === 0 && abc?.status === "ok" ? <InfoDica texto={dicaCurva(abc, impacto)} /> : undefined}>
               <DetalheCurva canal={c} impacto={impacto} abc={abc} />
             </DrilldownSecao>
           ))}
