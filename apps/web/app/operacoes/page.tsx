@@ -27,6 +27,7 @@ import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table"
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
+import { rotuloFrescor, type ComFrescor } from "@/lib/frescor-carga";
 import { buildChartData } from "@/lib/operacoes-trend";
 import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
@@ -267,7 +268,19 @@ export default function OperacoesPage() {
         status={
           <span className="flex items-center gap-2">
             {dataIsFresh ? (
-              <LiveStatusBadge live={displayIsLive} />
+              <>
+                <LiveStatusBadge live={displayIsLive} />
+                {/* T-0097: carga mais antiga das fontes da tela; nunca a ultima
+                    data da serie (o dia corrente e' parcial). Demo nao tem frescor. */}
+                {displayIsLive && (
+                  <span
+                    className="text-xs text-ink-muted tabular-nums"
+                    title="Última carga das fontes desta tela (ML Gestão Diária e TikTok Shop)"
+                  >
+                    {rotuloFrescor((displayData as ComFrescor<OperacoesData> | null)?.refreshed_at)}
+                  </span>
+                )}
+              </>
             ) : isLoadingState ? (
               <span className="text-xs text-ink-muted bg-raised border border-line rounded-lg px-3 py-1.5 font-medium">
                 Atualizando dados...

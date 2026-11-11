@@ -101,6 +101,17 @@ def _validate_sort_by(sort_by: Optional[str], allowlist: dict[str, str]) -> None
 
 VALID_ML_BRANDS = {"barbours", "kokeshi", "lescent", "rituaria"}  # rituaria incluida em 2026-07-01 (ver docs/backlog.md)
 VALID_TK_BRANDS = {"apice", "barbours", "kokeshi", "lescent", "rituaria"}
+
+
+class BrandDetailFrescorResponse(BrandDetailResponse):
+    """T-0097: `BrandDetailResponse` + `refreshed_at`, aditivo e local a esta rota
+    para nao tocar o schema compartilhado. `LEAST` do MAX(carimbo de carga) das
+    quatro fontes da competencia (ver `gold_service._frescor_mais_antigo`);
+    None quando nenhuma fonte tem linha no escopo."""
+
+    refreshed_at: Optional[str] = None
+
+
 VALID_PARETO_BUCKETS = {"A_top50", "B_next30", "C_next15", "D_tail"}  # compartilhado: ML, TikTok e Shopee
 VALID_ML_STATUS = {"sells+advertised", "sells_organic_only", "ad_spend_no_sales", "inactive"}
 VALID_ML_VELOCITY = {"high", "medium", "low", "zero"}
@@ -440,7 +451,7 @@ def tempo_real(db: Session = Depends(get_db)):
     return svc.get_tempo_real(_require_db(db))
 
 
-@router.get("/brand-detail", response_model=BrandDetailResponse)
+@router.get("/brand-detail", response_model=BrandDetailFrescorResponse)
 def brand_detail(
     brand: str = Query(...),
     ref_month: Optional[str] = Query(None),

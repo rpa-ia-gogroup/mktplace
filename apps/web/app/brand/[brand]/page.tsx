@@ -43,6 +43,7 @@ import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import TikTokMonthlyPanel from "@/components/brand/TikTokMonthlyPanel";
 import { parseBrandArrivalContext, SECTION_PERIOD } from "@/lib/brand-arrival-context";
 import { computeRequestStatus } from "@/lib/request-freshness";
+import { rotuloFrescor, type ComFrescor } from "@/lib/frescor-carga";
 import {
   availabilityForBrand, brandDetailRequestKey, fmtCompetencia, monthlyViewState,
   monthOptions, parseRefMonth, periodRegimeRelation, REF_MONTH_QUERY_KEY,
@@ -487,6 +488,17 @@ function BrandPageInner() {
               <p className="text-xs text-slate-500">
                 Marca 360 · intervalo global {periodLabel} · competência TikTok {competenciaLabel}
               </p>
+              {/* T-0097: frescor da competencia TikTok servida (`refreshed_at`
+                  de /brand-detail), so' com resposta da chave atual. Nunca a
+                  ultima data da serie diaria (o dia corrente e' parcial). */}
+              {displayDetail && (
+                <p
+                  className="text-xs text-slate-500 tabular-nums"
+                  title="Última carga das fontes do TikTok Shop na competência exibida"
+                >
+                  {rotuloFrescor((displayDetail as ComFrescor<BrandDetail>).refreshed_at)}
+                </p>
+              )}
             </div>
           </div>
           {dailyIsFresh ? (

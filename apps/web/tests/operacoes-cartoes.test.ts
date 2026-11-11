@@ -51,3 +51,14 @@ test("C1-02: trend TikTok em ordem cronologica pela data ISO, mesmo cruzando o m
   const pag = ler("app/operacoes/page.tsx");
   assert.ok(!pag.includes("localeCompare"), "o eixo nao ordena mais o rotulo");
 });
+
+test("T-0097: frescor de Operacoes vem de refreshed_at; ausente/nulo/ilegivel vira 'frescor indisponivel'", async () => {
+  const { rotuloFrescor, FRESCOR_INDISPONIVEL } = await import("../src/lib/frescor-carga.ts");
+  assert.equal(FRESCOR_INDISPONIVEL, "frescor indisponível");
+  assert.match(rotuloFrescor("2026-11-10T12:30:00Z"), /^Atualizado em \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}$/);
+  for (const v of [null, undefined, "", "nao-e-data"]) assert.equal(rotuloFrescor(v), FRESCOR_INDISPONIVEL);
+  const P = ler("app/operacoes/page.tsx");
+  assert.ok(P.includes("rotuloFrescor((displayData as ComFrescor<OperacoesData> | null)?.refreshed_at)"),
+    "o rotulo le o refreshed_at da resposta protegida (displayData), nunca a ultima data da serie");
+  assert.ok(/displayIsLive && \(/.test(P), "demonstracao nao exibe frescor");
+});
