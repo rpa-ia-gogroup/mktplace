@@ -36,7 +36,7 @@ import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import InfoDica from "@/components/ui/InfoDica";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import { fmtBrl, fmtBrlCurto, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
 import { detectPreset } from "@/lib/filters/presets";
 import { useSortableTable } from "@/lib/use-sortable-table";
@@ -77,13 +77,10 @@ function FaixaCarregando({ cartoes, className }: { cartoes: number; className: s
   );
 }
 
-function fmtPct(v: number | null, dec = 1): string {
-  if (v == null) return "—";
-  return v.toFixed(dec) + "%";
+/** Percentual no formato da casa ("44,5%"); sem valor, "—" (nunca 0). */
+function fmtPct(v: number | null): string {
+  return v == null ? "—" : fmtPctSimples(v);
 }
-
-const fmtPct1 = (v: number) => `${v.toFixed(1)}%`;
-const fmtRoas = (v: number) => `${v.toFixed(2)}x`;
 
 /** Identidade estavel da requisicao atual (mesmo padrao "Finding 2" adotado
  * na Gerencial no Gate U2) — enquanto a chave resolvida nao bate com a
@@ -507,13 +504,13 @@ function CanaisPageInner() {
           ? {
               novos: fmtPct(k?.ml_new_buyer_pct ?? null),
               recompra: fmtPct(k?.ml_repeat_buyer_rate_pct ?? null),
-              porComprador: k?.ml_gmv_per_buyer != null ? fmtBrl(k.ml_gmv_per_buyer) : "—",
+              porComprador: k?.ml_gmv_per_buyer != null ? fmtBrlCurto(k.ml_gmv_per_buyer) : "—",
               conversao: "N/D",
             }
           : {
               novos: fmtPct(k?.shopee_new_buyer_pct ?? null),
               recompra: fmtPct(k?.shopee_repeat_buyer_rate_pct ?? null),
-              porComprador: k?.shopee_gmv_per_buyer != null ? fmtBrl(k.shopee_gmv_per_buyer) : "—",
+              porComprador: k?.shopee_gmv_per_buyer != null ? fmtBrlCurto(k.shopee_gmv_per_buyer) : "—",
               conversao: k?.shopee_conversion_rate != null ? fmtPct(k.shopee_conversion_rate) : "—",
             };
     // Canal sem NENHUMA linha no recorte: ausencia de medicao (null -> "Sem
@@ -617,7 +614,7 @@ function CanaisPageInner() {
           canal — a matriz abaixo ja' declara isso; aqui o painel nem aparece,
           em vez de mostrar colunas vazias. */}
       {!error && !isEmpty && colunasCanal.length > 0 && (!dataIsFresh || isLive) && (
-        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrl} fmtNumber={fmtNumber} carregando={!dataIsFresh} />
+        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto} carregando={!dataIsFresh} />
       )}
 
       {/* ── Comparativo entre Canais: Ads, Custo e Frete (Gate 2) ── */}
@@ -665,28 +662,28 @@ function CanaisPageInner() {
                         {row.channel_label}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium whitespace-nowrap">{fmtBrl(row.gmv)}</td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-faint">{fmtNumber(row.orders)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium whitespace-nowrap">{fmtBrlCurto(row.gmv)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-faint">{fmtNumCurto(row.orders)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      <ChannelMetricCell value={row.ads_gmv_pct} applicable={row.ads_applicable} available={row.ads_available} format={fmtPct1} />
+                      <ChannelMetricCell value={row.ads_gmv_pct} applicable={row.ads_applicable} available={row.ads_available} format={fmtPctSimples} />
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      <ChannelMetricCell value={row.roas} applicable={row.ads_applicable} available={row.ads_available} format={fmtRoas} />
+                      <ChannelMetricCell value={row.roas} applicable={row.ads_applicable} available={row.ads_available} format={fmtVezes} />
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      <ChannelMetricCell value={row.acos_pct} applicable={row.ads_applicable} available={row.ads_available} format={fmtPct1} />
+                      <ChannelMetricCell value={row.acos_pct} applicable={row.ads_applicable} available={row.ads_available} format={fmtPctSimples} />
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
                       <ChannelMetricCell
                         value={row.marketplace_cost_pct}
                         applicable={row.marketplace_cost_applicable}
                         available={row.marketplace_cost_available}
-                        format={fmtPct1}
+                        format={fmtPctSimples}
                         warning={row.data_warning}
                       />
                     </td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
-                      <ChannelMetricCell value={row.seller_shipping_pct} applicable={row.seller_shipping_applicable} available={row.seller_shipping_available} format={fmtPct1} />
+                      <ChannelMetricCell value={row.seller_shipping_pct} applicable={row.seller_shipping_applicable} available={row.seller_shipping_available} format={fmtPctSimples} />
                     </td>
                     <td className="px-4 py-2.5 min-w-[15rem]">
                       <div className="flex flex-wrap gap-1">
@@ -883,7 +880,7 @@ function CanaisPageInner() {
                               {b.label}
                             </Link>
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrl(b.tiktok_gmv!)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrlCurto(b.tiktok_gmv!)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className="text-ink-faint text-xs">{formatContentPctBr(partPct)}</span>
                           </td>
@@ -897,7 +894,7 @@ function CanaisPageInner() {
                               />
                               {mix.base != null && (
                                 <span className="text-xs text-ink-faint tabular-nums whitespace-nowrap">
-                                  Base {fmtBrl(mix.base)}
+                                  Base {fmtBrlCurto(mix.base)}
                                 </span>
                               )}
                               {/* Sublinha separada: diagnostico de reconciliacao,
@@ -923,7 +920,7 @@ function CanaisPageInner() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-faint">
-                            {b.tiktok_visitors != null ? fmtNumber(b.tiktok_visitors) : "—"}
+                            {b.tiktok_visitors != null ? fmtNumCurto(b.tiktok_visitors) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${convRateStyle(b.tiktok_conversion_rate)}`}>
@@ -936,7 +933,7 @@ function CanaisPageInner() {
                     {tkBrands.length > 0 && (
                       <tr className="bg-raised border-t border-line">
                         <td className="px-6 py-3 text-xs font-bold text-ink-muted uppercase tracking-wider">Total</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrl(tkGmvTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrlCurto(tkGmvTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums"><span className="text-ink-faint text-xs">100%</span></td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
@@ -948,7 +945,7 @@ function CanaisPageInner() {
                             />
                             {tkMixTotal.base != null && (
                               <span className="text-xs text-ink-faint tabular-nums whitespace-nowrap">
-                                Base {fmtBrl(tkMixTotal.base)}
+                                Base {fmtBrlCurto(tkMixTotal.base)}
                               </span>
                             )}
                             <span className="text-xs text-ink-faint tabular-nums whitespace-nowrap">
@@ -959,7 +956,7 @@ function CanaisPageInner() {
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{formatContentPctBr(tkMixTotal.videoPct)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{formatContentPctBr(tkMixTotal.livePct)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{formatContentPctBr(tkMixTotal.cardPct)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-faint text-xs">{fmtNumber(tkVisitorsTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-faint text-xs">{fmtNumCurto(tkVisitorsTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums text-xs font-semibold text-ink-muted">
                           {formatContentPctBr(displayKpis?.tiktok_conversion_rate)}
                         </td>
@@ -1039,21 +1036,21 @@ function CanaisPageInner() {
                               {b.label}
                             </Link>
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrl(b.ml_gmv!)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrlCurto(b.ml_gmv!)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
-                            <span className="text-ink-faint text-xs">{partPct.toFixed(1)}%</span>
+                            <span className="text-ink-faint text-xs">{fmtPctSimples(partPct)}</span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.ml_unique_buyers != null ? fmtNumber(b.ml_unique_buyers) : "—"}
+                            {b.ml_unique_buyers != null ? fmtNumCurto(b.ml_unique_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(newPct)}`}>{fmtPct(newPct)}</span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.ml_new_buyers != null ? fmtNumber(b.ml_new_buyers) : "—"}
+                            {b.ml_new_buyers != null ? fmtNumCurto(b.ml_new_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.ml_repeat_buyers != null ? fmtNumber(b.ml_repeat_buyers) : "—"}
+                            {b.ml_repeat_buyers != null ? fmtNumCurto(b.ml_repeat_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(b.ml_repeat_buyer_rate_pct)}`}>
@@ -1061,7 +1058,7 @@ function CanaisPageInner() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">
-                            {b.ml_gmv_per_buyer != null ? fmtBrl(b.ml_gmv_per_buyer) : "—"}
+                            {b.ml_gmv_per_buyer != null ? fmtBrlCurto(b.ml_gmv_per_buyer) : "—"}
                           </td>
                         </tr>
                       );
@@ -1069,19 +1066,19 @@ function CanaisPageInner() {
                     {mlBrands.length > 0 && (
                       <tr className="bg-raised border-t border-line">
                         <td className="px-6 py-3 text-xs font-bold text-ink-muted uppercase tracking-wider">Total</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrl(mlGmvTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrlCurto(mlGmvTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums"><span className="text-ink-faint text-xs">100%</span></td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(mlBuyersTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(mlBuyersTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(mlNewPctTotal)}`}>{mlNewPctTotal.toFixed(1)}%</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(mlNewPctTotal)}`}>{fmtPctSimples(mlNewPctTotal)}</span>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(mlNewTotal)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(mlRepeatTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(mlNewTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(mlRepeatTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(mlRepeatPctTotal)}`}>{mlRepeatPctTotal.toFixed(1)}%</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(mlRepeatPctTotal)}`}>{fmtPctSimples(mlRepeatPctTotal)}</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">
-                          {mlGmvPerBuyerTotal != null ? fmtBrl(mlGmvPerBuyerTotal) : "—"}
+                          {mlGmvPerBuyerTotal != null ? fmtBrlCurto(mlGmvPerBuyerTotal) : "—"}
                         </td>
                       </tr>
                     )}
@@ -1169,21 +1166,21 @@ function CanaisPageInner() {
                               {b.label}
                             </Link>
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrl(b.shopee_gmv!)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrlCurto(b.shopee_gmv!)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
-                            <span className="text-ink-faint text-xs">{partPct.toFixed(1)}%</span>
+                            <span className="text-ink-faint text-xs">{fmtPctSimples(partPct)}</span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.shopee_unique_buyers != null ? fmtNumber(b.shopee_unique_buyers) : "—"}
+                            {b.shopee_unique_buyers != null ? fmtNumCurto(b.shopee_unique_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(newPct)}`}>{fmtPct(newPct)}</span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.shopee_new_buyers != null ? fmtNumber(b.shopee_new_buyers) : "—"}
+                            {b.shopee_new_buyers != null ? fmtNumCurto(b.shopee_new_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.shopee_repeat_buyers != null ? fmtNumber(b.shopee_repeat_buyers) : "—"}
+                            {b.shopee_repeat_buyers != null ? fmtNumCurto(b.shopee_repeat_buyers) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(b.shopee_repeat_buyer_rate_pct)}`}>
@@ -1191,10 +1188,10 @@ function CanaisPageInner() {
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">
-                            {b.shopee_gmv_per_buyer != null ? fmtBrl(b.shopee_gmv_per_buyer) : "—"}
+                            {b.shopee_gmv_per_buyer != null ? fmtBrlCurto(b.shopee_gmv_per_buyer) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted">
-                            {b.shopee_visitors != null ? fmtNumber(b.shopee_visitors) : "—"}
+                            {b.shopee_visitors != null ? fmtNumCurto(b.shopee_visitors) : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             {b.shopee_conversion_rate != null
@@ -1207,26 +1204,26 @@ function CanaisPageInner() {
                     {shBrands.length > 0 && (
                       <tr className="bg-raised border-t border-line">
                         <td className="px-6 py-3 text-xs font-bold text-ink-muted uppercase tracking-wider">Total</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrl(shGmvTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrlCurto(shGmvTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums"><span className="text-ink-faint text-xs">100%</span></td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(shBuyersTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(shBuyersTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(shNewPctTotal)}`}>{shNewPctTotal.toFixed(1)}%</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${newBuyerPctStyle(shNewPctTotal)}`}>{fmtPctSimples(shNewPctTotal)}</span>
                         </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(shNewTotal)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumber(shRepeatTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(shNewTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">{fmtNumCurto(shRepeatTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums">
-                          <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(shRepeatPctTotal)}`}>{shRepeatPctTotal.toFixed(1)}%</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded ${repeatRateStyle(shRepeatPctTotal)}`}>{fmtPctSimples(shRepeatPctTotal)}</span>
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">
-                          {shGmvPerBuyerTotal != null ? fmtBrl(shGmvPerBuyerTotal) : "—"}
+                          {shGmvPerBuyerTotal != null ? fmtBrlCurto(shGmvPerBuyerTotal) : "—"}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-xs font-bold">
-                          {shVisitorsTotal > 0 ? fmtNumber(shVisitorsTotal) : "—"}
+                          {shVisitorsTotal > 0 ? fmtNumCurto(shVisitorsTotal) : "—"}
                         </td>
                         <td className="px-4 py-3 text-right tabular-nums">
                           {shConvRateTotal != null
-                            ? <span className="text-xs px-1.5 py-0.5 rounded text-ink-muted font-bold">{shConvRateTotal.toFixed(1)}%</span>
+                            ? <span className="text-xs px-1.5 py-0.5 rounded text-ink-muted font-bold">{fmtPctSimples(shConvRateTotal)}</span>
                             : "—"}
                         </td>
                       </tr>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { Handshake } from "lucide-react";
 import type { AffiliateCostRow, AffiliateCostsBlock } from "@/lib/api-client";
 import {
   AFFILIATE_BLOCK_TITLE,
@@ -21,6 +22,7 @@ import DrilldownSecao from "./drilldown/DrilldownSecao";
 import EvidenceRow from "./drilldown/EvidenceRow";
 import DataQualityNote from "./drilldown/DataQualityNote";
 import InfoDica from "./ui/InfoDica";
+import StateBlock from "./ui/StateBlock";
 
 const TONE_CLASS: Record<string, string> = {
   value: "text-ink",
@@ -104,8 +106,11 @@ function DetalheAfiliados({
         <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
           {monthsLabel && <span className={SELO}>Competência {monthsLabel}</span>}
           <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn-ink">Não somar</span>
-          {children}
-          <InfoDica texto={[block.limitation_note, block.return_note, block.source_note].filter(Boolean).join(" ")} />
+          {/* O ⓘ fica colado no ultimo selo: no celular quebra junto, nao sozinho na linha de baixo. */}
+          <span className="inline-flex items-center gap-1.5">
+            {children}
+            <InfoDica texto={[block.limitation_note, block.return_note, block.source_note].filter(Boolean).join(" ")} />
+          </span>
         </p>
         <DataQualityNote note={coverageWarning} />
         {[...porMes.entries()].map(([mes, nota]) => (
@@ -189,8 +194,8 @@ export default function AffiliateCostsPanel({ block, phase }: Props) {
           {AFFILIATE_BLOCK_TITLE}
         </h2>
         <div className="animate-pulse">
-          <div className="h-8 w-full bg-accent-soft rounded mb-2" />
-          <div className="h-8 w-full bg-accent-soft rounded" />
+          <div className="h-8 w-full bg-raised rounded mb-2" />
+          <div className="h-8 w-full bg-raised rounded" />
         </div>
       </section>
     );
@@ -199,7 +204,7 @@ export default function AffiliateCostsPanel({ block, phase }: Props) {
   if (phase === "unavailable") {
     return (
       <Moldura>
-        <p className="text-sm text-warn-ink">Indisponível: falha ao carregar canais.</p>
+        <StateBlock compacto tipo="indisponivel" titulo="Indisponível: falha ao carregar canais." />
       </Moldura>
     );
   }
@@ -209,7 +214,7 @@ export default function AffiliateCostsPanel({ block, phase }: Props) {
     // estática, nunca R$ 0,00 — que seria lido como "não houve custo".
     return (
       <Moldura>
-        <p className="text-sm text-ink-faint">Sem dados de afiliado no recorte.</p>
+        <StateBlock compacto tipo="indisponivel" titulo="Sem dados de afiliado no recorte." />
       </Moldura>
     );
   }
@@ -252,9 +257,7 @@ export default function AffiliateCostsPanel({ block, phase }: Props) {
       )}
 
       {view.emptyMessage ? (
-        <p className={`text-sm ${TONE_CLASS[view.emptyTone]}`}>
-          {view.emptyMessage}
-        </p>
+        <StateBlock compacto tipo={view.emptyTone === "warning" ? "indisponivel" : "vazio"} titulo={view.emptyMessage} />
       ) : (
         <div className="overflow-x-auto -mx-5 px-5">
           <table className="w-full text-sm border-collapse">
@@ -339,6 +342,8 @@ export default function AffiliateCostsPanel({ block, phase }: Props) {
         open={aberto}
         onClose={() => setAberto(false)}
         title={AFFILIATE_BLOCK_TITLE}
+        icone={Handshake}
+        identidade="ads"
       >
         <DetalheAfiliados block={block} monthsLabel={view.monthsLabel} coverageWarning={view.coverageWarning}>
           {/* Frescor PROPRIO do bloco: selo curto, a frase inteira no ⓘ. */}

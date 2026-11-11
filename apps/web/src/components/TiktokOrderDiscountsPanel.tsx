@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BadgePercent } from "lucide-react";
 import type { TikTokOrderDiscountRow, TikTokOrderDiscountsBlock } from "@/lib/api-client";
 import { brandLabel } from "@/lib/canais-affiliate-costs";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
@@ -27,6 +28,7 @@ import DrilldownSecao from "./drilldown/DrilldownSecao";
 import EvidenceRow from "./drilldown/EvidenceRow";
 import DataQualityNote from "./drilldown/DataQualityNote";
 import InfoDica from "./ui/InfoDica";
+import StateBlock from "./ui/StateBlock";
 
 const TONE_CLASS: Record<string, string> = {
   value: "text-ink",
@@ -94,8 +96,8 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
           {DISCOUNTS_BLOCK_TITLE}
         </h2>
         <div className="animate-pulse">
-          <div className="h-8 w-full bg-accent-soft rounded mb-2" />
-          <div className="h-8 w-full bg-accent-soft rounded" />
+          <div className="h-8 w-full bg-raised rounded mb-2" />
+          <div className="h-8 w-full bg-raised rounded" />
         </div>
       </section>
     );
@@ -104,7 +106,7 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
   if (phase === "unavailable") {
     return (
       <Moldura>
-        <p className="text-sm text-warn-ink">Indisponível: falha ao carregar canais.</p>
+        <StateBlock compacto tipo="indisponivel" titulo="Indisponível: falha ao carregar canais." />
       </Moldura>
     );
   }
@@ -114,7 +116,7 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
     // Mensagem estatica, nunca R$ 0,00 — que seria lido como "sem desconto".
     return (
       <Moldura>
-        <p className="text-sm text-ink-faint">Sem dados de desconto no recorte.</p>
+        <StateBlock compacto tipo="indisponivel" titulo="Sem dados de desconto no recorte." />
       </Moldura>
     );
   }
@@ -183,9 +185,7 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
       )}
 
       {view.emptyMessage ? (
-        <p className={`text-sm ${TONE_CLASS[view.emptyTone]}`}>
-          {view.emptyMessage}
-        </p>
+        <StateBlock compacto tipo={view.emptyTone === "warning" ? "indisponivel" : "vazio"} titulo={view.emptyMessage} />
       ) : (
         /* `overflow-x-auto`: a tabela rola DENTRO do seu container e a pagina
             nunca ganha barra horizontal, inclusive em 390px. */
@@ -261,6 +261,8 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
         open={aberto}
         onClose={() => setAberto(false)}
         title={DISCOUNTS_BLOCK_TITLE}
+        icone={BadgePercent}
+        identidade="ticket"
       >
         <div className="flex flex-col gap-4 text-sm">
           {/* POPUPS-1 — contexto em selos; quem financia, revisao retroativa
@@ -270,6 +272,8 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
               {view.windowLabel && <span className={SELO}>{view.windowLabel}</span>}
               {view.dayCountLabel && <span className={SELO}>{view.dayCountLabel}</span>}
               <span className="rounded-full bg-warn-soft px-2 py-0.5 font-medium text-warn-ink">Não somar</span>
+              {/* O ⓘ fica colado no ultimo selo: no celular quebra junto, nao sozinho na linha de baixo. */}
+              <span className="inline-flex items-center gap-1.5">
               {view.freshnessLabel && (
                 <span
                   className={`${SELO} inline-flex items-center gap-1 ${
@@ -285,6 +289,7 @@ export default function TiktokOrderDiscountsPanel({ block, phase }: Props) {
                   view.coverageIsIncomplete ? "" : ` ${COVERAGE_LIMIT_COPY}`
                 } ${block.limitation_note}`}
               />
+              </span>
             </p>
             {view.warnings.map((aviso) => (
               <DataQualityNote key={aviso} note={aviso} />
