@@ -31,7 +31,7 @@ import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
-import { buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
+import { avisoCoberturaShopee, buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
 
 function fmtNum(v: number | null): string {
@@ -297,7 +297,7 @@ function PedidosPageInner() {
             que nao ha cobertura. Selecao mista: os numeros nunca incluem Shopee. */}
         {showShopeeMixed && (
           <p className="w-fit rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
-            Shopee fora: só TikTok Shop e Mercado Livre
+            {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
           </p>
         )}
 
