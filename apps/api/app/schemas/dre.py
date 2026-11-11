@@ -100,6 +100,11 @@ class Margem(BaseModel):
     faltam: list[str]
     #: T-0090: presente quando ha parciais (margem tende a estar acima da real).
     aviso: str | None = None
+    #: T-0101, opcionais e retrocompativeis: custo obrigatorio (taxas, CMV) com
+    #: insumo vencido/ausente, ou (agregado) alguma celula assim. `valor` = None.
+    suspensa: bool = False
+    #: Ex.: "insumo vencido: cmv; margem suspensa até a republicação (publicado em 09/11/2026)".
+    motivo_suspensao: str | None = None
 
 
 class DataMaxima(BaseModel):
@@ -173,6 +178,10 @@ class CenarioPremissas(BaseModel):
     celulas: int
     #: T-0090: celulas do recorte sem premissa publicada (fora do cenario).
     celulas_sem_premissa: int = 0
+    #: T-0101: margem estimada suspensa pela mesma regra da conhecida (estado nao_calculavel).
+    suspensa: bool = False
+    motivo_suspensao: str | None = None
+    celulas_suspensas: int = 0
 
 
 class CelulaDRE(BaseModel):
@@ -183,6 +192,8 @@ class CelulaDRE(BaseModel):
     marca: str | None = None
     marca_label: str | None = None
     celulas: int | None = None
+    #: T-0101, so' agregados: celulas com a margem conhecida suspensa.
+    celulas_suspensas: int | None = None
     classificacao: Classificacao
     #: T-0090: `True` quando PREVIA; `fecha_em` = ultimo dia de M+2 (agregado: o maior).
     previa: bool = False

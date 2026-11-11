@@ -812,7 +812,10 @@ def test_rota_periodo_informado_e_respeitado_e_marcado(cliente):
 
 def test_rota_mes_imaturo_explicito_sai_previa(monkeypatch):
     ago = date(2026, 8, 1)
-    neon = FakeNeon(mart_rows=[mart("ml", "kokeshi", mes=ago)], insumos=cmv("ml", "kokeshi", mes=ago))
+    # T-0101: a rota usa o relogio real; CMV publicado ha' 1 h (vencido suspenderia a margem).
+    fresco = datetime.now(AGORA.tzinfo) - timedelta(hours=1)  # AGORA esta em UTC
+    neon = FakeNeon(mart_rows=[mart("ml", "kokeshi", mes=ago)],
+                    insumos=cmv("ml", "kokeshi", mes=ago, publicado_em=fresco))
     app.dependency_overrides[get_db] = lambda: neon
     monkeypatch.setattr(database, "datamart_engine", _DataMartQueExplode())
     monkeypatch.setattr(dre_router, "today_brt", lambda: HOJE)

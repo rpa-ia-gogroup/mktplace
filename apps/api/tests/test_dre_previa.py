@@ -95,10 +95,15 @@ def test_snapshot_vencido_e_indisponivel_nao_entram():
         comp = c["componentes"][nome]
         assert (comp["status"], comp["valor"], comp["origem"], comp["entra_na_margem"]) == (
             status, None, "indisponivel", False)
+    # T-0101: CMV vencido SUSPENDE a margem (antes saia receita − ads − frete, inflada).
     m = c["margem_contribuicao_conhecida"]
-    assert m["valor"] == pytest.approx(1_000_000 - 40_000 - 130_000)
+    assert m["valor"] is None and m["suspensa"] is True and "insumo vencido: cmv" in m["motivo_suspensao"]
     assert {"taxas", "cmv"} <= set(m["faltam"]) and m["componentes_parciais"] == []
     assert c["classificacao"] == dre.PARCIAL
+    # Taxa so' indisponivel (sem insumo vencido): fica fora da soma, a margem sai.
+    c = celula("ml", m=mart("ml", fees=None, fees_n=0))
+    m = c["margem_contribuicao_conhecida"]
+    assert m["suspensa"] is False and m["valor"] == pytest.approx(1_000_000 - 40_000 - 130_000 - 300_000)
 
 
 def test_nao_aplicavel_tem_origem_propria():

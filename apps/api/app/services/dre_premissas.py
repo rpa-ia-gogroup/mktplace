@@ -396,6 +396,15 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
     elif not maduro:
         motivos_parcial.append("competencia ainda imatura pela regra M+2 da DRE realizada")
 
+    # T-0101: a mesma condicao que suspende a margem conhecida da celula (custo
+    # obrigatorio com insumo vencido/ausente, `dre_service._suspensao_da_celula`)
+    # suspende a estimada: estimar sem CMV infla a margem do mesmo jeito. As
+    # linhas seguem visiveis; so' subtotais e margem ficam sem calculo.
+    conhecida = celula.get("margem_contribuicao_conhecida") or {}
+    suspensa = bool(conhecida.get("suspensa"))
+    if suspensa:
+        motivos_nc.insert(0, conhecida.get("motivo_suspensao") or "margem suspensa: insumo vencido")
+
     estado = NAO_CALCULAVEL if motivos_nc else (PARCIAL if motivos_parcial else CALCULAVEL)
     _subtotais(linhas, receita, calcular=estado != NAO_CALCULAVEL)
     for ln in linhas.values():
@@ -427,6 +436,9 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
                             "carregado_em": premissa["carregado_em"]},
         "celulas": 1,
         "celulas_sem_premissa": 0,
+        "suspensa": suspensa,
+        "motivo_suspensao": conhecida.get("motivo_suspensao") if suspensa else None,
+        "celulas_suspensas": 1 if suspensa else 0,
     }
 
 
@@ -552,6 +564,14 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
             estado = PARCIAL
         motivos.append(f"{sem_premissa} célula(s) sem premissa publicada ficaram fora do cenário "
                        "(premissa nunca é estendida)")
+    # T-0101: celula com margem suspensa ja' e' `nao_calculavel`, entao a margem do
+    # agregado sai None (mesma escolha conservadora da margem conhecida).
+    suspensas = sum(c.get("celulas_suspensas", 0) for c in validos)
+    motivo_suspensao = None
+    if suspensas:
+        motivo_suspensao = (f"{suspensas} de {len(validos)} células com margem estimada suspensa "
+                            "(insumo vencido ou ausente); margem suspensa até a republicação")
+        motivos.insert(0, motivo_suspensao)
     for c in validos:
         for m in c["motivos"]:
             if m not in motivos:
@@ -584,6 +604,9 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
         "fonte_premissas": validos[0]["fonte_premissas"],
         "celulas": sum(c["celulas"] for c in validos),
         "celulas_sem_premissa": sem_premissa,
+        "suspensa": bool(suspensas),
+        "motivo_suspensao": motivo_suspensao,
+        "celulas_suspensas": suspensas,
     }
 
 

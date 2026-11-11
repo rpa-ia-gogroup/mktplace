@@ -628,6 +628,47 @@ singular).
 
 Testes: `apps/api/tests/test_dre_previa.py`.
 
+#### 8.1.1 Dado velho ≠ dado parcial — margem suspensa (T-0101, 11/11/2026)
+
+**Por quê.** Medido em produção em 11/11 21:27Z: o insumo (`marts.fact_dre_insumo_mensal`) publicado em 09/11
+venceu pela regra de 54 h (`INSUMO_IDADE_MAXIMA`), e CMV, taxas e frete do TikTok e a taxa do escrow Shopee
+saíram `snapshot_vencido`. Com a regra acima (margem sempre que há receita, componente sem valor fica fora da
+soma), out/26 mostrou margem conhecida do TikTok **100%** (nenhum custo entrou), total 82,44% e estimada
+51,21% sem CMV — números absurdos com cara de reais. Um parcial é dado medido, incompleto; um insumo vencido
+ou ausente não é dado nenhum.
+
+**Regra (célula base).** Se um custo obrigatório (`REQUISITOS_PARCIAL` sem a receita: `taxas` e `cmv`) estiver
+`snapshot_vencido` ou `snapshot_ausente`:
+
+- `margem_contribuicao_conhecida.valor` e `pct_receita` = `null`, `componentes_usados`/`componentes_parciais`
+  vazios (como na margem nula de sempre), novo `suspensa: true` e novo `motivo_suspensao`, ex.:
+  "insumo vencido: taxas; margem suspensa até a republicação (publicado em 09/11/2026)" — "ausente" quando é o
+  caso; a data é o `publicado_em` mais antigo dos componentes envolvidos (em BRT), omitida quando nenhum tem;
+- o motivo entra no início de `motivos_classificacao`;
+- a classificação **não muda** (PREVIA/PARCIAL); receita, componentes (valores e status), `completude`,
+  `componentes_disponiveis` e `componentes_ausentes` também não.
+
+Só esses dois status disparam a suspensão: o parcial **não vencido** (inclusive o CMV extrapolado) segue a regra
+da T-0090. Frete, Ads, devoluções e impostos vencidos não suspendem (não são obrigatórios); ficam fora da soma.
+
+**Cenário estimado.** Pela mesma condição, o `cenario_premissas` da célula sai `estado = nao_calculavel`,
+margem estimada `null`, `suspensa: true`, `motivo_suspensao` igual e o motivo em `motivos[0]`. As linhas
+seguem visíveis; só subtotais e margem ficam sem cálculo. Estimar sem CMV infla a margem do mesmo jeito.
+
+**Agregado.** **[DECISÃO]** Com **qualquer** célula suspensa, a margem do agregado é `null` e `suspensa: true`,
+com o motivo "N de M células com margem suspensa (insumo vencido|ausente|vencido ou ausente); margem suspensa
+até a republicação (publicado em DD/MM/AAAA)" (também no início de `motivos_classificacao`) e o novo campo
+`celulas_suspensas: int` na célula agregada (0 sem suspensão; ausente nas células base). Somar só as células
+com margem mostraria a margem de parte dos canais/marcas como se fosse a do recorte — o mesmo engano, diluído.
+O cenário agregado já sai `nao_calculavel` (alguma célula é) e ganha `suspensa`, `celulas_suspensas` e o motivo.
+
+**Web.** Onde a margem é destaque, `suspensa: true` vira "Margem suspensa: insumo vencido desde DD/MM/AAAA"
+(ou "insumo ausente"), nunca número, "100%" ou "R$ 0". Resposta antiga sem `suspensa` segue como antes.
+
+Contrato: campos aditivos e opcionais (`Margem.suspensa`, `Margem.motivo_suspensao`,
+`CelulaDRE.celulas_suspensas`, `CenarioPremissas.suspensa|motivo_suspensao|celulas_suspensas`).
+Testes: `apps/api/tests/test_dre_insumo_vencido_margem.py`.
+
 ---
 
 ## 9. DRE demonstrativa — jul/2026 (NÃO publicar)

@@ -123,6 +123,10 @@ COMPONENTES = ("receita", "devolucoes", "taxas", "afiliados", "ads", "frete", "c
 CUSTOS_SOMAVEIS = ("devolucoes", "taxas", "ads", "frete", "cmv", "impostos")
 #: Sem estes tres, nao ha margem conhecida (contrato §8).
 REQUISITOS_PARCIAL = ("receita", "taxas", "cmv")
+#: T-0101: dado VELHO nao e' dado PARCIAL. Custo obrigatorio (`REQUISITOS_PARCIAL`
+#: sem a receita) com o insumo publicado vencido ou ausente SUSPENDE a margem
+#: conhecida e a estimada: ficar fora da soma deixava a margem do TikTok em 100%.
+STATUS_SUSPENDEM_MARGEM = (SNAPSHOT_VENCIDO, SNAPSHOT_AUSENTE)
 
 #: Contrato §7 / D5: mes M so' fecha depois que M+2 terminou.
 MESES_MATURACAO = 2
@@ -1120,11 +1124,28 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
     }
 
     faltam = [c for c in aplicaveis if c not in usados]
-    if valor is None or receita is None:
+    # T-0101: suspensao (celula: custo obrigatorio vencido/ausente; agregado: alguma
+    # celula suspensa). Receita e componentes seguem visiveis; so' a margem some.
+    if agregado is None:
+        suspensao = _suspensao_da_celula(comps) if receita is not None else None
+    else:
+        suspensao = agregado.get("suspensao")
+    if suspensao is not None:
+        celula["motivos_classificacao"].insert(0, suspensao["motivo"])
         celula["margem_contribuicao_conhecida"] = {
             "valor": None, "pct_receita": None, "rotulo": ROTULO_MARGEM,
             "formula": None, "componentes_usados": [], "componentes_parciais": [],
             "faltam": faltam, "aviso": None,
+            "suspensa": True, "motivo_suspensao": suspensao["motivo"],
+            # Internas, para o agregado: o contrato as descarta.
+            "_suspensa_desde": suspensao["desde"], "_suspensa_tipos": suspensao["tipos"],
+        }
+        return celula
+    if valor is None or receita is None:
+        celula["margem_contribuicao_conhecida"] = {
+            "valor": None, "pct_receita": None, "rotulo": ROTULO_MARGEM,
+            "formula": None, "componentes_usados": [], "componentes_parciais": [],
+            "faltam": faltam, "aviso": None, "suspensa": False, "motivo_suspensao": None,
         }
         return celula
     if agregado is not None and usados_algum != usados:
@@ -1146,8 +1167,57 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
         "componentes_parciais": list(parciais),
         "faltam": faltam,
         "aviso": aviso,
+        "suspensa": False,
+        "motivo_suspensao": None,
     }
     return celula
+
+
+def _texto_suspensao(desde) -> str:
+    """Fecho comum do motivo: "...; margem suspensa até a republicação (publicado em DD/MM/AAAA)"."""
+    texto = "margem suspensa até a republicação"
+    return f"{texto} (publicado em {data_brt(desde).strftime('%d/%m/%Y')})" if desde is not None else texto
+
+
+def _suspensao_da_celula(comps: dict) -> dict | None:
+    """T-0101: custo obrigatorio com insumo vencido/ausente suspende a margem. None = nao suspende.
+
+    So' `snapshot_vencido`/`snapshot_ausente` disparam: o parcial NAO vencido
+    segue entrando pelo valor medido ou extrapolado (T-0090). `desde` = o
+    `publicado_em` mais antigo dos componentes envolvidos (None se nenhum tem).
+    """
+    envolvidos = [n for n in REQUISITOS_PARCIAL if n != "receita" and comps[n]["status"] in STATUS_SUSPENDEM_MARGEM]
+    if not envolvidos:
+        return None
+    partes = []
+    for status, palavra in ((SNAPSHOT_VENCIDO, "vencido"), (SNAPSHOT_AUSENTE, "ausente")):
+        nomes = [n for n in envolvidos if comps[n]["status"] == status]
+        if nomes:
+            partes.append(f"insumo {palavra}: {', '.join(nomes)}")
+    datas = [comps[n]["publicado_em"] for n in envolvidos if comps[n].get("publicado_em") is not None]
+    desde = min(datas) if datas else None
+    tipos = {comps[n]["status"] for n in envolvidos}
+    return {"motivo": f"{'; '.join(partes)}; {_texto_suspensao(desde)}", "desde": desde, "tipos": tipos}
+
+
+def _suspensao_do_agregado(margens: list[dict]) -> dict | None:
+    """T-0101: agregado com ALGUMA celula suspensa tem a margem suspensa (None).
+
+    Escolha conservadora: somar so' as celulas com margem mostraria a margem de
+    parte dos canais/marcas como se fosse a do recorte inteiro — o mesmo engano
+    da margem inflada, so' que diluido.
+    """
+    suspensas = [m for m in margens if m.get("suspensa")]
+    if not suspensas:
+        return None
+    tipos: set[str] = set().union(*(m.get("_suspensa_tipos") or set() for m in suspensas))
+    datas = [m["_suspensa_desde"] for m in suspensas if m.get("_suspensa_desde") is not None]
+    desde = min(datas) if datas else None
+    palavra = ("vencido ou ausente" if len(tipos) > 1 else
+               "ausente" if tipos == {SNAPSHOT_AUSENTE} else "vencido")
+    motivo = (f"{len(suspensas)} de {len(margens)} células com margem suspensa (insumo {palavra}); "
+              f"{_texto_suspensao(desde)}")
+    return {"motivo": motivo, "desde": desde, "tipos": tipos, "celulas": len(suspensas)}
 
 
 def _cobertura_agregada(destino: dict, partes: list[dict]) -> None:
@@ -1310,6 +1380,8 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         "usados_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in u for u in usados_cel)],
         "parciais_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in p for p in parciais_cel)],
         "margem": sum(m["valor"] for m in com_margem) if com_margem else None,
+        # T-0101: alguma celula suspensa suspende a margem do agregado (ver `_suspensao_do_agregado`).
+        "suspensao": _suspensao_do_agregado([c["margem_contribuicao_conhecida"] for c in celulas]),
     }
     fechas = [c["fecha_em"] for c in celulas if c.get("fecha_em")]
     out = {
@@ -1317,6 +1389,7 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         "previa": classificacao == PREVIA, "fecha_em": max(fechas) if fechas else None,
         "motivos_classificacao": motivos, "avisos_qualidade": avisos, "data_maxima": datas,
         "celulas": len(celulas),
+        "celulas_suspensas": (agregado["suspensao"] or {}).get("celulas", 0),
     }
     return _finalizar(out, agregado=agregado)
 
