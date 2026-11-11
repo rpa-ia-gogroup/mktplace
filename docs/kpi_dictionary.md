@@ -498,3 +498,21 @@ depois, 972.946 / GMV da kokeshi = **25,27%**, cobertura parcial (1 de 5).
   E' nulo na Shopee, onde o recorte por marca nao e' medido (a regra antiga continua valendo la').
 - Exemplo (ML, 4 marcas, barbours e lescent sem foto): antes, 11.413,56 / 139.446,19 = **8,18%**; depois,
   so' com kokeshi + rituaria, **~16,9%**, "parcial (2 de 4 marcas)".
+
+### `/api/v1/performance/quality` — devolucao Shopee (T-0088, 2026-11-11)
+
+Fonte: `marts.fact_marketplace_daily_performance` (`SUM(returned_orders)` e `SUM(orders)` por marca no periodo;
+a SQL faz `COALESCE(SUM(...), 0)`, entao devolucao ausente chega 0 e `shopee_returned_orders` sai nulo).
+
+| Campo | Formula | Nulo quando |
+|---|---|---|
+| `shopee_return_rate_pct` (marca) | `returned_orders / orders * 100` | `shopee_returned_orders` nulo/zero ou `orders <= 0` |
+| `shopee_return_rate_pct` (consolidado) | `Σ returned(marcas com devolucao) / Σ orders(as MESMAS marcas) * 100` | nenhuma marca com devolucao |
+
+Cobertura: `kpis.shopee_return_cobertura` (opcional) = `{status, marcas_com_dado, marcas_total, marcas_sem_dado}`;
+universo = marcas com pedido Shopee no recorte; nulo quando a Shopee nao tem pedido. A tela mostra "—" na linha
+sem dado e "Devolução: parcial (N de M marcas)" sob os cartoes da Shopee.
+O cancelamento Shopee NAO muda: `Σ cancelados / (Σ pedidos + Σ cancelados)` de todas as marcas.
+
+Exemplo (out/26, 5 marcas, so' a kokeshi com devolucao): antes, 260 / 95.945 = **0,27%** (diluido); depois,
+260 / 69.073 = **0,38%**, "parcial (1 de 5 marcas)".

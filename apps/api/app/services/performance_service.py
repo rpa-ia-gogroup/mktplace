@@ -1679,7 +1679,9 @@ def get_quality(
                 "shopee_canceled_orders": sh_canceled or None,
                 "shopee_returned_orders": sh_returned or None,
                 "shopee_cancel_rate_pct": round(sh_canceled / sh_total * 100, 2) if sh_total > 0 else None,
-                "shopee_return_rate_pct": round(sh_returned / sh_orders * 100, 2) if sh_orders > 0 else None,
+                # T-0088: marca sem devolucao na fato (SUM chega 0 pelo
+                # COALESCE e ja' sai `returned_orders` nulo) saia com 0,0%.
+                "shopee_return_rate_pct": _pct_da_marca(sh_returned, sh_orders),
             })
 
         brand_rows.append(row)
@@ -1706,9 +1708,13 @@ def get_quality(
     sh_br = [r for r in brand_rows if r.get("shopee_orders")]
     sh_orders_all = sum(r.get("shopee_orders") or 0 for r in sh_br)
     sh_canceled_all = sum(r.get("shopee_canceled_orders") or 0 for r in sh_br)
-    sh_returned_all = sum(r.get("shopee_returned_orders") or 0 for r in sh_br)
     kpi_sh_cancel = round(sh_canceled_all / (sh_orders_all + sh_canceled_all) * 100, 2) if (sh_orders_all + sh_canceled_all) > 0 else None
-    kpi_sh_return = round(sh_returned_all / sh_orders_all * 100, 2) if sh_orders_all > 0 else None
+    # T-0088: a devolucao consolidada divide SO' pelos pedidos das marcas com
+    # devolucao medida. Com todos os pedidos no denominador, a taxa da unica
+    # marca medida saia diluida (Shopee out/26: 0,27% contra 0,38% da kokeshi).
+    # O cancelamento acima continua com todas as marcas: a regra e' outra.
+    kpi_sh_return = _pct_coberto(brand_rows, "shopee_returned_orders", "shopee_orders")
+    kpi_sh_return_cobertura = _cobertura_marcas(brand_rows, "shopee_returned_orders", "shopee_orders")
 
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
 
@@ -1745,6 +1751,7 @@ def get_quality(
             "ml_avg_delivery_days": kpi_ml_del,
             "shopee_cancel_rate_pct": kpi_sh_cancel,
             "shopee_return_rate_pct": kpi_sh_return,
+            "shopee_return_cobertura": kpi_sh_return_cobertura,
         },
         "brands": brand_rows,
         "date_from": start,

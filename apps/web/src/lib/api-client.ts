@@ -1584,6 +1584,9 @@ export interface QualityKpis {
   ml_avg_delivery_days: number | null;
   shopee_cancel_rate_pct?: number | null;
   shopee_return_rate_pct?: number | null;
+  /** T-0088: quantas marcas com pedido Shopee entraram no % de devolucao
+   *  consolidado. `null`/ausente = Shopee sem pedido no recorte. */
+  shopee_return_cobertura?: CoberturaMarcas | null;
 }
 
 export interface QualityBrandRow {
