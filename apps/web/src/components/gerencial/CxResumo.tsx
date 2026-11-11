@@ -249,14 +249,9 @@ function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: I
   // CARDS-KPI (09/11): a cor de identidade da /cx; a resposta em kpi-ticket para nao repetir o contact rate ao lado
 
   const card = (i: IndicadorCx, span: string, valor: string, linha: ReactNode, extra: RodapeCard = {}) => (
-    <button
-      type="button"
-      onClick={() => abrir(i)}
-      aria-haspopup="dialog"
-      aria-label={`${ROTULO_INDICADOR[i]}: ${valor}. Ver por marca`}
-      className={`${CARD} card-hover w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${span}`}
-    >
+    <div className={`min-w-0 ${span}`}>
       <KpiTile
+        onAbrir={() => abrir(i)}
         variante="gerencial"
         identidade={IDENT[i].identidade}
         icone={IDENT[i].icone}
@@ -283,7 +278,7 @@ function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: I
           />
         }
       />
-    </button>
+    </div>
   );
 
   return (
