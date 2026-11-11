@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 /**
@@ -36,6 +37,8 @@ interface Props {
   /** Variacao % contra o periodo anterior. `neutro` = sem cor de juizo. */
   /** `menorMelhor`: cair e' bom (ACOS) — so' a cor inverte, o numero nao. */
   delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean } | null;
+  /** Conteudo extra sob a linha (ex.: barras Full / Sem Full), no lugar da barra de participacao. */
+  children?: ReactNode;
 }
 
 function fmtDelta(v: number): string {
@@ -53,6 +56,7 @@ export default function EvidenceRow({
   ponto,
   barra = "bg-accent",
   delta,
+  children,
 }: Props) {
   const sobe = delta != null && delta.pct >= 0;
   const Seta = sobe ? ArrowUpRight : ArrowDownRight;
@@ -75,7 +79,8 @@ export default function EvidenceRow({
           <span className={TONE_CLASS[tone]} title={title}>{value}</span>
         </span>
       </div>
-      {pct != null && (
+      {children ?? null}
+      {pct != null && !children && (
         <span aria-hidden="true" className="block h-1.5 w-full overflow-hidden rounded-full bg-raised">
           <span className={`tc-barra block h-full rounded-full ${barra}`} style={{ width: `${Math.max(0, Math.min(100, pct))}%` }} />
         </span>

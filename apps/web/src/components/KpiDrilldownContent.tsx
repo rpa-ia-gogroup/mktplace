@@ -15,11 +15,13 @@ import {
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { acosDoRoas } from "@/lib/gerencial/kpi-band";
+import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import { BarrasFull, FullResumo, type Segmento } from "@/components/drilldown/FullDivisao";
 import DrilldownCta from "@/components/drilldown/DrilldownCta";
 import InfoDica from "@/components/ui/InfoDica";
 import { IDENTIDADE, type IdentidadeKpi } from "@/components/ui/KpiTile";
@@ -38,6 +40,8 @@ interface Props {
    * (omitido) de canal selecionado sem valor no contrato ("Sem dado"). */
   channels: Marketplace[];
   buildHref: (href: string) => string;
+  /** Full x sem Full por marca (so' GMV e Pedidos); ausente = sem divisao. */
+  full?: FullDoDetalhe | null;
   /**
    * KPIS-COMPARACAO-1 — a comparacao que o CARD mostrou (variacao % e "antes
    * X"). Vem pronta da faixa para o detalhe nunca contradizer o card; ausente
@@ -113,6 +117,7 @@ export default function KpiDrilldownContent({
   brands,
   channels,
   buildHref,
+  full = null,
   comparacao: comparacaoDoCard,
   tendencia,
   comparar = true,
@@ -142,8 +147,8 @@ export default function KpiDrilldownContent({
 
       {tendencia && tendencia.pontos.length >= 4 && <Tendencia t={tendencia} identidade={identidade} />}
 
-      {kind === "gmv" && <GmvBreakdown overview={overview} brands={brands} channels={channels} />}
-      {kind === "orders" && <OrdersBreakdown brands={brands} />}
+      {kind === "gmv" && <GmvBreakdown overview={overview} brands={brands} channels={channels} full={full} />}
+      {kind === "orders" && <OrdersBreakdown brands={brands} full={full} />}
       {kind === "avg_ticket" && <AvgTicketBreakdown brands={brands} />}
       {kind === "ad_spend" && <AdSpendBreakdown overview={overview} brands={brands} channels={channels} />}
       {kind === "roas" && <RoasBreakdown overview={overview} brands={brands} channels={channels} />}
@@ -188,12 +193,51 @@ function Tendencia({ t, identidade }: { t: TendenciaKpi; identidade?: Identidade
   );
 }
 
-function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; brands: BrandRow[]; channels: Marketplace[] }) {
+const CANAIS_FULL = ["ml", "shopee", "tiktok"] as const;
+const CANAL_NOME = { ml: "Mercado Livre", shopee: "Shopee", tiktok: "TikTok" } as const;
+
+/** GMV da marca por canal (so' o que tem valor), para a divisao Full. */
+function gmvDaMarca(b: BrandRow) {
+  return { tiktok: b.tiktok_gmv ?? undefined, ml: b.ml_gmv ?? undefined, shopee: b.shopee_gmv ?? undefined };
+}
+
+const seg = (partes: FullDaMarca["full"]): Segmento[] =>
+  CANAIS_FULL.map((c) => ({ cls: CHANNEL_DOT[c], v: partes[c] ?? 0 }));
+const somaPartes = (partes: FullDaMarca["full"]) => CANAIS_FULL.reduce((a, c) => a + (partes[c] ?? 0), 0);
+
+const DICA_FULL_GMV =
+  "Estimativa: a % de Full medida até ontem, aplicada ao GMV do período. Full = ML Full + Shopee FBS. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+const DICA_FULL_PEDIDOS =
+  "Full = pedidos enviados pelo ML Full e pela Shopee FBS, contados um a um. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+const DICA_FULL_PEDIDOS_HOJE = `${DICA_FULL_PEDIDOS} Hoje ainda não tem tipo de envio: o dia usa a proporção até ontem (estimativa).`;
+
+function GmvBreakdown({
+  overview,
+  brands,
+  channels,
+  full,
+}: {
+  overview: OverviewData;
+  brands: BrandRow[];
+  channels: Marketplace[];
+  full: FullDoDetalhe | null;
+}) {
   const byChannel = gmvChannelBreakdown(overview, channels);
   const byBrand = [...gmvBrandBreakdown(brands)].sort((a, b) => b.value - a.value);
   const mom = new Map(brands.map((b) => [b.brand, b.mom_pct]));
+  const rowBrand = new Map(brands.map((b) => [b.brand, b]));
+  const ds = byBrand.map((b) => {
+    const row = rowBrand.get(b.brand);
+    return full && row ? fullDaMarca(gmvDaMarca(row), full.por[b.brand] ?? {}) : null;
+  });
+  const tot = ds.reduce(
+    (t, d) => (d ? { f: t.f + somaPartes(d.full), s: t.s + somaPartes(d.semFull), n: t.n + somaPartes(d.semDado) } : t),
+    { f: 0, s: 0, n: 0 },
+  );
+  const escala = Math.max(0, ...ds.map((d) => (d ? Math.max(somaPartes(d.full), somaPartes(d.semFull), somaPartes(d.semDado)) : 0)));
   return (
     <>
+      <FullResumo full={tot.f} semFull={tot.s} semMedida={tot.n} fmt={fmtBrlCurto} dica={DICA_FULL_GMV} estimado />
       <DrilldownSecao titulo="Por canal">
         <ul className="flex flex-col">
           {byChannel.map((c) => (
@@ -211,8 +255,11 @@ function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; 
       </DrilldownSecao>
       <DrilldownSecao titulo="Por marca" acao={<span>{byBrand.length}</span>}>
         <ul className="flex flex-col">
-          {byBrand.map((b) => {
+          {byBrand.map((b, i) => {
             const d = mom.get(b.brand);
+            const dv = ds[i];
+            const comMedida = dv != null && somaPartes(dv.full) + somaPartes(dv.semFull) > 0;
+            const semDado = dv != null && somaPartes(dv.semDado) > 0;
             return (
               <EvidenceRow
                 key={b.brand}
@@ -220,7 +267,20 @@ function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; 
                 pct={b.pct}
                 delta={d != null ? { pct: d } : null}
                 value={`${fmtBrlCurto(b.value)} · ${fmtPct1(b.pct)}`}
-              />
+              >
+                {dv && (comMedida || semDado) && (
+                  <BarrasFull
+                    full={seg(dv.full)}
+                    semFull={seg(dv.semFull)}
+                    semDado={seg(dv.semDado)}
+                    nomeSemDado={CANAIS_FULL.filter((c) => (dv.semDado[c] ?? 0) > 0)
+                      .map((c) => CANAL_NOME[c])
+                      .join(" + ")}
+                    escala={escala}
+                    fmt={fmtBrlCurto}
+                  />
+                )}
+              </EvidenceRow>
             );
           })}
         </ul>
@@ -229,16 +289,56 @@ function GmvBreakdown({ overview, brands, channels }: { overview: OverviewData; 
   );
 }
 
-function OrdersBreakdown({ brands }: { brands: BrandRow[] }) {
+function OrdersBreakdown({ brands, full }: { brands: BrandRow[]; full: FullDoDetalhe | null }) {
   const byBrand = [...ordersBrandBreakdown(brands)].sort((a, b) => b.value - a.value);
+  const rowBrand = new Map(brands.map((b) => [b.brand, b]));
+  // Real: contagem das fatos. Sem medida (null): a marca fica sem divisao e fora do %.
+  const divisoes = byBrand.map((b) => {
+    const row = rowBrand.get(b.brand);
+    const f = full?.por[b.brand];
+    return full && row ? fullPedidosDaMarca(b.value, f, full.aproximado, fullDaMarca(gmvDaMarca(row), f ?? {})) : null;
+  });
+  const tot = divisoes.reduce(
+    (t, d, i) => (d ? { ...t, f: t.f + d.full, s: t.s + d.semFull } : { ...t, n: t.n + byBrand[i].value }),
+    { f: 0, s: 0, n: 0 },
+  );
+  const escala = Math.max(0, ...divisoes.map((d) => (d ? Math.max(d.full, d.semFull) : 0)));
   return (
-    <DrilldownSecao titulo="Por marca" acao={<span>{byBrand.length}</span>}>
-      <ul className="flex flex-col">
-        {byBrand.map((b) => (
-          <EvidenceRow key={b.brand} label={b.label} pct={b.pct} value={`${fmtNumCurto(b.value)} · ${fmtPct1(b.pct)}`} />
-        ))}
-      </ul>
-    </DrilldownSecao>
+    <>
+      <FullResumo
+        full={tot.f}
+        semFull={tot.s}
+        semMedida={tot.n}
+        fmt={fmtNumCurto}
+        dica={full?.aproximado ? DICA_FULL_PEDIDOS_HOJE : DICA_FULL_PEDIDOS}
+        estimado={full?.aproximado}
+      />
+      <DrilldownSecao titulo="Por marca" acao={<span>{byBrand.length}</span>}>
+        <ul className="flex flex-col">
+          {byBrand.map((b, i) => {
+            const d = divisoes[i];
+            return (
+              <EvidenceRow
+                key={b.brand}
+                label={b.label}
+                pct={b.pct}
+                value={`${fmtNumCurto(b.value)} · ${fmtPct1(b.pct)}`}
+                reference={full && !d ? "Sem medida de Full" : null}
+              >
+                {d && (
+                  <BarrasFull
+                    full={[{ cls: "bg-accent", v: d.full }]}
+                    semFull={[{ cls: "bg-ink-faint", v: d.semFull }]}
+                    escala={escala}
+                    fmt={fmtNumCurto}
+                  />
+                )}
+              </EvidenceRow>
+            );
+          })}
+        </ul>
+      </DrilldownSecao>
+    </>
   );
 }
 
