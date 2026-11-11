@@ -324,6 +324,9 @@ SQL_ESPERADO = text("""
 #:   * `custo_provisorio` e' booleano no item: a soma filtrada reproduz o valor
 #:     do agregado (provado em set/26).
 #: Sem JOIN: uma tabela, GROUP BY na chave inteira da saida. Nada multiplica.
+#: T-0087b: `data_emissao` na janela e' redundante com `data_mes` (= mes da
+#: emissao), mas faz o planner usar o indice (marca, canal, data_emissao) so' na
+#: janela em vez de varrer o historico (caia por timeout de 600 s na replica).
 SQL_CMV = text("""
     SELECT data_mes AS competencia, marca, plataforma,
            SUM(receita_produto)                                  AS receita_fiscal,
@@ -334,6 +337,7 @@ SQL_CMV = text("""
            COUNT(*)                                              AS linhas
     FROM gold.nf_vendas_unificada_v2
     WHERE data_mes = ANY(:competencias)
+      AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
       AND canal = 'marketplace'
       AND plataforma = ANY(:plataformas)
       AND marca = ANY(:marcas)
@@ -362,6 +366,7 @@ SQL_CMV_ESTIMADO = text("""
                COUNT(*)                                                AS linhas
         FROM gold.nf_vendas_unificada_v2
         WHERE data_mes = ANY(:competencias)
+          AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
           AND canal = 'marketplace'
           AND plataforma = ANY(:plataformas)
           AND marca = ANY(:marcas)
@@ -372,6 +377,7 @@ SQL_CMV_ESTIMADO = text("""
         SELECT data_mes, marca, codigo_produto, sku_canonico, custo, quantidade_item
         FROM gold.nf_vendas_unificada_v2
         WHERE data_mes = ANY(:competencias)
+          AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
           AND marca = ANY(:marcas)
           AND intercompany IS NOT TRUE
           AND custo IS NOT NULL
@@ -561,6 +567,7 @@ SQL_IMPOSTOS = text("""
                COUNT(*) OVER (PARTITION BY chave_nfe) AS celulas_da_chave
         FROM gold.nf_vendas_unificada_v2
         WHERE data_mes = ANY(:competencias)
+          AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
           AND canal = 'marketplace'
           AND plataforma = ANY(:plataformas)
           AND marca = ANY(:marcas)
@@ -1437,6 +1444,7 @@ def ler_impostos(fonte_engine, comps: list[date], canais: list[str], marcas: lis
     inicio_webgex, fim_webgex = janela_webgex(comps)
     params = {
         "competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas,
+        "inicio": comps[0], "fim_exclusivo": somar_meses(comps[-1], 1),
         "inicio_webgex": inicio_webgex, "fim_webgex": fim_webgex,
     }
     try:
@@ -1461,7 +1469,10 @@ def ler_cmv_estimado(fonte_engine, comps: list[date], canais: list[str],
     """
     if fonte_engine is None or not marcas:
         return None, "nao avaliado: sem Data Mart ou sem marca no escopo"
-    params = {"competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas}
+    params = {
+        "competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas,
+        "inicio": comps[0], "fim_exclusivo": somar_meses(comps[-1], 1),
+    }
     try:
         with fonte_engine.connect() as conn:
             conn.execute(text("SET TRANSACTION READ ONLY"))

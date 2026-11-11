@@ -1300,6 +1300,85 @@ def test_t0091_leitura_da_estimativa_e_read_only_com_timeout_e_nao_derruba_o_lot
     assert P.ler_cmv_estimado(_EngQuebra(), [OUT], ["shopee"], [])[0] is None
 
 
+# ---------------------------------------------------------------------------
+# T-0087b — a leitura do CMV filtra data_emissao na janela (indice, sem timeout)
+# ---------------------------------------------------------------------------
+
+FILTRO_EMISSAO = "data_emissao >= :inicio AND data_emissao < :fim_exclusivo"
+
+
+def test_t0087b_sql_do_cmv_e_os_dois_ctes_da_estimativa_filtram_data_emissao_na_janela():
+    assert FILTRO_EMISSAO in _sql(P.SQL_CMV)
+    sql = _sql(P.SQL_CMV_ESTIMADO)
+    sem = sql[sql.index("sem_custo AS"):sql.index("com_custo AS")]
+    com = sql[sql.index("com_custo AS"):sql.index("SELECT 'sem_custo'")]
+    assert FILTRO_EMISSAO in sem and FILTRO_EMISSAO in com
+
+
+class _ConnParams:
+    def __init__(self, eng):
+        self.eng = eng
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def rollback(self):
+        pass
+
+    def execute(self, sql, params=None):
+        if params is not None:
+            self.eng.params[sql] = params
+        return _Res()
+
+
+class _EngParams:
+    """Data Mart que so' guarda os params de cada SQL e devolve zero linha."""
+
+    def __init__(self):
+        self.params = {}
+
+    def connect(self):
+        return _ConnParams(self)
+
+
+AGO = date(2026, 8, 1)
+JANELA_JUL_OUT = {"inicio": JUL, "fim_exclusivo": date(2026, 11, 1)}
+
+
+def test_t0087b_ler_fonte_passa_a_janela_de_emissao():
+    eng = _EngParams()
+    P.ler_fonte(eng, [JUL, AGO, date(2026, 9, 1), OUT], ["ml"], ["kokeshi"])
+    p = eng.params[P.SQL_CMV]
+    assert {k: p[k] for k in JANELA_JUL_OUT} == JANELA_JUL_OUT
+
+
+def test_t0087b_ler_cmv_estimado_passa_a_janela_de_emissao():
+    eng = _EngParams()
+    linhas, estado = P.ler_cmv_estimado(eng, [JUL, AGO, date(2026, 9, 1), OUT], ["shopee"], ["kokeshi"])
+    assert linhas == [] and estado == "lido"
+    p = eng.params[P.SQL_CMV_ESTIMADO]
+    assert {k: p[k] for k in JANELA_JUL_OUT} == JANELA_JUL_OUT
+    # virada de ano: dezembro fecha em 1o de janeiro
+    eng = _EngParams()
+    P.ler_cmv_estimado(eng, [date(2026, 12, 1)], ["shopee"], ["kokeshi"])
+    p = eng.params[P.SQL_CMV_ESTIMADO]
+    assert (p["inicio"], p["fim_exclusivo"]) == (date(2026, 12, 1), date(2027, 1, 1))
+
+
+def test_t0087b_ler_impostos_usa_a_mesma_janela_de_emissao_do_cmv():
+    assert FILTRO_EMISSAO in _sql(P.SQL_IMPOSTOS)
+    comps = [JUL, AGO, date(2026, 9, 1), OUT]
+    eng = _EngParams()
+    P.ler_impostos(eng, comps, ["ml"], ["kokeshi"], True)
+    p = eng.params[P.SQL_IMPOSTOS]
+    assert {k: p[k] for k in JANELA_JUL_OUT} == JANELA_JUL_OUT
+    # a janela do webgex (folga em volta) nao muda
+    assert (p["inicio_webgex"], p["fim_webgex"]) == P.janela_webgex(comps)
+
+
 def test_t0091_publicar_le_a_estimativa_sem_conexao_do_neon_e_grava_o_cmv_estimado(monkeypatch):
     alvo = _AlvoFake(_esp_shopee())
     fonte = _FonteFake(alvo, [_shopee()], estimado=[sem_custo("K1", receita=600, qtd=10),
