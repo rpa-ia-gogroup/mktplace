@@ -24,7 +24,7 @@ import { CHANNEL_DOT as PONTO } from "@/lib/gerencial/channel-colors";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
 import { ROTULO_STATUS, type ProgressoMeta, type StatusMeta } from "@/lib/gerencial/meta-progress";
 import { diaDaSemana, type ProgressoDia, type StatusDia } from "@/lib/metas-curva";
-import { fmtCompacto, rotuloMes } from "@/lib/metas";
+import { MARCAS, fmtCompacto, rotuloMes } from "@/lib/metas";
 import { fmtPctBr } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
 import type { TendenciaConsolidada } from "@/lib/gerencial/hoje-por-hora";
@@ -362,17 +362,29 @@ function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenci
   );
 }
 
-/** "Tendência R$ 1,2 mi · 98% da meta"; parcial (falta marca, nunca soma como 0) mostra só o valor: o % seria sobre outra meta que a da barra. */
+// "KOKESHI" gritando no meio da frase do (i): primeira maiuscula so'.
+const NOME_MARCA = Object.fromEntries(MARCAS.map((m) => [m.id, m.label[0] + m.label.slice(1).toLowerCase()])) as Record<string, string>;
+const NOME_CANAL = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" } as const;
+
+/** O que a tendência deixou de fora, para o ⓘ; a linha só mostra o valor. */
+function foraDaTendencia(t: TendenciaConsolidada): string {
+  const partes = [
+    ...t.soParte.map((p) => `${NOME_MARCA[p.id] ?? p.id} na ${p.canais.map((c) => NOME_CANAL[c]).join(" e ")} (sem hora de pedido)`),
+    ...t.semRitmo.map((id) => `${NOME_MARCA[id] ?? id} (sem ritmo ainda)`),
+  ];
+  return partes.length ? ` Ficou de fora: ${partes.join("; ")}.` : "";
+}
+
+/** "Tendência R$ 1,2 mi · 98% da meta"; com algo de fora (marca ou canal, nunca somado como 0) mostra só o valor: o % seria sobre outra meta que a da barra. */
 function TendenciaTopo({ t }: { t: TendenciaConsolidada }) {
-  const parcial = t.somadas < t.total;
+  const parcial = t.somadas < t.total || t.soParte.length > 0;
   return (
     <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
       <span>
         Tendência <b className="font-semibold text-ink">{fmtCompacto(t.projecao)}</b>
         {!parcial && t.meta != null && ` · ${pct0(t.projecao / t.meta)} da meta`}
       </span>
-      {parcial && <span className="font-semibold text-warn-ink">parcial ({t.somadas} de {t.total} marcas)</span>}
-      <InfoDica texto="Soma das tendências de cada marca: o GMV de hoje no ritmo de ontem até a mesma hora. Marca sem ritmo ainda fica de fora, e o total diz que é parcial." />
+      <InfoDica texto={`Soma das tendências de cada marca: o GMV de hoje no ritmo de ontem até a mesma hora. O GMV do topo conta tudo; só a tendência deixa de fora o que não tem hora.${foraDaTendencia(t)}`} />
     </p>
   );
 }

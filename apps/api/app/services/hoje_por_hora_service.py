@@ -134,8 +134,14 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
            "brands": brand_keys}).mappings().all() if any(cortes.values()) else []
     # Por marca E canal: quem mostra a tendencia soma so' os canais do valor
     # ao lado dela (ex.: so' os canais com meta), nunca um conjunto diferente.
+    def _sem_hora(brand: str, mk: int) -> bool:
+        return brand == "kokeshi" and mk == SHOPEE_ID and SHOPEE_ID in mkt_ids
+
     marcas: dict[str, dict[int, dict]] = {}
     for r in por_marca_linhas:
+        # Kokeshi na Shopee nao tem hora de pedido: sai da conta so' ela (o ML dela entra).
+        if _sem_hora(r["brand"], r["marketplace_id"]):
+            continue
         m = marcas.setdefault(r["brand"], {}).setdefault(
             r["marketplace_id"], {"hoje": 0.0, "ontem_ate": 0.0, "ontem_dia": 0.0})
         if r["dia"] == dias["hoje"]:
@@ -151,10 +157,9 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     por_marca = [{
         "brand": b, **_tendencia(list(canais.values())),
         "por_canal": [{"channel": CANAL_POR_ID[mk], **_tendencia([p])} for mk, p in sorted(canais.items())],
-    } for b, canais in sorted(marcas.items())
-        # Kokeshi na Shopee nao tem hora de pedido: a projecao veria so' o resto
-        # dela e ficaria ABAIXO do que ja' vendeu. Sem tendencia, nunca uma errada.
-        if not (b == "kokeshi" and SHOPEE_ID in mkt_ids)]
+        # Quem mostra a marca com a Shopee dela (Kokeshi) nao pode usar esta conta como total.
+        "canais_fora": [CANAL_POR_ID[SHOPEE_ID]] if _sem_hora(b, SHOPEE_ID) else [],
+    } for b, canais in sorted(marcas.items())]
 
     def total(dia: date, ids: list[int]) -> dict:
         gmv = sum(float(somas.get((dia, m), (0, 0))[0] or 0) for m in ids)
