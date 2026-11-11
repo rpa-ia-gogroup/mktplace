@@ -7,7 +7,15 @@
  */
 import type { Marketplace } from "../mock-data.ts";
 import type { OverviewData } from "../api-client.ts";
-import { variacaoPct, type Consolidado, type DiaMarca, type MarcaMenor, type MarcasMenores } from "../marcas-menores.ts";
+import {
+  canaisSemBase,
+  motivoSemBase,
+  variacaoPct,
+  type Consolidado,
+  type DiaMarca,
+  type MarcaMenor,
+  type MarcasMenores,
+} from "../marcas-menores.ts";
 
 const CANAL: Record<string, Marketplace> = { SHOPEE: "shopee", TIKTOK: "tiktok" };
 
@@ -15,22 +23,27 @@ export interface MarcaMenorGerencial {
   brand: string;
   label: string;
   total: number;
-  /** null = sem base no período anterior. */
+  /** null = sem base no período anterior, ou canal do filtro sem base nele (ver `motivo`). */
   anterior: number | null;
-  /** O anterior por canal (nos canais do filtro); null junto com `anterior`. */
+  /** O anterior por canal (nos canais do filtro); null = marca sem base. Canal sem base fica ausente. */
   anteriorPorCanal: Partial<Record<Marketplace, number>> | null;
   porCanal: Partial<Record<Marketplace, number>>;
+  /** "sem dado de Shopee no período anterior" (achado C1-03); null = nada a avisar. */
+  motivo: string | null;
 }
 
 export interface MenoresOk {
   estado: "ok";
   total: number;
   porCanal: Partial<Record<Marketplace, number>>;
-  /** null = alguma marca sem base: a variação fica sem elas (e o ⓘ diz). */
+  /** null = alguma marca sem base (ou canal sem base): a variação fica sem elas (e o ⓘ diz). */
   anterior: number | null;
+  /** Só os canais com base em todas as marcas; null = alguma marca sem base. */
   anteriorPorCanal: Partial<Record<Marketplace, number>> | null;
   marcas: MarcaMenorGerencial[];
   aguardando: string[];
+  /** Canal com receita agora e sem receita no anterior; null = nada a avisar. */
+  motivo: string | null;
 }
 
 export type Menores = { estado: "fora" } | { estado: "carregando" } | { estado: "indisponivel" } | MenoresOk;
@@ -62,6 +75,7 @@ export function menoresNaGerencial(
   const marcas: MarcaMenorGerencial[] = [];
   const aguardando: string[] = [];
   const anteriores: PorCanal[] = [];
+  const semBase: string[] = [];
   for (const m of d.marcas) {
     if (selecionadas && !selecionadas.includes(m.id) && m.status !== "aguardando_autorizacao") continue;
     if (m.status === "aguardando_autorizacao") {
@@ -72,30 +86,43 @@ export function menoresNaGerencial(
     const total = soma(porCanal);
     if (m.total == null || total <= 0) continue; // sem pedido nos canais do filtro: sem dado, fora
     const ant = somaCanais(m.por_plataforma_anterior, canais);
+    // Mesma regra da aba Demais marcas: canal do filtro com receita agora e sem receita no anterior tira o percentual.
+    const doFiltro = m.por_plataforma.filter((p) => CANAL[p.plataforma] && canais.includes(CANAL[p.plataforma]));
+    const semBaseDaMarca = m.total_anterior == null ? [] : canaisSemBase(doFiltro, m.por_plataforma_anterior);
+    const motivo = motivoSemBase(semBaseDaMarca);
+    semBase.push(...semBaseDaMarca);
     anteriores.push(ant);
     marcas.push({
       brand: m.id,
       label: m.label,
       total,
-      anterior: m.total_anterior == null ? null : soma(ant),
+      anterior: m.total_anterior == null || motivo ? null : soma(ant),
       anteriorPorCanal: m.total_anterior == null ? null : ant,
       porCanal,
+      motivo,
     });
   }
   const porCanal: PorCanal = {};
   for (const m of marcas) for (const [c, v] of Object.entries(m.porCanal)) porCanal[c as Marketplace] = (porCanal[c as Marketplace] ?? 0) + (v ?? 0);
   // Conjunto igual nos dois lados: uma marca sem base derruba a base de todas.
-  const comBase = marcas.length > 0 && marcas.every((m) => m.anterior != null);
+  const comBase = marcas.length > 0 && marcas.every((m) => m.anteriorPorCanal != null);
+  const motivo = comBase ? motivoSemBase(semBase) : null;
+  // Por canal: um canal sem base em alguma marca sai do anterior (a variação dele fica sem as menores).
+  const canaisSemBaseAqui = new Set(semBase.map((p) => CANAL[p]));
   const anteriorPorCanal: PorCanal = {};
-  if (comBase) for (const ant of anteriores) for (const [c, v] of Object.entries(ant)) anteriorPorCanal[c as Marketplace] = (anteriorPorCanal[c as Marketplace] ?? 0) + (v ?? 0);
+  if (comBase)
+    for (const ant of anteriores)
+      for (const [c, v] of Object.entries(ant))
+        if (!canaisSemBaseAqui.has(c as Marketplace)) anteriorPorCanal[c as Marketplace] = (anteriorPorCanal[c as Marketplace] ?? 0) + (v ?? 0);
   return {
     estado: "ok",
     total: marcas.reduce((a, m) => a + m.total, 0),
     porCanal,
-    anterior: comBase ? marcas.reduce((a, m) => a + (m.anterior ?? 0), 0) : null,
+    anterior: comBase && !motivo ? marcas.reduce((a, m) => a + (m.anterior ?? 0), 0) : null,
     anteriorPorCanal: comBase ? anteriorPorCanal : null,
     marcas,
     aguardando,
+    motivo,
   };
 }
 
@@ -148,7 +175,7 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
     ? "A variação de hoje não as inclui (o Bling não traz a hora do pedido)."
     : variacaoInclui
       ? "A variação as inclui nos dois períodos."
-      : "A variação não as inclui (sem base no período anterior).";
+      : `A variação não as inclui (${m.motivo ?? "sem base no período anterior"}).`;
   return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag} ${variacao}`;
 }
 
@@ -195,17 +222,19 @@ export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], c
     });
   }
   const comDado = marcas.filter((m) => m.total != null);
-  const comBase = comDado.length > 0 && comDado.every((m) => m.total_anterior != null);
+  const { comBase, semBase, motivo } = baseDoRecorte(marcas);
   const agr = (pega: (m: MarcaMenor) => Record<string, number> | undefined) => {
     const out: Record<string, number> = {};
     for (const m of comDado) for (const [p, v] of Object.entries(pega(m) ?? {})) out[p] = (out[p] ?? 0) + v;
     return out;
   };
   const plat = agr((m) => Object.fromEntries(m.por_plataforma.map((p) => [p.plataforma, p.faturamento])));
+  // Canal sem base em alguma marca sai do anterior por canal: a variação dele não soma um canal inteiro como crescimento.
+  const comBaseNoCanal = (d: Record<string, number> | undefined) => Object.fromEntries(Object.entries(d ?? {}).filter(([p]) => !semBase.includes(p)));
   const consolidado: Consolidado = {
     total: comDado.length ? soma2(comDado.map((m) => m.total as number)) : null,
-    total_anterior: comBase ? soma2(comDado.map((m) => m.total_anterior as number)) : null,
-    por_plataforma_anterior: comBase ? agr((m) => m.por_plataforma_anterior) : {},
+    total_anterior: comBase && !motivo ? soma2(comDado.map((m) => m.total_anterior as number)) : null,
+    por_plataforma_anterior: comBase ? agr((m) => comBaseNoCanal(m.por_plataforma_anterior)) : {},
     pedidos: comDado.some((m) => m.pedidos != null) ? soma2(comDado.map((m) => m.pedidos ?? 0)) : null,
     pedidos_por_plataforma: agr((m) => m.pedidos_por_plataforma),
     pedidos_por_plataforma_anterior: comBase ? agr((m) => m.pedidos_por_plataforma_anterior) : {},
@@ -215,6 +244,20 @@ export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], c
   };
   return { ...d, consolidado, marcas };
 }
+
+/**
+ * Base do recorte: todas as marcas com dado precisam de anterior (o mesmo conjunto nos dois lados) e, como na
+ * aba Demais marcas, todo canal com receita agora precisa ter receita no anterior (achado C1-03).
+ */
+function baseDoRecorte(marcas: readonly MarcaMenor[]): { comBase: boolean; semBase: string[]; motivo: string | null } {
+  const comDado = marcas.filter((m) => m.total != null);
+  const comBase = comDado.length > 0 && comDado.every((m) => m.total_anterior != null);
+  const semBase = comBase ? comDado.flatMap((m) => canaisSemBase(m.por_plataforma, m.por_plataforma_anterior)) : [];
+  return { comBase, semBase, motivo: motivoSemBase(semBase) };
+}
+
+/** Por que o recorte (já filtrado) não tem variação mesmo havendo anterior; null = nada a avisar. */
+export const motivoSemBaseDoRecorte = (f: MarcasMenores): string | null => baseDoRecorte(f.marcas).motivo;
 
 /**
  * O `OverviewData` das menores, para a faixa de KPIs da Gerencial (a mesma de sempre): GMV e pedidos do
