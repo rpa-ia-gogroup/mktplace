@@ -22,8 +22,8 @@ HOJE = date(2026, 10, 16)
 AGORA = datetime(2026, 10, 16, 15, 0, tzinfo=timezone.utc)
 
 
-def carregar_migration_027():
-    caminho = REPO / "apps" / "api" / "alembic" / "versions" / "027_create_fact_shopee_daily_api_shadow.py"
+def carregar_migration_027(arquivo="027_create_fact_shopee_daily_api_shadow.py"):
+    caminho = REPO / "apps" / "api" / "alembic" / "versions" / arquivo
     fonte = caminho.read_text(encoding="utf-8")
     ns: dict = {}
     exec(compile(fonte.replace("from alembic import op", "op = None"), str(caminho), "exec"), ns)  # noqa: S102
@@ -72,18 +72,29 @@ def test_hoje_e_dia_brt_nao_utc():
     assert S.hoje_brt(datetime(2026, 10, 17, 2, 0, tzinfo=timezone.utc)) == date(2026, 10, 16)
 
 
-@pytest.mark.parametrize("marcas", [("kokeshi",), ("apice", "kokeshi"), ("bysamia",)])
+@pytest.mark.parametrize("marcas", [("bysamia",), ("apice", "bysamia")])
 def test_marca_fora_da_allowlist_e_recusada(marcas):
-    with pytest.raises(S.ShopeeDailyShadowError, match="kokeshi e' manual"):
+    with pytest.raises(S.ShopeeDailyShadowError, match="fora da allowlist"):
         S.validar_marcas(marcas)
 
 
-def test_allowlist_igual_ao_check_da_migration_e_sem_kokeshi():
-    mig, fonte = carregar_migration_027()
-    assert tuple(mig.MARCAS) == S.CONTAS_API
-    assert "kokeshi" not in fonte.split("UPGRADE_SQL")[1]
-    lista = ", ".join(f"'{m}'" for m in S.CONTAS_API)
-    assert f"brand IN ({lista})" in fonte
+def test_kokeshi_e_aceita_mas_fica_fora_do_default():
+    assert S.validar_marcas(("kokeshi",)) == ("kokeshi",)
+    assert S.validar_marcas(None) == S.CONTAS_API
+    assert "kokeshi" not in S.CONTAS_API
+
+
+def test_allowlist_igual_ao_check_da_migration_044():
+    mig, fonte = carregar_migration_027("044_shopee_shadow_aceita_kokeshi.py")
+    assert (mig.revision, mig.down_revision) == ("044", "043")
+    assert tuple(mig.MARCAS) == S.CONTAS_PERMITIDAS
+    assert set(S.CONTAS_API) <= set(S.CONTAS_PERMITIDAS)
+    lista = ", ".join(f"'{m}'" for m in S.CONTAS_PERMITIDAS)
+    assert f"brand IN ({lista})" in mig.UPGRADE_SQL[1]
+    assert "INSERT" not in fonte.upper() and "DELETE FROM" not in fonte.upper()
+    antiga, _ = carregar_migration_027()
+    lista_027 = ", ".join(f"'{m}'" for m in antiga.MARCAS)
+    assert f"brand IN ({lista_027})" in mig.DOWNGRADE_SQL[1]
 
 
 # ---------------------------------------------------------------------------
