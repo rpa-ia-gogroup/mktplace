@@ -25,6 +25,8 @@ import {
   type FinanceiroKpis,
   type FinanceiroBrandRow,
 } from "@/lib/api-client";
+// T-0085: "parcial (N de M marcas)" do % consolidado (helper puro, testavel no node --test).
+import { textoCoberturaFinanceiro } from "@/lib/full-visao-geral";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
@@ -308,13 +310,15 @@ function FinanceiroPageInner() {
           valor: k?.tiktok_fees != null ? fmtBrlCurto(k.tiktok_fees) : null,
           pct: k?.tiktok_avg_fee_pct ?? null,
           pctTexto: k?.tiktok_avg_fee_pct != null ? fmtPct(k.tiktok_avg_fee_pct) : "—",
+          // T-0085: o % so' cobre as marcas com o dado; diz quantas.
+          detalhe: textoCoberturaFinanceiro(k?.tiktok_fee_cobertura) ?? undefined,
         },
         {
           rotulo: "Repasse recebido",
           valor: k?.tiktok_settlement != null ? fmtBrlCurto(k.tiktok_settlement) : "—",
           pct: k?.tiktok_avg_settlement_pct ?? null,
           pctTexto: k?.tiktok_avg_settlement_pct != null ? `${fmtPct(k.tiktok_avg_settlement_pct)} do GMV` : null,
-          detalhe: "Competências podem divergir.",
+          detalhe: [textoCoberturaFinanceiro(k?.tiktok_settlement_cobertura), "Competências podem divergir."].filter(Boolean).join(". "),
         },
         { rotulo: "Ads (mídia)", ausente: "Sem fonte" },
         { rotulo: "Frete do seller", ausente: "Sem fonte" },
@@ -324,7 +328,7 @@ function FinanceiroPageInner() {
   if (showMl) {
     paineis.push({
       canal: "ml", titulo: "Mercado Livre", ponto: "bg-canal-ml", gmv: k?.ml_gmv ?? null,
-      // O backend soma marca sem tarifa como zero: com carga parcial o total parece completo e sai baixo.
+      // T-0085: o % consolidado ja' divide so' pelo GMV das marcas com tarifa; o aviso diz que o total e' parcial.
       // O ⓘ fica ao lado do GMV: diz DE QUAL numero fala (os custos), para nao ser lido como ressalva do GMV.
       aviso: mlSemTarifa > 0 ? `Custos: tarifa parcial, ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Veja no detalhe.` : undefined,
       linhas: [
@@ -335,9 +339,11 @@ function FinanceiroPageInner() {
               pct: k.ml_avg_fee_pct ?? null,
               pctTexto: fmtPct(k.ml_avg_fee_pct ?? null),
               detalhe:
-                mlSemTarifa > 0
-                  ? `Parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Só a tarifa; sem Ads e frete.`
-                  : "Só a tarifa; sem Ads e frete.",
+                textoCoberturaFinanceiro(k.ml_fee_cobertura)
+                  ? `${textoCoberturaFinanceiro(k.ml_fee_cobertura)}. Só a tarifa; sem Ads e frete.`
+                  : mlSemTarifa > 0
+                    ? `Parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Só a tarifa; sem Ads e frete.`
+                    : "Só a tarifa; sem Ads e frete.",
             }
           : { rotulo: "Tarifa ML", ausente: "Não carregada neste período" },
         {
@@ -369,6 +375,8 @@ function FinanceiroPageInner() {
           valor: k?.shopee_fees != null ? fmtBrlCurto(k.shopee_fees) : null,
           pct: k?.shopee_avg_fee_pct ?? null,
           pctTexto: k?.shopee_avg_fee_pct != null ? fmtPct(k.shopee_avg_fee_pct) : "—",
+          // T-0085: sem isto, 25% de uma marca so' lia como taxa do canal inteiro.
+          detalhe: textoCoberturaFinanceiro(k?.shopee_fee_cobertura) ?? undefined,
         },
         {
           rotulo: "Ads (mídia)",

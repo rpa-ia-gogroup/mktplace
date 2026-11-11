@@ -1459,7 +1459,25 @@ export interface FinanceiroKpis {
   shopee_avg_settlement_pct?: number | null;
   shopee_ad_spend?: number | null;
   shopee_roas?: number | null;
+  /** T-0085: quantas marcas com GMV no canal entraram no % consolidado de
+   *  taxa/repasse. `null`/ausente = canal sem GMV no recorte. */
+  tiktok_fee_cobertura?: CoberturaMarcas | null;
+  tiktok_settlement_cobertura?: CoberturaMarcas | null;
+  ml_fee_cobertura?: CoberturaMarcas | null;
+  shopee_fee_cobertura?: CoberturaMarcas | null;
+  shopee_settlement_cobertura?: CoberturaMarcas | null;
 }
+
+/** T-0085: cobertura por marca de um % consolidado do Financeiro. */
+export interface CoberturaMarcas {
+  /** "completa" | "parcial" | "sem_dado" (string: valor novo nao quebra a tela). */
+  status: string;
+  marcas_com_dado: number;
+  marcas_total: number;
+  marcas_sem_dado?: string[];
+}
+
+/** O texto "parcial (N de M marcas)" vem de `textoCoberturaFinanceiro` (src/lib/full-visao-geral.ts). */
 
 export interface FinanceiroBrandRow {
   brand: string;
