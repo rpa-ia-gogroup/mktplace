@@ -24,7 +24,7 @@ export default function FinanceiroDrilldownContent({ painel, periodLabel, refres
         ) : (
           <NumeroAnimado texto={exato} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
         )}
-        <DrilldownContextLine leading="GMV" periodLabel={periodLabel} refreshedAt={refreshedAt} />
+        <DrilldownContextLine periodLabel={periodLabel} refreshedAt={refreshedAt} />
       </div>
       <DrilldownSecao titulo="Componentes conhecidos">
         <ListaDeCustos linhas={painel.linhas} barra={painel.ponto} />

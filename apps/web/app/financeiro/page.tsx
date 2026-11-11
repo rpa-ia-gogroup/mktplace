@@ -325,7 +325,8 @@ function FinanceiroPageInner() {
     paineis.push({
       canal: "ml", titulo: "Mercado Livre", ponto: "bg-canal-ml", gmv: k?.ml_gmv ?? null,
       // O backend soma marca sem tarifa como zero: com carga parcial o total parece completo e sai baixo.
-      aviso: mlSemTarifa > 0 ? `Tarifa parcial: ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}.` : undefined,
+      // O ⓘ fica ao lado do GMV: diz DE QUAL numero fala (os custos), para nao ser lido como ressalva do GMV.
+      aviso: mlSemTarifa > 0 ? `Custos: tarifa parcial, ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Veja no detalhe.` : undefined,
       linhas: [
         k?.ml_fees != null
           ? {

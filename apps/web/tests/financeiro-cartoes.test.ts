@@ -21,7 +21,7 @@ test("cartoes: KpiTile gerencial gmv, canal e' ponto, um por canal selecionado, 
   assert.ok(src.includes('variante="gerencial"') && src.includes('identidade="gmv"') && src.includes("icone={CircleDollarSign}"));
   assert.ok(src.includes("${p.ponto}") && !/bg-canal-[a-z]+\/|border-canal/.test(src), "canal so' como ponto, nunca cor de cartao");
   assert.ok(src.includes("onAbrir={() => onAbrir(p.canal)}"));
-  assert.ok(src.includes('comparacao={p.gmv != null ? "GMV" : "Sem dado no período"}') && src.includes('tom={p.gmv != null ? "neutro" : "ausente"}'), "sem GMV: motivo visivel, nunca zero");
+  assert.ok(src.includes('comparacao={p.gmv != null ? "Ver custos conhecidos" : "Sem dado no período"}') && src.includes('tom={p.gmv != null ? "neutro" : "ausente"}'), "sem GMV: motivo visivel, nunca zero");
   assert.ok(src.includes('"col-span-2 lg:col-span-1"') && src.includes("paineis.length % 2 === 1"), "cartao impar fecha a linha no celular");
   assert.ok(src.includes("<InfoDica emControle texto={p.aviso} />"), "ressalva de tarifa parcial no ⓘ do cartao");
 });
@@ -53,4 +53,15 @@ test("pagina: cartoes e dialogo unico; painel antigo e formatos ingleses fora; e
 test("formato da casa nos percentuais e no ROAS da tela ('29,9%', '12,8x'), ausencia '—'", () => {
   const pag = ler("app/financeiro/page.tsx");
   assert.ok(pag.includes("return v == null ? \"—\" : fmtPctSimples(v);") && pag.includes("return v == null ? \"—\" : fmtVezes(v);"));
+});
+
+test("o cartao diz onde o custo foi parar; o ⓘ do ML diz de qual numero fala; percentual antes do valor; sem selo repetido", () => {
+  const cartoes = ler("src/components/financeiro/FinanceiroCartoes.tsx");
+  assert.ok(cartoes.includes('"Ver custos conhecidos"'));
+  const pag = ler("app/financeiro/page.tsx");
+  assert.ok(pag.includes("`Custos: tarifa parcial, ${mlSemTarifa}") && pag.includes("Veja no detalhe."));
+  const det = ler("src/components/financeiro/FinanceiroDrilldownContent.tsx");
+  assert.ok(!det.includes('leading="GMV"'), "o titulo do modal ja' diz GMV");
+  const lista = ler("src/components/financeiro/ChannelCostPanel.tsx");
+  assert.ok(lista.indexOf("{l.pctTexto &&") < lista.indexOf("{l.valor &&"), "percentual antes do valor absoluto");
 });

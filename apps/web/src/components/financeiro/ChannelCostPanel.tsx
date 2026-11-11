@@ -42,8 +42,10 @@ export default function ListaDeCustos({ linhas, barra }: { linhas: LinhaCusto[];
               <span className="rounded border border-dashed border-line-strong px-1.5 py-0.5 text-xs text-ink-faint">{l.ausente}</span>
             ) : (
               <span className="flex items-baseline gap-2 tabular-nums">
-                {l.valor && <span className="text-sm font-semibold text-ink">{l.valor}</span>}
-                {l.pctTexto && <span className="text-xs font-medium text-ink-muted">{l.pctTexto}</span>}
+                {/* Regra de produto: o percentual ANTES do valor absoluto ("29,9% · R$ 4,0 mi"). */}
+                {l.pctTexto && <span className="text-sm font-semibold text-ink">{l.pctTexto}</span>}
+                {l.pctTexto && l.valor && <span aria-hidden="true" className="text-ink-faint">·</span>}
+                {l.valor && <span className="text-xs font-medium text-ink-muted">{l.valor}</span>}
               </span>
             )}
           </div>

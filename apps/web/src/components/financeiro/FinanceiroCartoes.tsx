@@ -11,7 +11,8 @@ import type { LinhaCusto } from "./ChannelCostPanel";
  * Os cartoes de GMV por canal de Financeiro, no padrao da Gerencial (`KpiTile`
  * gerencial, identidade `gmv`; o canal e' o ponto antes do nome, nunca cor de cartao).
  * O clique abre o detalhe com os componentes de custo CONHECIDOS do canal (antes o
- * corpo do painel por canal). Sem periodo anterior (a tela usa `hideCompare`) e sem
+ * corpo do painel por canal); o rodape do cartao diz onde o custo foi parar ("Ver custos
+ * conhecidos"), ja' que ele saiu da primeira dobra. Sem periodo anterior (a tela usa `hideCompare`) e sem
  * serie por canal: sem pilula e sem grafico.
  */
 export interface PainelCanal {
@@ -47,7 +48,7 @@ export default function FaixaGmvCanais({ paineis, onAbrir }: { paineis: PainelCa
               }
               ajuda={p.aviso ? <InfoDica emControle texto={p.aviso} /> : undefined}
               valor={p.gmv != null ? fmtBrlCurto(p.gmv) : "—"}
-              comparacao={p.gmv != null ? "GMV" : "Sem dado no período"}
+              comparacao={p.gmv != null ? "Ver custos conhecidos" : "Sem dado no período"}
               tom={p.gmv != null ? "neutro" : "ausente"}
               onAbrir={() => onAbrir(p.canal)}
             />
