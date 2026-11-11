@@ -1,6 +1,12 @@
+import { Award, Layers, Medal, Trophy, type LucideIcon } from "lucide-react";
+
 import type { ParetoSummaryBucket } from "@/lib/api-client";
+import { fmtBrlCurto, fmtPctSimples } from "@/lib/formatters";
 import { toggleBucketSelection } from "@/lib/produtos-tab-transition";
+import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import InfoDica from "@/components/ui/InfoDica";
+import KpiTile from "@/components/ui/KpiTile";
+import StateBlock from "@/components/ui/StateBlock";
 
 interface Props {
   buckets: ParetoSummaryBucket[] | null;
@@ -19,29 +25,29 @@ interface Props {
   unavailableReason?: string | null;
 }
 
-const BUCKET_STYLE: Record<string, { bg: string; border: string; text: string; bar: string; sub: string; ring: string }> = {
-  A_top50: { bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-800", bar: "bg-emerald-500", sub: "text-emerald-600", ring: "ring-emerald-400" },
-  B_next30: { bg: "bg-cyan-50", border: "border-cyan-200", text: "text-cyan-800", bar: "bg-cyan-500", sub: "text-cyan-600", ring: "ring-cyan-400" },
-  C_next15: { bg: "bg-amber-50", border: "border-amber-200", text: "text-amber-800", bar: "bg-amber-500", sub: "text-amber-600", ring: "ring-amber-400" },
-  D_tail: { bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-800", bar: "bg-rose-500", sub: "text-rose-600", ring: "ring-rose-400" },
-};
+/**
+ * Icone de cada faixa da curva (identidade `gmv` para as quatro: e' a composicao
+ * do GMV; a cor nao diz bom nem ruim, o que muda e' a letra e o icone). O
+ * `description` ("Top 50% GMV") vai para o ⓘ.
+ */
+const ICONE_DA_CURVA: Record<string, LucideIcon> = { A_top50: Trophy, B_next30: Medal, C_next15: Award, D_tail: Layers };
 
-function fmtGmvShort(v: number): string {
-  if (v >= 1_000_000) return `R$ ${(v / 1_000_000).toFixed(1)}M`;
-  return `R$ ${(v / 1_000).toFixed(0)}K`;
-}
+const GRADE = "grid grid-cols-2 sm:grid-cols-4 gap-3";
 
 /**
- * Cards A/B/C/D compartilhados pelas 3 abas de Produtos. Cada card e um
- * filtro clicavel (toggle): clicar de novo no bucket ja ativo remove o
- * filtro (equivalente a "Todos"). Os percentuais reais podem variar em
- * torno de 50/30/15/5 por causa do produto que cruza a fronteira — isso e
- * esperado, nao um bug.
+ * Cards A/B/C/D compartilhados pelas 3 abas de Produtos, no padrao da Gerencial
+ * (`KpiTile` gerencial). Cada card e um filtro clicavel (toggle): clicar de novo no
+ * bucket ja ativo remove o filtro (equivalente a "Todos"); por isso e' botao de
+ * alternar (`aria-pressed`, anel quando ativo) e NAO abre dialogo. Os percentuais
+ * reais podem variar em torno de 50/30/15/5 por causa do produto que cruza a
+ * fronteira — isso e esperado, nao um bug. Sem periodo anterior nem serie: sem
+ * pilula e sem grafico. O PERCENTUAL abre o cartao e o R$ vem depois (regra de produto:
+ * % antes do absoluto).
  */
 function ScopeLine({ scopeNote, dica, className }: { scopeNote?: string; dica?: string; className: string }) {
   if (!scopeNote && !dica) return null;
   return (
-    <p className={`flex items-center gap-1.5 text-[11px] text-slate-400 ${className}`}>
+    <p className={`flex items-center gap-1.5 text-xs text-ink-faint ${className}`}>
       {scopeNote && <span className="tabular-nums">{scopeNote}</span>}
       {dica && <InfoDica texto={dica} />}
     </p>
@@ -51,20 +57,16 @@ function ScopeLine({ scopeNote, dica, className }: { scopeNote?: string; dica?: 
 export default function ProductParetoSummary({ buckets, loading, activeBucket, onSelectBucket, scopeNote, dica, unavailableReason }: Props) {
   if (loading && !buckets) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 py-4 border-b border-violet-50">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-3 h-[104px] animate-pulse" />
-        ))}
+      <div className="border-b border-line px-6 py-4">
+        <FaixaCarregando cartoes={4} className={GRADE} />
       </div>
     );
   }
 
   if (unavailableReason) {
     return (
-      <div className="border-b border-violet-50 px-6 py-4" data-testid="pareto-unavailable">
-        <p className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-          {unavailableReason}
-        </p>
+      <div className="border-b border-line px-6 py-4" data-testid="pareto-unavailable">
+        <StateBlock compacto tipo="indisponivel" titulo={unavailableReason} />
         <ScopeLine scopeNote={scopeNote} dica={dica} className="pt-2" />
       </div>
     );
@@ -73,33 +75,23 @@ export default function ProductParetoSummary({ buckets, loading, activeBucket, o
   if (!buckets || buckets.length === 0) return null;
 
   return (
-    <div className="border-b border-violet-50">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 py-4">
-        {buckets.map((b) => {
-          const c = BUCKET_STYLE[b.bucket] ?? BUCKET_STYLE.D_tail;
-          const active = activeBucket === b.bucket;
-          return (
-            <button
-              key={b.bucket}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onSelectBucket(toggleBucketSelection(activeBucket, b.bucket))}
-              className={`text-left rounded-xl border px-4 py-3 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 ${c.bg} ${c.border} ${
-                active ? `ring-2 ${c.ring}` : ""
-              }`}
-            >
-              <div className="flex items-baseline justify-between mb-2">
-                <span className={`text-lg font-bold tabular-nums ${c.text}`}>{b.label}</span>
-                <span className={`text-xs font-semibold tabular-nums ${c.sub}`}>{b.gmv_pct.toFixed(1)}%</span>
-              </div>
-              <div className="h-1 rounded-full bg-white/60 overflow-hidden mb-2">
-                <div className={`tc-barra h-1 rounded-full ${c.bar}`} style={{ width: `${Math.min(100, b.gmv_pct)}%` }} />
-              </div>
-              <p className={`text-xs font-semibold tabular-nums ${c.text}`}>{fmtGmvShort(b.gmv)}</p>
-              <p className={`text-[11px] tabular-nums mt-0.5 ${c.sub}`}>{b.count} produtos · {b.description}</p>
-            </button>
-          );
-        })}
+    <div className="border-b border-line">
+      <div className={`${GRADE} px-6 py-4`}>
+        {buckets.map((b) => (
+          <KpiTile
+            key={b.bucket}
+            variante="gerencial"
+            identidade="gmv"
+            icone={ICONE_DA_CURVA[b.bucket] ?? Layers}
+            rotulo={`Curva ${b.label}`}
+            ajuda={<InfoDica emControle texto={b.description} />}
+            valor={fmtPctSimples(b.gmv_pct)}
+            comparacao={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}
+            ativo={activeBucket === b.bucket}
+            acaoFalada="filtrar a tabela"
+            onAbrir={() => onSelectBucket(toggleBucketSelection(activeBucket, b.bucket))}
+          />
+        ))}
       </div>
       <ScopeLine scopeNote={scopeNote} dica={dica} className="px-6 pb-3" />
     </div>

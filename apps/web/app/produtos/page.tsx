@@ -34,7 +34,7 @@ import {
 } from "@/lib/produtos-tab-transition";
 import { initialChannelState, startFetch, resolveFetch, resolveFetchError, type ChannelState } from "@/lib/async-channel-state";
 import { formatProdutosScope } from "@/lib/produtos-scope";
-import { fmtBrlFull } from "@/lib/formatters";
+import { fmtBrlExato } from "@/lib/formatters";
 import {
   mlRowToExportRecord, tiktokRowToExportRecord, shopeeRowToExportRecord,
   ML_EXPORT_COLUMNS, TIKTOK_EXPORT_COLUMNS, SHOPEE_EXPORT_COLUMNS,
@@ -82,7 +82,7 @@ function semGmv(excluded: number | undefined): string | null {
   return excluded ? `${excluded} sem GMV fora dos buckets` : null;
 }
 function precoMedio(avg: number | null | undefined): string | null {
-  return avg == null ? null : `Preço médio ${fmtBrlFull(avg)}`;
+  return avg == null ? null : `Preço médio ${fmtBrlExato(avg)}`;
 }
 // Ressalvas de metodologia vao para o ⓘ ao lado da linha.
 const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio ponderado por unidade.";

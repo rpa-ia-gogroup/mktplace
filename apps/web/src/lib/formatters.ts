@@ -12,6 +12,11 @@ export function fmtBrl(value: number): string {
   }).format(value);
 }
 
+/** Reais com SEMPRE 2 casas ("R$ 98,40"), para preco e ticket; `fmtBrlFull` deixa "R$ 98,4". */
+export function fmtBrlExato(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
 export function fmtBrlFull(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
