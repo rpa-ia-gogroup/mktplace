@@ -83,12 +83,16 @@ async function callError(client: Client, name: string, args: Record<string, unkn
 // Registro
 // ===========================================================================
 
-test("tools/list: exatamente 8, e a DRE NAO esta registrada nem alcancavel", async () => {
+test("tools/list: exatamente 9, com a DRE registrada (T-0080 P2) e read-only", async () => {
   const { tools } = await (await connect({})).listTools();
-  assert.equal(tools.length, 8);
-  assert.ok(!tools.some((t) => t.name === DRE_TOOL_NAME), "DRE nao pode aparecer no tools/list");
-  assert.ok(!ORACLE_TOOLS.some((t) => t.name === DRE_TOOL_NAME));
-  assert.ok(!Object.values(ENDPOINTS).includes(DRE_ENDPOINT_PATH as never), "path da DRE fora da allowlist");
+  assert.equal(tools.length, 9);
+  assert.equal(DRE_TOOL_NAME, "torre_dre");
+  assert.ok(tools.some((t) => t.name === DRE_TOOL_NAME), "DRE aparece no tools/list");
+  assert.ok(ORACLE_TOOLS.some((t) => t.name === DRE_TOOL_NAME));
+  assert.equal(ENDPOINTS.dre, DRE_ENDPOINT_PATH, "path da DRE allowlisted");
+  const dre = tools.find((x) => x.name === DRE_TOOL_NAME)!;
+  assert.equal(dre.annotations?.readOnlyHint, true);
+  assert.equal(dre.annotations?.destructiveHint, false);
   for (const name of ["torre_expedicao_operacional", "torre_estoque_full", "torre_monitoramento_precos"]) {
     const t = tools.find((x) => x.name === name)!;
     assert.ok(t, `${name} registrada`);
@@ -567,7 +571,7 @@ test("canais: descontos com carga antiga e chave faltando sao avisados", async (
 const NOW_DRE = new Date("2026-08-18T12:00:00Z");
 
 test("dre: status mapeado; nao calculavel tem valor NULO mesmo se a fonte mandar 0", () => {
-  const env = projectDre(dreResponse([dreCelula()]), { mes: "2026-07" }, NOW_DRE) as any;
+  const env = projectDre(dreResponse([dreCelula()]), { ref_month: "2026-07" }, NOW_DRE) as any;
   const c = env.data.celulas[0];
   assert.equal(c.receita.status, "CALCULADO");
   assert.equal(c.receita.valor, 1000);
@@ -595,7 +599,7 @@ test("dre: nao_aplicavel na fonte vira NAO_APLICAVEL (afiliados no ML, caso real
       fonte: null, somavel: false, partes: null, data_as_of: null, publicado_em: null },
   });
   const ml = { ...cel, canal: "ml", canal_label: "Mercado Livre" };
-  const env = projectDre(dreResponse([ml]), { mes: "2026-07" }, NOW_DRE) as any;
+  const env = projectDre(dreResponse([ml]), { ref_month: "2026-07" }, NOW_DRE) as any;
   const c = env.data.celulas[0];
   assert.equal(c.afiliados.status, "NAO_APLICAVEL");
   assert.equal(c.afiliados.valor, null);
@@ -604,7 +608,7 @@ test("dre: nao_aplicavel na fonte vira NAO_APLICAVEL (afiliados no ML, caso real
 test("dre: sem CMV calculado nao existe margem", () => {
   const env = projectDre(
     dreResponse([dreCelula({ cmv: { valor: null, pct_receita: null, status: "provisorio", motivo: "x", fonte: null, somavel: true, partes: null, publicado_em: null } })]),
-    { mes: "2026-07" }, NOW_DRE,
+    { ref_month: "2026-07" }, NOW_DRE,
   ) as any;
   const c = env.data.celulas[0];
   assert.equal(c.cmv.status, "NAO_CALCULAVEL");
@@ -616,14 +620,14 @@ test("dre: sem CMV calculado nao existe margem", () => {
 
 test("dre: lote de 50 h ainda vale (limite de 54 h, igual ao da API)", () => {
   const recente = "2026-08-16T10:00:00+00:00"; // 50 h antes de NOW_DRE: vencia na regra antiga de 48 h
-  const env = projectDre(dreResponse([dreCelula({}, recente)], "ok", recente), { mes: "2026-07" }, NOW_DRE) as any;
+  const env = projectDre(dreResponse([dreCelula({}, recente)], "ok", recente), { ref_month: "2026-07" }, NOW_DRE) as any;
   assert.equal(env.data.snapshot.insumos_disponiveis, true);
   assert.notEqual(env.data.celulas[0].cmv.status_fonte, "snapshot_vencido");
 });
 
 test("dre: lote acima de 54 h derruba CMV/taxas/frete mesmo que a fonte diga disponivel", () => {
   const velho = "2026-08-15T00:00:00+00:00"; // 84 h antes de NOW_DRE
-  const env = projectDre(dreResponse([dreCelula({}, velho)], "ok", velho), { mes: "2026-07" }, NOW_DRE) as any;
+  const env = projectDre(dreResponse([dreCelula({}, velho)], "ok", velho), { ref_month: "2026-07" }, NOW_DRE) as any;
   const c = env.data.celulas[0];
   for (const k of ["cmv", "taxas", "frete"]) {
     assert.equal(c[k].status, "NAO_CALCULAVEL", k);
@@ -637,17 +641,17 @@ test("dre: lote acima de 54 h derruba CMV/taxas/frete mesmo que a fonte diga dis
 });
 
 test("dre: lote com estado nao-ok e contrato quebrado", () => {
-  const env = projectDre(dreResponse([dreCelula()], "parcialmente_vencido"), { mes: "2026-07" }, NOW_DRE) as any;
+  const env = projectDre(dreResponse([dreCelula()], "parcialmente_vencido"), { ref_month: "2026-07" }, NOW_DRE) as any;
   assert.equal(env.data.celulas[0].cmv.status, "NAO_CALCULAVEL");
   assert.throws(
-    () => projectDre({ por_canal_marca: [] }, { mes: "2026-07" }, NOW_DRE),
+    () => projectDre({ por_canal_marca: [] }, { ref_month: "2026-07" }, NOW_DRE),
     (e: unknown) => e instanceof OracleToolError && e.category === "INVALID_UPSTREAM_RESPONSE",
   );
 });
 
-test("dre: entrada estrita (mes YYYY-MM, enums fechados)", () => {
-  assert.ok(dreInput.safeParse({ mes: "2026-07", canais: ["ml"], marcas: ["kokeshi"] }).success);
-  for (const bad of [{ mes: "2026-13" }, { mes: "2026-07", canais: ["amazon"] }, { mes: "2026-07", sql: "x" }, {}]) {
+test("dre: entrada estrita (ref_month YYYY-MM obrigatorio, enums fechados)", () => {
+  assert.ok(dreInput.safeParse({ ref_month: "2026-07", canais: ["ml"], marcas: ["kokeshi"] }).success);
+  for (const bad of [{ ref_month: "2026-13" }, { ref_month: "2026-7" }, { ref_month: "2026-10-01" }, { mes: "2026-07" }, { ref_month: "2026-07", canais: ["amazon"] }, { ref_month: "2026-07", marcas: ["xpto"] }, { ref_month: "2026-07", sql: "x" }, {}]) {
     assert.equal(dreInput.safeParse(bad).success, false, JSON.stringify(bad));
   }
 });

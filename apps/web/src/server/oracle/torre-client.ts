@@ -42,6 +42,8 @@ export const ENDPOINTS = {
   // T-0080: estoque FISICO no CD do ML, por inventario (nao e' a modalidade).
   mlFullEstoque: "/api/v1/performance/ml-full-estoque",
   monitoramentoPreco: "/api/v1/performance/monitoramento-preco",
+  // T-0080 P2: DRE gerencial mensal (tool torre_dre).
+  dre: "/api/v1/dre",
 } as const;
 
 export type EndpointKey = keyof typeof ENDPOINTS;
@@ -88,6 +90,20 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
   monitoramentoPreco: new Set([
     "marketplace", "brand", "status", "product_type", "observed_date", "limit",
   ]),
+  // A rota le `channels` e `brands` como CSV (`Optional[str]`), nunca lista.
+  dre: new Set(["ref_month", "channels", "brands"]),
+};
+
+/** Endpoints cujos parametros sao CSV: lista repetida seria lida pela METADE. */
+const CSV_ONLY_ENDPOINTS: ReadonlySet<EndpointKey> = new Set(["dre"]);
+
+/**
+ * Teto de bytes POR ENDPOINT, acima do padrao. So' a DRE: o payload bruto de
+ * um mes mede 417 KB (outubro/2026) e nunca chega ao modelo — a tool devolve
+ * uma projecao compacta medida contra o proprio teto (`DRE_MAX_RESPONSE_BYTES`).
+ */
+const ENDPOINT_MAX_BYTES: Partial<Record<EndpointKey, number>> = {
+  dre: 1024 * 1024,
 };
 
 /** Unicos parametros que a fonte le como lista (`list[str] = Query`). */
@@ -178,7 +194,9 @@ export class TorreClient {
       if (v === undefined) continue;
       // Lista em parametro escalar e' recusada: o FastAPI le o ULTIMO valor e
       // a guarda abaixo o primeiro — os dois nunca podem discordar.
-      if (Array.isArray(v) && !LIST_PARAMS.has(k)) throw toolError("MISSING_CONFIGURATION");
+      if (Array.isArray(v) && (!LIST_PARAMS.has(k) || CSV_ONLY_ENDPOINTS.has(endpoint))) {
+        throw toolError("MISSING_CONFIGURATION");
+      }
       if (Array.isArray(v)) {
         for (const item of v) url.searchParams.append(k, String(item));
       } else {
@@ -194,6 +212,7 @@ export class TorreClient {
       throw toolError("MISSING_CONFIGURATION");
     }
 
+    const maxBytes = ENDPOINT_MAX_BYTES[endpoint] ?? this.maxBytes;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -230,12 +249,12 @@ export class TorreClient {
       }
 
       const declared = Number(res.headers.get("content-length") ?? "");
-      if (Number.isFinite(declared) && declared > this.maxBytes) {
+      if (Number.isFinite(declared) && declared > maxBytes) {
         throw toolError("INVALID_UPSTREAM_RESPONSE");
       }
 
       // A leitura do corpo continua sob o MESMO deadline.
-      const body = await this.readCapped(res, controller.signal);
+      const body = await this.readCapped(res, controller.signal, maxBytes);
 
       try {
         return JSON.parse(body) as unknown;
@@ -254,7 +273,7 @@ export class TorreClient {
    * pendurado apos os headers termina como `SOURCE_TIMEOUT`, nao pendura a
    * invocacao.
    */
-  private async readCapped(res: Response, signal: AbortSignal): Promise<string> {
+  private async readCapped(res: Response, signal: AbortSignal, maxBytes: number): Promise<string> {
     const reader = res.body?.getReader();
 
     if (!reader) {
@@ -267,7 +286,7 @@ export class TorreClient {
           isAbortError(err) || signal.aborted ? "SOURCE_TIMEOUT" : "INVALID_UPSTREAM_RESPONSE",
         );
       }
-      if (utf8Bytes(text) > this.maxBytes) throw toolError("INVALID_UPSTREAM_RESPONSE");
+      if (utf8Bytes(text) > maxBytes) throw toolError("INVALID_UPSTREAM_RESPONSE");
       return text;
     }
 
@@ -280,7 +299,7 @@ export class TorreClient {
         const chunk = await this.withDeadline(reader.read(), signal);
         if (chunk.done) break;
         total += chunk.value?.byteLength ?? 0;
-        if (total > this.maxBytes) throw toolError("INVALID_UPSTREAM_RESPONSE");
+        if (total > maxBytes) throw toolError("INVALID_UPSTREAM_RESPONSE");
         out += decoder.decode(chunk.value, { stream: true });
       }
     } catch (err) {
