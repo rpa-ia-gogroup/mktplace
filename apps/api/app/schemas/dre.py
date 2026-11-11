@@ -22,7 +22,8 @@ StatusComponente = Literal[
     "nao_confirmado", "provisorio", "sinal_inesperado", "nao_aplicavel",
 ]
 #: T-0090: de onde vem o numero do componente.
-OrigemComponente = Literal["realizado", "parcial", "indisponivel", "nao_aplicavel"]
+#: `extrapolado` (so' CMV): medido estendido a' receita inteira pela razao coberta.
+OrigemComponente = Literal["realizado", "parcial", "extrapolado", "indisponivel", "nao_aplicavel"]
 NomeComponente = Literal["receita", "devolucoes", "taxas", "afiliados", "ads", "frete", "cmv", "impostos"]
 
 
@@ -51,10 +52,13 @@ class Componente(BaseModel):
     #: T-0090, opcionais e retrocompativeis. `realizado` = disponivel com valor;
     #: `parcial` = valor com status parcial/nao_confirmado/provisorio/nao_reconciliado.
     origem: OrigemComponente | None = None
-    #: Custo somavel com origem realizado ou parcial (receita e afiliados: False).
+    #: Custo somavel com origem realizado, parcial ou extrapolado (receita e afiliados: False).
     entra_na_margem: bool = False
     #: Rotulo curto da cobertura (ex.: "escrow em 93,0% dos pedidos").
     cobertura_rotulo: str | None = None
+    #: T-0090, so' CMV: custo medido cru (sempre que o CMV tem valor). Com
+    #: `origem = extrapolado`, `valor` e' o estendido a' receita e este e' o medido.
+    valor_medido: float | None = None
 
 
 class Componentes(BaseModel):

@@ -32,10 +32,11 @@ REGRAS
   andamento e' PREVIA, mes imaturo nunca e' `calculavel`.
 - **Sempre com numeros (T-0090).** `nao_calculavel` so' sem receita ou com
   premissa invalida. CMV ou taxa sem valor viram linha ausente e o cenario
-  fica `parcial`. So' NO CENARIO: CMV nao reconciliado/parcial/provisorio e'
-  EXTRAPOLADO pela razao CMV / receita com custo, e a taxa do escrow Shopee
-  parcial e' estendida aos pedidos sem escrow (`origem = extrapolado`). A DRE
-  realizada nunca extrapola.
+  fica `parcial`. CMV nao reconciliado/parcial/provisorio e' EXTRAPOLADO pela
+  razao CMV / receita com custo — desde 11/11 ja' na celula realizada
+  (`dre_service._extrapolar_cmv`), e o cenario reusa esse valor. So' NO
+  CENARIO: a taxa do escrow Shopee parcial e' estendida aos pedidos sem
+  escrow (`origem = extrapolado`).
 """
 from __future__ import annotations
 
@@ -421,15 +422,21 @@ def _cmv_parcial(e: dict, cmv: dict, receita: float | None) -> dict:
     Com a razao CMV / receita COM custo conhecida, o cenario a aplica a'
     receita inteira (`extrapolado`): a NF que cobre so' parte do GMV nao vira
     custo baixo. Sem essa base, o valor medido entra como esta (`parcial`).
+
+    Desde que a DRE realizada tambem extrapola (`dre_service._extrapolar_cmv`),
+    o CMV pode chegar ja' extrapolado: a razao sai do `valor_medido` e o valor
+    e' o da celula — nunca extrapolado duas vezes.
     """
     rcc = cmv.get("_receita_com_custo")
     pct = cmv.get("cmv_pct_receita_coberta")
-    razao = (cmv["valor"] / rcc) if rcc else (None if pct is None else pct / 100)
+    medido = cmv["valor"] if cmv.get("valor_medido") is None else cmv["valor_medido"]
+    razao = (medido / rcc) if rcc else (None if pct is None else pct / 100)
     if cmv["status"] in CMV_EXTRAPOLAVEL and razao is not None and receita is not None:
         nf = cmv.get("_razao_nf_gmv")
         motivo = (f"extrapolado: CMV de {_pct_br(razao)} da receita com custo aplicado à receita inteira"
                   + (f" (NF cobre {nf * 100:.0f}% do GMV)" if nf is not None else ""))
-        return _linha(e, valor=_r2(razao * receita), origem=ORIGEM_EXTRAPOLADO, status=cmv["status"], motivo=motivo)
+        valor = cmv["valor"] if cmv.get("origem") == ORIGEM_EXTRAPOLADO else _r2(razao * receita)
+        return _linha(e, valor=valor, origem=ORIGEM_EXTRAPOLADO, status=cmv["status"], motivo=motivo)
     return _linha(e, valor=cmv["valor"], origem=ORIGEM_PARCIAL, status=cmv["status"], motivo=cmv["motivo"])
 
 

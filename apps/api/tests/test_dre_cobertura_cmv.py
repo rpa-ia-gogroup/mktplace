@@ -5,8 +5,8 @@ O que se prova aqui:
     componente CMV (antes era descartada);
   * `cmv_pct_receita_coberta` = custo / (cobertura x receita fiscal) x 100,
     com denominador PROPRIO — `pct_receita` continua custo / receita (GMV);
-  * abaixo de `COBERTURA_CMV_MINIMA` o CMV sai `parcial` (fora da margem),
-    com o mesmo valor publicado: nada e' extrapolado;
+  * abaixo de `COBERTURA_CMV_MINIMA` o CMV sai `parcial`; desde a T-0090
+    (11/11) entra na margem extrapolado, com o publicado em `valor_medido`;
   * cobertura nula mantem o estado de antes, sem virar 100%;
   * agregado = razao das somas, nunca media de razoes; nula se faltar em
     alguma celula;
@@ -49,17 +49,20 @@ def test_cmv_pct_sobre_receita_coberta_tem_denominador_proprio():
     assert c["pct_receita"] == pytest.approx(30.0)  # custo / GMV, inalterado
 
 
-def test_cobertura_abaixo_do_limiar_vira_parcial_sem_extrapolar():
+def test_cobertura_abaixo_do_limiar_vira_parcial_e_entra_extrapolado():
     c = celula("ml", c=cmv_cob("ml", cobertura=0.9467))
     cm = c["componentes"]["cmv"]
     assert cm["status"] == dre.COBERTURA_PARCIAL
-    assert cm["valor"] == 300_000.0  # o publicado, nunca custo / cobertura
+    # T-0090 (11/11): valor = custo / receita com custo x receita; o publicado fica em valor_medido
+    assert cm["valor"] == pytest.approx(round(300_000 / 946_700 * 1_000_000, 2))
+    assert cm["valor_medido"] == 300_000.0
     assert "94.67%" in cm["motivo"] and "extrapolado" in cm["motivo"]
     assert cm["cobertura"] == pytest.approx(0.9467)
     assert cm["cmv_pct_receita_coberta"] == pytest.approx(round(300_000 / 946_700 * 100, 2))
-    # T-0090: CMV parcial entra na margem como parcial, com aviso e motivo nomeado
+    # T-0090: CMV parcial entra na margem extrapolado, com aviso e motivo nomeado
     assert c["classificacao"] == dre.PARCIAL
-    assert cm["origem"] == "parcial" and cm["cobertura_rotulo"] == "custo em 94,7% da receita fiscal"
+    assert cm["origem"] == "extrapolado"
+    assert cm["cobertura_rotulo"] == "custo em 94,7% da receita fiscal; extrapolado de 94,7% coberto"
     assert c["margem_contribuicao_conhecida"]["componentes_parciais"] == ["cmv"]
     assert c["margem_contribuicao_conhecida"]["aviso"] is not None
     assert any(m.startswith("cmv parcial") for m in c["motivos_classificacao"])

@@ -164,11 +164,14 @@ def test_cenario_extrapola_cmv_nao_reconciliado_pela_razao_coberta():
     body = _montar([mart("ml", "kokeshi")], _cmv_nao_reconciliado(), premissas=prem(JUL, "kokeshi"),
                    canais=("ml",), marcas=("kokeshi",))
     cel = body["celulas_base"][0]
-    assert cel["componentes"]["cmv"]["valor"] == 135_000.0          # o realizado nunca extrapola
-    assert cel["componentes"]["cmv"]["cobertura_rotulo"] == "NF cobre 45% do GMV"
+    cm = cel["componentes"]["cmv"]
+    # T-0090 (11/11): o realizado tambem extrapola; o medido fica em `valor_medido`.
+    assert (cm["valor"], cm["valor_medido"], cm["origem"]) == (300_000.0, 135_000.0, "extrapolado")
+    assert cm["cobertura_rotulo"] == "NF cobre 45% do GMV; extrapolado de 45,0% coberto"
     cen = cel["cenario_premissas"]
     linha = DP.linha(cen, "cmv")
-    assert linha["origem"] == "extrapolado" and linha["valor"] == pytest.approx(300_000.0)  # 30% x 1 mi
+    # sem dupla extrapolacao: 30% x 1 mi, o mesmo valor da celula
+    assert linha["origem"] == "extrapolado" and linha["valor"] == pytest.approx(300_000.0)
     assert linha["motivo"].startswith("extrapolado: CMV de 30,0% da receita com custo")
     assert "NF cobre 45% do GMV" in linha["motivo"]
     assert cen["estado"] == DP.PARCIAL and cen["margem_contribuicao_estimada"] is not None
@@ -234,3 +237,84 @@ def test_regras_anunciam_a_previa_e_impostos_parciais_na_margem():
     regras = montar(mart_rows=[mart("ml")], cmv_rows=[cmv("ml")], canais=("ml",), marcas=("kokeshi",))["regras"]
     assert regras["previa"] == "mes imaturo (M+2) sai como PREVIA com valores e fecha_em"
     assert "fica fora" not in regras["impostos"]
+
+
+# ---------------------------------------------------------------------------
+# CMV que nao cobre a receita inteira entra EXTRAPOLADO (supervisor, 11/11)
+# ---------------------------------------------------------------------------
+
+#: Margem do ML do fixture com CMV de 30% da receita (taxas, ads, frete, CMV).
+MARGEM_ML_CMV_30 = 1_000_000 - 150_000 - 40_000 - 130_000 - 300_000
+
+
+def _cmv_cob(cobertura, marca="kokeshi", **kw):
+    linhas = cmv("ml", marca, **kw)
+    linhas[0]["cobertura"] = cobertura
+    return linhas
+
+
+def test_cmv_parcial_por_cobertura_entra_extrapolado_na_margem():
+    # NF cobre o GMV inteiro, mas so' 20% da receita fiscal tem custo (NFs Full sem custo)
+    c = celula("ml", c=_cmv_cob(0.2, custo=60_000.0))
+    cm = c["componentes"]["cmv"]
+    assert (cm["status"], cm["origem"], cm["entra_na_margem"]) == (dre.COBERTURA_PARCIAL, "extrapolado", True)
+    assert (cm["valor"], cm["valor_medido"]) == (300_000.0, 60_000.0)  # 60 mil / 200 mil x 1 mi
+    assert cm["pct_receita"] == 30.0 and cm["cmv_pct_receita_coberta"] == 30.0
+    assert cm["cobertura_rotulo"].endswith("extrapolado de 20,0% coberto")
+    assert "extrapolado: CMV de 30,0% da receita com custo" in cm["motivo"]
+    m = c["margem_contribuicao_conhecida"]
+    assert m["valor"] == pytest.approx(MARGEM_ML_CMV_30)  # o cru daria +240 mil
+    assert "cmv" in m["componentes_parciais"] and m["aviso"].endswith(dre.AVISO_CMV_EXTRAPOLADO)
+
+
+def test_cmv_nao_reconciliado_entra_extrapolado_na_margem():
+    # receita fiscal / GMV = 0,25 (Shopee out/26 cobria 16-52%)
+    c = celula("ml", c=_cmv_cob(1.0, receita_fiscal=250_000.0, custo=75_000.0, status="nao_reconciliado"))
+    cm = c["componentes"]["cmv"]
+    assert (cm["status"], cm["origem"], cm["entra_na_margem"]) == (dre.NAO_RECONCILIADO, "extrapolado", True)
+    assert (cm["valor"], cm["valor_medido"]) == (300_000.0, 75_000.0)
+    assert cm["cobertura_rotulo"] == "NF cobre 25% do GMV; extrapolado de 25,0% coberto"
+    assert c["margem_contribuicao_conhecida"]["valor"] == pytest.approx(MARGEM_ML_CMV_30)
+
+
+def test_cmv_sem_razao_calculavel_segue_parcial_com_valor_cru():
+    c = celula("ml", c=cmv("ml", receita_fiscal=250_000.0, custo=75_000.0, status="nao_reconciliado"))
+    cm = c["componentes"]["cmv"]  # cobertura nao publicada: sem receita com custo
+    assert (cm["origem"], cm["valor"], cm["valor_medido"]) == ("parcial", 75_000.0, 75_000.0)
+    assert c["margem_contribuicao_conhecida"]["valor"] == pytest.approx(MARGEM_ML_CMV_30 + 225_000)
+    assert not c["margem_contribuicao_conhecida"]["aviso"].endswith(dre.AVISO_CMV_EXTRAPOLADO)
+
+
+def test_cmv_disponivel_tem_valor_medido_igual_ao_valor():
+    cm = celula("ml", c=_cmv_cob(0.99))["componentes"]["cmv"]
+    assert (cm["status"], cm["origem"]) == (dre.DISPONIVEL, "realizado")
+    assert cm["valor"] == cm["valor_medido"] == 300_000.0
+
+
+def test_agregado_soma_extrapolados_e_cobertura_segue_o_medido():
+    body = _montar([mart("ml", "kokeshi"), mart("ml", "barbours", gmv=500_000.0)],
+                   _cmv_cob(0.2, custo=60_000.0)
+                   + _cmv_cob(1.0, marca="barbours", receita_fiscal=500_000.0, custo=100_000.0),
+                   canais=("ml",))
+    cm = body["total"]["componentes"]["cmv"]
+    assert (cm["valor"], cm["valor_medido"], cm["origem"]) == (400_000.0, 160_000.0, "extrapolado")
+    rcc = 0.2 * 1_000_000 + 500_000
+    # as mesmas chaves de antes, pelo MEDIDO (nunca 400 mil / rcc)
+    assert cm["cobertura"] == pytest.approx(round(rcc / 1_500_000, 6))
+    assert cm["cmv_pct_receita_coberta"] == pytest.approx(round(160_000 / rcc * 100, 2))
+    assert cm["cobertura_rotulo"] == ("33,3% da receita com dado realizado, "
+                                      "66,7% com dado extrapolado")
+    m = body["total"]["margem_contribuicao_conhecida"]
+    assert m["valor"] == pytest.approx(sum(c["margem_contribuicao_conhecida"]["valor"]
+                                           for c in body["celulas_base"]))
+    assert "cmv" in m["componentes_parciais"] and m["aviso"].endswith(dre.AVISO_CMV_EXTRAPOLADO)
+
+
+def test_cenario_nao_extrapola_o_cmv_duas_vezes():
+    body = _montar([mart("ml", "kokeshi")], _cmv_cob(0.2, custo=60_000.0), premissas=prem(JUL, "kokeshi"),
+                   canais=("ml",), marcas=("kokeshi",))
+    cel = body["celulas_base"][0]
+    linha = DP.linha(cel["cenario_premissas"], "cmv")
+    assert linha["origem"] == "extrapolado"
+    assert linha["valor"] == cel["componentes"]["cmv"]["valor"] == 300_000.0  # nao 300 mil / 0,2
+    assert linha["motivo"].startswith("extrapolado: CMV de 30,0% da receita com custo")

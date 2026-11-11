@@ -545,7 +545,8 @@ receita incompleta e qualquer taxa/CMV fora de `disponivel` tiravam a margem. O 
 **Campos novos em cada componente (célula e agregado):**
 
 - `origem` ∈ `realizado` (status `disponivel` com valor), `parcial` (valor e status em `parcial`,
-  `nao_confirmado`, `provisorio` ou `nao_reconciliado`), `nao_aplicavel`, `indisponivel` (o resto: sem valor,
+  `nao_confirmado`, `provisorio` ou `nao_reconciliado`), `extrapolado` (só CMV, regra abaixo),
+  `nao_aplicavel`, `indisponivel` (o resto: sem valor,
   `snapshot_ausente`/`snapshot_vencido`, `sinal_inesperado`, `indisponivel`).
 - `entra_na_margem: bool` — custo somável (`devolucoes`, `taxas`, `ads`, `frete`, `cmv`, `impostos`) com
   origem `realizado` ou `parcial`. Receita e afiliados (`somavel=false`) ficam `false`. No agregado: entrou em
@@ -566,9 +567,34 @@ receita incompleta e qualquer taxa/CMV fora de `disponivel` tiravam a margem. O 
 - Novo `aviso: str | null`, quando há parciais: "Margem conhecida inclui custos parciais (<lista>); custo não
   medido não entra, então a margem tende a estar acima da real."
 - `rotulo`, `formula` e `pct_receita` continuam.
-- **[LIMITAÇÃO]** Custo parcial entra pelo valor medido, sem extrapolar (ex.: CMV da Shopee de out/26, com NF
-  cobrindo 16–52% do GMV). A margem conhecida tende a ficar acima da real; o `aviso` diz isso. A extrapolação
-  existe só no cenário estimado (`docs/dre_premissas_1.md` §6.1).
+- **[LIMITAÇÃO]** Custo parcial entra pelo valor medido, sem extrapolar — **exceto o CMV** (regra abaixo). A
+  margem conhecida tende a ficar acima da real; o `aviso` diz isso. A taxa do escrow Shopee parcial só é
+  estendida no cenário estimado (`docs/dre_premissas_1.md` §6.1).
+
+**CMV extrapolado na margem conhecida** — **[DECISÃO]** do supervisor, 11/11/2026, após alerta do orq-1:
+
+- **Por quê.** O CMV pode não cobrir a receita de duas formas, e nas duas o valor cru infla a margem:
+  `nao_reconciliado` (a NF cobre só 16–52% do GMV, como a Shopee de out/26) e `parcial` por cobertura de custo
+  abaixo de 98% (as NFs Full da Shopee chegam com custo NULL; a kokeshi apareceria com CMV ~3,9% contra ~22%
+  real). Somar o cru inflava a margem da Shopee em ~18 p.p.
+- **Regra (célula base).** CMV com valor, `status` ∈ {`nao_reconciliado`, `parcial`, `provisorio`} e razão
+  coberta calculável (receita com custo = cobertura × receita fiscal > 0):
+  `valor = (CMV medido ÷ receita com custo) × receita da célula` (a mesma receita do componente `receita`).
+  O componente fica com `origem = "extrapolado"`, `entra_na_margem = true`, `valor` = o extrapolado
+  (`pct_receita` sai dele), novo `valor_medido` = o CMV medido cru, `cobertura_rotulo` acrescido de
+  "extrapolado de X% coberto" (X = receita com custo ÷ receita) e o texto da extrapolação no `motivo`.
+  O `status` **não muda** (MCP e consumidores antigos). Sem razão calculável (ex.: cobertura não publicada),
+  segue `parcial` com o valor cru.
+- **`valor_medido`.** Preenchido no CMV sempre que há valor: no CMV `disponivel` (e no parcial sem razão),
+  `valor_medido = valor`. Nos demais componentes, `null`.
+- **Margem.** O CMV extrapolado conta em `componentes_parciais` e o `aviso` ganha "O CMV foi estendido
+  proporcionalmente à receita onde a NF ou o custo não cobre o mês inteiro."
+- **Agregado.** `valor` = soma dos `valor` (extrapolados); `valor_medido` = soma dos medidos; `origem` =
+  `extrapolado` se alguma célula foi; `cobertura_rotulo` ganha a fatia "Z% com dado extrapolado".
+  `cobertura` e `cmv_pct_receita_coberta` continuam calculados com o **medido** (numerador = Σ medido), nunca
+  com o extrapolado.
+- **Cenário estimado.** Reusa o valor da célula (origem `extrapolado`); a razão sai de `valor_medido`. Nunca
+  extrapola duas vezes; o número é o mesmo de antes.
 
 **Completude:** `usados` conta os que entraram (no agregado, os que entraram em todas as células); novo
 `parciais` conta, entre eles, os parciais; `texto` = "N de M custos (K parciais)" quando K > 0 ("1 parcial" no
