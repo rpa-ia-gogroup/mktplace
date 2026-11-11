@@ -140,7 +140,7 @@ export function canalComMenores(
 /** Texto do ⓘ do GMV do período; `null` quando as menores não se aplicam aos filtros. */
 export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, fmt: (v: number) => string): string | null {
   if (m.estado === "fora" || m.estado === "carregando") return null;
-  if (m.estado === "indisponivel") return "Marcas menores indisponíveis agora (Bling): o GMV mostrado não as inclui.";
+  if (m.estado === "indisponivel") return "Demais marcas indisponíveis agora (Bling): o GMV mostrado não as inclui.";
   if (m.total <= 0) return null;
   const nomes = m.marcas.map((x) => x.label).join(", ");
   const ag = m.aguardando.length ? ` ${m.aguardando.join(", ")}: aguardando autorização do Bling.` : "";
@@ -149,7 +149,7 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
     : variacaoInclui
       ? "A variação as inclui nos dois períodos."
       : "A variação não as inclui (sem base no período anterior).";
-  return `Inclui as marcas menores pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag} ${variacao}`;
+  return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag} ${variacao}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ import {
   type Canal,
   type LinhaFila,
   type Ordenacao,
+  type RespostaExpedicao,
   type Situacao,
 } from "./expedicao-contract.ts";
 import { brandLabel } from "./filters/brands.ts";
@@ -164,6 +165,8 @@ export interface ConfigLista {
   tom: "critico" | "atencao";
   /** Como a lista vem ordenada, em lingua de gestor ("mais antigos"). */
   ordemTexto?: string;
+  /** Busca a lista INTEIRA (paginando); sem isso, so' a primeira pagina (`limite`). */
+  completa?: boolean;
 }
 
 export const LISTAS: Record<TipoLista, ConfigLista> = {
@@ -173,28 +176,28 @@ export const LISTAS: Record<TipoLista, ConfigLista> = {
   },
   // Mais atrasado primeiro: o prazo mais antigo e' o que mais doi.
   vencidos: {
-    situacao: "overdue", ordem: "deadline", limite: LIMIT_MAX, nome: "vencidos",
+    situacao: "overdue", ordem: "deadline", limite: LIMIT_MAX, completa: true, nome: "vencidos",
     vazio: "Nenhum pedido vencido nesta fotografia.", arquivo: "vencidos", tom: "critico",
     ordemTexto: "mais atrasados",
   },
   // EXPEDICAO-PERTO-DE-VENCER: hoje primeiro, depois o proximo dia de prazo.
   perto_de_vencer: {
-    situacao: "due_soon", ordem: "deadline", limite: LIMIT_MAX, nome: "perto de vencer",
+    situacao: "due_soon", ordem: "deadline", limite: LIMIT_MAX, completa: true, nome: "perto de vencer",
     vazio: "Nenhum pedido vence hoje nem no próximo dia de prazo.", arquivo: "perto-de-vencer",
     tom: "atencao", ordemTexto: "mais urgentes",
   },
   // Mesmo prazo para todos (23:59): pago ha' mais tempo vem antes.
   vence_24h: {
-    situacao: "due_within_24h", ordem: "oldest", limite: LIMIT_MAX, nome: "vencem em 24 h",
+    situacao: "due_within_24h", ordem: "oldest", limite: LIMIT_MAX, completa: true, nome: "vencem em 24 h",
     vazio: "Nenhum pedido vence nas próximas 24 h.", arquivo: "vence-24h", tom: "atencao",
   },
-  // A lista de amanha e' para agir: cabe o dia inteiro (limite da API).
+  // A lista de amanha e' para agir: vem o dia inteiro (paginada, ver `buscarListaCompleta`).
   vence_proximo: {
-    situacao: "due_next_day", ordem: "oldest", limite: LIMIT_MAX, nome: "vencem no próximo dia de prazo",
+    situacao: "due_next_day", ordem: "oldest", limite: LIMIT_MAX, completa: true, nome: "vencem no próximo dia de prazo",
     vazio: "Nenhum pedido vence no próximo dia de prazo.", arquivo: "vence-proximo-dia", tom: "atencao",
   },
   acima_48h: {
-    situacao: "over_48h", ordem: "oldest", limite: LIMIT_MAX, nome: "acima de 48 h",
+    situacao: "over_48h", ordem: "oldest", limite: LIMIT_MAX, completa: true, nome: "acima de 48 h",
     vazio: "Nenhum pedido aberto há mais de 48 h.", arquivo: "acima-48h", tom: "atencao",
   },
 };
@@ -229,7 +232,9 @@ export function percentualDaFila(parte: number, base: number): string | null {
   return `${formatarDecimal((parte / base) * 100, 1)}%`;
 }
 
-export function queryDaLista(tipo: TipoLista, canal: Canal, marca: string | null, conta: string | null): string {
+export function queryDaLista(
+  tipo: TipoLista, canal: Canal, marca: string | null, conta: string | null, offset = 0,
+): string {
   const l = LISTAS[tipo];
   return construirQuery({
     ...FILTROS_PADRAO,
@@ -239,7 +244,40 @@ export function queryDaLista(tipo: TipoLista, canal: Canal, marca: string | null
     situacao: [l.situacao],
     orderBy: l.ordem,
     limit: l.limite,
+    offset,
   });
+}
+
+/** Trava contra loop se a API nunca disser `has_more=false` (500 x 100 = 50 mil pedidos). */
+const MAX_PAGINAS = 100;
+
+/**
+ * A lista INTEIRA do cartao: a API limita `limit` a 500, entao as listas
+ * `completa` pedem pagina por pagina (offset crescente), UMA de cada vez —
+ * nunca em paralelo contra o Render/Metabase — ate' `has_more=false`. Devolve a
+ * resposta da 1a pagina (snapshot, totais, etapas) com a fila de todas juntas.
+ * Erro em qualquer pagina rejeita: lista pela metade nao e' lista.
+ */
+export async function buscarListaCompleta(
+  buscarPagina: (query: string) => Promise<RespostaExpedicao>,
+  tipo: TipoLista,
+  canal: Canal,
+  marca: string | null,
+  conta: string | null,
+  opcoes: { aoProgredir?: (carregados: number, total: number) => void; ativo?: () => boolean } = {},
+): Promise<RespostaExpedicao> {
+  const primeira = await buscarPagina(queryDaLista(tipo, canal, marca, conta, 0));
+  if (!LISTAS[tipo].completa) return primeira;
+  const linhas = [...(primeira.queue ?? [])];
+  let pag = primeira.pagination;
+  for (let i = 1; pag?.has_more && pag.returned > 0 && i < MAX_PAGINAS; i++) {
+    if (opcoes.ativo && !opcoes.ativo()) break; // popup fechado/trocado: para de buscar
+    opcoes.aoProgredir?.(linhas.length, pag.total);
+    const prox = await buscarPagina(queryDaLista(tipo, canal, marca, conta, linhas.length));
+    linhas.push(...(prox.queue ?? []));
+    pag = prox.pagination;
+  }
+  return { ...primeira, queue: linhas };
 }
 
 export function queryDosTravados(canal: Canal, marca: string | null, conta: string | null): string {

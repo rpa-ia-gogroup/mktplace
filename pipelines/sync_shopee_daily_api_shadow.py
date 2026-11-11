@@ -38,7 +38,8 @@ so' "ontem" congelaria cada dia no valor imaturo — o defeito exato do export
 que este shadow mede. Por isso cada execucao recalcula `DIAS_JANELA` dias ate'
 D-1 e marca `is_partial` nos ultimos `DIAS_MATURACAO`.
 
-A kokeshi nunca entra: nao tem aplicacao Shopee (o app e' registrado por loja).
+A kokeshi e' ACEITA (`CONTAS_PERMITIDAS`, CHECK da migration 044), mas fica fora do
+default ate' o backfill dela: sem carga na fonte o frescor reprovaria o run das 4.
 
 USO
 ---
@@ -69,9 +70,12 @@ ITEMS = "silver.stg_shopee_order_items"
 SOURCE_API = "api"
 OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 
-#: 🔑 Dominio FECHADO, igual ao CHECK da migration 027. `kokeshi` fora de
-#: proposito: sem aplicacao Shopee cadastrada.
+#: Default de cada run (sem `--marcas`). A kokeshi entra aqui so' depois do
+#: backfill dela: antes disso `validate_frescor` reprova a conta sem carga e o run
+#: inteiro cai, levando junto as outras 4.
 CONTAS_API = ("apice", "barbours", "lescent", "rituaria")
+#: 🔑 Dominio FECHADO, igual ao CHECK da migration 044 (app da kokeshi aprovado em 11/2026).
+CONTAS_PERMITIDAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 #: Dias recalculados por execucao, terminando em D-1.
 DIAS_JANELA = 90
@@ -431,11 +435,10 @@ def coletar(marcas: tuple[str, ...], inicio: date, fim: date, hoje: date,
 
 def validar_marcas(marcas: tuple[str, ...] | None) -> tuple[str, ...]:
     alvo = tuple(marcas) if marcas else CONTAS_API
-    fora = sorted(set(alvo) - set(CONTAS_API))
+    fora = sorted(set(alvo) - set(CONTAS_PERMITIDAS))
     if fora:
         raise ShopeeDailyShadowError(
-            f"marcas fora da allowlist da API: {fora}. Cobertas: {list(CONTAS_API)}. "
-            "A kokeshi e' manual por nao ter aplicacao Shopee cadastrada.")
+            f"marcas fora da allowlist da API: {fora}. Cobertas: {list(CONTAS_PERMITIDAS)}.")
     return alvo
 
 

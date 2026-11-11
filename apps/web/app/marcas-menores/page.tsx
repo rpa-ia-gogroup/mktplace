@@ -51,7 +51,7 @@ export default function MarcasMenoresPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Marcas menores"
+        title="Demais marcas"
         icon={Layers}
         meta={
           <>
@@ -75,7 +75,7 @@ export default function MarcasMenoresPage() {
       ) : estado === "erro" || !dados ? (
         <StateBlock tipo="erro" titulo="Não foi possível contatar a API" />
       ) : !dados.disponivel ? (
-        <StateBlock tipo="indisponivel" titulo="Marcas menores indisponíveis" descricao={dados.motivo ?? undefined} />
+        <StateBlock tipo="indisponivel" titulo="Demais marcas indisponíveis" descricao={dados.motivo ?? undefined} />
       ) : (
         <>
           {dados.consolidado && <Topo c={dados.consolidado} marcas={dados.marcas} emAndamento={emAndamento} />}

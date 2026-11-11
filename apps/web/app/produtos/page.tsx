@@ -87,9 +87,9 @@ function precoMedio(avg: number | null | undefined): string | null {
 // Ressalvas de metodologia vao para o ⓘ ao lado da linha.
 const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio ponderado por unidade.";
 const DICA_BLING_TODAS =
-  "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as marcas menores, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
+  "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 const DICA_BLING =
-  "Marca menor: dado do Bling (conta da Rituária), pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). O A/B/C/D é feito só entre os produtos desta marca neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
+  "Demais marcas: dado do Bling (conta da Rituária), pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). O A/B/C/D é feito só entre os produtos desta marca neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 
 function fmtRefreshedAt(iso: string | null): string {
   if (!iso) return "";
@@ -724,12 +724,12 @@ function ProdutosPageInner() {
       {/* "Todas as marcas": as menores (Bling) entram aqui, no MESMO layout, abaixo do ranking do Data Mart.
           Nao entram no ranking nem no A/B/C/D de cima: aquele e' calculado e paginado no servidor. */}
       {brand === "" && canalBling != null && blingTodas.produtos !== undefined && (blingTodas.produtos === null || !blingTodas.produtos.disponivel) && (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-raised px-4 py-3 text-xs text-ink-muted">Marcas menores indisponíveis agora (Bling).</p>
+        <p className="rounded-2xl border border-dashed border-line-strong bg-raised px-4 py-3 text-xs text-ink-muted">Demais marcas indisponíveis agora (Bling).</p>
       )}
       {brand === "" && canalBling != null && linhasTodasMenores.length > 0 && (
         <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
           <div className="flex items-center gap-2 px-6 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-ink">Marcas menores · {activeChannelLabel}</h2>
+            <h2 className="text-sm font-semibold text-ink">Demais marcas · {activeChannelLabel}</h2>
             <InfoDica texto={DICA_BLING_TODAS} />
           </div>
           {progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-warn-ink" role="status">{progressoTodas}</p>}
