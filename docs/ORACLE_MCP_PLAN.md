@@ -3292,3 +3292,35 @@ Validação contra a produção em 11/11/2026: as 8 tools respondem com contrato
 Mário), marcas menores via Bling (`performance/marcas-menores`, enum próprio), curva ABC e situação na Shopee, e LDR
 Shopee/ML na expedição. Também fica pendente o timeout por endpoint: a 1ª chamada a frio do `ml-full-estoque` levou
 ~6,5 s, contra 8 s de timeout único no adapter, e hoje não há timeout por endpoint.
+
+## Nota T-0080 P2 (11/11/2026)
+
+Nona tool: **`torre_dre`** (`apps/web/src/server/oracle/dre-contract.ts`), sobre `GET /api/v1/dre`. Decisão do Mário
+(11/11): a DRE sai pelo MCP, inclusive CMV e margem.
+
+- **Entrada:** `ref_month` obrigatório (YYYY-MM), `canais` e `marcas` opcionais em enum fechado. A API lê
+  `channels`/`brands` como CSV, então o adapter recusa lista repetida nesse endpoint. Mês devolvido diferente do
+  pedido, ou filtro pedido que a fonte não ecoou em `filtros`, vira `INVALID_UPSTREAM_RESPONSE`.
+- **Saída:** total, por canal, por marca e células canal × marca. Cada linha traz `valor`, `pct_receita`, `status`
+  (`CALCULADO`/`NAO_CALCULAVEL`/`NAO_APLICAVEL`), `status_fonte` (o status real da API: `parcial`,
+  `nao_reconciliado`, `indisponivel`…) e `motivo`. Só `disponivel` tem número. Valor que a fonte manda com outro
+  status sai nulo e gera a limitação `dre_valor_nao_confirmado`. Por célula vão também `classificacao`, os motivos
+  (inclusive mês imaturo M+2), o frescor (`data_maxima`) e o resumo do cenário de premissas (estado, margem
+  estimada, motivos). O resultado é a margem de contribuição CONHECIDA, só com CMV calculado. A regra de 54 h do
+  lote de insumos continua.
+- **Limitações derivadas da resposta, sem data fixa no código:** `dre_impostos_nao_publicados`
+  (`IMPOSTOS_NAO_PUBLICADOS` ou `IMPOSTOS_PARCIAIS`, contadas pelo status de impostos nas células, com o motivo da
+  API; em outubro aparece "migration 040 pendente"), `dre_premissas_nao_publicadas` (por `fontes.premissas_dre`),
+  `dre_insumos_indisponiveis`, `dre_campos_omitidos` e `dre_corte_por_tamanho`.
+- **Teto de 256 KB:** o bruto de 2026-10 mede 417 KB, quase todo em `celulas_base` (repete o grão) e nas linhas do
+  cenário de premissas. Escolha: o adapter aceita até 1 MiB **só** para `dre` (`ENDPOINT_MAX_BYTES`), e a tool
+  devolve uma projeção compacta medida contra 240 KB (texto + structuredContent). Se passar, células canal × marca
+  saem do fim da lista, com `meta.truncated`, `data.corte` (quais e quantas) e a limitação de corte. O bruto nunca
+  chega ao modelo. Medido contra a produção em 11/11: `ref_month=2026-10` gera 184.641 bytes de resposta, 23/23
+  células, sem corte.
+- `NO_MARGIN` (desempenho, canais e produtos) deixou de dizer que a base não tem CMV e passou a apontar para a
+  `torre_dre`.
+
+**Ficou de fora:** `celulas_base`, as linhas detalhadas do cenário de premissas e `partes`/`fonte`/`cobertura`
+dos componentes (declarados em `dre_campos_omitidos`); períodos de vários meses; e o timeout por endpoint (a DRE
+respondeu em ~0,6 s a quente, abaixo dos 8 s).
