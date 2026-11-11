@@ -273,7 +273,7 @@ test("consolidado por etapa: % sobre o TOTAL da lista, da maior para a menor, 'S
 });
 
 test("consolidado TikTok: etapa de cada lista do resumo; 100% numa etapa aparece; API antiga, nada", async () => {
-  const { etapasDaLista } = await import("../src/lib/expedicao-tiktok-abertos.ts");
+  const { etapasDaLista, valorDaLista } = await import("../src/lib/expedicao-tiktok-abertos.ts");
   const t = {
     open: 0, awaiting_shipment: 0, awaiting_collection: 0, on_hold: 0, overdue: 0, overdue_shipment: 0,
     overdue_collection: 0, due_today: 1465, due_next_day: 0, on_time: 0, over_48h: 0,
@@ -284,6 +284,13 @@ test("consolidado TikTok: etapa de cada lista do resumo; 100% numa etapa aparece
   const misto = { ...t, over_48h: 10, over_48h_collection: 7, over_48h_shipment: 3 };
   assert.deepEqual(etapasDaLista("over_48h", misto, 10).map((e) => e.n), [7, 3]);
   assert.deepEqual(etapasDaLista("awaiting_shipment", t, 5).map((e) => e.n), [5]);
+  // "Perto de vencer" = hoje + proximo dia, por etapa; API antiga (sem etapa) segue sem chute.
+  const perto = { ...t, due_today: 5, due_next_day: 3, due_today_collection: 4, due_today_shipment: 1,
+    due_next_day_collection: 1, due_next_day_shipment: 2 };
+  assert.deepEqual(etapasDaLista("due_soon", perto, 8).map((e) => e.n), [5, 3]);
+  assert.deepEqual(etapasDaLista("due_soon", t, 8), []);
+  assert.equal(valorDaLista("due_soon", perto), 8);
+  assert.equal(valorDaLista("overdue", { ...perto, overdue: 7 }), 7);
 });
 
 // ---------------------------------------------------------------------------

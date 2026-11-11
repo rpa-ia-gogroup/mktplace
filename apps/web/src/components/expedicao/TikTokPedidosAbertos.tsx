@@ -33,13 +33,13 @@ import { formatarHoras } from "@/lib/expedicao-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { formatarInteiro } from "@/lib/expedicao-formato";
 import {
-  CAMPO_DA_LISTA,
   CONFIG_LISTA,
   ROTULO_ETAPA,
   buscarTodasAsPaginas,
   csvDosAbertos,
   diaCurto,
   etapasDaLista,
+  valorDaLista,
   faixaDaPagina,
   instanteCurto,
   nomeDoCsvAbertos,
@@ -67,6 +67,7 @@ function pct(n: number, base: number): string {
 const VISUAL_DA_LISTA: Partial<Record<ListaAbertos, { icone: typeof Clock; identidade: IdentidadeKpi }>> = {
   due_today: { icone: Clock, identidade: "prazo" },
   due_next_day: { icone: CalendarClock, identidade: "prazo" },
+  due_soon: { icone: Clock, identidade: "prazo" },
   over_48h: { icone: Hourglass, identidade: "pedidos" },
 };
 
@@ -115,7 +116,7 @@ function PopupAbertos({
   const porMarca =
     dados && lista
       ? dados.brands
-          .map((b) => ({ rotulo: brandLabel(b.brand), n: b[CAMPO_DA_LISTA[lista]] ?? 0 }))
+          .map((b) => ({ rotulo: brandLabel(b.brand), n: valorDaLista(lista, b) }))
           .filter((b) => b.n > 0)
           .sort((a, b) => b.n - a.n)
       : [];
@@ -540,6 +541,7 @@ export function BacklogPorMarcaTikTok({
                 aoVerVencidos: b.overdue > 0 ? () => abertos.abrir("overdue", b.overdue, b.brand) : undefined,
                 pertoDeVencer: perto,
                 pctPertoDeVencer: percentualDaFila(perto, b.open),
+                aoVerPertoDeVencer: perto > 0 ? () => abertos.abrir("due_soon", perto, b.brand) : undefined,
                 aoVerBacklog: b.open > 0 ? () => abertos.abrir("all", b.open, b.brand) : undefined,
                 acima48h: b.over_48h,
                 aoVerAcima48h: b.over_48h > 0 ? () => abertos.abrir("over_48h", b.over_48h, b.brand) : undefined,

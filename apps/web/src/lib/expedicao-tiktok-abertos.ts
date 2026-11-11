@@ -12,6 +12,7 @@ export type ListaAbertos =
   | "overdue"
   | "due_today"
   | "due_next_day"
+  | "due_soon"
   | "over_48h"
   | "awaiting_shipment"
   | "awaiting_collection"
@@ -117,6 +118,7 @@ export const CONFIG_LISTA: Record<ListaAbertos, { titulo: string; vazio: string 
     titulo: "Pedidos que vencem no próximo dia útil (TikTok)",
     vazio: "Nenhum pedido vence no próximo dia útil.",
   },
+  due_soon: { titulo: "Pedidos perto de vencer (TikTok)", vazio: "Nenhum pedido perto de vencer." },
   over_48h: { titulo: "Pedidos abertos há mais de 48 h (TikTok)", vazio: "Nenhum pedido acima de 48 h." },
   awaiting_shipment: {
     titulo: "Pedidos aguardando envio (TikTok)",
@@ -159,7 +161,7 @@ export function nomeDoCsvAbertos(lista: ListaAbertos, marca: string | null, agor
 }
 
 /** Campo do resumo que da' o total de cada lista. */
-export const CAMPO_DA_LISTA: Record<ListaAbertos, keyof ContagemAbertos> = {
+const CAMPO_DA_LISTA: Record<Exclude<ListaAbertos, "due_soon">, keyof ContagemAbertos> = {
   overdue: "overdue",
   due_today: "due_today",
   due_next_day: "due_next_day",
@@ -169,10 +171,17 @@ export const CAMPO_DA_LISTA: Record<ListaAbertos, keyof ContagemAbertos> = {
   all: "open",
 };
 
+/** Total da lista numa contagem (marca ou geral); "perto de vencer" = hoje + proximo dia. */
+export function valorDaLista(lista: ListaAbertos, c: ContagemAbertos): number {
+  return lista === "due_soon" ? c.due_today + c.due_next_day : (c[CAMPO_DA_LISTA[lista]] ?? 0);
+}
+
 /**
  * Quebra por etapa EXATA (do resumo), so' onde o resumo a tem. Nas demais
  * listas a etapa aparece na tabela, linha a linha.
  */
+const soma = (a?: number, b?: number) => (a === undefined || b === undefined ? undefined : a + b);
+
 export function etapasDaLista(lista: ListaAbertos, t: ContagemAbertos, total: number): FatiaEtapa[] {
   // [coleta, despacho] de cada lista, do resumo (lista INTEIRA).
   const par: [number | undefined, number | undefined] | null =
@@ -186,6 +195,8 @@ export function etapasDaLista(lista: ListaAbertos, t: ContagemAbertos, total: nu
             ? [t.due_next_day_collection, t.due_next_day_shipment]
             : lista === "over_48h"
               ? [t.over_48h_collection, t.over_48h_shipment]
+              : lista === "due_soon"
+                ? [soma(t.due_today_collection, t.due_next_day_collection), soma(t.due_today_shipment, t.due_next_day_shipment)]
               : lista === "awaiting_collection"
                 ? [total, 0]
                 : lista === "awaiting_shipment"

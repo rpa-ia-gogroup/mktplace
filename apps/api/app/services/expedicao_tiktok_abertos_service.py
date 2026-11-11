@@ -60,7 +60,7 @@ PRAZO_DIAS_UTEIS = {"despacho": 1, "coleta": 2}
 LIMITE_IDADE_H = 48
 
 #: Listas que o popup pode pedir. `all` = todos os abertos.
-LISTAS = ("overdue", "due_today", "due_next_day", "over_48h", "awaiting_shipment",
+LISTAS = ("overdue", "due_today", "due_next_day", "due_soon", "over_48h", "awaiting_shipment",
           "awaiting_collection", "all")
 
 #: Lista PAGINADA: cada pagina e' uma consulta com LIMIT/OFFSET sobre uma
@@ -73,6 +73,7 @@ PAGINA_MAX = 1000
 #: Total da lista pedida, tirado do resumo (sem consulta extra).
 TOTAL_DA_LISTA = {
     "overdue": "overdue", "due_today": "due_today", "due_next_day": "due_next_day",
+    "due_soon": "due_today+due_next_day",  # "perto de vencer" = hoje + proximo dia
     "over_48h": "over_48h", "awaiting_shipment": "awaiting_shipment",
     "awaiting_collection": "awaiting_collection", "all": "open",
 }
@@ -193,6 +194,7 @@ _FILTRO_LISTA = {
     "overdue": "situacao = 'overdue'",
     "due_today": "situacao = 'due_today'",
     "due_next_day": "situacao = 'due_next_day'",
+    "due_soon": "situacao IN ('due_today', 'due_next_day')",
     "over_48h": "acima_48h AND etapa <> 'retido'",
     "awaiting_shipment": "etapa = 'despacho'",
     "awaiting_collection": "etapa = 'coleta'",
@@ -397,7 +399,7 @@ def obter_abertos(
 
     if not lista:
         return saida
-    saida["list_total"] = totais[TOTAL_DA_LISTA[lista]]
+    saida["list_total"] = sum(totais[c] for c in TOTAL_DA_LISTA[lista].split("+"))
     deslocamento = (pagina - 1) * TAMANHO_PAGINA
     try:
         pedidos = consultar(

@@ -94,6 +94,20 @@ def test_paginacao_pede_uma_linha_a_mais_e_desloca():
     assert r["list_total"] == 650 and r["page"] == 3
 
 
+def test_lista_perto_de_vencer_une_hoje_e_proximo_dia():
+    vistos = []
+
+    def consultar(sql, params):
+        if "LIMIT" in sql:
+            vistos.append(sql)
+            return []
+        return [{"brand": "apice", "abertos": 900, "vence_hoje": 650, "vence_proximo": 30}]
+
+    r = svc.obter_abertos(lista="due_soon", consultar=consultar, agora=AGORA)
+    assert "situacao IN ('due_today', 'due_next_day')" in vistos[0]
+    assert r["list_total"] == 680 and r["list"] == "due_soon"
+
+
 def test_falha_da_fonte_vira_indisponivel_nunca_zero():
     def consultar(sql, params):
         raise RuntimeError("boom")
