@@ -123,7 +123,7 @@ def _alg_none(**kw) -> str:
     lambda: _alg_none(),
     lambda: kit.token(iss="https://outro-tenant.us.auth0.com/"),
     lambda: kit.token(iss=f"https://{auth.ALLOWED_AUTH_ISSUER_HOSTNAME}"),  # sem barra final
-    lambda: kit.token(aud="https://mktplace-gobeaute.vercel.app/api/mcp"),  # token do MCP
+    lambda: kit.token(aud="https://mktplace-ten.vercel.app/api/mcp"),  # token do MCP
     lambda: kit.token(exp_em=-3600),
     lambda: kit.token(sem=("sub",)),
     lambda: kit.token(sem=("exp",)),

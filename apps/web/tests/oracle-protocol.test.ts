@@ -152,7 +152,7 @@ import { handleMcpRequest } from "../src/server/oracle/handler.ts";
 import type { AccessEnv } from "../src/server/oracle/access.ts";
 
 const OAUTH_ISSUER = "https://gobeaute-oraculo.us.auth0.com/";
-const OAUTH_AUDIENCE = "https://mktplace-gobeaute.vercel.app/api/mcp";
+const OAUTH_AUDIENCE = "https://mktplace-ten.vercel.app/api/mcp";
 
 const PROD_ENV: AccessEnv = {
   NODE_ENV: "production",
