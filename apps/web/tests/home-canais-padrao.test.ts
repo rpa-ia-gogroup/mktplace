@@ -1,5 +1,6 @@
-// T-0089 — a Gerencial (home) abre com os TRES canais, e o "GMV do periodo"
-// e' a soma de TikTok + ML + Shopee. As outras telas seguem no Consolidado.
+// T-0089 — todas as telas de filtro global abrem com os TRES canais (decisao
+// do proprietario); na Gerencial (home) o "GMV do periodo" e' a soma de
+// TikTok + ML + Shopee. `channels=` explicito na URL continua mandando.
 // Roda via `node --test` com type-stripping nativo do Node.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -28,15 +29,22 @@ test("home: o padrao materializado na URL e' channels=all e relido igual (sem re
   assert.deepEqual(resolveFilters(params, { ...HOME_FILTER_DEFAULTS, now }), defaults);
 });
 
-test("home: channels explicito na URL continua mandando", () => {
-  const f = resolveFilters(new URLSearchParams("channels=ml%2Cshopee"), { ...HOME_FILTER_DEFAULTS, now });
-  assert.deepEqual(f.channels, ["ml", "shopee"]);
+test("channels explicito na URL continua mandando (home e demais telas)", () => {
+  for (const opts of [{ ...HOME_FILTER_DEFAULTS, now }, { defaultPreset: "mes_anterior" as const, now }, { now }]) {
+    const f = resolveFilters(new URLSearchParams("channels=ml%2Cshopee"), opts);
+    assert.deepEqual(f.channels, ["ml", "shopee"]);
+  }
 });
 
-test("outras telas: sem defaultChannels o padrao segue o Consolidado (ML + Shopee)", () => {
-  assert.deepEqual(DEFAULT_MARKETPLACE_SELECTION, ["ml", "shopee"]);
-  const f = computeDefaultFilters({ defaultPreset: "mes_anterior", now });
-  assert.deepEqual(f.channels, ["ml", "shopee"]);
+test("padrao global: toda tela (sem opcao de canal) abre com os tres canais = channels=all", () => {
+  assert.deepEqual(DEFAULT_MARKETPLACE_SELECTION, ["tiktok", "ml", "shopee"]);
+  for (const opts of [{ defaultPreset: "mes_anterior" as const, now }, { defaultPreset: "30d" as const, now }, { now }]) {
+    const f = resolveFilters(new URLSearchParams(), opts);
+    assert.deepEqual(f.channels, ["tiktok", "ml", "shopee"]);
+    assert.equal(filtersToSearchParams(f).get("channels"), "all");
+  }
+  // A home nao tem mais opcao propria de canal: herda o padrao global.
+  assert.ok(!("defaultChannels" in HOME_FILTER_DEFAULTS));
 });
 
 test("home: o KPI de GMV e' a soma dos 3 canais no periodo", () => {

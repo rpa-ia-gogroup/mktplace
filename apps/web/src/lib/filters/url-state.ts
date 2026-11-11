@@ -3,7 +3,6 @@ import {
   parseMarketplaceParam,
   serializeMarketplaceSelection,
 } from "../marketplace-filter.ts";
-import type { Marketplace } from "../mock-data.ts";
 import { FILTER_BRAND_KEYS } from "./brands.ts";
 import { presetRange, toISODate } from "./presets.ts";
 import type { DatePreset, GlobalFilters } from "./types.ts";
@@ -69,8 +68,8 @@ export function validateDateRange(dateFrom: string, dateTo: string, today: Date 
  * lanca excecao.
  */
 export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFilters {
-  // Sem canal na URL -> Consolidado (ML + Shopee). `channels=all` explicito
-  // continua sendo os tres canais.
+  // Sem canal na URL -> os tres canais (DEFAULT_MARKETPLACE_SELECTION, T-0089).
+  // `channels=` explicito (ex.: ml,shopee) continua mandando.
   const channelsRaw = params.get("channels") ?? params.get("marketplace");
   const channels = channelsRaw == null ? [...DEFAULT_MARKETPLACE_SELECTION] : parseMarketplaceParam(channelsRaw);
 
@@ -95,7 +94,7 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFil
  * Presenca de qualquer um deles significa que a URL nao esta "vazia" — o
  * default por tela (`defaultPreset`/`defaultCompare`) nao se aplica mais,
  * mesmo que o parametro individual esteja ausente (nesse caso cai no
- * fallback neutro do parser: Consolidado, sem marca, compare=false). Isso e
+ * fallback neutro do parser: tres canais, sem marca, compare=false). Isso e
  * o que garante que "querystring explicita sempre vence o default da tela"
  * e que compare=false sobrevive a um reload (ver useGlobalFilters). */
 const FILTER_PARAM_NAMES = ["channels", "marketplace", "brands", "date_from", "date_to", "compare"] as const;
@@ -110,29 +109,18 @@ export interface DefaultFiltersOptions {
   defaultPreset?: DatePreset;
   /** Comparacao (MoM) ativa por padrao quando a URL chega vazia. */
   defaultCompare?: boolean;
-  /** Canais aplicados quando a URL chega vazia. Sem ele, o Consolidado
-   * (`DEFAULT_MARKETPLACE_SELECTION`). A Gerencial (home) passa os tres
-   * canais: o "GMV do periodo" dela e' o total dos marketplaces (T-0089). */
-  defaultChannels?: readonly Marketplace[];
   /** Relogio injetavel — usado nos testes para nao depender da data real. */
   now?: () => Date;
 }
 
 /** Resolve o default de uma tela (usado so quando a URL nao tem NENHUM
- * parametro de filtro reconhecido) — `defaultChannels` (sem ele, Consolidado
- * ML + Shopee), sem marca, o intervalo do `defaultPreset` e `defaultCompare`. */
+ * parametro de filtro reconhecido) — os tres canais (`DEFAULT_MARKETPLACE_SELECTION`,
+ * o mesmo para todas as telas), sem marca, o intervalo do `defaultPreset` e `defaultCompare`. */
 export function computeDefaultFilters(options: DefaultFiltersOptions = {}): GlobalFilters {
-  const {
-    defaultPreset = "30d",
-    defaultCompare = false,
-    defaultChannels = DEFAULT_MARKETPLACE_SELECTION,
-    now = () => new Date(),
-  } = options;
+  const { defaultPreset = "30d", defaultCompare = false, now = () => new Date() } = options;
   const range = presetRange(defaultPreset, now());
   return {
-    // Ida e volta pela URL: o default e' exatamente o que o eco do
-    // router.replace vai ler (ordem canonica; vazio vira os tres canais).
-    channels: parseMarketplaceParam(serializeMarketplaceSelection(defaultChannels)),
+    channels: [...DEFAULT_MARKETPLACE_SELECTION],
     brands: [],
     dateFrom: range.dateFrom,
     dateTo: range.dateTo,
