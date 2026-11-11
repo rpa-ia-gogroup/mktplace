@@ -202,11 +202,12 @@ máximo TRÊS consultas por requisição (view, reclamações+perguntas, reputa�
 
 | Tela | Regra |
 |---|---|
-| Taxa de resposta (herói) | `perguntas_respondidas` ÷ `perguntas` do período; "N aguardando · N há mais de 24 h" são as perguntas sem resposta AGORA (`raw.ml_cx_perguntas`); tempo de resposta = `tempo_resposta_min` oficial, média das marcas ponderada pelas perguntas |
+| Taxa de resposta (herói) | `perguntas_respondidas` ÷ `perguntas` do período; "N aguardando" = perguntas sem resposta AGORA (`raw.ml_cx_perguntas`); "N há mais de 24 h" = soma de TODOS os dias de `perguntas_sem_resposta_24h` da view (a coluna guarda cada pergunta no dia em que foi feita: o último dia sozinho dá 0; sem leitura, "—"); tempo de resposta = `tempo_resposta_min` oficial, média das marcas ponderada pelas perguntas |
 | Saúde da Conta por marca + selo | reputação OFICIAL do ML (`raw.ml_seller_reputation_snapshot`, a mesma leitura da Performance das contas: termômetro, MercadoLíder e métricas com limite). "N loja abaixo da meta" = contas com métrica fora do limite |
 | Contact rate (cartão 1) | reclamações (tudo que não é `cancel_*`, por data de abertura) ÷ pedidos do período. Cálculo Torre, não é a reputação oficial |
-| Reembolso (cartão 3) | **sem fonte**: a coleta não lê devoluções; "—" e "Sem fonte", nunca 0 |
-| Cancelamento / Mediações | `cancel_purchase`+`cancel_sale` / etapa `dispute`, ÷ pedidos (mediações ficam só na tabela por marca) |
+| Reembolso (cartão 3) | `reembolsos` ÷ pedidos do período (a mesma conta de `pct_reembolsos`; soma de contagens, não média de percentuais); `valor_reembolsado` no detalhe. Sem leitura = "—", nunca 0 |
+| Cancelamento (cartão 2) | `pedidos_cancelados` ÷ pedidos (a mesma conta de `pct_cancelados`, mesmo conceito da Shopee); não depende da coleta de reclamações. Os motivos do Pareto seguem nas solicitações `cancel_purchase`+`cancel_sale` |
+| Mediações | etapa `dispute` ÷ pedidos (só na tabela por marca) |
 | Perguntas sem resposta | agora, não segue o período; vão para a fila "O que exige atenção" e a tabela por loja |
 | Aguardam nós, prazo | claims `opened` com `acao_pendente_vendedor`; vencidas = `prazo_vendedor` passou |
 | Tempo de resposta, mensagens | valor OFICIAL do ML, 1 foto/dia (janela de 14 dias do ML) |
@@ -214,10 +215,14 @@ máximo TRÊS consultas por requisição (view, reclamações+perguntas, reputa�
 | Pareto | motivo (`ml_cx_motivos.nome`) → rótulo em português mantido no código; fora do mapa sai com o nome do ML e "(sem tradução)" |
 
 - Cobertura: a carga inicial pegou 90 dias (a partir de 12/08/2026). Janela que começa antes disso não mostra
-  número de reclamação; o período anterior só existe quando cabe na coleta E na base de pedidos (a view guarda
-  90 dias de pedidos: o anterior de 90 dias nunca existe, o de 30 existe desde 11/10). `sem_anterior` diz quando.
-- **Devoluções**: a view marca 0 em todos os dias porque a coleta ainda não lê o endpoint de devoluções. É falta
-  de leitura, não zero: o campo não sai e aparece como pendência.
+  número de reclamação nem mediação; o período anterior delas só existe quando cabe na coleta E na base de pedidos
+  (a view guarda 90 dias de pedidos: o anterior de 90 dias nunca existe, o de 30 existe desde 11/10). Cancelamento e
+  reembolso só dependem da base de pedidos. `sem_anterior` diz, por indicador, quando.
+- **Devoluções**: `devolucoes` da view vem nula/0 em todos os dias (conferido em 11/11/2026: nenhum dia > 0 nas 4
+  marcas) porque a coleta ainda não lê o endpoint de devoluções. É falta de leitura, não zero: o campo não sai e
+  aparece como pendência. Quando houver dado, entra como o Reembolso.
+- Migration 61 (PR #2476 do Data Mart): a mesma consulta da view traz `reembolsos`, `valor_reembolsado`, `pedidos_cancelados`
+  e `perguntas_sem_resposta_24h` (sem consulta nova ao Metabase).
 - Dado velho: coleta sem atualização há mais de 6 h ganha o chip "Coleta desatualizada".
 
 ## 8. Arquitetura e fases

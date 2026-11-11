@@ -1,5 +1,7 @@
 /**
  * Aba CX · Mercado Livre (10/11/2026) — `GET /api/v1/cx/mercadolivre?brands=&dias=`.
+ * Cancelamento e Reembolso vem da view diaria (pedidos cancelados e reembolsos ÷ pedidos);
+ * devolucao segue sem fonte (a coluna vem vazia) e nao e' desenhada.
  *
  * Mesmas regras da CX da Shopee: ausencia nunca vira zero ("—"), numero Torre
  * sem faixa oficial, periodo anterior so' quando a API o mede (`sem_anterior`
@@ -13,6 +15,7 @@ import {
   metaDaMetrica,
   pctCx,
   razaoPct,
+  reais,
   somar,
   textoSemComparacao,
   valorOficial,
@@ -34,17 +37,18 @@ import {
 import { MOTIVO_TIMEOUT, repetirSeEstourar, TIMEOUT_API_MS } from "./performance-contas.ts";
 
 /** Taxas sobre pedidos (colunas da tabela por marca). */
-export type IndicadorTaxa = "reclamacao" | "cancelamento" | "mediacao";
+export type IndicadorTaxa = "reclamacao" | "cancelamento" | "mediacao" | "reembolso";
 /** Chaves do `sem_anterior` da API: as taxas e a taxa de resposta. */
 export type IndicadorMl = IndicadorTaxa | "resposta";
-export const INDICADORES_ML: readonly IndicadorTaxa[] = ["reclamacao", "cancelamento", "mediacao"];
-const CAMPO: Record<IndicadorTaxa, "reclamacoes" | "cancelamentos" | "mediacoes"> = {
+export const INDICADORES_ML: readonly IndicadorTaxa[] = ["reclamacao", "cancelamento", "mediacao", "reembolso"];
+const CAMPO: Record<IndicadorTaxa, "reclamacoes" | "cancelamentos" | "mediacoes" | "reembolsos"> = {
   reclamacao: "reclamacoes",
   cancelamento: "cancelamentos",
   mediacao: "mediacoes",
+  reembolso: "reembolsos",
 };
 // Os mesmos nomes da CX da Shopee: o gestor le' os dois canais do mesmo jeito.
-export const ROTULO_ML: Record<IndicadorMl | "reembolso", string> = {
+export const ROTULO_ML: Record<IndicadorMl, string> = {
   resposta: "Taxa de resposta",
   reclamacao: ROTULO_INDICADOR.contactRate,
   cancelamento: ROTULO_INDICADOR.cancelamento,
@@ -57,6 +61,8 @@ export interface LinhaMl {
   pedidos?: number | null;
   reclamacoes?: number | null;
   cancelamentos?: number | null;
+  reembolsos?: number | null;
+  valor_reembolsado?: number | null;
   mediacoes?: number | null;
   perguntas?: number | null;
   perguntas_respondidas?: number | null;
@@ -65,6 +71,7 @@ export interface LinhaMl {
   pedidos_anterior?: number | null;
   reclamacoes_anterior?: number | null;
   cancelamentos_anterior?: number | null;
+  reembolsos_anterior?: number | null;
   mediacoes_anterior?: number | null;
   aguardando_nos?: number | null;
   vencidas?: number | null;
@@ -87,6 +94,7 @@ export interface PontoDiaMl {
   pedidos?: number | null;
   reclamacoes?: number | null;
   cancelamentos?: number | null;
+  reembolsos?: number | null;
   mediacoes?: number | null;
 }
 
@@ -207,6 +215,8 @@ export interface ResumoMl {
   /** Taxa (% dos pedidos) e contagem de cada indicador no periodo. */
   taxa: Record<IndicadorTaxa, number | null>;
   contagem: Record<IndicadorTaxa, number | null>;
+  /** Valor reembolsado (R$) das marcas com reembolso medido; null = sem leitura. */
+  valorReembolsado: number | null;
   comparacao: Record<IndicadorTaxa, ComparacaoCard | null>;
   semAnterior: Partial<Record<IndicadorMl, { texto: string; detalhe: string | null }>>;
   perguntas: number | null;
@@ -266,6 +276,7 @@ export function resumoMl(d: CxMlResponse): ResumoMl {
     pedidos: somar(ms.map((m) => m.pedidos)),
     taxa,
     contagem,
+    valorReembolsado: somar(ms.filter((m) => num(m.reembolsos) != null).map((m) => m.valor_reembolsado)),
     comparacao,
     semAnterior,
     perguntas: somar(comPerg.map((m) => m.perguntas)),
@@ -281,6 +292,8 @@ export interface CelulaTaxa {
   n: string;
   delta: DeltaCx | null;
   antes: string | null;
+  /** So' no reembolso: valor reembolsado (R$) da marca; null nos demais ou sem leitura. */
+  valor: string | null;
 }
 
 export interface LinhaProblemasMl {
@@ -296,7 +309,8 @@ function celula(m: LinhaMl, i: IndicadorTaxa): CelulaTaxa {
   const c = CAMPO[i];
   const atual = razaoPct([[m[c], m.pedidos]]);
   const antes = razaoPct([[m[`${c}_anterior` as const], m.pedidos_anterior]]);
-  return { pct: pctCx(atual), n: inteiro(m[c]), delta: deltaPp(atual, antes), antes: antes == null ? null : pctCx(antes) };
+  const valor = i === "reembolso" && num(m.valor_reembolsado) != null ? reais(m.valor_reembolsado) : null;
+  return { pct: pctCx(atual), n: inteiro(m[c]), delta: deltaPp(atual, antes), antes: antes == null ? null : pctCx(antes), valor };
 }
 
 export function montarProblemasMl(d: CxMlResponse, rotuloMarca: (m: string) => string) {
@@ -512,15 +526,15 @@ export function itensAtencaoMl(d: CxMlResponse, rotuloMarca: (m: string) => stri
 // ---------------------------------------------------------------------------
 export const AJUDA_ML = {
   resposta:
-    "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período.",
+    "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período; as de mais de 24 h vêm da base diária, que guarda cada pergunta no dia em que foi feita.",
   status:
     "Reputação OFICIAL do Mercado Livre de cada conta (termômetro de cor e MercadoLíder). Em vermelho, as métricas fora do limite para MercadoLíder.",
   reembolso:
-    "Sem fonte: o Mercado Livre ainda não tem reembolso coletado (a coleta não lê devoluções). Não é zero.",
+    "Pedidos com reembolso no período ÷ pedidos do período, somando as marcas; o valor reembolsado fica no detalhe. Cálculo da Torre. Não é taxa de devolução: devolução ainda não tem fonte no Mercado Livre.",
   reclamacao:
     "Contact rate: de cada 100 pedidos, quantos viraram reclamação. Reclamações abertas no período (tipo mediação, sem os cancelamentos) ÷ pedidos criados no período, somando as marcas. Cálculo da Torre: não é a taxa de reputação do Mercado Livre, que tem regras e exclusões próprias. Sem faixa de cor porque não há meta definida.",
   cancelamento:
-    "Solicitações de cancelamento (cancel_purchase e cancel_sale) abertas no período ÷ pedidos criados no período. Cálculo da Torre.",
+    "Pedidos cancelados no período ÷ pedidos do período, somando as marcas (o mesmo conceito da Shopee). Cálculo da Torre. Os motivos do Pareto são os das solicitações de cancelamento abertas no período.",
   mediacao:
     "Reclamações que chegaram à mediação do Mercado Livre (etapa dispute), abertas no período ÷ pedidos criados no período. Cálculo da Torre.",
   perguntas:
