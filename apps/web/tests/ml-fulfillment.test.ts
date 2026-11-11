@@ -401,8 +401,8 @@ test("vazio real e' distinguido de erro e de carregando", () => {
 
 test("a pagina implementa loading, erro, vazio e janela invalida", () => {
   assert.ok(PAGE.includes("carregando"), "estado de carregamento");
-  assert.ok(PAGE.includes("animate-pulse"), "skeleton");
-  assert.ok(PAGE.includes('role="alert"'), "erro anunciado");
+  assert.ok(PAGE.includes("KpiCardSkeleton"), "skeleton");
+  assert.ok(PAGE.includes('tipo="erro"'), "erro anunciado (StateBlock)");
   assert.ok(PAGE.includes("isVazioReal"), "vazio real");
   assert.ok(PAGE.includes("erroJanela"), "janela invalida");
   assert.ok(PAGE.includes('role="status"'), "carregando anunciado");

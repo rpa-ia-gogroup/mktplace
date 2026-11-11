@@ -24,7 +24,10 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import KpiCard from "@/components/KpiCard";
+import { Ban, CircleDollarSign, Package, ShoppingBag, Truck } from "lucide-react";
+import KpiTile from "@/components/ui/KpiTile";
+import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
+import StateBlock from "@/components/ui/StateBlock";
 import MLFulfillmentTrend from "@/components/MLFulfillmentTrend";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchMLFulfillment, MLFulfillmentError } from "@/lib/api-client";
@@ -281,48 +284,19 @@ function FullMLPageInner() {
       )}
 
       {/* --- Estados ----------------------------------------------------- */}
-      {erroJanela && (
-        <div
-          role="alert"
-          className="border border-warn/40 bg-warn-soft rounded-xl px-4 py-3 text-sm text-warn-ink"
-        >
-          {erroJanela}
-        </div>
-      )}
+      {erroJanela && <StateBlock tipo="indisponivel" titulo={erroJanela} />}
 
-      {!erroJanela && erro && (
-        <div
-          role="alert"
-          className="border border-crit/40 bg-crit-soft rounded-xl px-4 py-3 text-sm text-crit-ink"
-        >
-          {erro}
-        </div>
-      )}
+      {!erroJanela && erro && <StateBlock tipo="erro" titulo={erro} />}
 
       {!erroJanela && !erro && carregando && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-24 rounded-xl bg-raised animate-pulse"
-              aria-hidden="true"
-            />
-          ))}
-          <p className="sr-only" role="status">
-            Carregando indicadores de Full do Mercado Livre.
-          </p>
+        <div role="status" aria-busy="true" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <span className="sr-only">Carregando indicadores de Full do Mercado Livre.</span>
+          {Array.from({ length: 8 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
         </div>
       )}
 
       {!erroJanela && !erro && !carregando && vazio && (
-        <div className="border border-line bg-surface rounded-xl px-4 py-10 text-center">
-          <p className="text-sm font-medium text-ink-muted">
-            Nenhum pedido no período e filtro selecionados.
-          </p>
-          <p className="text-xs text-ink-faint mt-1">
-            É ausência de venda, não falha de carga.
-          </p>
-        </div>
+        <StateBlock tipo="vazio" titulo="Nenhum pedido no período e filtro selecionados." descricao="É ausência de venda, não falha de carga." />
       )}
 
       {/* --- Conteudo ---------------------------------------------------- */}
@@ -333,52 +307,14 @@ function FullMLPageInner() {
               Participação do Full
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              <KpiCard
-                label="Share de GMV Full"
-                value={fmtShare(dados.share_full_gmv)}
-                subvalue={`Não-Full: ${fmtGmv(naoFull?.paid_gmv ?? null)}`}
-              />
-              <KpiCard
-                label="Share de pedidos Full"
-                value={fmtShare(dados.share_full_orders)}
-                subvalue={`Não-Full: ${fmtCount(naoFull?.paid_orders ?? null)} pedidos`}
-                accent="bg-kpi-prazo"
-              />
-              <KpiCard
-                label="Share de unidades Full"
-                value={fmtShare(dados.share_full_units)}
-                subvalue={`Não-Full: ${fmtCount(naoFull?.paid_units ?? null)} unidades`}
-                accent="bg-kpi-atendimento"
-              />
-              <KpiCard
-                label="Cancelamento Full"
-                value={fmtShare(full?.cancellation_rate ?? null)}
-                subvalue={`Não-Full: ${fmtShare(naoFull?.cancellation_rate ?? null)}`}
-                accent="bg-crit"
-              />
-              <KpiCard
-                label="GMV Full"
-                value={fmtGmv(full?.paid_gmv ?? null)}
-                subvalue={`Total pago: ${fmtGmv(dados.paid_gmv_total)}`}
-              />
-              <KpiCard
-                label="Pedidos Full"
-                value={fmtCount(full?.paid_orders ?? null)}
-                subvalue={`Total pago: ${fmtCount(dados.paid_orders_total)}`}
-                accent="bg-kpi-prazo"
-              />
-              <KpiCard
-                label="Unidades Full"
-                value={fmtCount(full?.paid_units ?? null)}
-                subvalue={`Total pago: ${fmtCount(dados.paid_units_total)}`}
-                accent="bg-kpi-atendimento"
-              />
-              <KpiCard
-                label="Entrega Full"
-                value={fmtTempo(full?.delivery ?? null)}
-                subvalue={`Não-Full: ${fmtTempo(naoFull?.delivery ?? null)}`}
-                accent="bg-kpi-ticket"
-              />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Share de GMV Full" valor={fmtShare(dados.share_full_gmv)} comparacao={`Não-Full: ${fmtGmv(naoFull?.paid_gmv ?? null)}`} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Share de pedidos Full" valor={fmtShare(dados.share_full_orders)} comparacao={`Não-Full: ${fmtCount(naoFull?.paid_orders ?? null)} pedidos`} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Share de unidades Full" valor={fmtShare(dados.share_full_units)} comparacao={`Não-Full: ${fmtCount(naoFull?.paid_units ?? null)} unidades`} />
+              <KpiTile variante="gerencial" identidade="ads" icone={Ban} rotulo="Cancelamento Full" valor={fmtShare(full?.cancellation_rate ?? null)} comparacao={`Não-Full: ${fmtShare(naoFull?.cancellation_rate ?? null)}`} />
+              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV Full" valor={fmtGmv(full?.paid_gmv ?? null)} comparacao={`Total pago: ${fmtGmv(dados.paid_gmv_total)}`} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Pedidos Full" valor={fmtCount(full?.paid_orders ?? null)} comparacao={`Total pago: ${fmtCount(dados.paid_orders_total)}`} />
+              <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Unidades Full" valor={fmtCount(full?.paid_units ?? null)} comparacao={`Total pago: ${fmtCount(dados.paid_units_total)}`} />
+              <KpiTile variante="gerencial" identidade="prazo" icone={Truck} rotulo="Entrega Full" valor={fmtTempo(full?.delivery ?? null)} comparacao={`Não-Full: ${fmtTempo(naoFull?.delivery ?? null)}`} />
             </div>
           </section>
 

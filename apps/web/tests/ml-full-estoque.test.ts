@@ -151,8 +151,8 @@ test("o componente nao coalesce ausencia para zero e declara os quatro estados",
   assert.ok(CLIENT_SRC.includes("fmtOpcional(i.disponivel)"));
   assert.ok(CLIENT_SRC.includes("fmtOpcional(m.disponivel_full)"));
   assert.ok(CLIENT_SRC.includes("Carregando estoque"));
-  assert.ok(CLIENT_SRC.includes('role="alert"'));
-  assert.ok(CLIENT_SRC.includes("Tentar novamente"));
+  assert.ok(CLIENT_SRC.includes('tipo="erro"'));
+  assert.ok(CLIENT_SRC.includes("<RetryButton"));
   assert.ok(CLIENT_SRC.includes("PainelIndisponivel"));
   assert.ok(CLIENT_SRC.includes("Nenhum inventário neste filtro"));
   assert.match(CLIENT_SRC, /não significa estoque zero/);
@@ -262,10 +262,10 @@ test("QA2: data futura -- max = hoje em BRT e 422 com data vira mensagem propria
   assert.equal(ERRO_DATA_FUTURA_ML, "Data no futuro: escolha até hoje.");
 
   // No erro de data, a saida e' voltar a' ultima fotografia, nao repetir.
-  const erroBloco = CLIENT_SRC.split('role="alert"')[1] ?? "";
-  const ramoData = erroBloco.split("erro.dataFutura ?")[1]?.split(") : (")[0] ?? "";
+  const erroBloco = CLIENT_SRC.split('tipo="erro"')[1] ?? "";
+  const ramoData = erroBloco.split("erro.dataFutura ?")[1]?.split(") : <RetryButton")[0] ?? "";
   assert.ok(ramoData.includes("voltarParaUltima"));
-  assert.ok(!ramoData.includes("Tentar novamente"));
+  assert.ok(!ramoData.includes("RetryButton"));
 });
 
 test("QA3: tabelas usam TableScrollHint e tem regiao focavel com nome", () => {
