@@ -378,3 +378,16 @@ test("queryDaLista aceita offset (padrao 0, igual ao de antes)", () => {
   assert.equal(new URLSearchParams(queryDaLista("vencidos", "shopee", null, null)).get("offset"), "0");
   assert.equal(new URLSearchParams(queryDaLista("vencidos", "shopee", null, null, 1500)).get("offset"), "1500");
 });
+
+test("backlog: lista da fila inteira (sem filtro de situacao), mais antigo primeiro", () => {
+  const q = new URLSearchParams(queryDaLista("backlog", "mercadolivre", "barbours", "123", 0));
+  assert.equal(q.get("situacao"), null);
+  assert.equal(q.get("order_by") ?? q.get("orderBy") ?? q.get("ordem"), "oldest");
+  assert.equal(new URLSearchParams(queryDaLista("acima_48h", "shopee", null, null)).get("situacao"), "over_48h");
+});
+
+test("tabela de marcas (Shopee/ML): Backlog e Acima de 48 h abrem o popup", () => {
+  const cliente = readFileSync(join(RAIZ, "app/expedicao/ExpedicaoClient.tsx"), "utf8");
+  assert.match(cliente, /aoVerBacklog:[\s\S]{0,400}lista: "backlog"/);
+  assert.match(cliente, /aoVerAcima48h:[\s\S]{0,400}lista: "acima_48h"/);
+});
