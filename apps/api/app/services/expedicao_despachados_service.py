@@ -10,8 +10,9 @@ SO' A OPERACAO DO VENDEDOR — o mesmo escopo do backlog da Expedicao:
 
   shopee        `pickup_done_time`, fora `fulfilled_by_shopee` (FBS);
   mercadolivre  `date_shipped`, so' modalidades do vendedor (fora Full);
-  tiktok        `max(rts_time)` do pedido, so' com TODOS os itens carimbados
-                (como `pipelines/expedicao/tiktok_daily.py`), fora amostra e gocase.
+  tiktok        coleta = 1o `IN_TRANSIT` do log de status (regra da LDR de coleta),
+                fora amostra e gocase. Antes era `max(rts_time)` dos itens: varria
+                `line_items` (3,2 GB) e estourava o tempo do Metabase (source_error).
 
 Dia util = seg-sex fora feriado nacional (`dia_util` da Expedicao do TikTok).
 So' dias FECHADOS (ate' ontem): hoje esta pela metade.
@@ -47,27 +48,17 @@ TIKTOK_MARCAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 #: Mesmas modalidades do backlog do vendedor (`ML_SELLER_MANAGED_LOGISTIC_TYPES`);
 #: `fulfillment` (Full) fica de fora.
 ML_LOGISTICAS_VENDEDOR = ("cross_docking", "xd_drop_off", "drop_off", "self_service")
-#: shortcut: TikTok olha pedidos pagos nos ultimos 15 dias antes da janela, para
-#: nao varrer `line_items` inteiro; despacho depois de 15 dias do pagamento e'
-#: raro demais para pesar — subir se aparecer.
-TIKTOK_RECUO_PAGAMENTO_DIAS = 15
 
 # Uma consulta so' por chamada (UNION ALL dos canais pedidos): em prod cada
-# consulta vira chamada ao Metabase em fila. So' o TikTok varre `line_items`,
-# entao so' entra quando pedido.
-_CTE_TIKTOK = f"""
-WITH ped AS MATERIALIZED (
-    SELECT o.brand, o.order_id
-      FROM raw.tiktok_shop_orders o
-     WHERE o.paid_at >= CAST(:inicio AS date) - {TIKTOK_RECUO_PAGAMENTO_DIAS}
-       AND NOT (o.brand = ANY(CAST(:marcas_fora AS text[])))
-       AND NOT COALESCE(o.is_sample_order, false)
-       AND o.brand = ANY(CAST(:marcas_tiktok AS text[]))
-), rts AS (
-    SELECT p.brand, max(li.rts_time) AS t, count(*) AS itens, count(li.rts_time) AS com
-      FROM raw.tiktok_shop_line_items li
-      JOIN ped p ON p.order_id = li.order_id
-     GROUP BY p.brand, li.order_id
+# consulta vira chamada ao Metabase em fila. O TikTok le' o log de status
+# (com indice em detected_at), so' quando o canal e' pedido.
+_CTE_TIKTOK = """
+WITH col AS (
+    SELECT l.order_id, min(l.updated_at_tiktok) AS t
+      FROM raw.tiktok_shop_order_status_log l
+     WHERE l.detected_at >= CAST(:inicio AS date) - 1
+       AND l.new_status = 'IN_TRANSIT'
+     GROUP BY 1
 )
 """
 _BLOCOS = {
@@ -96,10 +87,13 @@ SELECT 'mercadolivre' AS canal, brand AS marca, (date_shipped + interval '1 hour
   ) s
  GROUP BY 1, 2, 3""",
     "tiktok": """
-SELECT 'tiktok' AS canal, brand AS marca, t::date AS dia, COUNT(*) AS despachados
-  FROM rts
- WHERE com = itens
-   AND t >= CAST(:inicio AS date) AND t < CAST(:fim AS date) + 1
+SELECT 'tiktok' AS canal, o.brand AS marca, c.t::date AS dia, COUNT(*) AS despachados
+  FROM col c
+  JOIN raw.tiktok_shop_orders o ON o.order_id = c.order_id
+ WHERE c.t >= CAST(:inicio AS date) AND c.t < CAST(:fim AS date) + 1
+   AND NOT (o.brand = ANY(CAST(:marcas_fora AS text[])))
+   AND NOT COALESCE(o.is_sample_order, false)
+   AND o.brand = ANY(CAST(:marcas_tiktok AS text[]))
  GROUP BY 1, 2, 3""",
 }
 
