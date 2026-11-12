@@ -20,7 +20,7 @@ from decimal import Decimal
 from app.schemas.dre import DREResponse
 from app.services import dre_premissas as DP
 from app.services import dre_service as dre
-from tests.test_dre_mvp import FakeNeon, mart
+from tests.test_dre_mvp import FakeNeon, cmv, mart
 from tests.test_dre_premissas import prem
 
 OUT, NOV = date(2026, 10, 1), date(2026, 11, 1)
@@ -51,6 +51,11 @@ def dev_export(marca="kokeshi", mes=OUT, reembolsado=Decimal("8765.43"), devoluc
             "reembolsado": reembolsado, "data_max_origem": datetime(2026, 11, 10, 9, 0, tzinfo=UTC)}
 
 
+def cmv_pub(*marcas, mes=OUT):
+    """T-0101: CMV publicado e fresco. Sem ele a margem fica suspensa (insumo ausente)."""
+    return [x for m in marcas for x in cmv("shopee", m, mes=mes, publicado_em=PUBLICADO)]
+
+
 def sh(marca="barbours", mes=OUT):
     return mart("shopee", marca, mes=mes, dias=dre.ultimo_dia(mes).day)
 
@@ -79,7 +84,7 @@ def lido(*linhas):
 # ---------------------------------------------------------------------------
 
 def test_cobertura_parcial_entra_na_margem_pelo_valor_medido_com_rotulo():
-    out = montar([sh()], [dev_pub()])
+    out = montar([sh()], [dev_pub(), *cmv_pub("barbours")])
     DREResponse.model_validate(out)
     c = cel(out, "shopee", "barbours")
     d = c["componentes"]["devolucoes"]
@@ -92,7 +97,7 @@ def test_cobertura_parcial_entra_na_margem_pelo_valor_medido_com_rotulo():
     m = c["margem_contribuicao_conhecida"]
     assert "devolucoes" in m["componentes_usados"] and "devolucoes" in m["componentes_parciais"]
     # Nunca extrapolado no realizado: a margem desconta exatamente o medido.
-    sem = cel(montar([sh()]), "shopee", "barbours")["margem_contribuicao_conhecida"]["valor"]
+    sem = cel(montar([sh()], cmv_pub("barbours")), "shopee", "barbours")["margem_contribuicao_conhecida"]["valor"]
     assert round(sem - m["valor"], 2) == 12_000.0
 
 
@@ -227,14 +232,15 @@ def test_ml_e_tiktok_inalterados():
 # ---------------------------------------------------------------------------
 
 def test_agregado_shopee_nao_soma_a_kokeshi_na_margem_nem_no_valor():
-    out = montar([sh("barbours"), sh("kokeshi")], [dev_pub()], lido(dev_export()))
+    out = montar([sh("barbours"), sh("kokeshi")], [dev_pub(), *cmv_pub("barbours", "kokeshi")], lido(dev_export()))
     DREResponse.model_validate(out)
     b, k = cel(out, "shopee", "barbours"), cel(out, "shopee", "kokeshi")
     canal = next(c for c in out["por_canal"] if c["canal"] == "shopee")
     soma = b["margem_contribuicao_conhecida"]["valor"] + k["margem_contribuicao_conhecida"]["valor"]
     assert canal["margem_contribuicao_conhecida"]["valor"] == round(soma, 2)
     # a margem da Kokeshi e' a mesma sem a leitura do export
-    k_sem = cel(montar([sh("barbours"), sh("kokeshi")], [dev_pub()]), "shopee", "kokeshi")
+    k_sem = cel(montar([sh("barbours"), sh("kokeshi")], [dev_pub(), *cmv_pub("barbours", "kokeshi")]),
+                "shopee", "kokeshi")
     assert k["margem_contribuicao_conhecida"]["valor"] == k_sem["margem_contribuicao_conhecida"]["valor"]
     d = canal["componentes"]["devolucoes"]
     assert d["valor"] == 12_000.0  # so' a deduzida; a informativa fica fora do valor do agregado
@@ -268,14 +274,15 @@ def test_estimada_extrapola_pela_cobertura():
 
 
 def test_estimada_kokeshi_sem_premissa_de_devolucao():
-    out = montar([sh("kokeshi")], export=lido(dev_export()), premissas=prem(OUT, "kokeshi"))
+    out = montar([sh("kokeshi")], cmv_pub("kokeshi"), export=lido(dev_export()), premissas=prem(OUT, "kokeshi"))
     DREResponse.model_validate(out)
     cen = cel(out, "shopee", "kokeshi")["cenario_premissas"]
     ln = DP.linha(cen, "devolucoes_reembolsos")
     assert (ln["valor"], ln["status"], ln["somavel"]) == (None, "nao_aplicavel", False)
     assert "receita já líquida de devoluções (shop-stats)" in ln["motivo"]
     # sem a leitura (comportamento antigo) a premissa e' aplicada: a margem estimada cai exatamente 1% da receita
-    antes = cel(montar([sh("kokeshi")], premissas=prem(OUT, "kokeshi")), "shopee", "kokeshi")["cenario_premissas"]
+    antes = cel(montar([sh("kokeshi")], cmv_pub("kokeshi"), premissas=prem(OUT, "kokeshi")),
+                "shopee", "kokeshi")["cenario_premissas"]
     receita = cen["receita_base"]
     assert round(cen["margem_contribuicao_estimada"] - antes["margem_contribuicao_estimada"], 2) == round(
         receita * 0.01, 2)

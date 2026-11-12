@@ -480,3 +480,38 @@ test("seletor de competencia exibe MM/AAAA, inclusive a madura padrao", () => {
     assert.match(t, /medido: R\$\s?7\.500/);
   });
 }
+
+// ===========================================================================
+// T-0101 — insumo vencido suspende a margem: a frase no lugar do numero
+// ===========================================================================
+test("T-0101: margem suspensa aparece no lugar do numero, nunca 100% nem R$ 0", () => {
+  const c = fx.TIKTOK_SUSPENSA;
+  const frase = /Margem suspensa: insumo vencido desde 09\/11\/2026/;
+  const resumo = texto(render(h(DreResumo, { total: c, competencia: "10/2026", bloqueadores: [] })));
+  const canais = texto(render(h(DreCanais, { canais: [c], total: c })));
+  const vertical = texto(
+    render(h(DreVertical, { opcoes: [{ valor: "total", rotulo: "Total", celula: c }], selecionado: "total", aoEscolher: () => {} })),
+  );
+  const matriz = texto(
+    render(h(DreMarcaCanalMatriz, { celulas: [{ ...c, marca: "kokeshi" }], marcas: [{ ...c, marca: "kokeshi", canal: null }], canais: ["tiktok"] })),
+  );
+  for (const [onde, t] of [["resumo", resumo], ["canais", canais], ["vertical", vertical]] as const) {
+    assert.match(t, frase, `${onde}: frase de suspensao`);
+    assert.doesNotMatch(t, /Margem[^%]*100,0%/, `${onde}: margem nunca 100%`);
+    assert.doesNotMatch(t, R_ZERO, `${onde}: nunca R$ 0`);
+  }
+  assert.match(resumo, /insumo vencido: taxas; margem suspensa até a republicação/);
+  assert.match(matriz, /Margem suspensa/);
+  assert.doesNotMatch(matriz, /100,0%/);
+  // Receita e componentes seguem visiveis.
+  assert.match(resumo, /R\$\s?60\.000/);
+  assert.match(vertical, /R\$\s?20\.000/);
+});
+
+test("T-0101: resposta antiga (margem null sem `suspensa`) segue como antes", () => {
+  const { suspensa: _s, motivo_suspensao: _m, ...antiga } = fx.TIKTOK_SUSPENSA.margem_contribuicao_conhecida;
+  const c = { ...fx.TIKTOK_SUSPENSA, margem_contribuicao_conhecida: antiga };
+  const canais = texto(render(h(DreCanais, { canais: [c], total: c })));
+  assert.doesNotMatch(canais, /Margem suspensa/);
+  assert.match(canais, /Não calculável/);
+});

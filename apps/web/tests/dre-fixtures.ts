@@ -275,3 +275,33 @@ export function resposta(over: Partial<DreResponse> = {}, estado: EstadoInsumos 
     ...over,
   };
 }
+
+/**
+ * T-0101 — TikTok com o repasse VENCIDO (forma medida em 11/11/2026): taxas e
+ * frete `snapshot_vencido`, CMV em dia. A API suspende a margem: valor null,
+ * `suspensa: true`. Antes saia 100% (nenhum custo entrou).
+ */
+export const MOTIVO_SUSPENSAO = "insumo vencido: taxas; margem suspensa até a republicação (publicado em 09/11/2026)";
+const tiktokSuspensaBase = celula({
+  canal: "tiktok",
+  classificacao: "PREVIA",
+  motivos: [MOTIVO_SUSPENSAO],
+  comps: {
+    receita: comp(60_000, "disponivel", { somavel: false }),
+    taxas: comp(null, "snapshot_vencido", { motivo: "publicado em 2026-11-09T13:00:00+00:00; limite de 54 h" }),
+    ads: comp(null, "indisponivel"),
+    frete: comp(null, "snapshot_vencido", { motivo: "publicado em 2026-11-09T13:00:00+00:00; limite de 54 h" }),
+    cmv: comp(20_000, "disponivel"),
+  },
+  margem: null,
+  usados: ["cmv"],
+  faltam: ["devolucoes", "taxas", "ads", "frete", "impostos"],
+});
+export const TIKTOK_SUSPENSA: CelulaDRE = {
+  ...tiktokSuspensaBase,
+  margem_contribuicao_conhecida: {
+    ...tiktokSuspensaBase.margem_contribuicao_conhecida,
+    suspensa: true,
+    motivo_suspensao: MOTIVO_SUSPENSAO,
+  },
+};

@@ -60,6 +60,14 @@ export function ClassificacaoChip({
   );
 }
 
+/**
+ * T-0101 — margem suspensa por insumo vencido/ausente. Tom de aviso ja'
+ * existente; o texto ao lado diz desde quando.
+ */
+export function MargemSuspensaChip() {
+  return <Chip tom="atencao">Margem suspensa</Chip>;
+}
+
 export function StatusChip({ status }: { status: StatusComponente }) {
   const c = STATUS_CHIP[status];
   if (!c) return null;

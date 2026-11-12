@@ -260,16 +260,17 @@ def test_competencia_encerrada_mas_imatura_continua_parcial():
     assert cen["previa"] is False and cen["competencia_madura"] is False and cen["estado"] == DP.PARCIAL
 
 
-def test_cmv_ausente_deixa_o_cenario_parcial_sem_fabricar_zero():
+def test_cmv_ausente_suspende_o_cenario_sem_fabricar_zero():
     body = montar([ml()], premissas=prem(JUL, "kokeshi"), insumos=[])
     cen = body["celulas_base"][0]["cenario_premissas"]
-    # T-0090: CMV sem valor e' linha ausente; o cenario segue com numero, parcial.
-    assert cen["estado"] == DP.PARCIAL
+    # T-0101: CMV `snapshot_ausente` suspende a estimada (antes: parcial, sem CMV na soma).
+    assert cen["estado"] == DP.NAO_CALCULAVEL and cen["suspensa"] is True
+    assert cen["margem_contribuicao_estimada"] is None
+    assert "insumo ausente: cmv" in cen["motivos"][0]
+    # As linhas seguem visiveis; CMV ausente nunca vira zero.
     assert L(cen, "cmv")["valor"] is None and L(cen, "cmv")["origem"] == "indisponivel"
     assert {"linha": "cmv", "motivo": "snapshot_ausente"} in cen["componentes_ausentes"]
     assert L(cen, "icms")["valor"] == 10_000.0
-    # sem CMV na soma: 16 premissas a 1% + Ads + taxas
-    assert cen["margem_contribuicao_estimada"] == 1_000_000 - 16 * 10_000 - 40_000 - 150_000
 
 
 def test_lote_de_premissa_invalido_torna_nao_calculavel():
