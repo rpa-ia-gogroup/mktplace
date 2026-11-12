@@ -543,8 +543,10 @@ function BrandPageInner() {
         <DateRangeFilter
           dateFrom={filters.dateFrom}
           dateTo={filters.dateTo}
+          periodo={filters.periodo}
           compare={filters.compare}
           onChange={(v) => setFilters(v)}
+          variante="menu"
           onCompareChange={(compare) => setFilters({ compare })}
         />
       </div>
