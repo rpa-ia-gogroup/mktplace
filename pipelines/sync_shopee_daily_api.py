@@ -14,12 +14,11 @@ por linha antes de somar itens, pedido nao cancelado sem item ou sem frete abort
 A fato nao tem coluna de procedencia. Para nao misturar fontes, cada coluna de
 cada loja tem UM dono:
 
-* lojas com API (apice, barbours, lescent, rituaria — `LOJAS_COM_API`):
+* lojas com API (as 5 contas, kokeshi desde 11/2026 — `LOJAS_COM_API`):
   - ESTE modulo escreve `COLUNAS_API` e anula `COLUNAS_ANULADAS`;
   - os carregadores de arquivo deixam de escrever essas colunas para elas
     (`daily_performance.colunas_da_api_por_loja`);
   - funil (visitantes, conversao, compradores) e Ads seguem dos arquivos;
-* kokeshi: inteira pelos arquivos. Este modulo nunca le' nem escreve a loja 3.
 
 🔴 O QUE ESTA PUBLICACAO MEDE
 ------------------------------

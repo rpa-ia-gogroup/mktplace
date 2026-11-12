@@ -68,9 +68,8 @@ def test_regra_da_shopee_tira_cancelado_e_soma_item_total():
     assert "SUM(item_total)" in V.SHOPEE_SQL
 
 
-def test_kokeshi_nunca_entra_na_shopee():
-    assert "kokeshi" not in SHOPEE.brands
-    assert set(SHOPEE.brands) == {"apice", "barbours", "lescent", "rituaria"}
+def test_shopee_cobre_as_cinco_contas():
+    assert set(SHOPEE.brands) == {"apice", "barbours", "kokeshi", "lescent", "rituaria"}
 
 
 def test_marcas_sao_as_dos_conectores():

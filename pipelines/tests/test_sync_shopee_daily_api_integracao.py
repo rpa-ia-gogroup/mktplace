@@ -2,7 +2,7 @@
 
 O que um dublê nao prova: o upsert so' das colunas donas, a idempotencia por
 conteudo, o rollback da reconciliacao pre-commit, o advisory lock compartilhado
-com os carregadores de arquivo e a preservacao do funil/Ads e da kokeshi.
+com os carregadores de arquivo e a preservacao do funil/Ads.
 Cluster descartavel; nunca toca Neon nem Data Mart.
 """
 from __future__ import annotations
@@ -96,7 +96,7 @@ def _semear(e):
     _pedido(e, "barbours", "B1", D1, "completed", 8, [(3, 60)])
     _pedido(e, "lescent", "L1", D2, "completed", 4, [(1, 25)])
     _pedido(e, "rituaria", "R1", D3, "shipped", 6, [(2, 70)])
-    _pedido(e, "kokeshi", "K1", D1, "completed", 9, [(1, 15)])      # nunca entra
+    _pedido(e, "kokeshi", "K1", D1, "completed", 9, [(1, 15)])      # API desde 11/2026
     _pedido(e, "apice", "A9", FORA, "completed", 1, [(1, 11)])      # fora da janela padrao
     # volume de fundo da apice em D3: a guarda de colapso (80%) mede a JANELA, nao o dia.
     for i in range(10):
@@ -127,7 +127,7 @@ def _auditorias(e):
 def test_publica_e_segunda_execucao_identica_nao_grava(eng):
     _semear(eng)
     r1 = D.run(apply=True, agora=AGORA, ambiente=LIGADO)
-    assert r1["linhas_gravadas"] == 5 and r1["aplicado"] is True
+    assert r1["linhas_gravadas"] == 6 and r1["aplicado"] is True
     a1 = _fato(eng)[(D1, 1)]
     assert (a1["orders"], a1["canceled_orders"], a1["units_sold"], a1["delivered_orders"]) == (2, 1, 4, 1)
     assert a1["gmv"] == Decimal("120.00") and a1["seller_shipping_cost"] == Decimal("15.00")
@@ -138,7 +138,7 @@ def test_publica_e_segunda_execucao_identica_nao_grava(eng):
     assert {k: {c: v for c, v in r.items() if c != "ingested_at"} for k, r in _fato(eng).items()} == \
            {k: {c: v for c, v in r.items() if c != "ingested_at"} for k, r in antes.items()}
     aud = _auditorias(eng)
-    assert [a[:3] for a in aud] == [("shopee_daily_api", "success", 5), ("shopee_daily_api", "success", 0)]
+    assert [a[:3] for a in aud] == [("shopee_daily_api", "success", 6), ("shopee_daily_api", "success", 0)]
     assert aud[0][3:] == (date(2026, 8, 22), date(2026, 10, 20))
 
 
@@ -177,13 +177,13 @@ def test_funil_e_ads_do_arquivo_preservados_familia_de_pedidos_trocada(eng):
     assert (a1["total_fees"], a1["total_settlement"], a1["returned_orders"]) == (None, None, None)
 
 
-def test_kokeshi_sem_api_nunca_e_tocada(eng):
+def test_kokeshi_vem_da_api_e_mantem_o_funil_do_arquivo(eng):
     _semear(eng)
     _linha_arquivo(eng, D1, 3, gmv=1000, orders=50, visitors=900)
     D.run(apply=True, agora=AGORA, ambiente=LIGADO)
     kok = _fato(eng, loja=3)
     assert list(kok) == [(D1, 3)]
-    assert (kok[(D1, 3)]["gmv"], kok[(D1, 3)]["orders"]) == (Decimal("1000.00"), 50)
+    assert (kok[(D1, 3)]["gmv"], kok[(D1, 3)]["orders"], kok[(D1, 3)]["visitors"]) ==            (Decimal("15.00"), 1, 900)
 
 
 def test_loja_sem_dado_na_fonte_aborta_sem_escrever_nem_auditar(eng):

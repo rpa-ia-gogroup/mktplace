@@ -116,11 +116,10 @@ def test_shopee_atrasada_nao_segura_ml_e_tiktok():
     assert (ml["hoje"]["gmv"], ml["ontem"]["gmv"]) == (300.0, 200.0)
 
 
-def test_kokeshi_na_shopee_vira_limitacao():
+def test_kokeshi_na_shopee_nao_vira_mais_limitacao():
     db = SessaoFalsa(fontes={3: brt(13, 3)}, vendas=[])
-    assert S.get_hoje_por_hora(db, [3], None, agora=AGORA)["limitacoes"] == [S.LIMITACAO_KOKESHI_SHOPEE]
-    assert S.get_hoje_por_hora(db, [3], ["kokeshi"], agora=AGORA)["limitacoes"]
-    assert S.get_hoje_por_hora(db, [3], ["apice"], agora=AGORA)["limitacoes"] == []
+    assert S.get_hoje_por_hora(db, [3], None, agora=AGORA)["limitacoes"] == []
+    assert S.get_hoje_por_hora(db, [3], ["kokeshi"], agora=AGORA)["limitacoes"] == []
     assert S.get_hoje_por_hora(db, [1, 2], None, agora=AGORA)["limitacoes"] == []
 
 
@@ -173,16 +172,17 @@ def test_tendencia_por_marca_usa_hoje_e_ontem_no_mesmo_corte():
     assert lescent["projecao"] is None  # ontem sem venda: sem projecao
 
 
-def test_kokeshi_entra_pelo_ml_e_so_a_shopee_dela_fica_fora():
+def test_kokeshi_entra_pelo_ml_e_pela_shopee():
     ml = [{"brand": "kokeshi", "dia": HOJE, "marketplace_id": 2, "gmv_corte": 500, "gmv_dia": 500},
           {"brand": "kokeshi", "dia": HOJE - timedelta(days=1), "marketplace_id": 2, "gmv_corte": 400, "gmv_dia": 1000}]
-    # Shopee dela, se vier com linha, nao entra na conta (sem hora de pedido).
+    # Desde 11/2026 a Shopee dela vem da API, com hora de pedido: entra na conta.
     shopee = [{"brand": "kokeshi", "dia": HOJE, "marketplace_id": 3, "gmv_corte": 90, "gmv_dia": 90},
               {"brand": "kokeshi", "dia": HOJE - timedelta(days=1), "marketplace_id": 3, "gmv_corte": 10, "gmv_dia": 700}]
     com_shopee = S.get_hoje_por_hora(SessaoFalsa({2: brt(13, 10), 3: brt(13, 3)}, [], marcas=ml + shopee), [2, 3], None, agora=AGORA)
     so_ml = S.get_hoje_por_hora(SessaoFalsa({2: brt(13, 10)}, [], marcas=ml), [2], None, agora=AGORA)
     k = com_shopee["por_marca"][0]
-    assert (k["brand"], k["projecao"], k["canais_fora"]) == ("kokeshi", 1250.0, ["shopee"])
-    assert [c["channel"] for c in k["por_canal"]] == ["ml"]
+    assert (k["brand"], k["canais_fora"]) == ("kokeshi", [])
+    assert [c["channel"] for c in k["por_canal"]] == ["ml", "shopee"]
+    assert k["hoje"] == 590.0
     assert so_ml["por_marca"][0]["projecao"] == 1250.0
     assert so_ml["por_marca"][0]["canais_fora"] == []
