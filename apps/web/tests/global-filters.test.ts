@@ -2,7 +2,8 @@
 // Roda via `node --test` com type-stripping nativo do Node.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { presetRange, detectPreset, toISODate, previousEquivalentRange } from "../src/lib/filters/presets.ts";
+import { presetRange, detectPreset, toISODate, previousEquivalentRange, resolveActivePreset, intervaloCurto } from "../src/lib/filters/presets.ts";
+import type { Marketplace } from "../src/lib/mock-data.ts";
 import {
   parseFiltersFromSearchParams, filtersToSearchParams, validateDateRange,
   hasExplicitFilterParams, computeDefaultFilters, resolveFilters,
@@ -433,4 +434,49 @@ test("detectPreset reconhece os presets novos", () => {
   assert.equal(detectPreset("2026-11-11", "2026-11-11", qui), "ontem");
   assert.equal(detectPreset("2026-11-09", "2026-11-11", qui), "semana_atual");
   assert.equal(detectPreset("2026-11-02", "2026-11-08", qui), "semana_passada");
+});
+
+// O preset aceso e' o CLICADO (?periodo), nao o primeiro que bate na deteccao.
+test("resolveActivePreset: segunda, Semana atual/passada nao acendem 7 dias", () => {
+  const seg = new Date(2026, 10, 16);
+  const atual = presetRange("semana_atual", seg);
+  const passada = presetRange("semana_passada", seg);
+  assert.deepEqual(atual, presetRange("7d", seg)); // o mesmo intervalo
+  assert.equal(resolveActivePreset(atual.dateFrom, atual.dateTo, "semana_atual", seg), "semana_atual");
+  assert.equal(resolveActivePreset(passada.dateFrom, passada.dateTo, "semana_passada", seg), "semana_passada");
+  assert.equal(resolveActivePreset(atual.dateFrom, atual.dateTo, "7d", seg), "7d");
+  // Sem preset guardado (URL antiga): deteccao, como antes.
+  assert.equal(resolveActivePreset(atual.dateFrom, atual.dateTo, undefined, seg), "7d");
+});
+
+test("resolveActivePreset: terca, Semana atual nao acende Ontem; dia 2, Mes atual nao acende Ontem", () => {
+  const ter = new Date(2026, 10, 17);
+  assert.deepEqual(presetRange("semana_atual", ter), presetRange("ontem", ter));
+  assert.equal(resolveActivePreset("2026-11-16", "2026-11-16", "semana_atual", ter), "semana_atual");
+  assert.equal(resolveActivePreset("2026-11-16", "2026-11-16", "ontem", ter), "ontem");
+  const dia2 = new Date(2026, 11, 2);
+  assert.equal(resolveActivePreset("2026-12-01", "2026-12-01", "mes_atual", dia2), "mes_atual");
+  assert.equal(resolveActivePreset("2026-12-01", "2026-12-01", undefined, dia2), "ontem");
+});
+
+test("resolveActivePreset: preset guardado que nao bate mais (o dia virou) cai na deteccao", () => {
+  const qui = new Date(2026, 10, 12);
+  // Link de "Semana atual" aberto num dia depois: 09–10/11 nao e' mais a semana atual.
+  assert.equal(resolveActivePreset("2026-11-09", "2026-11-10", "semana_atual", qui), "personalizado");
+});
+
+test("?periodo: vai e volta na URL; valor desconhecido e personalizado ficam fora", () => {
+  const base = { channels: ["ml"] as Marketplace[], brands: [], dateFrom: "2026-11-09", dateTo: "2026-11-15", compare: false };
+  const qs = filtersToSearchParams({ ...base, periodo: "semana_atual" });
+  assert.equal(qs.get("periodo"), "semana_atual");
+  assert.equal(parseFiltersFromSearchParams(qs).periodo, "semana_atual");
+  assert.equal(filtersToSearchParams({ ...base, periodo: undefined }, qs).get("periodo"), null);
+  assert.equal(parseFiltersFromSearchParams(new URLSearchParams("date_from=2026-11-09&date_to=2026-11-15&periodo=xyz")).periodo, undefined);
+  assert.equal(parseFiltersFromSearchParams(new URLSearchParams("date_from=2026-11-09&date_to=2026-11-15&periodo=personalizado")).periodo, undefined);
+});
+
+test("intervaloCurto: datas no gatilho", () => {
+  assert.equal(intervaloCurto("2026-11-10", "2026-11-10"), "10/11");
+  assert.equal(intervaloCurto("2026-11-09", "2026-11-15"), "09–15/11");
+  assert.equal(intervaloCurto("2026-12-28", "2027-01-03"), "28/12–03/01");
 });

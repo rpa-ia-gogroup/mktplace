@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { CalendarDays, Check } from "lucide-react";
 import Popover from "@/components/ui/Popover";
-import { DATE_PRESET_OPTIONS, detectPreset, presetRange, toISODate } from "@/lib/filters/presets";
+import { DATE_PRESET_OPTIONS, intervaloCurto, presetRange, resolveActivePreset, toISODate } from "@/lib/filters/presets";
 import { validateDateRange } from "@/lib/filters/url-state";
 import type { DatePreset } from "@/lib/filters/types";
 
@@ -11,7 +11,9 @@ interface Props {
   dateFrom: string;
   dateTo: string;
   compare: boolean;
-  onChange: (v: { dateFrom: string; dateTo: string }) => void;
+  /** Preset clicado, guardado na URL (`?periodo=`). */
+  periodo?: DatePreset;
+  onChange: (v: { dateFrom: string; dateTo: string; periodo: DatePreset | undefined }) => void;
   onCompareChange: (v: boolean) => void;
   /** Esconde o toggle de comparação em telas onde a fonte não calcula deltas
    * por período (ver docs/filtros_globais_contrato.md). */
@@ -26,10 +28,10 @@ interface Props {
 }
 
 export default function DateRangeFilter({
-  dateFrom, dateTo, compare, onChange, onCompareChange, hideCompare, variante = "faixa",
+  dateFrom, dateTo, periodo, compare, onChange, onCompareChange, hideCompare, variante = "faixa",
 }: Props) {
   const menu = variante === "menu";
-  const activePreset = detectPreset(dateFrom, dateTo);
+  const activePreset = resolveActivePreset(dateFrom, dateTo, periodo);
   const [showCustom, setShowCustom] = useState(activePreset === "personalizado");
   const [error, setError] = useState<string | null>(null);
   const todayIso = toISODate(new Date());
@@ -40,9 +42,9 @@ export default function DateRangeFilter({
   // com intervalo personalizado continuava mostrando os botões de preset
   // sem revelar os campos de data.
   useEffect(() => {
-    setShowCustom(detectPreset(dateFrom, dateTo) === "personalizado");
+    setShowCustom(resolveActivePreset(dateFrom, dateTo, periodo) === "personalizado");
     setError(null);
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, periodo]);
 
   function selectPreset(preset: DatePreset) {
     if (preset === "personalizado") {
@@ -51,7 +53,7 @@ export default function DateRangeFilter({
     }
     setShowCustom(false);
     setError(null);
-    onChange(presetRange(preset));
+    onChange({ ...presetRange(preset), periodo: preset });
   }
 
   function applyCustomChange(next: { dateFrom: string; dateTo: string }) {
@@ -61,12 +63,13 @@ export default function DateRangeFilter({
       return;
     }
     setError(null);
-    onChange(next);
+    // Data digitada: deixa de ser o preset clicado.
+    onChange({ ...next, periodo: undefined });
   }
 
   const presetAtivo = showCustom
     ? "Personalizado"
-    : DATE_PRESET_OPTIONS.find((o) => o.value === activePreset)?.label ?? "Personalizado";
+    : `${DATE_PRESET_OPTIONS.find((o) => o.value === activePreset)?.label ?? "Personalizado"} · ${intervaloCurto(dateFrom, dateTo)}`;
 
   // `fechar` so' existe na variante menu: escolher um preset encerra o painel.
   // "Personalizado" tambem fecha — os campos de data aparecem na propria barra.

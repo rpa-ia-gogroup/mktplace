@@ -78,6 +78,7 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
         <DateRangeFilter
           dateFrom={filters.dateFrom}
           dateTo={filters.dateTo}
+          periodo={filters.periodo}
           compare={filters.compare}
           onChange={(v) => onChange(v)}
           onCompareChange={(compare) => onChange({ compare })}

@@ -10,6 +10,10 @@ export interface GlobalFilters {
   /** YYYY-MM-DD, inclusive. */
   dateTo: string;
   compare: boolean;
+  /** Preset clicado (`?periodo=`). Vale so' enquanto o intervalo bater com ele;
+   * sem ele, o preset aceso sai de `detectPreset`. Ausente = personalizado ou
+   * URL antiga. */
+  periodo?: DatePreset;
 }
 
 export type DatePreset =

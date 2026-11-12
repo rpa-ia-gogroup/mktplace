@@ -63,8 +63,10 @@ export default function MarcasMenoresPage() {
           <DateRangeFilter
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
+            periodo={filters.periodo}
             compare={false}
             onChange={(v) => setFilters(v)}
+            variante="menu"
             onCompareChange={() => {}}
             hideCompare
           />

@@ -119,3 +119,27 @@ export function detectPreset(dateFrom: string, dateTo: string, today: Date = new
   }
   return "personalizado";
 }
+
+/** Preset aceso: o CLICADO (`periodo` na URL) enquanto o intervalo ainda bater
+ * com ele; sem preset guardado (ou se o dia virou e ele nao bate mais), cai na
+ * deteccao. Sem isso, numa segunda "Semana atual" acendia "7 dias". */
+export function resolveActivePreset(
+  dateFrom: string,
+  dateTo: string,
+  periodo: DatePreset | undefined,
+  today: Date = new Date(),
+): DatePreset {
+  if (periodo && periodo !== "personalizado") {
+    const r = presetRange(periodo, today);
+    if (r.dateFrom === dateFrom && r.dateTo === dateTo) return periodo;
+  }
+  return detectPreset(dateFrom, dateTo, today);
+}
+
+/** Intervalo curto para o gatilho: "10/11", "09–15/11", "28/12–03/01". */
+export function intervaloCurto(dateFrom: string, dateTo: string): string {
+  const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  if (dateFrom === dateTo) return dm(dateFrom);
+  if (dateFrom.slice(0, 7) === dateTo.slice(0, 7)) return `${dateFrom.slice(8, 10)}–${dm(dateTo)}`;
+  return `${dm(dateFrom)}–${dm(dateTo)}`;
+}

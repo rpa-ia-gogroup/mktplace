@@ -276,7 +276,7 @@ test("ctx_* NUNCA entram na preservação global de filtros", () => {
   for (const k of ["ctx_from", "ctx_signal", "ctx_channel", "ctx_brand"]) {
     assert.ok(!FILTER_QUERY_KEYS.includes(k), `${k} não pode estar em FILTER_QUERY_KEYS`);
   }
-  assert.deepEqual(FILTER_QUERY_KEYS, ["channels", "brands", "date_from", "date_to", "compare", "base"]);
+  assert.deepEqual(FILTER_QUERY_KEYS, ["channels", "brands", "date_from", "date_to", "compare", "base", "periodo"]);
 });
 
 test("null ≠ zero: ausência de contexto é null, nunca um objeto 'vazio'", () => {

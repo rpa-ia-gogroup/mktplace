@@ -4,7 +4,7 @@ import {
   serializeMarketplaceSelection,
 } from "../marketplace-filter.ts";
 import { FILTER_BRAND_KEYS } from "./brands.ts";
-import { presetRange, toISODate } from "./presets.ts";
+import { DATE_PRESET_OPTIONS, presetRange, toISODate } from "./presets.ts";
 import type { DatePreset, GlobalFilters } from "./types.ts";
 
 export const MAX_RANGE_DAYS = 366;
@@ -87,7 +87,10 @@ export function parseFiltersFromSearchParams(params: URLSearchParams): GlobalFil
   const compareRaw = params.get("compare");
   const compare = compareRaw === "true" || compareRaw === "1";
 
-  return { channels, brands, dateFrom, dateTo, compare };
+  const periodoRaw = params.get("periodo");
+  const periodo = DATE_PRESET_OPTIONS.find((o) => o.value === periodoRaw && o.value !== "personalizado")?.value;
+
+  return { channels, brands, dateFrom, dateTo, compare, ...(periodo ? { periodo } : {}) };
 }
 
 /** Nomes de query param reconhecidos como "intencao explicita de filtro".
@@ -125,6 +128,7 @@ export function computeDefaultFilters(options: DefaultFiltersOptions = {}): Glob
     dateFrom: range.dateFrom,
     dateTo: range.dateTo,
     compare: defaultCompare,
+    periodo: defaultPreset,
   };
 }
 
@@ -152,5 +156,7 @@ export function filtersToSearchParams(filters: GlobalFilters, base?: URLSearchPa
   } else {
     params.delete("compare");
   }
+  if (filters.periodo && filters.periodo !== "personalizado") params.set("periodo", filters.periodo);
+  else params.delete("periodo");
   return params;
 }

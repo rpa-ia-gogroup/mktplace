@@ -29,7 +29,8 @@ function filtersEqual(a: GlobalFilters, b: GlobalFilters): boolean {
     sameStringArray(a.brands, b.brands) &&
     a.dateFrom === b.dateFrom &&
     a.dateTo === b.dateTo &&
-    a.compare === b.compare
+    a.compare === b.compare &&
+    a.periodo === b.periodo
   );
 }
 
