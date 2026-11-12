@@ -14,6 +14,9 @@ export interface GlobalFilters {
 
 export type DatePreset =
   | "hoje"
+  | "ontem"
+  | "semana_atual"
+  | "semana_passada"
   | "7d"
   | "30d"
   | "90d"

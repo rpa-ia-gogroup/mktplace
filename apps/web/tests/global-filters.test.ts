@@ -405,3 +405,32 @@ test("channels=all explicito continua sendo os tres canais (link antigo / botao 
   const filters = parseFiltersFromSearchParams(new URLSearchParams("channels=all&date_from=2026-05-01&date_to=2026-05-31"));
   assert.deepEqual(filters.channels, ["tiktok", "ml", "shopee"]);
 });
+
+// Ontem / Semana atual / Semana passada (semana comeca na segunda).
+test("ontem = D-1; comparacao com anteontem", () => {
+  const qua = new Date(2026, 10, 11); // quarta 11/11/2026
+  assert.deepEqual(presetRange("ontem", qua), { dateFrom: "2026-11-10", dateTo: "2026-11-10" });
+  assert.deepEqual(previousEquivalentRange("2026-11-10", "2026-11-10"), { dateFrom: "2026-11-09", dateTo: "2026-11-09" });
+  // Virada de mes.
+  assert.deepEqual(presetRange("ontem", new Date(2026, 11, 1)), { dateFrom: "2026-11-30", dateTo: "2026-11-30" });
+});
+
+test("semana_atual: segunda ate' D-1; na segunda, a semana anterior inteira", () => {
+  assert.deepEqual(presetRange("semana_atual", new Date(2026, 10, 11)), { dateFrom: "2026-11-09", dateTo: "2026-11-10" });
+  assert.deepEqual(presetRange("semana_atual", new Date(2026, 10, 15)), { dateFrom: "2026-11-09", dateTo: "2026-11-14" }); // domingo
+  assert.deepEqual(presetRange("semana_atual", new Date(2026, 10, 16)), { dateFrom: "2026-11-09", dateTo: "2026-11-15" }); // segunda
+});
+
+test("semana_passada: segunda a domingo da semana anterior; compara com a semana antes dela", () => {
+  assert.deepEqual(presetRange("semana_passada", new Date(2026, 10, 11)), { dateFrom: "2026-11-02", dateTo: "2026-11-08" });
+  assert.deepEqual(presetRange("semana_passada", new Date(2026, 10, 15)), { dateFrom: "2026-11-02", dateTo: "2026-11-08" }); // domingo
+  assert.deepEqual(presetRange("semana_passada", new Date(2027, 0, 4)), { dateFrom: "2026-12-28", dateTo: "2027-01-03" }); // virada de ano
+  assert.deepEqual(previousEquivalentRange("2026-11-02", "2026-11-08"), { dateFrom: "2026-10-26", dateTo: "2026-11-01" });
+});
+
+test("detectPreset reconhece os presets novos", () => {
+  const qui = new Date(2026, 10, 12); // quinta
+  assert.equal(detectPreset("2026-11-11", "2026-11-11", qui), "ontem");
+  assert.equal(detectPreset("2026-11-09", "2026-11-11", qui), "semana_atual");
+  assert.equal(detectPreset("2026-11-02", "2026-11-08", qui), "semana_passada");
+});

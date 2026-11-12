@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { CalendarDays, Check } from "lucide-react";
 import Popover from "@/components/ui/Popover";
 import { DATE_PRESET_OPTIONS, detectPreset, presetRange, toISODate } from "@/lib/filters/presets";
@@ -80,11 +80,18 @@ export default function DateRangeFilter({
               : "flex gap-0.5 bg-raised border border-line rounded-lg p-0.5 overflow-x-auto min-w-0 max-w-full"
           }
         >
-          {DATE_PRESET_OPTIONS.map((opt) => {
+          {DATE_PRESET_OPTIONS.map((opt, i) => {
             const active = showCustom ? opt.value === "personalizado" : activePreset === opt.value;
+            const novoGrupo = i > 0 && DATE_PRESET_OPTIONS[i - 1].grupo !== opt.grupo;
             return (
+              <Fragment key={opt.value}>
+              {novoGrupo &&
+                (menu ? (
+                  <div role="separator" className="my-1 h-px shrink-0 bg-line" />
+                ) : (
+                  <span aria-hidden="true" className="mx-0.5 my-1.5 w-px shrink-0 self-stretch bg-line" />
+                ))}
               <button
-                key={opt.value}
                 type="button"
                 aria-pressed={active}
                 onClick={() => {
@@ -103,6 +110,7 @@ export default function DateRangeFilter({
                 {opt.label}
                 {menu && active && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
               </button>
+              </Fragment>
             );
           })}
         </div>
