@@ -1424,11 +1424,6 @@ export default function ExpedicaoClient({
           {relogios?.efetivoEm ? ` Última fotografia: ${dataCurta(relogios.efetivoEm)}.` : ""}
         </p>
       )}
-      {estadoTend === "parcial" && (
-        <Note tom="atencao" papel="status" className="mb-2">
-          Série parcial: faltam contas em algumas horas.
-        </Note>
-      )}
       <div className="mb-3">
         <Segmented
           rotulo="Período da tabela"

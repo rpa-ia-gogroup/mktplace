@@ -304,9 +304,6 @@ function SoTendencia({ resposta }: { resposta: RespostaTendencia }) {
                   <td className="text-right tabular-nums text-ink">{inteiro(ultimo.stalled)}</td>
                   <td>
                     <Sparkline serie={s} dominioX={dominioX} />
-                    {s.lacunas > 0 ? (
-                      <span className="ml-2 text-xs text-ink-faint">{s.lacunas} hora(s) sem ponto</span>
-                    ) : null}
                   </td>
                 </tr>
               );
@@ -594,9 +591,6 @@ function TabelaUnica({
                               </>
                             ) : null}
                           </span>
-                        ) : null}
-                        {s.lacunas > 0 ? (
-                          <span className="text-xs text-ink-faint">{s.lacunas} hora(s) sem ponto</span>
                         ) : null}
                       </span>
                     ) : (
