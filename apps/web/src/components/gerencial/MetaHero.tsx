@@ -547,7 +547,7 @@ function Divisao({
             }`}
             title={
               c === "shopee" && s != null
-                ? "Full = FBS. A proporção é medida nas contas da Shopee com API (sem a Kokeshi, que chega por arquivo) e aplicada ao GMV do canal."
+                ? "Full = FBS. A proporção é medida nas contas da Shopee (API) e aplicada ao GMV do canal."
                 : undefined
             }
           >

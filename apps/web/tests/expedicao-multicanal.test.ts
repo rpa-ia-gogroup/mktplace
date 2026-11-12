@@ -300,11 +300,11 @@ test("Kokeshi coberta no ML: nenhum aviso de fora de escopo", () => {
   assert.equal(avisos.length, 0);
 });
 
-test("Kokeshi segue fora da cobertura na Shopee", () => {
-  const avisos = avisosDeCobertura(cobertura({ brands_not_covered: ["kokeshi"] }));
+test("marca em brands_not_covered segue como aviso de fora do escopo", () => {
+  const avisos = avisosDeCobertura(cobertura({ brands_not_covered: ["marcax"] }));
   assert.equal(avisos.length, 1);
   assert.equal(avisos[0].tipo, "fora_do_escopo");
-  assert.match(avisos[0].texto, /kokeshi/i);
+  assert.match(avisos[0].texto, /marcax/i);
 });
 
 test("conta ausente e' acusada pela identidade da conta", () => {

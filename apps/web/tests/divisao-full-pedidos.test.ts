@@ -22,7 +22,7 @@ test("sem medida nao vira zero nem 'tudo sem Full'", () => {
   assert.equal(fullPedidosDaMarca(600, { ml: 0.5 }, false, d), null); // sem contagem de Full
   assert.equal(fullPedidosDaMarca(600, { ml: 0.5, pedFull: 200 }, true, d), null); // janela sem base
   assert.equal(fullPedidosDaMarca(600, undefined, false, d), null);
-  // Shopee vendendo sem modalidade (Kokeshi): canal sem dado -> marca sem divisao.
+  // Shopee vendendo sem modalidade medida: canal sem dado -> marca sem divisao.
   const k = medido({ ml: 100, shopee: 100 }, { ml: 0.5, shopee: null });
   assert.equal(fullPedidosDaMarca(600, { ml: 0.5, pedFull: 200 }, false, k), null);
   assert.equal(fullPedidosDaMarca(0, { pedFull: 0 }, false, d), null);

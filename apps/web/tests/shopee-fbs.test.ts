@@ -69,11 +69,11 @@ function payload(over: Partial<ShopeeFbsResponse> = {}): ShopeeFbsResponse {
       last_closed_date: "2026-09-15",
       requested_date_from: "2026-08-01", requested_date_to: "2026-08-31",
       effective_date_from: "2026-08-01", effective_date_to: "2026-08-31",
-      expected_accounts: ["apice", "barbours", "lescent", "rituaria"],
+      expected_accounts: ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
       observed_accounts: ["apice", "barbours", "lescent", "rituaria"],
-      missing_accounts: [], unexpected_accounts: [],
+      missing_accounts: ["kokeshi"], unexpected_accounts: [],
       covered_brands: ["apice", "barbours", "lescent", "rituaria"],
-      brands_not_covered: ["kokeshi"],
+      brands_not_covered: [],
       gmv_definition: "GMV bruto de pedidos nao cancelados...",
       freshness: {
         freshness_status: "fresh", source_watermark_at: "2026-09-16T18:00:00Z",
@@ -235,9 +235,9 @@ test("Apice: coberta, com share FBS legitimo de 0%", () => {
   assert.match(CLIENT, /l\.share === 0/);
 });
 
-test("Kokeshi fica FORA da cobertura e nunca vira zero", () => {
+test("conta esperada sem linha (Kokeshi antes da ingestao) nao vira zero", () => {
   const p = payload();
-  assert.ok(p.meta.brands_not_covered.includes("kokeshi"));
+  assert.ok(p.meta.missing_accounts.includes("kokeshi"));
   assert.ok(!p.meta.covered_brands.includes("kokeshi"));
   assert.ok(!p.by_brand.some((b) => b.brand === "kokeshi"));
   assert.ok(!p.by_account.some((a) => a.shop_account === "kokeshi"));
@@ -413,10 +413,10 @@ test("a tela NUNCA afirma tempo real ou atualizacao automatica", () => {
     "a tela nao pode dizer 'carga manual'");
 });
 
-test("a cobertura parcial esta declarada e nega 'Shopee total'", () => {
-  assert.match(AVISO_COBERTURA, /PARCIAL/);
+test("a cobertura esta declarada: cinco contas e Kokeshi so com historico recente", () => {
+  assert.match(AVISO_COBERTURA, /cinco contas/);
   assert.match(AVISO_COBERTURA, /Kokeshi/);
-  assert.match(AVISO_COBERTURA, /nunca a\s+operacao Shopee inteira|nunca a operacao/i);
+  assert.match(AVISO_COBERTURA, /cobertura API/);
   assert.match(CLIENT, /AVISO_COBERTURA/);
 });
 

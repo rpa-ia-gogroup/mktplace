@@ -37,12 +37,14 @@ AUSENCIA NAO E' ZERO -- E ZERO NAO E' AUSENCIA
 
 Apice em agosto/2026 e' o caso real do primeiro: vendeu R$ 275.234,00 e nao
 teve um unico pedido FBS. Isso e' 0%, nao "sem dado". Kokeshi e' o caso do
-terceiro: nao existe na esteira API e NAO pode ser suprida pelo XLSX aqui.
+terceiro, para qualquer conta esperada sem pedido na janela. Desde 11/2026 a
+Kokeshi esta na esteira API; antes de a ingestao dela comecar, nao ha linha e
+ela NAO e' suprida pelo XLSX aqui.
 
-COBERTURA PARCIAL, DECLARADA NO PROPRIO PAYLOAD
-------------------------------------------------
-`scope_label` e' "Shopee -- cobertura API", nunca "Shopee total". A esteira
-cobre quatro contas; Kokeshi, a maior marca Shopee por volume, esta fora.
+COBERTURA, DECLARADA NO PROPRIO PAYLOAD
+----------------------------------------
+`scope_label` e' "Shopee -- cobertura API". A esteira cobre as cinco contas
+Shopee; a Kokeshi so' tem historico desde que a ingestao comecou.
 """
 from __future__ import annotations
 
@@ -220,7 +222,7 @@ class Freshness(BaseModel):
 
 class Meta(BaseModel):
     marketplace: Literal["shopee"] = "shopee"
-    #: NUNCA "Shopee total": a esteira cobre quatro contas e Kokeshi esta fora.
+    #: A esteira cobre as cinco contas Shopee (Kokeshi desde 11/2026).
     scope_label: str
     date_policy: DatePolicy = "closed_day"
     #: Politica de data explicita, em texto, para a tela nao ter de inferir.
@@ -244,7 +246,7 @@ class Meta(BaseModel):
                          "vazia; se nao for, o contrato da fonte mudou.")
     covered_brands: list[str]
     brands_not_covered: list[str] = Field(
-        ..., description="Marcas Shopee fora da esteira API. Contem 'kokeshi'.")
+        ..., description="Marcas Shopee fora da esteira API. Vazia desde 11/2026.")
 
     gmv_definition: str
     freshness: Freshness

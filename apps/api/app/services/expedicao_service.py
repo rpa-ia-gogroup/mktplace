@@ -201,16 +201,13 @@ JANELA_MAX_HORAS = 24 * 14
 JANELA_PADRAO_HORAS = 48
 PONTOS_MAX = 2000
 
-#: Marcas que a torre acompanha e que a fonte da SHOPEE nao cobre. Medido no
-#: EXP-1E: Kokeshi existe em `marts.dim_loja` e nao existe em
-#: `raw.shopee_orders`. No Mercado Livre a Kokeshi E' coberta — por isso a lista
-#: e' POR CANAL: publicar a lacuna da Shopee no payload do ML afirmaria um
-#: buraco que nao existe.
-MARCAS_SEM_COBERTURA = ("kokeshi",)
+#: Marcas que a torre acompanha e que a fonte do canal nao cobre. Vazia desde
+#: 11/2026: a Kokeshi (a ultima) passou a vir da API da Shopee, cadastrada em
+#: `marts.dim_seller_account` como as outras quatro. A lista e' POR CANAL e
+#: continua existindo para a proxima marca que ficar sem fonte; conta do export
+#: (EXPEDICAO-KOKESHI-EXPORT) segue suportada e entra pela fotografia propria.
+MARCAS_SEM_COBERTURA: tuple[str, ...] = ()
 
-#: Sai das notas quando a Kokeshi chega pelo export (EXPEDICAO-KOKESHI-EXPORT).
-NOTA_KOKESHI_SEM_FONTE = (
-    "Kokeshi nao e' coberta por esta fonte (ausente em raw.shopee_orders).")
 NOTA_EXPORT = (
     "{marcas}: fila do export de pedidos do Seller Centre, carregado pelo"
     " operador da conta; a hora e' a da propria carga (accounts[].observed_at).")
@@ -269,7 +266,6 @@ CANAIS: dict[str, Canal] = {
         marcas_sem_cobertura=MARCAS_SEM_COBERTURA,
         notas=(
             NOTA_SEM_AGENDAMENTO,
-            NOTA_KOKESHI_SEM_FONTE,
             NOTA_SEM_IDENTIFICADOR,
             NOTA_FRESCOR,
         ),
@@ -281,7 +277,6 @@ CANAIS: dict[str, Canal] = {
         # guarda em `external_seller_id`. Sao a MESMA entidade.
         identidade_no_registry="external_seller_id",
         publica_prazo=False,
-        # A Kokeshi E' coberta aqui. Lista vazia, nao a da Shopee.
         marcas_sem_cobertura=(),
         notas=(
             NOTA_SEM_AGENDAMENTO,
@@ -452,8 +447,7 @@ def _limitacoes(canal: Canal, idade_h: Optional[float],
                 cobertas: frozenset[str] = frozenset()) -> dict:
     # Com o numero do pedido publico, a nota "nao e' servido" mentiria.
     notas = [n for n in canal.notas
-             if not (n == NOTA_SEM_IDENTIFICADOR and _numero_publico())
-             and not (n == NOTA_KOKESHI_SEM_FONTE and "kokeshi" in cobertas)]
+             if not (n == NOTA_SEM_IDENTIFICADOR and _numero_publico())]
     if cobertas:
         notas.append(NOTA_EXPORT.format(
             marcas=", ".join(BRAND_LABELS.get(m, m.upper()) for m in sorted(cobertas))))

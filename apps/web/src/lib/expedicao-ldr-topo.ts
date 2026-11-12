@@ -60,7 +60,7 @@ export const DIAS_LDR_TOPO = 7;
 
 /** Contas por canal (cobertura). Fora daqui = "sem conta neste canal". */
 export const CONTAS_POR_CANAL: Record<CanalLdr, readonly string[]> = {
-  shopee: ["apice", "barbours", "lescent", "rituaria"],
+  shopee: ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
   mercadolivre: ["barbours", "kokeshi", "lescent", "rituaria"],
   tiktokshop: ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
 };

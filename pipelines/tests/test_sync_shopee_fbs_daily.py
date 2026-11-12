@@ -237,15 +237,18 @@ def test_30_shares_usam_valores_integrais_sem_arredondamento():
 # 8-9, 27. Cobertura: Apice, Kokeshi
 # ---------------------------------------------------------------------------
 
-def test_9_27_kokeshi_ausente_e_declarada_nunca_zero():
+def test_9_27_kokeshi_e_conta_da_esteira_api_e_ausente_nunca_vira_zero():
+    assert "kokeshi" in mod.CONTAS_ESPERADAS
+    assert mod.MARCAS_FORA_DA_API == ()
     linhas = [_linha(brand="barbours", conta="barbours")]
     cob = mod.cobertura_por_conta(_snap(linhas))
-    assert "kokeshi" in cob
     assert cob["kokeshi"]["coberta"] is False
     assert cob["kokeshi"]["share_fbs_gmv"] is None, (
-        "Kokeshi ausente nao pode virar 0%")
-    assert "fora da esteira API" in cob["kokeshi"]["motivo"]
-    assert mod.MARCAS_FORA_DA_API == ("kokeshi",)
+        "Kokeshi sem pedido na janela nao pode virar 0%")
+    assert "sem pedido na janela" in cob["kokeshi"]["motivo"]
+    # Presente, entra como as outras quatro.
+    cob = mod.cobertura_por_conta(_snap([_linha(brand="kokeshi", conta="kokeshi")]))
+    assert cob["kokeshi"]["coberta"] is True
     # E nao pode ser suprida pelo XLSX neste pipeline.
     assert "order_item_snapshots" not in CODIGO
 
@@ -263,11 +266,11 @@ def test_9c_aviso_de_cobertura_viaja_com_o_resultado():
         window=mod.Window(date(2026, 8, 1), date(2026, 8, 31)),
         rows=[_linha()],
         preflight={"contas_observadas": ["barbours"],
-                   "contas_ausentes": ["apice", "lescent", "rituaria"]})
+                   "contas_ausentes": ["apice", "kokeshi", "lescent", "rituaria"]})
     avisos = " ".join(mod.validate_contract(snap))
     assert "kokeshi" in avisos.lower()
-    assert "cobertura API" in avisos
-    assert "Shopee total" in avisos, "o aviso precisa negar o rotulo 'Shopee total'"
+    assert "cobertura API: 1 de 5" in avisos
+    assert "NAO esta(o) na esteira API" not in avisos
     assert "entrega" in avisos.lower()
 
 

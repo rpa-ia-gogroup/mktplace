@@ -847,8 +847,8 @@ ERRO_SHOPEE_FBS_CONTRATO = (
 )
 MOTIVO_SHOPEE_FBS_DESLIGADO = (
     "Superficie de FBS da Shopee ainda nao habilitada. A fato existe e esta "
-    "publicada, mas a cobertura e' PARCIAL (quatro contas da esteira API; "
-    "Kokeshi fora) e a ativacao e' decisao de negocio."
+    "publicada (cinco contas da esteira API, Kokeshi incluida) e a ativacao e' "
+    "decisao de negocio."
 )
 
 #: Politica de data PROPRIA desta superficie, e o motivo de nao reusar
@@ -924,10 +924,10 @@ def shopee_fbs(
 ):
     """Desempenho FBS da Shopee: fulfillment da Shopee contra envio pelo vendedor.
 
-    COBERTURA PARCIAL, e a resposta diz isso. A esteira API cobre apice,
-    barbours, lescent e rituaria. **Kokeshi nao esta na API** e nao e' suprida
-    por planilha aqui -- o agregado e' "Shopee (cobertura API)", nunca
-    "Shopee total".
+    A esteira API cobre as cinco contas Shopee (apice, barbours, kokeshi,
+    lescent e rituaria); a Kokeshi so' tem historico desde 11/2026, quando a
+    ingestao comecou. O agregado e' "Shopee (cobertura API)" e nao e' suprido
+    por planilha.
 
     O valor e' **GMV BRUTO de pedidos nao cancelados**: inclui `to_return` e
     `unpaid` (publicados tambem em coluna propria) e exclui cancelados. Nao e'

@@ -174,9 +174,9 @@ def test_metadados_obrigatorios_presentes(ligada):
     lim = r["limitations"]
     assert lim["no_automation"] is True
     assert lim["load_mode"] == "manual_snapshot"
-    assert "kokeshi" in lim["brands_not_covered"]
+    assert lim["brands_not_covered"] == []
     assert any("agendamento" in n.lower() for n in lim["notes"])
-    assert any("kokeshi" in n.lower() for n in lim["notes"])
+    assert not any("kokeshi" in n.lower() for n in lim["notes"])
     f0 = r["freshness"][0]
     for campo in ("source_watermark_at", "source_age_hours", "freshness",
                   "oldest_row_age_hours"):
@@ -283,12 +283,21 @@ def test_conta_inesperada_aparece_em_unexpected_accounts(ligada):
     assert r["snapshot"]["source_health"] == "unexpected_account"
 
 
-def test_kokeshi_aparece_so_como_limitacao_de_cobertura(ligada):
-    r = svc.get_expedicao(SessaoFake())
-    assert "kokeshi" in r["coverage"]["brands_not_covered"]
-    assert "kokeshi" not in r["coverage"]["expected_accounts"]
-    assert "kokeshi" not in r["coverage"]["missing_accounts"]
-    assert "kokeshi" not in [a["brand"] for a in r["accounts"]]
+def test_kokeshi_do_registry_da_api_nao_e_sem_cobertura(ligada):
+    """Virada 11/2026: Kokeshi em `dim_seller_account` e' conta esperada como as outras."""
+    contas = [*CONTAS, ("kokeshi", 300)]
+    s = SessaoFake(
+        resumos=[resumo(b, n) for b, n in contas],
+        frescores=[frescor(b) for b, _ in contas],
+        registry=[{"external_seller_id": f"id-{b}", "brand": b, "account_name": b}
+                  for b, _ in contas])
+    r = svc.get_expedicao(s)
+    assert r["coverage"]["brands_not_covered"] == []
+    assert r["limitations"]["brands_not_covered"] == []
+    assert not any("kokeshi" in n.lower() for n in r["limitations"]["notes"])
+    assert "kokeshi" in r["coverage"]["expected_accounts"]
+    assert "kokeshi" in [a["brand"] for a in r["accounts"]]
+    assert r["snapshot"]["source_health"] == "healthy"
 
 
 # ===========================================================================

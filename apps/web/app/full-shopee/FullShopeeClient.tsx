@@ -3,12 +3,13 @@
 /**
  * Tela "Full Shopee" — Gate FULL-SH-1D.
  *
- * COBERTURA PARCIAL, DECLARADA NO TOPO
- * -------------------------------------
- * A esteira de API cobre QUATRO contas. Kokeshi, a maior marca Shopee por
- * volume, NAO esta na API e nao entra em nenhum total, share, tabela ou
- * grafico. Ela aparece como NAO COBERTA -- nunca como zero, 0% ou "sem FBS".
- * A ressalva fica num chip no topo; o texto longo, num "i" ao lado.
+ * COBERTURA, DECLARADA NO TOPO
+ * ----------------------------
+ * A esteira de API cobre as CINCO contas Shopee (Kokeshi desde 11/2026, com
+ * historico so' a partir da ingestao). Marca fora da cobertura nao entra em
+ * total, share, tabela ou grafico e aparece como NAO COBERTA -- nunca como
+ * zero, 0% ou "sem FBS". A ressalva fica num chip no topo; o texto longo, num
+ * "i" ao lado.
  *
  * Apice e' o oposto: esta coberta e teve share FBS de 0% em agosto/2026. Isso
  * e' medicao, nao ausencia, e a tela mostra "0,00%" com nota, nao travessao.

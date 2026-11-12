@@ -334,7 +334,7 @@ function GerencialComGrandes() {
   }, [filterIdentity, hoje, sources.demoMode, sources.retryKey]);
   // A mesma proporcao Full, POR MARCA, para o card de Marcas e os detalhes de GMV e
   // Pedidos. A rota do ML nao abre por marca: uma consulta por marca. Shopee vem do
-  // `by_brand` (Kokeshi fora da esteira = sem dado). As fatos so' tem dia fechado:
+  // `by_brand` (marca sem linha na fato = sem dado). As fatos so' tem dia fechado:
   // periodo que passa de ontem (ou so' hoje) usa a medida ate' ontem (`aproximado`);
   // so' hoje o card de Marcas segue com uma barra so', como antes.
   const [fullPorMarca, setFullPorMarca] = useState<FullPorMarca | null>(null);
