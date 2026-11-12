@@ -249,3 +249,24 @@ Passos do proprietário, **nesta ordem** (só nomes de variável aqui, nunca val
   `resource_metadata` (no domínio novo) e `scope="oracle:read"`;
 - Vincular no Claude e `tools/list` com bearer → **9** tools com o T-0080 P2 (`torre_dre`) no deploy; **8** se o
   deploy ainda for só da P1.
+
+### 8.1 Action v4: portão por audience e claim corporativo (T-0099)
+
+Espelho no repo: `infra/auth0/actions/oracle-corporate-access.js` = Action "Oraculo — acesso corporativo", **versão 4**
+(deploy de 11/11/2026, trigger Post Login v3). Testes: `apps/web/tests/oracle-auth0-action.test.ts`.
+
+- **DCR ligado no tenant.** Clientes MCP (ex.: GoMarketplace) se autocadastram e recebem um Client ID novo, que
+  **não** está no `ORACLE_CLIENT_IDS`.
+- **Conexão `google-oauth2` promovida a domain level**, para que esses clientes de terceiros enxerguem o login Google
+  sem habilitação por aplicação.
+- **Regra nova.** A política se aplica ao cliente que está na allowlist (`ORACLE_CLIENT_IDS`) **ou** que pede a API
+  do Oráculo (audience = `ORACLE_API_AUDIENCE`). Fora da allowlist e pedindo outra API (ou nenhuma): a Action não
+  faz nada. Se a audience esperada estiver vazia ou ausente, ela nunca casa.
+- **Claim `https://mktplace-ten.vercel.app/oracle_access` = `"corporate"`**, gravado no access token **só depois**
+  de a política aprovar, junto com o `oracle:read`. Ele existe porque o Auth0 descarta o scope que a Action adiciona
+  a um cliente third-party que não o pediu. O MCP (T-0100, `hasCorporateAccess` em
+  `apps/web/src/server/oracle/oauth.ts`) aceita `oracle:read` **ou** o claim, só em token de usuário.
+- **Risco aceito.** Qualquer cliente MCP pode se autocadastrar e pedir a audience. O portão passa a ser só a conta:
+  Google (`google-oauth2`), e-mail `@gocase.com`/`@gobeaute.com.br` **verificado** e `hd` (`idp_tenant_domain`)
+  concordante quando presente. Revogar uma organização tirando o Client ID da allowlist **não** basta se ela pedir a
+  audience: o bloqueio é de conta (offboarding, §5) ou de aplicação (apagar/bloquear o cliente DCR).

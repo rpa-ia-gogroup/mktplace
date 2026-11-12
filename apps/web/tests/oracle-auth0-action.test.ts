@@ -22,6 +22,8 @@ const action = require_("../../../infra/auth0/actions/oracle-corporate-access.js
   resolveHostedDomain: (event: Record<string, unknown>) => string;
   ALLOWED_DOMAINS: readonly string[];
   ORACLE_SCOPE: string;
+  ORACLE_ACCESS_CLAIM: string;
+  ORACLE_ACCESS_VALUE: string;
   onExecutePostLogin: (event: unknown, api: unknown) => Promise<void>;
 };
 
@@ -30,6 +32,10 @@ const { decideOracleAccess, extractEmailDomain } = action;
 const ORACLE_CLIENT = "cid_oraculo_org_a";
 const OUTRA_ORG = "cid_oraculo_org_b";
 const AUDIENCE = "https://mktplace-ten.vercel.app/api/mcp";
+/** Audience de outra API do tenant: fora da allowlist, ela nao aciona a politica. */
+const OUTRA_API = "https://outra-api.example/api";
+/** Claim da Action v4 (T-0099); o MCP aceita em `hasCorporateAccess` (T-0100). */
+const CLAIM = "https://mktplace-ten.vercel.app/oracle_access";
 
 /** Contexto valido; cada teste altera só o que quer provar. */
 function ctx(over: Record<string, unknown> = {}) {
@@ -195,21 +201,35 @@ test("conexao nominal e' respeitada quando configurada", () => {
 
 // --- isolamento de outros clientes ------------------------------------------
 
-test("cliente fora do Oraculo NAO e' tocado — nem negado, nem enriquecido", () => {
+test("cliente fora do Oraculo pedindo outra API NAO e' tocado — nem negado, nem enriquecido", () => {
   const outros = ["cid_outra_aplicacao", "cid_dashboard_interno", "", undefined, null];
 
   for (const clientId of outros) {
     // De proposito com dados que reprovariam se a Action se aplicasse.
+    // v4: fora da allowlist, so' a audience do Oraculo aciona a politica.
+    for (const requestedAudience of [OUTRA_API, "", undefined]) {
+      const d = decideOracleAccess(
+        ctx({ clientId, requestedAudience, email: "qualquer@gmail.com", emailVerified: false }),
+      );
+      assert.equal(d.applies, false, String(clientId) + " " + String(requestedAudience));
+      assert.equal(d.reason, "not_oracle_client", String(clientId));
+    }
+  }
+});
+
+test("cliente fora do Oraculo pedindo a API do Oraculo cai na politica (v4)", () => {
+  for (const clientId of ["cid_outra_aplicacao", "", undefined, null]) {
     const d = decideOracleAccess(
       ctx({ clientId, email: "qualquer@gmail.com", emailVerified: false }),
     );
-    assert.equal(d.applies, false, String(clientId));
-    assert.equal(d.reason, "not_oracle_client", String(clientId));
+    assert.equal(d.applies, true, String(clientId));
+    assert.equal(d.allow, false, String(clientId));
   }
 });
 
 test("allowlist vazia nao transforma cliente algum em cliente do Oraculo", () => {
-  const d = decideOracleAccess(ctx({ oracleClientIds: [] }));
+  // Pedindo outra API: sem allowlist, a Action nao interfere.
+  const d = decideOracleAccess(ctx({ oracleClientIds: [], requestedAudience: OUTRA_API }));
   assert.equal(d.applies, false, "sem allowlist, a Action nao interfere");
 });
 
@@ -220,7 +240,11 @@ test("cada organizacao Claude tem seu Client ID, e todos entram pela mesma polit
     assert.equal(d.allow, true, clientId);
   }
   // Revogar uma organizacao e' remover o Client ID da allowlist; as demais seguem.
-  const semOrgB = decideOracleAccess(ctx({ clientId: OUTRA_ORG, oracleClientIds: [ORACLE_CLIENT] }));
+  // v4: a org revogada so' sai da politica quando NAO pede a API do Oraculo; se
+  // pedir, cai no portao por audience e segue a mesma regra corporativa.
+  const semOrgB = decideOracleAccess(
+    ctx({ clientId: OUTRA_ORG, oracleClientIds: [ORACLE_CLIENT], requestedAudience: OUTRA_API }),
+  );
   assert.equal(semOrgB.applies, false, "org revogada sai da politica sem afetar as outras");
 });
 
@@ -353,8 +377,12 @@ test("idp_tenant_domain percorre o handler real ponta a ponta", async () => {
 test("a Action so' consegue conceder oracle:read", async () => {
   const concedidos: string[] = [];
   const negas: string[] = [];
+  const claims: Array<[string, unknown]> = [];
   const api = {
-    accessToken: { addScope: (s: string) => concedidos.push(s) },
+    accessToken: {
+      addScope: (s: string) => concedidos.push(s),
+      setCustomClaim: (k: string, v: unknown) => claims.push([k, v]),
+    },
     access: { deny: (m: string) => negas.push(m) },
   };
 
@@ -370,6 +398,7 @@ test("a Action so' consegue conceder oracle:read", async () => {
   );
 
   assert.deepEqual(concedidos, ["oracle:read"], "um unico scope, e read-only");
+  assert.deepEqual(claims, [[CLAIM, "corporate"]], "e um unico claim, o corporativo");
   assert.equal(negas.length, 0);
   assert.equal(action.ORACLE_SCOPE, "oracle:read");
 
@@ -387,8 +416,12 @@ test("a Action so' consegue conceder oracle:read", async () => {
 test("conta reprovada nega e NAO recebe scope algum", async () => {
   const concedidos: string[] = [];
   const negas: string[] = [];
+  const claims: Array<[string, unknown]> = [];
   const api = {
-    accessToken: { addScope: (s: string) => concedidos.push(s) },
+    accessToken: {
+      addScope: (s: string) => concedidos.push(s),
+      setCustomClaim: (k: string, v: unknown) => claims.push([k, v]),
+    },
     access: { deny: (m: string) => negas.push(m) },
   };
 
@@ -404,6 +437,7 @@ test("conta reprovada nega e NAO recebe scope algum", async () => {
   );
 
   assert.deepEqual(concedidos, [], "conta externa nao pode receber scope");
+  assert.deepEqual(claims, [], "nem o claim corporativo");
   assert.equal(negas.length, 1, "precisa negar explicitamente");
   // A mensagem ao usuario nao pode ecoar e-mail nem dominio.
   assert.ok(!negas[0].includes("gmail"), "mensagem nao ecoa o dominio");
@@ -413,8 +447,12 @@ test("conta reprovada nega e NAO recebe scope algum", async () => {
 test("aplicacao de terceiros passa intacta: sem deny, sem addScope", async () => {
   const concedidos: string[] = [];
   const negas: string[] = [];
+  const claims: Array<[string, unknown]> = [];
   const api = {
-    accessToken: { addScope: (s: string) => concedidos.push(s) },
+    accessToken: {
+      addScope: (s: string) => concedidos.push(s),
+      setCustomClaim: (k: string, v: unknown) => claims.push([k, v]),
+    },
     access: { deny: (m: string) => negas.push(m) },
   };
 
@@ -429,6 +467,7 @@ test("aplicacao de terceiros passa intacta: sem deny, sem addScope", async () =>
   );
 
   assert.deepEqual(concedidos, [], "nao enriquece outra aplicacao");
+  assert.deepEqual(claims, [], "nem com o claim corporativo");
   assert.deepEqual(negas, [], "nao derruba login de outra aplicacao");
 });
 
@@ -438,8 +477,12 @@ test("aplicacao de terceiros passa intacta: sem deny, sem addScope", async () =>
 async function executar(over: Record<string, unknown> = {}) {
   const concedidos: string[] = [];
   const negas: string[] = [];
+  const claims: Array<[string, unknown]> = [];
   const api = {
-    accessToken: { addScope: (s: string) => concedidos.push(s) },
+    accessToken: {
+      addScope: (s: string) => concedidos.push(s),
+      setCustomClaim: (k: string, v: unknown) => claims.push([k, v]),
+    },
     access: { deny: (m: string) => negas.push(m) },
   };
 
@@ -456,7 +499,7 @@ async function executar(over: Record<string, unknown> = {}) {
     api,
   );
 
-  return { concedidos, negas };
+  return { concedidos, negas, claims };
 }
 
 test("Post-Login cobre login inicial E refresh — um unico handler", async () => {
@@ -531,4 +574,125 @@ test("o arquivo da Action nao carrega segredo, e-mail nem Client ID real", () =>
 
 test("os dominios aprovados sao exatamente dois", () => {
   assert.deepEqual([...action.ALLOWED_DOMAINS].sort(), ["gobeaute.com.br", "gocase.com"]);
+});
+
+// --- v4: portao por audience + claim corporativo (T-0099) --------------------
+//
+// Cliente MCP autocadastrado por DCR nao esta na allowlist; entra na politica
+// porque pede a API do Oraculo. O Auth0 descarta o scope que ele nao pediu, por
+// isso a Action grava tambem o claim `oracle_access = "corporate"`.
+
+const CLIENTE_DCR = "cid_autocadastrado_dcr";
+
+/** Handler real com cliente FORA da allowlist (DCR). */
+function executarDcr(over: Record<string, unknown> = {}) {
+  return executar({
+    client: { client_id: CLIENTE_DCR },
+    secrets: { ORACLE_CLIENT_IDS: ORACLE_CLIENT, ORACLE_API_AUDIENCE: AUDIENCE },
+    ...over,
+  });
+}
+
+test("v4: as constantes do claim batem com o que o MCP aceita", () => {
+  assert.equal(action.ORACLE_ACCESS_CLAIM, CLAIM);
+  assert.equal(action.ORACLE_ACCESS_VALUE, "corporate");
+});
+
+test("v4: fora da allowlist + audience certa + conta corporativa -> granted com claim", async () => {
+  const d = decideOracleAccess(ctx({ clientId: CLIENTE_DCR }));
+  assert.deepEqual(d, { applies: true, allow: true, reason: "granted" });
+
+  for (const email of ["pessoa@gocase.com", "pessoa@gobeaute.com.br"]) {
+    const r = await executarDcr({
+      user: { email, email_verified: true, idp_tenant_domain: email.split("@")[1] },
+    });
+    assert.deepEqual(r.claims, [[CLAIM, "corporate"]], email);
+    assert.deepEqual(r.concedidos, ["oracle:read"], email);
+    assert.deepEqual(r.negas, [], email);
+  }
+});
+
+test("v4: fora da allowlist + audience certa + gmail -> deny, sem claim", async () => {
+  const d = decideOracleAccess(ctx({ clientId: CLIENTE_DCR, email: "pessoa@gmail.com" }));
+  assert.deepEqual(d, { applies: true, allow: false, reason: "domain_not_allowed" });
+
+  const r = await executarDcr({ user: { email: "pessoa@gmail.com", email_verified: true } });
+  assert.equal(r.negas.length, 1, "nega explicitamente");
+  assert.deepEqual(r.claims, [], "sem claim");
+  assert.deepEqual(r.concedidos, [], "sem scope");
+});
+
+test("v4: fora da allowlist + outra audience -> applies=false e nenhum efeito", async () => {
+  const d = decideOracleAccess(ctx({ clientId: CLIENTE_DCR, requestedAudience: OUTRA_API }));
+  assert.equal(d.applies, false);
+  assert.equal(d.reason, "not_oracle_client");
+
+  // Mesmo com conta corporativa valida: a politica nao se aplica, nada e' gravado.
+  for (const resource_server of [{ identifier: OUTRA_API }, undefined]) {
+    const r = await executarDcr({ resource_server });
+    assert.deepEqual(r.claims, [], JSON.stringify(resource_server));
+    assert.deepEqual(r.concedidos, [], JSON.stringify(resource_server));
+    assert.deepEqual(r.negas, [], JSON.stringify(resource_server));
+  }
+});
+
+test("v4: audience esperada vazia ou ausente nunca casa", async () => {
+  for (const expectedAudience of ["", "   ", undefined, null, 42]) {
+    // Pedido sem audience nao pode "casar" com uma esperada vazia.
+    for (const requestedAudience of ["", "   ", undefined, AUDIENCE]) {
+      const d = decideOracleAccess(
+        ctx({ clientId: CLIENTE_DCR, expectedAudience, requestedAudience }),
+      );
+      assert.equal(
+        d.applies,
+        false,
+        JSON.stringify({ expectedAudience, requestedAudience }) + " nao pode acionar a politica",
+      );
+    }
+  }
+
+  // No handler: secret ausente desliga o portao por audience.
+  for (const secrets of [
+    { ORACLE_CLIENT_IDS: ORACLE_CLIENT },
+    { ORACLE_CLIENT_IDS: ORACLE_CLIENT, ORACLE_API_AUDIENCE: "" },
+  ]) {
+    const r = await executarDcr({ secrets, resource_server: undefined });
+    assert.deepEqual(r, { concedidos: [], negas: [], claims: [] }, JSON.stringify(secrets));
+  }
+});
+
+test("v4: cliente na allowlist continua como antes, agora tambem com o claim", async () => {
+  // Com audience certa ou sem audience exposta: concede.
+  for (const resource_server of [{ identifier: AUDIENCE }, undefined]) {
+    const r = await executar({ resource_server });
+    assert.deepEqual(r.concedidos, ["oracle:read"], JSON.stringify(resource_server));
+    assert.deepEqual(r.claims, [[CLAIM, "corporate"]], JSON.stringify(resource_server));
+    assert.deepEqual(r.negas, []);
+  }
+  // Com audience divergente: nega, como antes.
+  const divergente = await executar({ resource_server: { identifier: OUTRA_API } });
+  assert.equal(divergente.negas.length, 1);
+  assert.deepEqual(divergente.claims, []);
+  assert.deepEqual(decideOracleAccess(ctx({ requestedAudience: OUTRA_API })).reason, "audience_mismatch");
+});
+
+test("v4: o claim NUNCA e' gravado quando a politica nega", async () => {
+  const reprovacoes: Array<Record<string, unknown>> = [
+    { user: { email: "pessoa@gmail.com", email_verified: true } },
+    { user: { email: "pessoa@gocase.com", email_verified: false } },
+    { user: { email: "pessoa@gocase.com", email_verified: "true" } },
+    { user: { email: "pessoa@evilgocase.com", email_verified: true } },
+    { user: { email: "pessoa@gocase.com", email_verified: true, idp_tenant_domain: "outro.com" } },
+    { user: { email: "a@b@gocase.com", email_verified: true } },
+    { user: {} },
+    { connection: { strategy: "auth0", name: "Username-Password-Authentication" } },
+    { resource_server: { identifier: OUTRA_API } },
+  ];
+  for (const over of reprovacoes) {
+    // Tanto pelo cliente da allowlist quanto pelo cliente DCR.
+    for (const r of [await executar(over), await executarDcr(over)]) {
+      assert.deepEqual(r.claims, [], "sem claim: " + JSON.stringify(over));
+      assert.deepEqual(r.concedidos, [], "sem scope: " + JSON.stringify(over));
+    }
+  }
 });
