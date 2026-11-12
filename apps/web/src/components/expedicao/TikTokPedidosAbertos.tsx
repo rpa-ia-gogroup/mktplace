@@ -31,7 +31,9 @@ import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { formatarHoras } from "@/lib/expedicao-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
-import { formatarInteiro } from "@/lib/expedicao-formato";
+import { formatarDecimal, formatarInteiro } from "@/lib/expedicao-formato";
+import { diasDeBacklog, mediaDaMarca, textoDoPace } from "@/lib/expedicao-pace";
+import { usePaceDespachados } from "@/components/expedicao/usePaceDespachados";
 import {
   CONFIG_LISTA,
   ROTULO_ETAPA,
@@ -497,6 +499,7 @@ export function BacklogPorMarcaTikTok({
   api: string;
   marca: string | null;
 }) {
+  const pace = usePaceDespachados(api, "tiktok", true);
   const d = prontos(abertos);
   if (!d) {
     return (
@@ -529,13 +532,17 @@ export function BacklogPorMarcaTikTok({
           <EvolucaoPorMarca
             resposta={null}
             semTendencia
+            ajudaPace={<InfoDica texto={textoDoPace("tiktok", pace)} />}
             fila={d.brands.map((b) => {
               const perto = b.due_today + b.due_next_day;
+              const media = mediaDaMarca(pace, "tiktok", b.brand);
               return {
                 conta: b.brand,
                 titulo: brandLabel(b.brand),
                 apelido: null,
                 backlog: b.open,
+                diasDeBacklog: formatarDecimal(diasDeBacklog(b.open, media), 1),
+                ritmo: formatarDecimal(media, 0),
                 vencidos: b.overdue,
                 pctVencidos: percentualDaFila(b.overdue, b.open),
                 aoVerVencidos: b.overdue > 0 ? () => abertos.abrir("overdue", b.overdue, b.brand) : undefined,

@@ -169,12 +169,14 @@ def limpar_cache() -> None:
     _cache.clear()
 
 
-def consultar(sql: str, params: dict, timeout_metabase: Optional[float] = None) -> list[dict]:
+def consultar(sql: str, params: dict, timeout_metabase: Optional[float] = None,
+              ttl_s: float = CACHE_TTL_S) -> list[dict]:
     """`timeout_metabase`: espera maior para UMA consulta sabidamente pesada,
-    so' na reserva pelo Metabase. `None` = o padrao do cliente."""
+    so' na reserva pelo Metabase. `None` = o padrao do cliente. `ttl_s`: dado
+    de dia fechado pode ficar mais tempo guardado."""
     chave = sql + "" + repr(sorted(params.items(), key=lambda kv: kv[0]))
     guardado = _cache.get(chave)
-    if guardado and _agora() - guardado[0] < CACHE_TTL_S:
+    if guardado and _agora() - guardado[0] < ttl_s:
         return [dict(linha) for linha in guardado[1]]
     linhas = _consultar_sem_cache(sql, params, timeout_metabase)
     _cache[chave] = (_agora(), linhas)

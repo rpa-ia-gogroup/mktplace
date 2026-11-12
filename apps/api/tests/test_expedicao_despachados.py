@@ -103,7 +103,8 @@ def test_escopo_so_do_vendedor_fbs_full_amostra_gocase_ficam_fora():
     assert "fulfilled_by_shopee" in sql and "is_sample_order" in sql
     assert "fulfillment" not in p["logisticas_ml"] and "self_service" in p["logisticas_ml"]
     assert "gocase" in p["marcas_fora"] and "gocase" not in p["marcas_tiktok"]
-    assert "com = itens" in sql  # TikTok: so' com TODOS os itens carimbados
+    # TikTok: coleta pelo log de status (indice), nunca varrendo line_items.
+    assert "new_status = 'IN_TRANSIT'" in sql and "line_items" not in sql
 
 
 def test_so_o_canal_pedido_entra_na_consulta():

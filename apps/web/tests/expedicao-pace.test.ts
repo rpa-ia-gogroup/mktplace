@@ -103,3 +103,16 @@ test("media da marca respeita o canal e a disponibilidade", () => {
 test("url pede o canal", () => {
   assert.equal(urlPace("http://x", "shopee"), "http://x/api/v1/expedicao/despachados?channel=shopee");
 });
+
+test("TikTok: o ⓘ fala em coletados e tira amostras (nao FBS/Full)", () => {
+  const t = textoDoPace("tiktok", null);
+  assert.match(t, /pedidos coletados por dia/);
+  assert.match(t, /sem amostras/);
+});
+
+test("TikTok: a tabela de marcas recebe Dias de backlog e Ritmo/dia", async () => {
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../src/components/expedicao/TikTokPedidosAbertos.tsx", import.meta.url), "utf8");
+  assert.match(src, /usePaceDespachados\(api, "tiktok", true\)/);
+  assert.match(src, /diasDeBacklog: formatarDecimal\(diasDeBacklog\(b\.open, media\), 1\)/);
+});

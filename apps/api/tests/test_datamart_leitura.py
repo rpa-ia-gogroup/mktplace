@@ -289,3 +289,18 @@ def test_coleta_perdida_usa_a_espera_maior(monkeypatch):
     r = svc.obter_coleta_perdida(vencimento=date(2026, 11, 4))
     assert r["availability"] == "available"
     assert pedidos == [svc.TIMEOUT_COLETA_PERDIDA_S] and svc.TIMEOUT_COLETA_PERDIDA_S > 60
+
+
+def test_ttl_por_consulta_guarda_mais_tempo(monkeypatch):
+    chamadas = []
+    agora = [1000.0]
+    monkeypatch.setattr(dl, "_agora", lambda: agora[0])
+    monkeypatch.setattr(dl, "_consultar_sem_cache", lambda sql, p, t=None: chamadas.append(1) or [{"x": 1}])
+    dl.limpar_cache()
+    dl.consultar("select 1", {}, ttl_s=3600.0)
+    agora[0] += 1800  # passou do padrao (600 s), dentro de 1 h
+    dl.consultar("select 1", {}, ttl_s=3600.0)
+    assert len(chamadas) == 1
+    dl.consultar("select 1", {})  # padrao: 1800 s > 600 s, busca de novo
+    assert len(chamadas) == 2
+    dl.limpar_cache()
