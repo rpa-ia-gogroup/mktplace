@@ -18,7 +18,7 @@ Por (dia BRT, hora BRT, canal, loja), pedido a pedido, no Data Mart:
   TikTok  `raw.tiktok_shop_orders` deduplicada por `order_id` (ultima versao),
           status da allowlist comercial, GMV = `total_amount`. A regra de
           `connectors/tiktok`.
-  Shopee  `silver.stg_shopee_orders` + `_order_items`, status <> cancelled,
+  Shopee  `silver.stg_shopee_orders` + `_order_items`, status fora de cancelled e unpaid,
           GMV = soma de `item_total`. A regra de `sync_shopee_daily_api`, so'
           nas lojas com API.
 
@@ -35,6 +35,13 @@ o ultimo pedido tinha `date_created` 13:52 e `extracted_at` (UTC) 17:53, i.e.
 NAO faz isso (corta o dia a meia-noite de -04:00, 01:00 BRT): o total do dia
 do ML aqui difere da fato pelos pedidos da faixa 00:00-00:59 BRT. TikTok
 (`created_at`) ja' esta' em BRT; a Shopee (`create_time`) tem fuso.
+
+NAO PAGOS (base "Realizados")
+-----------------------------
+Colunas PARALELAS `unpaid_orders`/`unpaid_gmv` (nunca somadas em gmv/pedidos):
+Shopee = status 'unpaid' (item_total), TikTok = 'UNPAID' (total_amount). O ML nao
+tem fonte de nao pago: NULL, nunca 0. Hora com pagos e sem nao pagos grava 0 (a
+fonte provou zero); hora so' com nao pagos grava gmv/pedidos = 0.
 
 A KOKESHI NA SHOPEE NAO ENTRA
 -----------------------------
@@ -139,10 +146,12 @@ WITH r AS (
 SELECT created_at::date                AS dia,
        extract(hour FROM created_at)::int AS hora,
        brand,
-       SUM(total_amount)               AS gmv,
-       COUNT(*)                        AS pedidos
+       COALESCE(SUM(total_amount) FILTER (WHERE order_status IN :status_comerciais), 0) AS gmv,
+       COUNT(*) FILTER (WHERE order_status IN :status_comerciais)                       AS pedidos,
+       COALESCE(SUM(total_amount) FILTER (WHERE order_status = 'UNPAID'), 0)            AS unpaid_gmv,
+       COUNT(*) FILTER (WHERE order_status = 'UNPAID')                                  AS unpaid_orders
 FROM r
-WHERE order_status IN :status_comerciais
+WHERE order_status IN :status_comerciais OR order_status = 'UNPAID'
 GROUP BY 1, 2, 3
 """
 
@@ -171,8 +180,10 @@ i AS (
 SELECT o.criado_brt::date                AS dia,
        extract(hour FROM o.criado_brt)::int AS hora,
        o.brand,
-       COALESCE(SUM(i.total), 0)         AS gmv,
-       COUNT(*)                          AS pedidos
+       COALESCE(SUM(i.total) FILTER (WHERE lower(o.order_status) <> 'unpaid'), 0) AS gmv,
+       COUNT(*) FILTER (WHERE lower(o.order_status) <> 'unpaid')                  AS pedidos,
+       COALESCE(SUM(i.total) FILTER (WHERE lower(o.order_status) = 'unpaid'), 0)  AS unpaid_gmv,
+       COUNT(*) FILTER (WHERE lower(o.order_status) = 'unpaid')                   AS unpaid_orders
 FROM o LEFT JOIN i USING (order_sn)
 GROUP BY 1, 2, 3
 """
@@ -192,10 +203,12 @@ class Canal:
     fonte_sql: str
     brands: tuple
     extra: dict
+    #: A fonte tem nao pagos? ML nao tem: `unpaid_*` ficam NULL.
+    tem_nao_pago: bool = True
 
 
 CANAIS = (
-    Canal(ML, "mercadolivre", ML_SQL, ML_FONTE_SQL, tuple(ML_BRANDS), {}),
+    Canal(ML, "mercadolivre", ML_SQL, ML_FONTE_SQL, tuple(ML_BRANDS), {}, tem_nao_pago=False),
     Canal(TIKTOK, "tiktok", TIKTOK_SQL, TIKTOK_FONTE_SQL, tuple(TIKTOK_BRANDS),
           {"status_comerciais": tuple(TIKTOK_STATUS_COMERCIAIS)}),
     Canal(SHOPEE, "shopee", SHOPEE_SQL, SHOPEE_FONTE_SQL, tuple(SHOPEE_BRANDS), {}),
@@ -253,7 +266,7 @@ def montar(canal: Canal, linhas: list[dict], fonte_ate: datetime | None,
     faltando = sorted(set(canal.brands) - set(lojas))
     if faltando:
         raise VendasPorHoraError(f"{canal.nome}: marca sem loja em dim_loja: {faltando}")
-    somas: dict[tuple, list] = defaultdict(lambda: [Decimal("0"), 0])
+    somas: dict[tuple, list] = defaultdict(lambda: [Decimal("0"), 0, 0, Decimal("0")])
     for r in linhas:
         dia, hora = r["dia"], int(r["hora"])
         if isinstance(dia, datetime):
@@ -263,9 +276,13 @@ def montar(canal: Canal, linhas: list[dict], fonte_ate: datetime | None,
         chave = (dia, hora, canal.marketplace_id, lojas[r["brand"]])
         somas[chave][0] += Decimal(str(r["gmv"] or 0))
         somas[chave][1] += int(r["pedidos"] or 0)
+        somas[chave][2] += int(r.get("unpaid_orders") or 0)
+        somas[chave][3] += Decimal(str(r.get("unpaid_gmv") or 0))
     return [{"dia": d, "hora": h, "marketplace_id": m, "loja_id": l,
-             "gmv": g.quantize(Decimal("0.01"), ROUND_HALF_UP), "pedidos": p}
-            for (d, h, m, l), (g, p) in sorted(somas.items())]
+             "gmv": g.quantize(Decimal("0.01"), ROUND_HALF_UP), "pedidos": p,
+             "unpaid_orders": uo if canal.tem_nao_pago else None,
+             "unpaid_gmv": ug.quantize(Decimal("0.01"), ROUND_HALF_UP) if canal.tem_nao_pago else None}
+            for (d, h, m, l), (g, p, uo, ug) in sorted(somas.items())]
 
 
 # --------------------------------------------------------------------------- #
@@ -283,8 +300,10 @@ def publicar_em_transacao(conn, linhas: list[dict], fontes: dict[int, datetime],
                       f"AND marketplace_id = ANY(:canais)"),
                  {"inicio": inicio, "fim": fim_exclusivo, "canais": sorted(fontes)})
     if linhas:
-        conn.execute(text(f"INSERT INTO {TABELA} (dia, hora, marketplace_id, loja_id, gmv, pedidos) "
-                          f"VALUES (:dia, :hora, :marketplace_id, :loja_id, :gmv, :pedidos)"), linhas)
+        conn.execute(text(f"INSERT INTO {TABELA} (dia, hora, marketplace_id, loja_id, gmv, pedidos, "
+                          f"unpaid_orders, unpaid_gmv) "
+                          f"VALUES (:dia, :hora, :marketplace_id, :loja_id, :gmv, :pedidos, "
+                          f":unpaid_orders, :unpaid_gmv)"), linhas)
     conn.execute(text(f"""
         INSERT INTO {FONTES} (marketplace_id, fonte_ate, publicado_em)
         VALUES (:m, :f, now())

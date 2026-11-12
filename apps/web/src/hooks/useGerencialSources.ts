@@ -25,6 +25,7 @@
  * A metrica do grafico (GMV | Pedidos) NAO participa de nenhuma identidade de
  * fetch: `/trend` entrega as duas na mesma resposta.
  */
+import type { BaseVendas } from "@/lib/base-vendas";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchBrands,
@@ -174,6 +175,8 @@ export interface UseGerencialSourcesInput {
   /** Gate V2-2: granularidade PEDIDA. Entra somente na identidade das series
    * de `/trend` — trocar de granularidade nao refaz as outras cinco fontes. */
   granularity: TrendGranularityRequest;
+  /** Pagos (padrao) ou realizados: muda pedidos, GMV e ticket das fontes de venda. */
+  base?: BaseVendas;
 }
 
 export function useGerencialSources(input: UseGerencialSourcesInput): GerencialSources {
@@ -187,8 +190,9 @@ export function useGerencialSources(input: UseGerencialSourcesInput): GerencialS
       dateTo: input.dateTo,
       compare: input.compare,
       retryKey,
+      base: input.base,
     }),
-    [input.channels, input.brands, input.dateFrom, input.dateTo, input.compare, retryKey],
+    [input.channels, input.brands, input.dateFrom, input.dateTo, input.compare, retryKey, input.base],
   );
 
   const requestKey = useMemo(() => buildGerencialRequestKey(keyInput), [keyInput]);
@@ -215,8 +219,9 @@ export function useGerencialSources(input: UseGerencialSourcesInput): GerencialS
       dateFrom: input.dateFrom,
       dateTo: input.dateTo,
       compare: input.compare,
+      base: input.base,
     }),
-    [input.brands, input.dateFrom, input.dateTo, input.compare],
+    [input.brands, input.dateFrom, input.dateTo, input.compare, input.base],
   );
 
   const channelsKey = input.channels.join(",");
@@ -323,7 +328,7 @@ export function useGerencialSources(input: UseGerencialSourcesInput): GerencialS
   useEffect(() => {
     let ignore = false;
     setQualityState((s) => ({ ...s, loading: true, errored: false }));
-    fetchQuality(input.channels, undefined, filterOpts)
+    fetchQuality(input.channels, undefined, { ...filterOpts, base: undefined })
       .then((res) => {
         if (ignore) return;
         setQualityState({
@@ -405,7 +410,7 @@ export function useGerencialSources(input: UseGerencialSourcesInput): GerencialS
   useEffect(() => {
     if (!hojeKey) return;
     let ignore = false;
-    const opts = { brands: input.brands, dateFrom: hoje, dateTo: hoje, compare: false };
+    const opts = { brands: input.brands, dateFrom: hoje, dateTo: hoje, compare: false, base: input.base };
     setHojeState({ key: hojeKey, porCanal: {} });
     // Uma chamada por canal, independentes (como as series do periodo): cada
     // resposta entra sozinha, e canal sem resposta ainda nao forma total.

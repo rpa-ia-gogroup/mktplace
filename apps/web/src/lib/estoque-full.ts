@@ -338,6 +338,7 @@ export const VENDA_NAO_INFORMADA = "(venda não informada)";
 export const CONTAS_ESPERADAS_API = [
   "apice",
   "barbours",
+  "kokeshi",
   "lescent",
   "rituaria",
 ] as const;

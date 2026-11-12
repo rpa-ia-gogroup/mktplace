@@ -28,6 +28,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { useBaseVendas } from "@/hooks/useBaseVendas";
+import { notaBase } from "@/lib/base-vendas";
+import SeletorBase from "@/components/SeletorBase";
 import { useGerencialSources } from "@/hooks/useGerencialSources";
 import { HOME_FILTER_DEFAULTS } from "@/lib/filters/home-defaults";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
@@ -62,7 +65,7 @@ import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import type { FullPorMarca } from "@/lib/gerencial/divisao-full";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
-import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores, pedidosTicketComMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import { linhasDeMarcasMenores } from "@/lib/gerencial/marcas-menores-adaptador";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
 import { MARCAS_MENORES_KEYS, escopoDeMarcas } from "@/lib/filters/brands";
@@ -155,6 +158,7 @@ function GerencialComGrandes() {
   // pode ser decidida (ritmo, projecao e quanto falta por dia). O mes fechado
   // continua a um clique no seletor de periodo.
   const [filtersRaw, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
+  const [base] = useBaseVendas();
   // Marcas grandes (Data Mart) e menores (Bling) vem no mesmo filtro; o resto da pagina so' ve as grandes
   // (`filters.brands` vazio = todas as grandes) e as menores entram por `menores`, sem meta.
   const escopo = escopoDeMarcas(filtersRaw.brands);
@@ -179,6 +183,7 @@ function GerencialComGrandes() {
     dateTo: filters.dateTo,
     compare: filters.compare,
     granularity,
+    base,
   });
 
   /**
@@ -193,6 +198,7 @@ function GerencialComGrandes() {
     filters.dateFrom,
     filters.dateTo,
     String(filters.compare),
+    base,
   ].join("|");
 
   useEffect(() => {
@@ -334,7 +340,7 @@ function GerencialComGrandes() {
   }, [filterIdentity, hoje, sources.demoMode, sources.retryKey]);
   // A mesma proporcao Full, POR MARCA, para o card de Marcas e os detalhes de GMV e
   // Pedidos. A rota do ML nao abre por marca: uma consulta por marca. Shopee vem do
-  // `by_brand` (Kokeshi fora da esteira = sem dado). As fatos so' tem dia fechado:
+  // `by_brand` (marca sem linha na fato = sem dado). As fatos so' tem dia fechado:
   // periodo que passa de ontem (ou so' hoje) usa a medida ate' ontem (`aproximado`);
   // so' hoje o card de Marcas segue com uma barra so', como antes.
   const [fullPorMarca, setFullPorMarca] = useState<FullPorMarca | null>(null);
@@ -400,7 +406,7 @@ function GerencialComGrandes() {
     setHojePorHora(null);
     if (!diaEmAndamento || sources.demoMode) return;
     let vivo = true;
-    fetchHojePorHora(filters.channels, filters.brands).then((d) => {
+    fetchHojePorHora(filters.channels, filters.brands, base).then((d) => {
       if (vivo) setHojePorHora(d);
     });
     return () => {
@@ -485,17 +491,20 @@ function GerencialComGrandes() {
     canais: filters.channels,
     marcas: escopo.menores,
   });
+  // Pedidos e Ticket incluem as menores como o GMV do topo (Ticket = GMV do topo / Pedidos).
+  const kpisComMenores = useMemo(
+    () => pedidosTicketComMenores(kpis, overview, topo, menoresOk),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- topo deriva de overview, menoresOk e comparar
+    [kpis, overview, menoresOk, comparar, compHoje],
+  );
   const kpisDaTela = useMemo(() => {
-    if (!compHoje) return kpis;
+    if (!compHoje) return kpisComMenores;
     const ref = (pct: number | null) =>
       pct != null ? { deltaPct: pct, deltaTone: "higher_is_better" as const, reference: compHoje.rotuloCurto } : {};
-    return kpis.map((k) =>
+    return kpisComMenores.map((k) =>
       k.key === "orders" ? { ...k, ...ref(compHoje.pedidosPct) } : k.key === "avg_ticket" ? { ...k, ...ref(compHoje.ticketPct) } : k,
     );
-  }, [kpis, compHoje]);
-  // Pedidos e Ticket vem so' das marcas grandes (o overview); com as menores no GMV do topo, GMV / Pedidos nao daria o
-  // Ticket. O aviso fica VISIVEL logo sob a faixa, em cor de aviso, nao so' no (i).
-  const avisoKpisSoGrandes = menoresOk != null && menoresOk.total > 0;
+  }, [kpisComMenores, compHoje]);
   const diaMeta = diaDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const mesMeta = diaMeta ? null : mesDaMeta(filters.dateFrom, filters.dateTo, hoje);
   const metas = useMetasDoMes(mesMeta ?? diaMeta?.slice(0, 7) ?? null);
@@ -716,6 +725,7 @@ function GerencialComGrandes() {
         loading={sources.anyLoading}
       >
         <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} />
+        <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
       </GerencialHeader>
 
       <span className="sr-only" aria-live="polite" aria-atomic="true">
@@ -732,6 +742,7 @@ function GerencialComGrandes() {
         prevGmv={topo.prevGmv}
         momPct={topo.momPct}
         notaMenores={notaDasMenores}
+        notaVendas={notaBase(overview, filters.channels)}
         linhaMenores={linhaMenores}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}
@@ -774,11 +785,6 @@ function GerencialComGrandes() {
         semGmv
         tendencias={tendencias}
       />
-      {avisoKpisSoGrandes && (
-        <p className="-mt-1 text-xs font-semibold text-warn-ink" role="status">
-          Pedidos e Ticket: só marcas grandes (sem as menores).
-        </p>
-      )}
 
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
@@ -946,10 +952,15 @@ function GerencialComGrandes() {
             identidade={kpiDoDialogo?.identidade}
             // O detalhe mostra o valor EXATO; o card, o curto (UI-DENSIDADE-1).
             value={(() => {
-              const k = kpis.find((x) => x.key === dialog.key);
+              const k = kpisComMenores.find((x) => x.key === dialog.key);
               return k?.exactValue ?? k?.value ?? "—";
             })()}
-            comparacao={kpis.find((k) => k.key === dialog.key)}
+            comparacao={kpisComMenores.find((k) => k.key === dialog.key)}
+            nota={
+              menoresOk?.pedidos != null && (dialog.key === "orders" || dialog.key === "avg_ticket")
+                ? "O número inclui as demais marcas (Bling); a tendência e a divisão por marca são só das marcas grandes."
+                : null
+            }
             comparar={comparar}
             diaEmAndamento={diaEmAndamento}
             tendencia={dialog.key === "orders" || dialog.key === "avg_ticket" ? tendencias[dialog.key] : null}

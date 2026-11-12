@@ -34,7 +34,8 @@ class Componente(BaseModel):
     status: StatusComponente
     motivo: str | None = None
     fonte: str | None = None
-    #: `False` para receita e para afiliados TikTok (ja dentro de taxas).
+    #: `False` para receita, para afiliados TikTok (ja dentro de taxas) e para a
+    #: devolucao da Kokeshi (T-0093: GMV do shop-stats ja' liquido; informativa).
     somavel: bool
     #: Decomposicao (so' afiliados TikTok: creator, partner, ads).
     partes: dict[str, float | None] | None = None
@@ -44,7 +45,9 @@ class Componente(BaseModel):
     publicado_em: datetime | None = None
     #: So' CMV (T-0055 C3), opcionais e retrocompativeis. `cobertura` (0..1) =
     #: receita com custo / receita fiscal, como publicada (NF fiscal, base de
-    #: item); `None` = nao publicada — nunca assumida 100%.
+    #: item); `None` = nao publicada — nunca assumida 100%. Impostos (T-0069):
+    #: receita fiscal casada / receita fiscal. Devolucoes Shopee (T-0093): dias
+    #: do mes com devolucao capturada / dias do mes.
     cobertura: float | None = None
     #: CMV / receita COM custo x 100. Denominador diferente de `pct_receita`
     #: (CMV / receita da DRE = GMV). `None` sem custo ou sem receita com custo.
@@ -97,6 +100,11 @@ class Margem(BaseModel):
     faltam: list[str]
     #: T-0090: presente quando ha parciais (margem tende a estar acima da real).
     aviso: str | None = None
+    #: T-0101, opcionais e retrocompativeis: custo obrigatorio (taxas, CMV) com
+    #: insumo vencido/ausente, ou (agregado) alguma celula assim. `valor` = None.
+    suspensa: bool = False
+    #: Ex.: "insumo vencido: cmv; margem suspensa até a republicação (publicado em 09/11/2026)".
+    motivo_suspensao: str | None = None
 
 
 class DataMaxima(BaseModel):
@@ -170,6 +178,10 @@ class CenarioPremissas(BaseModel):
     celulas: int
     #: T-0090: celulas do recorte sem premissa publicada (fora do cenario).
     celulas_sem_premissa: int = 0
+    #: T-0101: margem estimada suspensa pela mesma regra da conhecida (estado nao_calculavel).
+    suspensa: bool = False
+    motivo_suspensao: str | None = None
+    celulas_suspensas: int = 0
 
 
 class CelulaDRE(BaseModel):
@@ -180,6 +192,8 @@ class CelulaDRE(BaseModel):
     marca: str | None = None
     marca_label: str | None = None
     celulas: int | None = None
+    #: T-0101, so' agregados: celulas com a margem conhecida suspensa.
+    celulas_suspensas: int | None = None
     classificacao: Classificacao
     #: T-0090: `True` quando PREVIA; `fecha_em` = ultimo dia de M+2 (agregado: o maior).
     previa: bool = False

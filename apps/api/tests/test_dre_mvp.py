@@ -669,13 +669,15 @@ class FakeNeon:
     """Roteia pelo texto do SQL e registra os parametros recebidos."""
 
     def __init__(self, mart_rows=(), afiliado_rows=(), insumos=(), marcas=("barbours", "kokeshi"),
-                 tabela_existe=True, premissas=None, frete_comprador=None):
+                 tabela_existe=True, premissas=None, frete_comprador=None, devolucoes_export=None):
         self.mart_rows, self.afiliado_rows, self.marcas = list(mart_rows), list(afiliado_rows), list(marcas)
         self.insumos, self.tabela_existe = list(insumos), tabela_existe
         #: `None` = migration 026 nao aplicada (estado real do Neon hoje).
         self.premissas = None if premissas is None else list(premissas)
         #: T-0068. `None` = coluna `buyer_shipping_fee` ausente (Neon antes da 041).
         self.frete_comprador = None if frete_comprador is None else list(frete_comprador)
+        #: T-0093. `None` = `marts.shopee_returns_export` ausente (036 nao aplicada).
+        self.devolucoes_export = None if devolucoes_export is None else list(devolucoes_export)
         self.params: list[dict] = []
         self.sqls: list[str] = []
 
@@ -683,6 +685,10 @@ class FakeNeon:
         sql = str(stmt)
         self.params.append(params or {})
         self.sqls.append(sql)
+        if "shopee_returns_export" in sql and "to_regclass" in sql:
+            return _Res([self.devolucoes_export is not None])
+        if "shopee_returns_export" in sql:
+            return _Res([r for r in self.devolucoes_export if r["marca"] in params["marcas"]])
         if "buyer_shipping_fee" in sql and "pg_attribute" in sql:
             return _Res([self.frete_comprador is not None])
         if "buyer_shipping_fee" in sql:
@@ -806,7 +812,10 @@ def test_rota_periodo_informado_e_respeitado_e_marcado(cliente):
 
 def test_rota_mes_imaturo_explicito_sai_previa(monkeypatch):
     ago = date(2026, 8, 1)
-    neon = FakeNeon(mart_rows=[mart("ml", "kokeshi", mes=ago)], insumos=cmv("ml", "kokeshi", mes=ago))
+    # T-0101: a rota usa o relogio real; CMV publicado ha' 1 h (vencido suspenderia a margem).
+    fresco = datetime.now(AGORA.tzinfo) - timedelta(hours=1)  # AGORA esta em UTC
+    neon = FakeNeon(mart_rows=[mart("ml", "kokeshi", mes=ago)],
+                    insumos=cmv("ml", "kokeshi", mes=ago, publicado_em=fresco))
     app.dependency_overrides[get_db] = lambda: neon
     monkeypatch.setattr(database, "datamart_engine", _DataMartQueExplode())
     monkeypatch.setattr(dre_router, "today_brt", lambda: HOJE)

@@ -78,10 +78,9 @@ def test_marca_fora_da_allowlist_e_recusada(marcas):
         S.validar_marcas(marcas)
 
 
-def test_kokeshi_e_aceita_mas_fica_fora_do_default():
+def test_kokeshi_entra_no_default():
     assert S.validar_marcas(("kokeshi",)) == ("kokeshi",)
-    assert S.validar_marcas(None) == S.CONTAS_API
-    assert "kokeshi" not in S.CONTAS_API
+    assert S.validar_marcas(None) == S.CONTAS_API == S.CONTAS_PERMITIDAS
 
 
 def test_allowlist_igual_ao_check_da_migration_044():
@@ -119,7 +118,7 @@ def test_frete_ausente_aborta_nunca_vira_zero():
 
 def test_conta_inesperada_na_fonte_aborta():
     with pytest.raises(S.ShopeeDailyShadowError, match="fora da allowlist"):
-        S.montar_linhas([bruta(brand="kokeshi")], S.CONTAS_API, HOJE)
+        S.montar_linhas([bruta(brand="kokeshi")], ("apice",), HOJE)
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +135,7 @@ def test_chave_duplicada_aborta():
         S.validate_contract(snap([linha(), linha()]))
 
 
-@pytest.mark.parametrize("kw", [{"delivered_orders": 11}, {"unpaid_orders": 11}, {"to_return_orders": 11},
+@pytest.mark.parametrize("kw", [{"delivered_orders": 11}, {"to_return_orders": 11},
                                 {"orders": -1}, {"seller_shipping_cost": -0.01}])
 def test_linha_incoerente_aborta(kw):
     with pytest.raises(S.ShopeeDailyShadowError):
@@ -281,3 +280,14 @@ def test_publicado_nulo_nao_entra_em_nenhum_lado():
 
 def test_divergencia_sobre_zero_publicado_e_none_nao_infinito():
     assert R.Divergencia("apice", "2026-01", "orders", 5.0, 0.0).pct is None
+
+
+def test_nao_pago_fica_fora_dos_pedidos_e_da_receita():
+    # Pedido feito e ainda nao pago nao e' venda (12/11/2026, pedido da Nath).
+    assert S.SQL_DIARIO.text.count("NOT IN ('cancelled', 'unpaid')") == 6
+    # nao pagos: colunas paralelas (contagem e item_total), fora de orders/product_subtotal.
+    assert "COUNT(*) FILTER (WHERE o.st = 'unpaid')" in S.SQL_DIARIO.text
+    assert "SUM(it.subtotal) FILTER (WHERE o.st = 'unpaid')" in S.SQL_DIARIO.text
+    assert "o.st <> 'cancelled'" not in S.SQL_DIARIO.text
+    # unpaid maior que orders e' valido agora: nao aborta.
+    S.validate_contract(snap([linha(unpaid_orders=11)]))

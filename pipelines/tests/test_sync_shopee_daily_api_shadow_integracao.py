@@ -88,7 +88,7 @@ def _semear(eng):
     _pedido(eng, "apice", "A4", D2, "to_return", 3, [(1, 10)])
     _pedido(eng, "apice", "A5", D2, "unpaid", 2, [(2, 22)])
     _pedido(eng, "barbours", "B1", D1, "completed", 8, [(3, 60)])
-    # kokeshi NUNCA entra, mesmo presente na fonte.
+    # kokeshi fica fora quando nao esta nas marcas pedidas.
     _pedido(eng, "kokeshi", "K1", D1, "completed", 9, [(1, 15)])
     # fora da janela pedida
     _pedido(eng, "apice", "A9", date(2026, 9, 1), "completed", 1, [(1, 1)])

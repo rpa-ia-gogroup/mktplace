@@ -20,10 +20,12 @@
  * R$ 275.234,00 em agosto/2026 e nao teve um unico pedido FBS. Exibir "sem
  * dado" ali seria mentira.
  *
- * KOKESHI NAO E' ZERO
- * --------------------
- * Ela nao existe na esteira API. Nao aparece em nenhum denominador, em nenhuma
- * tabela e em nenhum grafico -- aparece como NAO COBERTA.
+ * MARCA SEM LINHA NAO E' ZERO
+ * ---------------------------
+ * Marca fora da cobertura (`brands_not_covered`, hoje vazia) nao aparece em
+ * nenhum denominador, tabela ou grafico -- aparece como NAO COBERTA. A Kokeshi
+ * entrou na esteira API em 11/2026; antes de a ingestao comecar ela nao tem
+ * linha, e isso tambem nao e' zero.
  */
 
 /** Classes logisticas. Nao existe `unknown` nesta fonte. */
@@ -359,10 +361,10 @@ export const AVISO_REGIME_CARGA =
   "ontem, a publicação do dia ainda não ocorreu. Esta tela não é tempo real.";
 
 export const AVISO_COBERTURA =
-  "Cobertura PARCIAL da Shopee. A esteira de API cobre quatro contas; " +
-  "Kokeshi NAO esta na API e nao entra em nenhum total, share ou grafico " +
-  "desta tela. Os numeros aqui sao 'Shopee — cobertura API', nunca a " +
-  "operacao Shopee inteira.";
+  "A esteira de API cobre as cinco contas da Shopee. A Kokeshi so tem " +
+  "historico desde que a ingestao dela comecou (app aprovado em 11/2026): " +
+  "antes disso nao entra em total, share ou grafico, e nao e zero. Os " +
+  "numeros aqui sao 'Shopee — cobertura API'.";
 
 export const AVISO_GMV_BRUTO =
   "GMV BRUTO de pedidos nao cancelados: inclui pedidos em devolucao " +

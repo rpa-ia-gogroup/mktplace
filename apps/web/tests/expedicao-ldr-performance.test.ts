@@ -67,7 +67,8 @@ test("celula: sem conta, sem base e taxa nula nunca viram 0%", () => {
     { brand: "apice", base: 371, late: 22, rate: 0.0593 },
     { brand: "lescent", base: 0, late: 0, rate: null },
   ] };
-  assert.deepEqual(celula(fonte, "shopee", "kokeshi"), { tipo: "sem_conta" });
+  assert.deepEqual(celula(fonte, "shopee", "kokeshi"), { tipo: "sem_base", motivo: "Nenhum pedido com prazo vencido na janela." });
+  assert.deepEqual(celula(fonte, "mercadolivre", "apice"), { tipo: "sem_conta" });
   assert.equal(celula(fonte, "shopee", "lescent").tipo, "sem_base");
   assert.equal(celula(fonte, "shopee", "barbours").tipo, "sem_base");
   const a = celula(fonte, "shopee", "apice");
@@ -99,7 +100,8 @@ test("ML aguardando com motivo; Apice sem conta ML", () => {
   }, ["apice", "kokeshi"]);
   assert.deepEqual(linhas[0].celulas.mercadolivre, { tipo: "sem_conta" });
   assert.deepEqual(linhas[1].celulas.mercadolivre, { tipo: "indisponivel", motivo: MOTIVO_ML_AGUARDANDO });
-  assert.deepEqual(linhas[1].celulas.shopee, { tipo: "sem_conta" });
+  // Kokeshi tem conta Shopee (API) desde 11/2026: carregando, nao "sem conta".
+  assert.deepEqual(linhas[1].celulas.shopee, { tipo: "carregando" });
   assert.deepEqual(linhas[0].celulas.shopee, { tipo: "carregando" });
 });
 
@@ -109,7 +111,7 @@ test("urls das rotas existentes, 7 dias e marca", () => {
 });
 
 test("cobertura por canal", () => {
-  assert.ok(!CONTAS_POR_CANAL.shopee.includes("kokeshi"));
+  assert.ok(CONTAS_POR_CANAL.shopee.includes("kokeshi"));
   assert.ok(!CONTAS_POR_CANAL.mercadolivre.includes("apice"));
   assert.equal(pct(0.0593), "5,93%");
 });

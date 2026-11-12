@@ -114,6 +114,31 @@ UPSERT_SQL = text("""
 """)
 
 
+def _com_nao_pagos(sql: str) -> str:
+    """UPSERT_SQL + as colunas de nao pagos (base "Realizados").
+
+    So' o TikTok tem fonte de nao pago nesta via: o ML nao tem (fica NULL) e a
+    Shopee vem de `sync_shopee_daily_api`. Derivado do UPSERT_SQL, que segue
+    inalterado para o ML.
+    """
+    pares = (
+        ("data_quality_score, source_updated_at\n    ) VALUES (",
+         "data_quality_score, source_updated_at,\n        unpaid_orders, unpaid_gmv\n    ) VALUES ("),
+        (":data_quality_score, :source_updated_at\n    )",
+         ":data_quality_score, :source_updated_at,\n        :unpaid_orders, :unpaid_gmv\n    )"),
+        ("        ingested_at             = NOW()",
+         "        unpaid_orders           = EXCLUDED.unpaid_orders,\n"
+         "        unpaid_gmv              = EXCLUDED.unpaid_gmv,\n        ingested_at             = NOW()"),
+    )
+    for velho, novo in pares:
+        assert sql.count(velho) == 1, velho
+        sql = sql.replace(velho, novo)
+    return sql
+
+
+UPSERT_TIKTOK_SQL = text(_com_nao_pagos(str(UPSERT_SQL)))
+
+
 PATCH_ADS_SQL = text("""
     INSERT INTO marts.fact_marketplace_daily_performance (
         date, loja_id, marketplace_id, empresa_id,
@@ -269,7 +294,6 @@ def colunas_da_api_por_loja(source: str, rows: list[dict], upsert_sql) -> list[t
       * `shopee` (pedidos do export): linhas dessas lojas sao DESCARTADAS;
       * `shopee-stats`: funil sim, `gmv` nao (`PATCH_SHOP_STATS_SEM_GMV_SQL`);
       * `shopee-ads` e os outros marketplaces: inalterados.
-    A kokeshi (sem API) segue exatamente como antes.
     """
     api = shopee_transform.LOJAS_COM_API
     if source == "shopee":
@@ -661,6 +685,8 @@ def run(
                 # Gate SD2-C: orders escreve só as colunas de que é fonte; ver a
                 # nota em PATCH_SHOPEE_ORDERS_SQL. TikTok e ML seguem no UPSERT_SQL.
                 upsert_sql = PATCH_SHOPEE_ORDERS_SQL
+            elif source == "tiktok":
+                upsert_sql = UPSERT_TIKTOK_SQL
             else:
                 upsert_sql = UPSERT_SQL
 

@@ -1730,6 +1730,23 @@ def diagnose_raw_tempo_real(db: Session) -> dict:
 # Brand Detail
 # ---------------------------------------------------------------------------
 
+def _frescor_mais_antigo(rows: list[dict]) -> str | None:
+    """T-0097: `refreshed_at` de uma tela servida por VARIAS fontes.
+
+    A consulta devolve `LEAST(MAX(carimbo_de_carga) por fonte)` no escopo
+    consultado: a tela so' e' tao fresca quanto a fonte mais atrasada. O
+    `LEAST` do Postgres ignora NULL, entao fonte sem linha no escopo nao
+    derruba as outras; nenhuma linha em fonte alguma -> None. Nunca `now()`.
+    Saida no mesmo formato de `ml_snapshot_refreshed_at` (UTC, sufixo Z).
+    """
+    alvo = rows[0].get("frescor_refreshed_at") if rows else None
+    if not isinstance(alvo, datetime):
+        return None
+    if alvo.tzinfo is None:
+        alvo = alvo.replace(tzinfo=timezone.utc)
+    return alvo.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
     start, end = _month_bounds(year, month)
 
@@ -1892,12 +1909,25 @@ def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
         ORDER BY mes DESC
     """
 
+    # T-0097: frescor da competencia servida. Mesmo escopo (marca + mes) das
+    # quatro fontes de dados acima; ver `_frescor_mais_antigo`.
+    janela_mes = f"brand = '{brand}' AND date BETWEEN '{start}' AND '{end}'"
+    sql_frescor = f"""
+        SELECT LEAST(
+            (SELECT MAX(synced_at)   FROM marts.fact_tiktok_brand_content_daily      WHERE {janela_mes}),
+            (SELECT MAX(synced_at)   FROM marts.fact_tiktok_creator_daily            WHERE {janela_mes}),
+            (SELECT MAX(ingested_at) FROM marts.fact_tiktok_product_daily            WHERE {janela_mes}),
+            (SELECT MAX(synced_at)   FROM marts.fact_tiktok_channel_efficiency_daily WHERE {janela_mes})
+        ) AS frescor_refreshed_at
+    """
+
     monthly_rows = _query(db, sql_monthly)
     daily_rows = _query(db, sql_daily)
     available_months_rows = _query(db, sql_available_months)
     creators = _query(db, sql_creators)
     products = _query(db, sql_products)
     channel_funnel_rows = _query(db, sql_channel_funnel)
+    refreshed_at = _frescor_mais_antigo(_query(db, sql_frescor))
 
     m = monthly_rows[0] if monthly_rows else {}
 
@@ -1994,6 +2024,7 @@ def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
             }
             for r in products
         ],
+        "refreshed_at": refreshed_at,
     }
 
 
@@ -2854,12 +2885,30 @@ def get_operacoes(db: Session) -> dict:
         for r in _query(db, tk_daily_sql)
     ]
 
+    # T-0097: frescor das tres fontes, cada uma no escopo (marcas + janela
+    # mais larga) em que a tela a le. Ver `_frescor_mais_antigo`.
+    frescor_sql = f"""
+        SELECT LEAST(
+            (SELECT MAX(synced_at) FROM marts.fact_ml_gestao_diaria
+              WHERE brand IN {_fmt_list(ML_BRANDS)}
+                AND ref_date >= '{d7_start}' AND ref_date <= '{d_fechado}'),
+            (SELECT MAX(synced_at) FROM marts.fact_tiktok_creator_daily
+              WHERE brand IN {_fmt_list(BRANDS_IN_SCOPE)}
+                AND date >= '{d7_start}' AND date <= '{d_fechado}'),
+            (SELECT MAX(synced_at) FROM marts.fact_tiktok_brand_content_daily
+              WHERE brand IN {_fmt_list(BRANDS_IN_SCOPE)}
+                AND date >= '{d30_start}' AND date <= '{d_fechado}')
+        ) AS frescor_refreshed_at
+    """
+    refreshed_at = _frescor_mais_antigo(_query(db, frescor_sql))
+
     return {
         "alertas": alertas,
         "ml_velocity": ml_velocity,
         "creators": creators,
         "lives": lives,
         "tk_daily": tk_daily,
+        "refreshed_at": refreshed_at,
     }
 
 

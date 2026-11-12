@@ -153,8 +153,10 @@ def test_g09_brand_detail_atravessa_inteira_sem_datamart(monkeypatch):
     assert out["brand"] == "kokeshi"
     assert out["channel_funnel"] == [] and out["top_produtos"] == []
     # Gate V3-BE: +1 consulta, a de `available_months` (BE5).
-    assert len(sessao.consultas) == 6, sessao.consultas
+    # T-0097: +1 consulta, a de frescor (`refreshed_at`), tambem pela Session.
+    assert len(sessao.consultas) == 7, sessao.consultas
     assert out["available_months"] == []
+    assert out["refreshed_at"] is None
 
 
 @pytest.mark.parametrize("nome,chamada", [
@@ -254,7 +256,10 @@ def test_g16_os_tres_endpoints_continuam_registrados():
 def test_g17_response_models_inalterados():
     from app.schemas.performance import BrandDetailResponse, TempoRealResponse
     por_path = {getattr(r, "path", ""): r for r in rp.router.routes}
-    assert por_path["/api/v1/performance/brand-detail"].response_model is BrandDetailResponse
+    # T-0097: extensao LOCAL do schema com so `refreshed_at` a mais.
+    modelo = por_path["/api/v1/performance/brand-detail"].response_model
+    assert issubclass(modelo, BrandDetailResponse)
+    assert set(modelo.model_fields) - set(BrandDetailResponse.model_fields) == {"refreshed_at"}
     assert por_path["/api/v1/performance/tempo-real"].response_model is TempoRealResponse
     assert getattr(por_path["/api/v1/performance/inteligencia"], "response_model", None) is None
 
@@ -313,7 +318,8 @@ def test_g23_a_troca_ficou_restrita_as_duas_funcoes():
     total_marts = len(re.findall(r"\bmarts\.fact_ml_cross_company_summary", FONTE))
     total_canal = len(re.findall(r"\bmarts\.fact_tiktok_channel_efficiency_daily", FONTE))
     assert total_marts == 1, "a nova fato ML aparece so' em /inteligencia"
-    assert total_canal == 1, "a nova fato de canal aparece so' em /brand-detail"
+    # T-0097: 2 = a consulta de dados + a de frescor, ambas em /brand-detail.
+    assert total_canal == 2, "a nova fato de canal aparece so' em /brand-detail"
 
 
 def test_g24_zero_frontend_referenciado():

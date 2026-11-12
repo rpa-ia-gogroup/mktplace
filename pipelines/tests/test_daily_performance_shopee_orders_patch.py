@@ -282,7 +282,8 @@ def _upserts_usados(monkeypatch, source):
         ),
     )
 
-    linha = {"date": date(2026, 8, 14), "loja_id": 3, "marketplace_id": 3,
+    # loja 9: hipotetica sem API (as 5 contas Shopee sao da API desde 11/2026).
+    linha = {"date": date(2026, 8, 14), "loja_id": 9, "marketplace_id": 3,
              "empresa_id": 1}
     alvo = {
         "shopee": (dp.shopee_connector, "fetch_backfill", dp.shopee_transform),
@@ -332,9 +333,13 @@ def test_source_shopee_ads_continua_no_patch_proprio(monkeypatch):
     assert usados and all(s == str(dp.PATCH_ADS_SQL) for s in usados)
 
 
-def test_source_tiktok_continua_no_upsert_completo(monkeypatch):
+def test_source_tiktok_usa_o_upsert_completo_mais_os_nao_pagos(monkeypatch):
     usados = _upserts_usados(monkeypatch, "tiktok")
-    assert usados and all(s == str(dp.UPSERT_SQL) for s in usados)
+    assert usados and all(s == str(dp.UPSERT_TIKTOK_SQL) for s in usados)
+    # o ML segue no UPSERT_SQL, que nao conhece os nao pagos (ficam NULL).
+    assert "unpaid" not in str(dp.UPSERT_SQL)
+    assert {"unpaid_orders", "unpaid_gmv"} <= set(_atribuicoes_do_set(dp.UPSERT_TIKTOK_SQL))
+    assert ":unpaid_gmv" in str(dp.UPSERT_TIKTOK_SQL)
 
 
 def test_source_ml_continua_no_upsert_completo(monkeypatch):

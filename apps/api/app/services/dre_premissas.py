@@ -37,6 +37,10 @@ REGRAS
   (`dre_service._extrapolar_cmv`), e o cenario reusa esse valor. So' NO
   CENARIO: a taxa do escrow Shopee parcial e' estendida aos pedidos sem
   escrow (`origem = extrapolado`).
+- **Devolucoes realizadas (T-0093).** Onde a DRE realizada tem devolucao
+  somavel (Shopee, lojas com API), ela substitui a premissa: `disponivel` ->
+  realizado; `parcial` com cobertura em dias -> extrapolado (valor / cobertura).
+  Kokeshi (informativa, receita ja' liquida) -> `nao_aplicavel`, sem premissa.
 """
 from __future__ import annotations
 
@@ -138,6 +142,8 @@ USAVEL_OK = ("disponivel",)
 USAVEL_PARCIAL = ("parcial", "provisorio", "nao_confirmado", "nao_reconciliado")
 #: T-0090: status de CMV extrapolavel pela razao CMV / receita com custo.
 CMV_EXTRAPOLAVEL = ("nao_reconciliado", "parcial", "provisorio")
+#: T-0093: devolucao da Kokeshi no cenario (receita do shop-stats ja' liquida).
+MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA = "receita já líquida de devoluções (shop-stats): premissa não aplicada"
 
 
 def _pct_br(fracao: float, casas: int = 1) -> str:
@@ -271,9 +277,17 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
         if rec["status"] != "disponivel":
             motivos_parcial.append(f"receita com cobertura parcial: {rec['motivo']}")
 
+    # --- devolucoes realizadas (T-0093): substituem a premissa onde existem ----
+    dev_linha = _devolucoes_realizadas(por_linha["devolucoes_reembolsos"], comps["devolucoes"])
+    if dev_linha is not None and dev_linha["origem"] == ORIGEM_EXTRAPOLADO:
+        motivos_parcial.append(f"devolucoes {comps['devolucoes']['status']} extrapolado")
+
     # --- premissas ---------------------------------------------------------
     for nome in COMPONENTES_PREMISSA:
         e = por_linha[nome]
+        if nome == "devolucoes_reembolsos" and dev_linha is not None:
+            linhas[nome] = dev_linha
+            continue
         row = premissa["componentes"].get(nome)
         rate = None if row is None or row.get("rate") is None else Decimal(str(row["rate"]))
         if rate is None:
@@ -382,6 +396,15 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
     elif not maduro:
         motivos_parcial.append("competencia ainda imatura pela regra M+2 da DRE realizada")
 
+    # T-0101: a mesma condicao que suspende a margem conhecida da celula (custo
+    # obrigatorio com insumo vencido/ausente, `dre_service._suspensao_da_celula`)
+    # suspende a estimada: estimar sem CMV infla a margem do mesmo jeito. As
+    # linhas seguem visiveis; so' subtotais e margem ficam sem calculo.
+    conhecida = celula.get("margem_contribuicao_conhecida") or {}
+    suspensa = bool(conhecida.get("suspensa"))
+    if suspensa:
+        motivos_nc.insert(0, conhecida.get("motivo_suspensao") or "margem suspensa: insumo vencido")
+
     estado = NAO_CALCULAVEL if motivos_nc else (PARCIAL if motivos_parcial else CALCULAVEL)
     _subtotais(linhas, receita, calcular=estado != NAO_CALCULAVEL)
     for ln in linhas.values():
@@ -413,6 +436,9 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
                             "carregado_em": premissa["carregado_em"]},
         "celulas": 1,
         "celulas_sem_premissa": 0,
+        "suspensa": suspensa,
+        "motivo_suspensao": conhecida.get("motivo_suspensao") if suspensa else None,
+        "celulas_suspensas": 1 if suspensa else 0,
     }
 
 
@@ -438,6 +464,32 @@ def _cmv_parcial(e: dict, cmv: dict, receita: float | None) -> dict:
         valor = cmv["valor"] if cmv.get("origem") == ORIGEM_EXTRAPOLADO else _r2(razao * receita)
         return _linha(e, valor=valor, origem=ORIGEM_EXTRAPOLADO, status=cmv["status"], motivo=motivo)
     return _linha(e, valor=cmv["valor"], origem=ORIGEM_PARCIAL, status=cmv["status"], motivo=cmv["motivo"])
+
+
+def _devolucoes_realizadas(e: dict, dev: dict) -> dict | None:
+    """Linha `devolucoes_reembolsos` a partir da devolucao realizada (T-0093).
+
+    - devolucao so' informativa (`somavel=False`: Kokeshi, receita do shop-stats
+      ja' liquida) -> `nao_aplicavel`, sem valor e SEM a premissa: deduzir
+      seria dupla deducao;
+    - `disponivel` com valor -> `realizado`;
+    - `parcial` com a cobertura em dias conhecida (0 < c < 1) -> `extrapolado`
+      = valor / c (so' no cenario; o realizado nunca extrapola);
+    - o resto (sem valor, vencido, cobertura desconhecida) -> `None`: a premissa,
+      como antes.
+    """
+    if dev.get("somavel") is False:
+        return _linha(e, status="nao_aplicavel", somavel=False, motivo=MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA)
+    if dev["valor"] is None:
+        return None
+    if dev["status"] == "disponivel":
+        return _linha(e, valor=dev["valor"], origem=ORIGEM_REALIZADO, status=dev["status"], motivo=dev["motivo"])
+    cob = dev.get("cobertura")
+    if dev["status"] == "parcial" and cob is not None and 0 < cob < 1:
+        return _linha(e, valor=_r2(dev["valor"] / cob), origem=ORIGEM_EXTRAPOLADO, status=dev["status"],
+                      motivo=f"extrapolado: devoluções medidas em {_pct_br(cob)} dos dias do mês estendidas "
+                             "ao mês inteiro")
+    return None
 
 
 def _taxas_parciais(e: dict, tx: dict, canal: str) -> dict:
@@ -512,6 +564,14 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
             estado = PARCIAL
         motivos.append(f"{sem_premissa} célula(s) sem premissa publicada ficaram fora do cenário "
                        "(premissa nunca é estendida)")
+    # T-0101: celula com margem suspensa ja' e' `nao_calculavel`, entao a margem do
+    # agregado sai None (mesma escolha conservadora da margem conhecida).
+    suspensas = sum(c.get("celulas_suspensas", 0) for c in validos)
+    motivo_suspensao = None
+    if suspensas:
+        motivo_suspensao = (f"{suspensas} de {len(validos)} células com margem estimada suspensa "
+                            "(insumo vencido ou ausente); margem suspensa até a republicação")
+        motivos.insert(0, motivo_suspensao)
     for c in validos:
         for m in c["motivos"]:
             if m not in motivos:
@@ -544,6 +604,9 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
         "fonte_premissas": validos[0]["fonte_premissas"],
         "celulas": sum(c["celulas"] for c in validos),
         "celulas_sem_premissa": sem_premissa,
+        "suspensa": bool(suspensas),
+        "motivo_suspensao": motivo_suspensao,
+        "celulas_suspensas": suspensas,
     }
 
 

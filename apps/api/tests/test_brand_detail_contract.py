@@ -39,6 +39,9 @@ MARCA = "kokeshi"
 def _classifica(sql: str) -> str:
     """Qual das seis consultas de `get_brand_detail` esta sendo feita."""
     s = " ".join(sql.split()).lower()
+    # T-0097: a consulta de frescor cita as quatro fontes; vem antes de tudo.
+    if "frescor_refreshed_at" in s:
+        return "frescor"
     # Gate V3-BE / BE5: a unica consulta que projeta competencia e NAO filtra
     # por mes — e por isso a unica capaz de listar outros meses.
     if "distinct to_char(date" in s:
@@ -60,7 +63,7 @@ def _classifica(sql: str) -> str:
 def fixar(monkeypatch):
     dados: dict[str, list[dict]] = {
         "monthly": [], "daily": [], "creators": [], "products": [], "channel_funnel": [],
-        "available_months": [],
+        "available_months": [], "frescor": [],
     }
     vistas: list[tuple[str, str]] = []
 
@@ -120,6 +123,8 @@ CAMPOS_TOP_LEVEL = [
     "followers_pct_25_34", "followers_pct_35_44", "followers_pct_45_54",
     "followers_pct_55_plus",
     "channel_funnel", "daily", "top_creators", "top_produtos",
+    # T-0097: frescor da competencia, aditivo, no fim.
+    "refreshed_at",
 ]
 
 DEMOGRAFICOS = [c for c in CAMPOS_TOP_LEVEL if c.startswith(("viewers_pct", "followers_pct"))]
@@ -137,7 +142,7 @@ def test_b01_chaves_top_level_exatas_e_na_ordem(fixar):
 def test_b02_sao_46_chaves_das_quais_5_listas(fixar):
     """Gate V3-BE: +1 chave e +1 lista, `available_months`."""
     out = _chamar()
-    assert len(out) == 46
+    assert len(out) == 47  # T-0097: + `refreshed_at`
     listas = [k for k, v in out.items() if isinstance(v, list)]
     assert listas == ["available_months", "channel_funnel", "daily",
                       "top_creators", "top_produtos"]
@@ -162,9 +167,9 @@ def test_b05_as_seis_consultas_sao_executadas(fixar):
     _, vistas = fixar
     _chamar()
     assert sorted(t for t, _ in vistas) == [
-        "available_months", "channel_funnel", "creators", "daily", "monthly",
+        "available_months", "channel_funnel", "creators", "daily", "frescor", "monthly",
         "products"]
-    assert len(vistas) == 6
+    assert len(vistas) == 7  # T-0097: + a consulta de frescor
 
 
 def test_b06_fonte_vazia_produz_zeros_e_listas_vazias(fixar):
@@ -517,11 +522,15 @@ def test_b35_banco_indisponivel_responde_503(monkeypatch):
 
 
 def test_b36_response_model_permanece_o_atual():
-    """O S3 nao cria nem troca `response_model`. Congelado."""
+    """O S3 nao cria nem troca `response_model`. T-0097: a rota passa a usar uma
+    extensao LOCAL do schema (so com `refreshed_at` a mais); o schema
+    compartilhado continua intocado e todos os campos dele seguem no contrato."""
     rota = next(r for r in rp.router.routes
                 if getattr(r, "path", "") == "/api/v1/performance/brand-detail")
     from app.schemas.performance import BrandDetailResponse
-    assert rota.response_model is BrandDetailResponse
+    assert issubclass(rota.response_model, BrandDetailResponse)
+    extras = set(rota.response_model.model_fields) - set(BrandDetailResponse.model_fields)
+    assert extras == {"refreshed_at"}
 
 
 # ===========================================================================
@@ -558,3 +567,52 @@ def test_b38_nenhuma_consulta_menciona_shopee_ou_frete(fixar):
         baixo = sql.lower()
         assert "shopee" not in baixo, tipo
         assert "shipping" not in baixo and "frete" not in baixo, tipo
+
+
+# ===========================================================================
+# T-0097 - `refreshed_at`: frescor das quatro fontes da competencia
+# ===========================================================================
+
+def test_b38_refreshed_at_e_a_carga_mais_antiga_em_utc(fixar):
+    from datetime import datetime, timedelta, timezone
+    dados, _ = fixar
+    brt = timezone(timedelta(hours=-3))
+    dados["frescor"] = [{"frescor_refreshed_at": datetime(2026, 8, 1, 7, 5, 0, tzinfo=brt)}]
+    assert _chamar()["refreshed_at"] == "2026-08-01T10:05:00Z"
+
+
+@pytest.mark.parametrize("linhas", [[], [{"frescor_refreshed_at": None}]])
+def test_b39_fonte_sem_carimbo_devolve_null(fixar, linhas):
+    """Nenhuma linha da marca no mes em fonte alguma: null, nunca `now()`."""
+    dados, _ = fixar
+    dados["frescor"] = linhas
+    assert _chamar()["refreshed_at"] is None
+
+
+def test_b40_frescor_le_o_carimbo_de_carga_das_quatro_fontes_no_mes(fixar):
+    _, vistas = fixar
+    _chamar()
+    sql = _sql_de(vistas, "frescor")
+    assert sql.startswith("SELECT LEAST(")
+    assert sql.count("MAX(synced_at)") == 3 and sql.count("MAX(ingested_at)") == 1
+    for rel in ("marts.fact_tiktok_brand_content_daily", "marts.fact_tiktok_creator_daily",
+                "marts.fact_tiktok_product_daily", "marts.fact_tiktok_channel_efficiency_daily"):
+        assert rel in sql
+    assert sql.count(f"BETWEEN '{INICIO}' AND '{FIM}'") == 4
+    assert sql.count(f"brand = '{MARCA}'") == 4
+    assert "now()" not in sql.lower()
+
+
+def test_b41_rota_preserva_refreshed_at_no_response_model():
+    """O `response_model` filtra campos: a extensao local tem de deixar passar."""
+    rota = next(r for r in rp.router.routes
+                if getattr(r, "path", "") == "/api/v1/performance/brand-detail")
+    base = {k: None for k in CAMPOS_TOP_LEVEL}
+    base.update(brand=MARCA, label="K", ref_month="2026-07", available_months=[], gmv=0.0,
+                orders=0, customers=0, active_videos=0, new_videos_posted=0,
+                active_video_creators=0, total_views=0, total_lives=0, live_creators=0,
+                fresh_videos=0, evergreen_videos=0, gmv_fresh=0.0, gmv_evergreen=0.0,
+                channel_funnel=[], daily=[], top_creators=[], top_produtos=[],
+                refreshed_at="2026-08-01T10:05:00Z")
+    validado = rota.response_model.model_validate(base).model_dump()
+    assert validado["refreshed_at"] == "2026-08-01T10:05:00Z"

@@ -25,9 +25,9 @@ EMPRESA_ID = 1      # GoBeauté
 #: `shopee_orders_etl`). Para estas lojas a familia de pedidos e o GMV da fato
 #: diaria tem UM dono: `pipelines.sync_shopee_daily_api`. Os carregadores de
 #: arquivo deixam de escrever essas colunas para elas (ver
-#: `daily_performance.colunas_da_api_por_loja`). A kokeshi fica FORA: nao tem
-#: aplicacao Shopee cadastrada e continua inteira pelos arquivos.
-CONTAS_COM_API: tuple[str, ...] = ("apice", "barbours", "lescent", "rituaria")
+#: `daily_performance.colunas_da_api_por_loja`). A kokeshi entrou em 11/2026
+#: (app aprovado, backfill desde 31/08); dias antes disso ficam do arquivo.
+CONTAS_COM_API: tuple[str, ...] = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 LOJAS_COM_API: frozenset[int] = frozenset(BRAND_TO_LOJA[c] for c in CONTAS_COM_API)
 
 

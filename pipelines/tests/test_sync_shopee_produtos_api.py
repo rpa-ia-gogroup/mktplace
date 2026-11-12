@@ -133,19 +133,13 @@ def test_conta_ausente_vira_aviso_e_nao_erro():
 # Allowlist — fail-closed                                                       #
 # --------------------------------------------------------------------------- #
 
-def test_kokeshi_nao_esta_na_allowlist_da_api():
-    """Ela nao tem aplicacao Shopee cadastrada: o app e' registrado por loja,
-    no console da empresa dona."""
-    assert "kokeshi" not in mod.CONTAS_API
-
-
-def test_allowlist_e_exatamente_as_quatro_contas_medidas():
-    assert set(mod.CONTAS_API) == {"apice", "barbours", "lescent", "rituaria"}
+def test_allowlist_e_exatamente_as_cinco_contas():
+    assert set(mod.CONTAS_API) == {"apice", "barbours", "kokeshi", "lescent", "rituaria"}
 
 
 def test_marca_fora_da_allowlist_e_recusada_antes_de_qualquer_leitura():
     with pytest.raises(mod.ShopeeProdutosSyncError, match="fora da allowlist"):
-        mod.run(apply=False, marcas=("kokeshi",))
+        mod.run(apply=False, marcas=("gocase",))
 
 
 # --------------------------------------------------------------------------- #

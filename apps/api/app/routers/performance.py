@@ -101,6 +101,17 @@ def _validate_sort_by(sort_by: Optional[str], allowlist: dict[str, str]) -> None
 
 VALID_ML_BRANDS = {"barbours", "kokeshi", "lescent", "rituaria"}  # rituaria incluida em 2026-07-01 (ver docs/backlog.md)
 VALID_TK_BRANDS = {"apice", "barbours", "kokeshi", "lescent", "rituaria"}
+
+
+class BrandDetailFrescorResponse(BrandDetailResponse):
+    """T-0097: `BrandDetailResponse` + `refreshed_at`, aditivo e local a esta rota
+    para nao tocar o schema compartilhado. `LEAST` do MAX(carimbo de carga) das
+    quatro fontes da competencia (ver `gold_service._frescor_mais_antigo`);
+    None quando nenhuma fonte tem linha no escopo."""
+
+    refreshed_at: Optional[str] = None
+
+
 VALID_PARETO_BUCKETS = {"A_top50", "B_next30", "C_next15", "D_tail"}  # compartilhado: ML, TikTok e Shopee
 VALID_ML_STATUS = {"sells+advertised", "sells_organic_only", "ad_spend_no_sales", "inactive"}
 VALID_ML_VELOCITY = {"high", "medium", "low", "zero"}
@@ -131,27 +142,40 @@ def _parse_month(ref_month: Optional[str]) -> tuple[int, int]:
     return (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
 
 
+#: Base de vendas da Gerencial: `pagos` (padrao, identico ao contrato anterior) ou
+#: `realizados` (pagos + nao pagos). Valor fora disso e' 422 (Literal).
+BaseVendas = Literal["pagos", "realizados"]
+BASE_QUERY_DESCRIPTION = (
+    "Base de vendas: 'pagos' (padrao) ou 'realizados' (pagos + nao pagos; cancelados "
+    "seguem fora). Muda so' pedidos, GMV e ticket; margem, Ads e o resto seguem pagos."
+)
+
+
 @router.get("/overview", response_model=OverviewResponse)
 def overview(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
     return perf_svc.get_overview(
         _require_db(db), filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
 
 
 @router.get("/brands", response_model=BrandsResponse)
 def brands(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
     return perf_svc.get_brands(
         _require_db(db), filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
 
 
@@ -175,6 +199,7 @@ def trend(
             "na segunda-feira) ou month."
         ),
     ),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Serie de GMV/pedidos no grao do intervalo filtrado — respeita
@@ -198,12 +223,14 @@ def trend(
         filters.period,
         granularity=granularity,
         compare_period=filters.compare_period,
+        base=base,
     )
 
 
 @router.get("/executive-summary", response_model=ExecutiveSummaryResponse)
 def executive_summary(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Resumo executivo da Gerencial (Gate 2, Fase 1 — docs/sections/
@@ -211,7 +238,7 @@ def executive_summary(
     Reaproveita get_overview/get_brands/get_quality/get_canais e
     regioes_service.get_summary — nao duplica SQL. Opportunities e Matriz
     Marca x Canal ficam para a Fase 2."""
-    return executive_summary_service.get_executive_summary(_require_db(db), filters)
+    return executive_summary_service.get_executive_summary(_require_db(db), filters, base=base)
 
 
 @router.get("/daily", response_model=DailyResponse)
@@ -364,6 +391,7 @@ def produtos_shopee_summary(
 @router.get("/canais", response_model=CanaisResponse)
 def canais(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
@@ -371,6 +399,7 @@ def canais(
     resposta = perf_svc.get_canais(
         sessao, filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
     # Bloco ADITIVO de afiliados (§23), composto AQUI e nao dentro de
     # `get_canais`: o corpo historico da resposta e as consultas que o produzem
@@ -427,12 +456,13 @@ def quality(
 @router.get("/hoje-por-hora", response_model=HojePorHoraResponse)
 def hoje_por_hora(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Hoje ate' a ultima hora cheia fechada em TODOS os canais do filtro, contra
     ontem e a semana passada ate' a mesma hora. O periodo do filtro e' ignorado:
     a resposta e' sempre do dia corrente (BRT)."""
-    return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands)
+    return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands, base=base)
 
 
 @router.get("/tempo-real", response_model=TempoRealResponse)
@@ -440,7 +470,7 @@ def tempo_real(db: Session = Depends(get_db)):
     return svc.get_tempo_real(_require_db(db))
 
 
-@router.get("/brand-detail", response_model=BrandDetailResponse)
+@router.get("/brand-detail", response_model=BrandDetailFrescorResponse)
 def brand_detail(
     brand: str = Query(...),
     ref_month: Optional[str] = Query(None),
@@ -836,8 +866,8 @@ ERRO_SHOPEE_FBS_CONTRATO = (
 )
 MOTIVO_SHOPEE_FBS_DESLIGADO = (
     "Superficie de FBS da Shopee ainda nao habilitada. A fato existe e esta "
-    "publicada, mas a cobertura e' PARCIAL (quatro contas da esteira API; "
-    "Kokeshi fora) e a ativacao e' decisao de negocio."
+    "publicada (cinco contas da esteira API, Kokeshi incluida) e a ativacao e' "
+    "decisao de negocio."
 )
 
 #: Politica de data PROPRIA desta superficie, e o motivo de nao reusar
@@ -913,10 +943,10 @@ def shopee_fbs(
 ):
     """Desempenho FBS da Shopee: fulfillment da Shopee contra envio pelo vendedor.
 
-    COBERTURA PARCIAL, e a resposta diz isso. A esteira API cobre apice,
-    barbours, lescent e rituaria. **Kokeshi nao esta na API** e nao e' suprida
-    por planilha aqui -- o agregado e' "Shopee (cobertura API)", nunca
-    "Shopee total".
+    A esteira API cobre as cinco contas Shopee (apice, barbours, kokeshi,
+    lescent e rituaria); a Kokeshi so' tem historico desde 11/2026, quando a
+    ingestao comecou. O agregado e' "Shopee (cobertura API)" e nao e' suprido
+    por planilha.
 
     O valor e' **GMV BRUTO de pedidos nao cancelados**: inclui `to_return` e
     `unpaid` (publicados tambem em coluna propria) e exclui cancelados. Nao e'

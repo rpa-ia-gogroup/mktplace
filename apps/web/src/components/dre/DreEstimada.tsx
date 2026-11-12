@@ -21,6 +21,9 @@ import { ClassificacaoChip } from "@/components/dre/DreChips";
 import Motivos from "@/components/dre/Motivos";
 import {
   ROTULO_MARGEM,
+  ROTULO_MARGEM_SUSPENSA,
+  cenarioSuspenso,
+  textoSuspensao,
   fmtInstanteBrt,
   fmtPctDre,
   fmtReais,
@@ -45,6 +48,19 @@ import {
   type Disponibilidade,
   type LinhaEstimadaExibida,
 } from "@/lib/dre-estimada";
+
+/**
+ * T-0101 — margem estimada suspensa (insumo de taxas/CMV vencido ou ausente):
+ * a frase no lugar do numero. Sem o campo (API anterior), o texto de antes.
+ */
+function margemEstimadaTexto(c: CenarioPremissas): string {
+  const s = cenarioSuspenso(c);
+  return s.suspensa ? textoSuspensao(s.motivo) : textoMargemEstimada(c);
+}
+
+function margemEstimadaPctTexto(c: CenarioPremissas): string {
+  return cenarioSuspenso(c).suspensa ? ROTULO_MARGEM_SUSPENSA : textoMargemEstimadaPct(c);
+}
 
 export function EstadoCenarioChip({ cenario }: { cenario: CenarioPremissas }) {
   const e = ESTADO_CENARIO_CHIP[cenario.estado];
@@ -100,7 +116,7 @@ export function ResumoEstimado({ cenario }: { cenario: CenarioPremissas }) {
         identidade="roas"
         icone={TrendingUp}
         rotulo={ROTULO_MARGEM_ESTIMADA}
-        valor={textoMargemEstimada(cenario)}
+        valor={cenarioSuspenso(cenario).suspensa ? margemEstimadaTexto(cenario) : textoMargemEstimada(cenario)}
         tom={nc ? "ausente" : "neutro"}
         comparacao={
           <span className="flex flex-wrap items-center gap-1.5">
@@ -114,7 +130,7 @@ export function ResumoEstimado({ cenario }: { cenario: CenarioPremissas }) {
         identidade="ticket"
         icone={Percent}
         rotulo="% da receita (estimada)"
-        valor={textoMargemEstimadaPct(cenario)}
+        valor={margemEstimadaPctTexto(cenario)}
         tom={nc ? "ausente" : "neutro"}
         comparacao={nc ? "Depende da margem estimada" : "Margem estimada ÷ receita base"}
       />
@@ -169,9 +185,9 @@ export function ComparacaoCenarios({ celula, cenario }: { celula: CelulaDRE; cen
               cenario.estado === "nao_calculavel" || cenario.margem_contribuicao_estimada === null ? "text-ink-faint" : "text-ink"
             }`}
           >
-            {textoMargemEstimada(cenario)}
+            {margemEstimadaTexto(cenario)}
           </dd>
-          <dd className="text-xs text-ink-muted">% da receita: {textoMargemEstimadaPct(cenario)}</dd>
+          <dd className="text-xs text-ink-muted">% da receita: {margemEstimadaPctTexto(cenario)}</dd>
           <dd>
             <EstadoCenarioChip cenario={cenario} />
           </dd>
@@ -361,7 +377,7 @@ export function DreVerticalEstimada({
             <td className="hidden sm:table-cell" />
             <td className="hidden sm:table-cell" />
             <td className="px-3 py-3 text-right text-sm font-semibold tabular-nums text-ink sm:whitespace-nowrap sm:px-4">
-              {nc ? <span className="text-ink-faint">Não calculável</span> : textoMargemEstimada(c)}
+              {nc ? <span className="text-ink-faint">{cenarioSuspenso(c).suspensa ? margemEstimadaTexto(c) : "Não calculável"}</span> : margemEstimadaTexto(c)}
               {!nc && margem && fmtPctDre(c.margem_contribuicao_estimada_pct) && (
                 <span className="block text-xs text-ink-muted sm:hidden">{fmtPctDre(c.margem_contribuicao_estimada_pct)}</span>
               )}
@@ -434,8 +450,8 @@ export function EstimadaPorRecorte({
                       <td className="px-3 py-2.5">
                         <EstadoCenarioChip cenario={d.cenario} />
                       </td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{textoMargemEstimada(d.cenario)}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{textoMargemEstimadaPct(d.cenario)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{margemEstimadaTexto(d.cenario)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{margemEstimadaPctTexto(d.cenario)}</td>
                       <td className="px-3 py-2.5">
                         <Motivos motivos={d.cenario.motivos} visiveis={1} />
                       </td>

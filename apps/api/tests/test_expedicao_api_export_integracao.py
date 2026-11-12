@@ -210,7 +210,6 @@ def test_a_kokeshi_entra_na_resposta_da_shopee(juntas):
     assert r["coverage"]["unexpected_accounts"] == []
     assert r["limitations"]["brands_not_covered"] == []
     notas = r["limitations"]["notes"]
-    assert svc.NOTA_KOKESHI_SEM_FONTE not in notas
     assert any("KOKESHI: fila do export" in n for n in notas)
     frescor = {f["brand"]: f for f in r["freshness"]}
     assert frescor["kokeshi"]["freshness"] == "fresh"
@@ -268,5 +267,6 @@ def test_fila_do_export_incoerente_fica_fora_sem_derrubar_a_shopee(juntas):
     r = svc.get_expedicao(sessao, channel="shopee", include_queue=False)
     assert r["availability"] == "available"
     assert "kokeshi" not in {a["shop_account"] for a in r["accounts"]}
-    assert r["coverage"]["brands_not_covered"] == ["kokeshi"]
+    # Conta do export incoerente fica fora; sem MARCAS_SEM_COBERTURA ela nao vira lacuna.
+    assert r["coverage"]["brands_not_covered"] == []
     assert r["totals"]["backlog_count"] == 5

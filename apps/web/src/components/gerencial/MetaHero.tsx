@@ -22,6 +22,7 @@ import { ArrowDownRight, ArrowUpRight, Target, TriangleAlert } from "lucide-reac
 import type { Marketplace } from "@/lib/mock-data";
 import { CHANNEL_DOT as PONTO } from "@/lib/gerencial/channel-colors";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
+import { SO_PAGOS } from "@/lib/base-vendas";
 import { ROTULO_STATUS, type ProgressoMeta, type StatusMeta } from "@/lib/gerencial/meta-progress";
 import { diaDaSemana, type ProgressoDia, type StatusDia } from "@/lib/metas-curva";
 import { MARCAS, fmtCompacto, rotuloMes } from "@/lib/metas";
@@ -97,6 +98,8 @@ interface Props {
   semMetaDaMarca?: boolean;
   /** (i) do GMV: marcas menores (Bling) somadas sem meta, ou indisponiveis. */
   notaMenores?: string | null;
+  /** (i) do GMV: o que a venda conta (pagos ou realizados). */
+  notaVendas?: string;
   /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
   linhaMenores?: { texto: string; aviso: boolean } | null;
   /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
@@ -137,7 +140,7 @@ export default function MetaHero(props: Props) {
   );
 }
 
-function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, detalheComparacao, notaMenores, linhaMenores }: Props) {
+function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, detalheComparacao, notaMenores, linhaMenores, notaVendas = SO_PAGOS }: Props) {
   const ate = ultimoDia ? ` · até ${ultimoDia.slice(8, 10)}/${ultimoDia.slice(5, 7)}` : "";
   return (
     <div className="min-w-0">
@@ -145,7 +148,7 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
         <h2 id="meta-hero-titulo" className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           GMV do período{ate}
         </h2>
-        {notaMenores && <InfoDica texto={notaMenores} />}
+        <InfoDica texto={notaMenores ? `${notaVendas} ${notaMenores}` : notaVendas} />
       </div>
       {error ? (
         <>
@@ -547,7 +550,7 @@ function Divisao({
             }`}
             title={
               c === "shopee" && s != null
-                ? "Full = FBS. A proporção é medida nas contas da Shopee com API (sem a Kokeshi, que chega por arquivo) e aplicada ao GMV do canal."
+                ? "Full = FBS. A proporção é medida nas contas da Shopee (API) e aplicada ao GMV do canal."
                 : undefined
             }
           >

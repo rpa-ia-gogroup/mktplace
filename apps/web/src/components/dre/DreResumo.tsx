@@ -1,7 +1,7 @@
 import { CircleDollarSign, Percent, ShieldCheck, TrendingUp } from "lucide-react";
 
 import KpiTile from "@/components/ui/KpiTile";
-import { AvisoMargem, ClassificacaoChip } from "@/components/dre/DreChips";
+import { AvisoMargem, ClassificacaoChip, MargemSuspensaChip } from "@/components/dre/DreChips";
 import type { ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
 import {
   ROTULO_MARGEM,
@@ -13,6 +13,7 @@ import {
   fmtReais,
   juntarNomes,
   margemPrincipal,
+  margemSuspensa,
   rotuloAusentes,
   semMargem,
   textoMargem,
@@ -69,7 +70,14 @@ export default function DreResumo({
       ? `Motivo: ${motivo}`
       : "Sem margem para esta seleção";
 
-  const leituraMargem = sem ? (
+  // T-0101: insumo vencido/ausente suspende a margem; o motivo vem com o selo.
+  const suspensa = margemSuspensa(total);
+  const leituraMargem = suspensa ? (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <MargemSuspensaChip />
+      <span>{total.margem_contribuicao_conhecida.motivo_suspensao ?? bloqueio}</span>
+    </span>
+  ) : sem ? (
     bloqueio
   ) : (
     <span className="flex flex-col items-start gap-1.5">
@@ -117,7 +125,13 @@ export default function DreResumo({
         valor={estimada ? estimada.pct : textoMargemPct(total)}
         tom={sem ? "ausente" : "neutro"}
         comparacao={
-          estimada ? "Margem estimada ÷ receita" : sem ? "Depende da margem ao lado" : "Margem conhecida ÷ receita"
+          estimada
+            ? "Margem estimada ÷ receita"
+            : suspensa
+              ? "Suspensa até a republicação do insumo"
+              : sem
+                ? "Depende da margem ao lado"
+                : "Margem conhecida ÷ receita"
         }
       />
       <KpiTile

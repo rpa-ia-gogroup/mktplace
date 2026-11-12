@@ -560,22 +560,23 @@ test("chave REPETIDA por valor, nunca uma lista separada por virgula", () => {
 
 test("contasAusentes: todas presentes -> nenhuma ausente", () => {
   assert.deepEqual(
-    contasAusentes(CONTAS_ESPERADAS_API, ["apice", "barbours", "lescent", "rituaria"]),
+    contasAusentes(CONTAS_ESPERADAS_API, ["apice", "barbours", "kokeshi", "lescent", "rituaria"]),
     [],
   );
 });
 
 test("contasAusentes: uma conta faltando -> so' ela", () => {
   assert.deepEqual(
-    contasAusentes(CONTAS_ESPERADAS_API, ["apice", "barbours", "rituaria"]),
+    contasAusentes(CONTAS_ESPERADAS_API, ["apice", "barbours", "kokeshi", "rituaria"]),
     ["lescent"],
   );
 });
 
-test("contasAusentes: contas_cobertas vazio (ou nulo) -> as quatro", () => {
+test("contasAusentes: contas_cobertas vazio (ou nulo) -> todas", () => {
   assert.deepEqual(contasAusentes(CONTAS_ESPERADAS_API, []), [
     "apice",
     "barbours",
+    "kokeshi",
     "lescent",
     "rituaria",
   ]);
@@ -590,30 +591,31 @@ test("contasAusentes: conta extra inesperada e' ignorada", () => {
     contasAusentes(CONTAS_ESPERADAS_API, [
       "apice",
       "barbours",
+      "kokeshi",
       "lescent",
       "rituaria",
-      "kokeshi",
+      "denavita",
     ]),
     [],
   );
   assert.deepEqual(
-    contasAusentes(CONTAS_ESPERADAS_API, ["kokeshi", "apice"]),
-    ["barbours", "lescent", "rituaria"],
+    contasAusentes(CONTAS_ESPERADAS_API, ["denavita", "apice"]),
+    ["barbours", "kokeshi", "lescent", "rituaria"],
   );
 });
 
 test("contasPresentes: so' esperadas, na ordem esperada, sem extras", () => {
   assert.deepEqual(
-    contasPresentes(CONTAS_ESPERADAS_API, ["rituaria", "kokeshi", "apice"]),
+    contasPresentes(CONTAS_ESPERADAS_API, ["rituaria", "denavita", "apice"]),
     ["apice", "rituaria"],
   );
   assert.deepEqual(contasPresentes(CONTAS_ESPERADAS_API, null), []);
 });
 
-test("as contas esperadas sao as quatro da esteira API", () => {
+test("as contas esperadas sao as cinco da esteira API", () => {
   assert.deepEqual(
     [...CONTAS_ESPERADAS_API],
-    ["apice", "barbours", "lescent", "rituaria"],
+    ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
   );
 });
 

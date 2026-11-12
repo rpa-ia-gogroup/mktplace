@@ -39,7 +39,8 @@ LOTE_SH = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 LOTE_ML = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
 
 LOJAS = {"apice": 1, "barbours": 2, "kokeshi": 3, "lescent": 4, "rituaria": 5}
-#: Shopee: conta identificada pelo NOME da loja. Kokeshi nao e' coberta.
+#: Shopee: conta identificada pelo NOME da loja. Fixture so' com as 4 contas
+#: agendadas; a Kokeshi sai do registry quando cadastrada (ver test_expedicao_api).
 CONTAS_SH = [("apice", "apice", 5), ("barbours", "barbours", 3),
              ("lescent", "lescent", 2), ("rituaria", "rituaria", 1)]
 #: ML: conta identificada pelo SELLER_ID. Kokeshi e' coberta.
@@ -200,12 +201,12 @@ def test_nenhuma_linha_de_um_canal_aparece_no_outro(sessao):
     assert not (contas_sh & contas_ml), "as duas filas se misturaram"
 
 
-def test_kokeshi_so_aparece_no_ml(sessao):
+def test_kokeshi_fora_do_registry_shopee_nao_aparece_na_shopee(sessao):
     sh = svc.get_expedicao(sessao, limit=100)
     ml = svc.get_expedicao(sessao, channel="mercadolivre", limit=100)
     assert "kokeshi" not in {c["brand"] for c in sh["accounts"]}
     assert "kokeshi" in {c["brand"] for c in ml["accounts"]}
-    assert sh["limitations"]["brands_not_covered"] == ["kokeshi"]
+    assert sh["limitations"]["brands_not_covered"] == []
     assert ml["limitations"]["brands_not_covered"] == []
 
 
@@ -343,7 +344,7 @@ def test_cobertura_usa_o_registry_do_canal(sessao):
     assert "kokeshi" in {c["brand"] for c in ml["accounts"]}
     assert "kokeshi" not in ml["expected_accounts"]
     assert ml["brands_not_covered"] == []
-    assert sh["brands_not_covered"] == ["kokeshi"]
+    assert sh["brands_not_covered"] == []
 
 
 def test_conta_do_registry_sem_fotografia_e_acusada_pelo_seller_id(sessao, engine):

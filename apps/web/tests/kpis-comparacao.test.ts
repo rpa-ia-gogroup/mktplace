@@ -141,7 +141,7 @@ test("o card usa o tom do KPI e a tendencia; a pagina passa as tendencias", () =
 
 test("o detalhe do card usa a mesma comparacao do card", () => {
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /comparacao=\{kpis\.find\(\(k\) => k\.key === dialog\.key\)\}/);
+  assert.match(page, /comparacao=\{kpisComMenores.find\(\(k\) => k\.key === dialog\.key\)\}/);
   const det = readFileSync(new URL("../src/components/KpiDrilldownContent.tsx", import.meta.url), "utf8");
   assert.match(det, /<KpiReference kind=\{kind\} overview=\{overview\} comparacao=\{comparacao\} \/>/);
 });

@@ -13,7 +13,7 @@
 | barbours | API + export | `manual_export` |
 | lescent | API + export | `manual_export` |
 | rituaria | API + export | `manual_export` |
-| **kokeshi** | **só export** | `manual_export` (permanente) |
+| kokeshi | API (desde 31/08/2026) + export | `manual_export` até o UPDATE da virada (11/2026) |
 
 Kokeshi é a única ausente da API, e a causa é **app inexistente**: o app Shopee
 é registrado como *Seller In House System* no console da empresa dona de cada

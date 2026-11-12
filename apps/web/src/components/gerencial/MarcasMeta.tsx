@@ -211,7 +211,7 @@ export default function MarcasMeta({
                   </span>
                   {d ? (
                     <span className="col-start-1 row-start-2 flex flex-col gap-1.5">
-                      {/* Venda toda sem medida (Kokeshi so' na Shopee): Full e sem Full zerados nao dizem nada. */}
+                      {/* Venda toda sem medida de Full no canal: Full e sem Full zerados nao dizem nada. */}
                       {comFull > 0 && (
                         <>
                           <BarraFull rotulo="Full" partes={d.full} canais={canaisDaBarra(b)} escala={escalaFull} />
@@ -221,7 +221,7 @@ export default function MarcasMeta({
                       {soma(d.semDado) > 0 && (
                         <BarraFull
                           rotulo={canaisDaBarra(b).filter((c) => (d.semDado[c] ?? 0) > 0).map((c) => CHANNEL_LABEL[c]).join(" + ")}
-                          dica="Sem medida de Full: a Kokeshi na Shopee chega por arquivo, sem a modalidade de envio de cada pedido."
+                          dica="Sem medida de Full: a modalidade de envio dos pedidos deste canal não foi medida no período."
                           partes={d.semDado}
                           canais={canaisDaBarra(b)}
                           escala={escalaFull}
@@ -283,7 +283,7 @@ export default function MarcasMeta({
 }
 
 const FULL_DICA =
-  "Full = ML Full + Shopee FBS, pela proporção medida até ontem; TikTok entra em sem Full. A barra com o nome do canal é a parte sem medida de Full (Kokeshi na Shopee, que chega por arquivo).";
+  "Full = ML Full + Shopee FBS, pela proporção medida até ontem; TikTok entra em sem Full. A barra com o nome do canal é a parte sem medida de Full.";
 
 /** A linha da marca so' com um canal: total, anterior e variacao daquele canal. */
 function soDoCanal(b: BrandRow, c: Marketplace): BrandRow {

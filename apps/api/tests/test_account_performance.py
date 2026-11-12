@@ -811,8 +811,8 @@ def test_brands_validas_sao_repassadas(cliente, fontes, chamadas):
     _get(cliente, brands="Barbours,kokeshi")
     assert chamadas["quality"][0][1]["brand_keys"] == ["barbours", "kokeshi"]
     assert chamadas["tiktok"][0][1]["brands"] == ["barbours", "kokeshi"]
-    # Kokeshi nao tem app Shopee: so' barbours chega a fonte da Shopee.
-    assert chamadas["shopee"][0][1]["brands"] == ["barbours"]
+    # Desde 11/2026 a Kokeshi tem app Shopee: as duas marcas chegam a fonte.
+    assert chamadas["shopee"][0][1]["brands"] == ["barbours", "kokeshi"]
 
 
 def test_brands_repetido_equivale_ao_csv(cliente, fontes, chamadas):
@@ -851,8 +851,8 @@ def test_cobertura_padrao_por_canal(cliente, fontes):
     assert ml["marcas"] == ["barbours", "kokeshi", "lescent", "rituaria"]
     assert [f["marca"] for f in ml["fora"]] == ["apice"]
     sh = _canal(corpo, "shopee")["cobertura"]
-    assert "kokeshi" not in sh["marcas"]
-    assert [f["marca"] for f in sh["fora"]] == ["kokeshi"]
+    assert "kokeshi" in sh["marcas"]
+    assert sh["fora"] == []
     tk = _canal(corpo, "tiktok")["cobertura"]
     assert tk["fora"] == []
 
@@ -866,11 +866,9 @@ def test_so_apice_nao_consulta_fontes_ml(cliente, fontes, chamadas):
     assert _canal(corpo, "mercado_livre")["cobertura"]["fora"][0]["marca"] == "apice"
 
 
-def test_so_kokeshi_nao_consulta_ldr_shopee(cliente, fontes, chamadas):
+def test_so_kokeshi_consulta_ldr_shopee(cliente, fontes, chamadas):
     corpo = _get(cliente, brands="kokeshi")
-    assert "shopee" not in chamadas
-    ind = _ind(corpo, "shopee_ldr_operacional_torre")
-    assert (ind["estado"], ind["valor"]) == ("sem_fonte", None)
+    assert chamadas["shopee"][0][1]["brands"] == ["kokeshi"]
     assert _ind(corpo, "shopee_account_health_oficial")["estado"] == "nao_comprovado"
 
 

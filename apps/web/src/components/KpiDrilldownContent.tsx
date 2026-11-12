@@ -15,6 +15,7 @@ import {
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { acosDoRoas } from "@/lib/gerencial/kpi-band";
+import { notaBase } from "@/lib/base-vendas";
 import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
@@ -56,6 +57,8 @@ interface Props {
   diaEmAndamento?: boolean;
   /** Cor de identidade do cartao que abriu o detalhe (gráfico da tendencia). */
   identidade?: IdentidadeKpi;
+  /** Ressalva extra do número (vai no ⓘ, junto da definição). */
+  nota?: string | null;
 }
 
 function fmtPct1(v: number | null): string {
@@ -123,10 +126,12 @@ export default function KpiDrilldownContent({
   comparar = true,
   diaEmAndamento = false,
   identidade,
+  nota,
 }: Props) {
   const meta = KPI_META[kind];
   const comparacao = comparar ? comparacaoDoCard : undefined;
-  const explicacao = DICA[kind];
+  const venda = kind === "gmv" || kind === "orders" || kind === "avg_ticket" ? notaBase(overview, channels) : null;
+  const explicacao = [DICA[kind], venda, nota].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex flex-col gap-4 text-sm">

@@ -63,14 +63,22 @@ def test_regra_do_tiktok_deduplica_e_usa_a_allowlist_do_conector():
     assert TIKTOK.extra["status_comerciais"] == tuple(COMMERCIAL_ORDER_STATUSES)
 
 
-def test_regra_da_shopee_tira_cancelado_e_soma_item_total():
+def test_regra_da_shopee_tira_cancelado_e_nao_pago_e_soma_item_total():
+    # pagos: nem cancelled nem unpaid; unpaid vai para colunas paralelas.
     assert "lower(order_status) <> 'cancelled'" in V.SHOPEE_SQL
+    assert "FILTER (WHERE lower(o.order_status) <> 'unpaid')" in V.SHOPEE_SQL
+    assert "FILTER (WHERE lower(o.order_status) = 'unpaid')" in V.SHOPEE_SQL
     assert "SUM(item_total)" in V.SHOPEE_SQL
 
 
-def test_kokeshi_nunca_entra_na_shopee():
-    assert "kokeshi" not in SHOPEE.brands
-    assert set(SHOPEE.brands) == {"apice", "barbours", "lescent", "rituaria"}
+def test_tiktok_nao_pago_e_coluna_paralela_e_on_hold_fica_fora():
+    assert "order_status = 'UNPAID'" in V.TIKTOK_SQL
+    assert "WHERE order_status IN :status_comerciais OR order_status = 'UNPAID'" in V.TIKTOK_SQL
+    assert "ON_HOLD" not in V.TIKTOK_SQL
+
+
+def test_shopee_cobre_as_cinco_contas():
+    assert set(SHOPEE.brands) == {"apice", "barbours", "kokeshi", "lescent", "rituaria"}
 
 
 def test_marcas_sao_as_dos_conectores():
@@ -104,10 +112,25 @@ def test_montar_descarta_a_hora_aberta_e_mapeia_a_loja():
     out = V.montar(ML, linhas, brt(13, 20), LOJAS)
     assert out == [
         {"dia": HOJE - timedelta(days=1), "hora": 23, "marketplace_id": V.ML, "loja_id": 3,
-         "gmv": Decimal("7.00"), "pedidos": 1},
+         "gmv": Decimal("7.00"), "pedidos": 1, "unpaid_orders": None, "unpaid_gmv": None},
         {"dia": HOJE, "hora": 12, "marketplace_id": V.ML, "loja_id": 2,
-         "gmv": Decimal("10.01"), "pedidos": 2},
+         "gmv": Decimal("10.01"), "pedidos": 2, "unpaid_orders": None, "unpaid_gmv": None},
     ]
+
+
+def test_montar_publica_nao_pagos_so_onde_ha_fonte_e_ml_fica_nulo():
+    linha = {**_linha(HOJE, 12, "barbours", Decimal("10"), 2), "unpaid_orders": 3, "unpaid_gmv": Decimal("7.505")}
+    so_nao_pago = {**_linha(HOJE, 11, "barbours", Decimal("0"), 0), "unpaid_orders": 1, "unpaid_gmv": Decimal("4")}
+    sem_nao_pago = {**_linha(HOJE, 10, "barbours", Decimal("5"), 1), "unpaid_orders": 0, "unpaid_gmv": Decimal("0")}
+    out = V.montar(SHOPEE, [linha, so_nao_pago, sem_nao_pago], brt(13, 20), LOJAS)
+    por_hora = {r["hora"]: r for r in out}
+    assert (por_hora[12]["pedidos"], por_hora[12]["unpaid_orders"], por_hora[12]["unpaid_gmv"]) == (
+        2, 3, Decimal("7.51"))
+    assert (por_hora[11]["gmv"], por_hora[11]["pedidos"], por_hora[11]["unpaid_orders"]) == (Decimal("0.00"), 0, 1)
+    assert (por_hora[10]["unpaid_orders"], por_hora[10]["unpaid_gmv"]) == (0, Decimal("0.00"))   # zero provado
+    ml = V.montar(ML, [linha], brt(13, 20), LOJAS)          # ML sem fonte: NULL, mesmo se a linha trouxesse valor
+    assert ml[0]["unpaid_orders"] is None and ml[0]["unpaid_gmv"] is None
+
 
 
 def test_montar_aceita_dia_como_datetime():

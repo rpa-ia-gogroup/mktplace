@@ -7,6 +7,8 @@
  */
 import type { Marketplace } from "../mock-data.ts";
 import type { OverviewData } from "../api-client.ts";
+import { fmtBrlFull, fmtNumCurto } from "../formatters.ts";
+import { deltaPct, type KpiDescriptor } from "./kpi-band.ts";
 import {
   canaisSemBase,
   motivoSemBase,
@@ -40,6 +42,10 @@ export interface MenoresOk {
   anterior: number | null;
   /** Só os canais com base em todas as marcas; null = alguma marca sem base. */
   anteriorPorCanal: Partial<Record<Marketplace, number>> | null;
+  /** Pedidos (nos canais do filtro); null = alguma marca sem pedidos informados (nunca 0). */
+  pedidos: number | null;
+  /** Pedidos do período anterior; null = alguma marca sem base (mesma regra do `anterior`). */
+  pedidosAnterior: number | null;
   marcas: MarcaMenorGerencial[];
   aguardando: string[];
   /** Canal com receita agora e sem receita no anterior; null = nada a avisar. */
@@ -61,6 +67,13 @@ function somaCanais(p: Record<string, number> | undefined, canais: readonly Mark
 
 const soma = (p: PorCanal) => Object.values(p).reduce((a, v) => a + (v ?? 0), 0);
 
+/** Pedidos nos canais do filtro. null só quando o dado não veio, ou há GMV e 0 pedidos; GMV 0 com 0 pedidos é 0 de verdade. */
+function pedidosOuNull(p: Record<string, number> | undefined, canais: readonly Marketplace[], gmv: number): number | null {
+  if (p == null) return null;
+  const n = soma(somaCanais(p, canais));
+  return n > 0 || gmv <= 0 ? n : null;
+}
+
 /** `ativo` = filtros permitem (todas as marcas, algum canal Shopee/TikTok, não é demonstração). */
 export function menoresNaGerencial(
   d: MarcasMenores | null | undefined,
@@ -76,6 +89,8 @@ export function menoresNaGerencial(
   const aguardando: string[] = [];
   const anteriores: PorCanal[] = [];
   const semBase: string[] = [];
+  const pedidosDasMarcas: (number | null)[] = [];
+  const pedidosAnteriores: (number | null)[] = [];
   for (const m of d.marcas) {
     if (selecionadas && !selecionadas.includes(m.id) && m.status !== "aguardando_autorizacao") continue;
     if (m.status === "aguardando_autorizacao") {
@@ -92,11 +107,14 @@ export function menoresNaGerencial(
     const motivo = motivoSemBase(semBaseDaMarca);
     semBase.push(...semBaseDaMarca);
     anteriores.push(ant);
+    const anteriorDaMarca = m.total_anterior == null || motivo ? null : soma(ant);
+    pedidosDasMarcas.push(pedidosOuNull(m.pedidos_por_plataforma, canais, total));
+    pedidosAnteriores.push(anteriorDaMarca == null ? null : pedidosOuNull(m.pedidos_por_plataforma_anterior, canais, anteriorDaMarca));
     marcas.push({
       brand: m.id,
       label: m.label,
       total,
-      anterior: m.total_anterior == null || motivo ? null : soma(ant),
+      anterior: anteriorDaMarca,
       anteriorPorCanal: m.total_anterior == null ? null : ant,
       porCanal,
       motivo,
@@ -120,6 +138,8 @@ export function menoresNaGerencial(
     porCanal,
     anterior: comBase && !motivo ? marcas.reduce((a, m) => a + (m.anterior ?? 0), 0) : null,
     anteriorPorCanal: comBase ? anteriorPorCanal : null,
+    pedidos: marcas.length > 0 && pedidosDasMarcas.every((p) => p != null) ? soma2(pedidosDasMarcas as number[]) : null,
+    pedidosAnterior: comBase && !motivo && pedidosAnteriores.every((p) => p != null) ? soma2(pedidosAnteriores as number[]) : null,
     marcas,
     aguardando,
     motivo,
@@ -146,6 +166,53 @@ export function gmvComMenores(base: GmvBase, m: MenoresOk | null, comparavel: bo
   }
   // "antes R$ X" sem as menores ao lado de um total com elas enganaria: some, fica só o percentual da base.
   return { gmv, prevGmv: null, momPct: base.momPct, variacaoInclui: false };
+}
+
+/**
+ * Pedidos e Ticket da faixa de KPIs com as menores, como o GMV do topo: Pedidos = grandes + menores, Ticket = GMV
+ * do topo (já com as menores) / Pedidos. A variação só inclui as menores com base nos DOIS períodos (a mesma
+ * condição do GMV, `variacaoInclui`, mais os pedidos anteriores delas); senão fica o percentual das grandes e o
+ * "antes X" some. Menor sem pedidos informados: a faixa fica como está (grandes) e o card diz isso.
+ */
+export function pedidosTicketComMenores(
+  kpis: readonly KpiDescriptor[],
+  overview: OverviewData | null | undefined,
+  topo: GmvBase & { variacaoInclui: boolean },
+  m: MenoresOk | null,
+): KpiDescriptor[] {
+  if (!m || !overview || topo.gmv == null || m.total <= 0) return [...kpis];
+  if (m.pedidos == null) {
+    const aviso = "Só marcas grandes: pedidos das menores não vieram";
+    return kpis.map((k) => (k.key === "orders" || k.key === "avg_ticket" ? { ...k, subvalue: aviso } : k));
+  }
+  const pedidos = overview.orders + m.pedidos;
+  const ticket = topo.gmv / pedidos;
+  const prevPedidos = topo.variacaoInclui && topo.prevGmv != null && m.pedidosAnterior != null && overview.prev_orders != null ? overview.prev_orders + m.pedidosAnterior : null;
+  const pedidosPct = prevPedidos != null ? deltaPct(pedidos, prevPedidos) : null;
+  const ticketPct = prevPedidos != null ? deltaPct(ticket, topo.prevGmv! / prevPedidos) : null;
+  return kpis.map((k) => {
+    if (k.key === "orders")
+      return {
+        ...k,
+        value: fmtNumCurto(pedidos),
+        exactValue: pedidos.toLocaleString("pt-BR"),
+        // Sem as duas bases, o percentual é o das grandes e o "antes" (sem as menores) some.
+        // O "compradores" vem do overview: só das grandes (as menores não trazem compradores).
+        subvalue: k.subvalue?.replace(/ compradores .*$/, " compradores nas marcas grandes (soma diária)") ?? null,
+        deltaPct: prevPedidos != null ? pedidosPct : k.deltaPct,
+        reference: prevPedidos != null && pedidosPct != null ? `antes ${fmtNumCurto(prevPedidos)}` : null,
+      };
+    if (k.key === "avg_ticket")
+      return {
+        ...k,
+        value: fmtBrlFull(ticket),
+        exactValue: fmtBrlFull(ticket),
+        unavailableReason: null,
+        deltaPct: prevPedidos != null ? ticketPct : k.deltaPct,
+        reference: prevPedidos != null && ticketPct != null ? `antes ${fmtBrlFull(topo.prevGmv! / prevPedidos)}` : null,
+      };
+    return k;
+  });
 }
 
 /** GMV de um canal com as menores e a variação dele (só inclui as menores com base no canal). */

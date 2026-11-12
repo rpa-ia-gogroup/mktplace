@@ -8,7 +8,7 @@ import InfoDica from "@/components/ui/InfoDica";
 import Segmented from "@/components/ui/Segmented";
 import Chip from "@/components/ui/Chip";
 import TableScrollHint from "@/components/TableScrollHint";
-import { ClassificacaoChip } from "@/components/dre/DreChips";
+import { ClassificacaoChip, MargemSuspensaChip } from "@/components/dre/DreChips";
 import {
   ROTULO_CANAL,
   completudeExibida,
@@ -17,6 +17,7 @@ import {
   fmtReais,
   juntarNomes,
   rankingDeMargem,
+  margemSuspensa,
   semMargem,
   textoMargem,
   textoMargemPct,
@@ -197,7 +198,7 @@ export function CelulaNaoCalculavel({ c, abertoInicial = false }: { c: CelulaDRE
         onClick={() => setAberto((v) => !v)}
         className="inline-flex min-h-11 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <ClassificacaoChip classificacao={c.classificacao} />
+        {margemSuspensa(c) ? <MargemSuspensaChip /> : <ClassificacaoChip classificacao={c.classificacao} />}
         <span className="ml-1 text-xs font-semibold text-accent">{aberto ? "ocultar" : "por quê?"}</span>
       </button>
       {aberto && (

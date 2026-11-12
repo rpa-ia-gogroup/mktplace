@@ -18,9 +18,10 @@ O QUE ESTE MODULO GARANTE, E POR QUE
   custo positivo, o repasse TikTok grava negativo. Sinal inesperado nao e'
   corrigido com `abs()` — o componente sai como `sinal_inesperado`.
 - **Nada aqui se chama margem liquida.** O melhor nivel possivel hoje e'
-  "margem de contribuicao conhecida": devolucoes em valor nao tem fonte
-  (contrato §1, §8). Impostos entram como REALIZADO (webgex, T-0069) so' onde
-  foram publicados; sem publicacao, seguem indisponiveis.
+  "margem de contribuicao conhecida": devolucoes em valor so' tem fonte na
+  Shopee (T-0093; ML e TikTok seguem sem, contrato §1, §8). Impostos entram
+  como REALIZADO (webgex, T-0069) so' onde foram publicados; sem publicacao,
+  seguem indisponiveis.
 
 FONTES — SO' O NEON (Gate DRE-DATA-BRIDGE-1)
 -------------------------------------------
@@ -33,9 +34,13 @@ FONTES — SO' O NEON (Gate DRE-DATA-BRIDGE-1)
   e (T-0059) a taxa da Shopee do escrow (`shopee_taxa_escrow`), que substitui
   o `total_fees` do mart quando ele nao cobre a celula (ver `_taxa_shopee_escrow`),
   e (T-0069) os impostos realizados do webgex (`imposto_icms`, `imposto_difal`,
-  `imposto_pis_cofins`, ver `_impostos`), AGREGADOS e publicados pelo `pipelines.dre.insumo_publisher`, que e' o unico
+  `imposto_pis_cofins`, ver `_impostos`), e (T-0093) a devolucao Shopee das
+  lojas com API (`shopee_devolucao_reembolso`, ver `_devolucao_shopee_publicada`),
+  AGREGADOS e publicados pelo `pipelines.dre.insumo_publisher`, que e' o unico
   que le o Data Mart. A requisicao nunca toca o Data Mart: o Render nao o
   alcanca (Gate G4).
+- `marts.shopee_returns_export` (T-0093, migration 036): devolucao da Kokeshi
+  (export do Seller Centre), so' INFORMATIVA (`_devolucao_shopee_export`).
 
 FALHA FECHADA
 -------------
@@ -118,6 +123,10 @@ COMPONENTES = ("receita", "devolucoes", "taxas", "afiliados", "ads", "frete", "c
 CUSTOS_SOMAVEIS = ("devolucoes", "taxas", "ads", "frete", "cmv", "impostos")
 #: Sem estes tres, nao ha margem conhecida (contrato §8).
 REQUISITOS_PARCIAL = ("receita", "taxas", "cmv")
+#: T-0101: dado VELHO nao e' dado PARCIAL. Custo obrigatorio (`REQUISITOS_PARCIAL`
+#: sem a receita) com o insumo publicado vencido ou ausente SUSPENDE a margem
+#: conhecida e a estimada: ficar fora da soma deixava a margem do TikTok em 100%.
+STATUS_SUSPENDEM_MARGEM = (SNAPSHOT_VENCIDO, SNAPSHOT_AUSENTE)
 
 #: Contrato §7 / D5: mes M so' fecha depois que M+2 terminou.
 MESES_MATURACAO = 2
@@ -164,6 +173,25 @@ RESIDUO_REPASSE_MAX = 1.0
 #: listener global) avisa no primeiro dia. Ha' teste de paridade com `DRE_MAX_SNAPSHOT_HOURS` do Oraculo.
 INSUMO_IDADE_MAXIMA = timedelta(hours=54)
 TABELA_INSUMOS = "marts.fact_dre_insumo_mensal"
+
+#: T-0093: devolucoes Shopee. Lojas com API (`pipelines/sync_shopee_daily_api.py`,
+#: `LOJAS_COM_API`): o GMV do mart NAO desconta reembolso, entao a devolucao real
+#: (publicada pelo insumo_publisher a partir de `raw.shopee_returns`) entra na margem.
+LOJAS_SHOPEE_DEVOLUCAO_PUBLICADA = ("apice", "barbours", "lescent", "rituaria")
+#: Lojas cujo GMV vem do shop-stats (vendas − canceladas − devolvidas): a receita
+#: ja' e' liquida, a devolucao e' so' INFORMATIVA (decisao D2, supervisor 11/11).
+MARCAS_SHOPEE_RECEITA_LIQUIDA = ("kokeshi",)
+#: Primeiro dia com devolucao capturada nas duas fontes (as mesmas do /cx).
+DEVOLUCAO_SHOPEE_INICIO = date(2026, 10, 7)
+#: Cobertura (dias cobertos / dias do mes) a partir da qual a devolucao e' do mes inteiro.
+COBERTURA_DEVOLUCAO_COMPLETA = 0.999
+FONTE_DEVOLUCAO_SHOPEE = f"{TABELA_INSUMOS}.shopee_devolucao_reembolso"
+TABELA_DEVOLUCOES_EXPORT = "marts.shopee_returns_export"
+FONTE_DEVOLUCAO_EXPORT = (f"{TABELA_DEVOLUCOES_EXPORT} (export do Seller Centre: refund_amount das devolucoes "
+                          "ACCEPTED, por dia de criacao)")
+MOTIVO_DEVOLUCAO_SEM_PUBLICACAO = "devolução Shopee não publicada (migration 045 ou insumo pendente)"
+MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA = ("já descontada da receita: GMV do shop-stats é líquido de devoluções; "
+                                    "exibida só como informação, fora da margem")
 
 #: Sinal com que cada fonte grava custo. Medido no contrato §4.5/§4.8.
 SINAL_FONTE = {
@@ -321,6 +349,14 @@ class InsumosCelula:
     frete_comprador: dict | None = None
     #: `False` = a coluna `buyer_shipping_fee` nao existe no Neon (041 nao aplicada).
     frete_comprador_coluna: bool = False
+    #: T-0093, so' celula Shopee das lojas com API: `shopee_devolucao_reembolso`
+    #: publicado. `None` = nada publicado para a chave.
+    devolucao_shopee: dict | None = None
+    #: T-0093, so' celula Shopee da Kokeshi: soma do mes em `marts.shopee_returns_export`.
+    #: `devolucao_export_lida=False` = leitura nao feita (comportamento de antes).
+    devolucao_export: dict | None = None
+    devolucao_export_lida: bool = False
+    devolucao_export_tabela: bool = False
 
 
 def _comp(valor=None, status=INDISPONIVEL, motivo=None, fonte=None, somavel=True, partes=None,
@@ -453,8 +489,8 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
                                  motivo=f"{parcial}; {motivo_receita}" if motivo_receita else parcial)
         comps["receita"]["cobertura_rotulo"] = f"presente em {dias} de {dias_mes} dias"
 
-    # --- devolucoes: sem fonte servivel em nenhum canal ----------------------
-    comps["devolucoes"] = _comp(motivo="sem fonte de devolucao/reembolso em valor (perguntas C6, F5)")
+    # --- devolucoes: so' a Shopee tem fonte (T-0093) --------------------------
+    comps["devolucoes"] = _devolucoes(ins)
     # --- impostos: realizado do webgex quando publicado (T-0069) -------------
     comps["impostos"] = _impostos(ins)
 
@@ -539,7 +575,8 @@ def montar_celula_base(ins: InsumosCelula, hoje: date) -> dict:
         classificacao = NAO_CALCULAVEL
     elif not maduro:
         classificacao = PREVIA
-    elif motivos or not all(comps[c]["status"] in (DISPONIVEL, NAO_APLICAVEL) for c in CUSTOS_SOMAVEIS):
+    elif motivos or not all(comps[c]["status"] in (DISPONIVEL, NAO_APLICAVEL)
+                            for c in CUSTOS_SOMAVEIS if comps[c]["somavel"]):
         classificacao = PARCIAL
     else:
         classificacao = COMPLETA
@@ -706,6 +743,119 @@ def _impostos_agregados(destino: dict, partes: list[dict]) -> None:
                       p.get("_imp_receita_casada") is not None for p in partes):
         rf = sum(p["_imp_receita_fiscal"] for p in partes)
         destino["cobertura"] = round(sum(p["_imp_receita_casada"] for p in partes) / rf, 6)
+
+
+def _devolucoes(ins: InsumosCelula) -> dict:
+    """Linha `devolucoes` da celula (T-0093). Funcao PURA.
+
+    - Shopee, lojas com API: devolucao publicada, entra na margem
+      (`_devolucao_shopee_publicada`);
+    - Shopee, Kokeshi, com a leitura do export feita: INFORMATIVA
+      (`_devolucao_shopee_export`), nunca na margem (D2);
+    - o resto (ML, TikTok, leitura nao feita): sem fonte, como antes.
+    """
+    if ins.canal == "shopee" and ins.marca in LOJAS_SHOPEE_DEVOLUCAO_PUBLICADA:
+        return _devolucao_shopee_publicada(ins)
+    if ins.canal == "shopee" and ins.marca in MARCAS_SHOPEE_RECEITA_LIQUIDA and ins.devolucao_export_lida:
+        return _devolucao_shopee_export(ins)
+    return _comp(motivo="sem fonte de devolucao/reembolso em valor (perguntas C6, F5)")
+
+
+def _rotulo_cobertura_devolucao(mes: date, cobertura: float) -> str:
+    """Rotulo da cobertura em dias: "desde 07/10 (25 de 31 dias)" no mes em que a
+    captura comeca (a parte coberta e' o fim do mes); nos outros, "N de M dias"."""
+    dias_mes = ultimo_dia(mes).day
+    dias = max(0, min(dias_mes, round(cobertura * dias_mes)))
+    if (mes.year, mes.month) == (DEVOLUCAO_SHOPEE_INICIO.year, DEVOLUCAO_SHOPEE_INICIO.month) and dias:
+        return f"desde {dias_mes - dias + 1:02d}/{mes.month:02d} ({dias} de {dias_mes} dias)"
+    return f"{dias} de {dias_mes} dias"
+
+
+def _devolucao_com_cobertura(ins: InsumosCelula, valor: float, cobertura: float | None, motivo: str,
+                             somavel: bool, **meta) -> dict:
+    """`disponivel` com cobertura >= 0,999; senao `parcial` com o valor MEDIDO e o rotulo.
+
+    O realizado nunca extrapola: a parte do mes sem captura nao e' estimada
+    (so' o cenario estimado estende pela cobertura).
+    """
+    if cobertura is not None and cobertura >= COBERTURA_DEVOLUCAO_COMPLETA:
+        comp = _comp(valor=valor, status=DISPONIVEL, motivo=motivo, somavel=somavel, **meta)
+    else:
+        cob_txt = "desconhecida" if cobertura is None else pct_br(cobertura)
+        comp = _comp(valor=valor, status=COBERTURA_PARCIAL, somavel=somavel,
+                     motivo=f"{motivo}; captura cobre {cob_txt} dos dias do mes, a parte sem captura "
+                            "nao e' estimada", **meta)
+        if cobertura is not None:
+            comp["cobertura_rotulo"] = _rotulo_cobertura_devolucao(ins.mes, cobertura)
+    comp["cobertura"] = None if cobertura is None else round(cobertura, 6)
+    return comp
+
+
+def _devolucao_shopee_publicada(ins: InsumosCelula) -> dict:
+    """Devolucao Shopee das lojas com API (T-0093), publicada no insumo mensal.
+
+    Valor = reembolso das devolucoes ACCEPTED de `raw.shopee_returns` criadas no
+    mes (competencia = dia de CRIACAO da devolucao, BRT, decisao D1): a margem
+    do mes pode levar devolucao de venda de mes anterior. Precedencia, como os
+    demais insumos: sem linha -> `indisponivel` (nunca zero); lote nao
+    concluido/vencido -> esse estado; `ausente_na_origem` -> `indisponivel`;
+    senao o valor, `disponivel` ou `parcial` pela cobertura em dias. O parcial
+    entra na margem conhecida pelo valor medido (T-0090), sem extrapolar.
+    """
+    dev = ins.devolucao_shopee
+    fonte = FONTE_DEVOLUCAO_SHOPEE
+    if dev is None:
+        return _comp(motivo=MOTIVO_DEVOLUCAO_SEM_PUBLICACAO, fonte=fonte)
+    meta = {"fonte": fonte, "data_as_of": dev.get("data_as_of"), "publicado_em": dev.get("publicado_em")}
+    if dev["_estado"] != "ok":
+        return _comp(status=dev["_estado"], motivo=dev["_motivo"], **meta)
+    if dev.get("valor") is None:
+        return _comp(status=INDISPONIVEL, **meta,
+                     motivo=f"sem devolucao na origem ({dev.get('motivo') or 'ausente_na_origem'}); ausencia nao e' zero")
+    if dev.get("sinal") != 1:
+        return _comp(status=SINAL_INESPERADO, motivo="convencao de sinal publicada diferente da esperada", **meta)
+    valor = _num(dev["valor"])
+    if valor < 0:
+        return _comp(status=SINAL_INESPERADO, motivo="reembolso publicado negativo", **meta)
+    return _devolucao_com_cobertura(
+        ins, valor, _num(dev.get("cobertura")),
+        "reembolso das devolucoes aceitas, pelo dia de criacao da devolucao (pode ser de venda de mes anterior)",
+        somavel=True, **meta)
+
+
+def _devolucao_shopee_export(ins: InsumosCelula) -> dict:
+    """Devolucao da Kokeshi (T-0093), so' INFORMATIVA (decisao D2).
+
+    O GMV da Kokeshi vem do shop-stats, que ja' desconta devolvidas/reembolsadas:
+    deduzir de novo seria dupla deducao. `somavel=False` em todos os estados,
+    inclusive sem a tabela (a receita e' liquida de qualquer jeito); a receita
+    nao muda. Cobertura = dias do mes desde `DEVOLUCAO_SHOPEE_INICIO` / dias do mes.
+    """
+    fonte = FONTE_DEVOLUCAO_EXPORT
+    if not ins.devolucao_export_tabela:
+        return _comp(motivo=f"{TABELA_DEVOLUCOES_EXPORT} nao existe (migration 036 nao aplicada); "
+                            f"{MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA}", fonte=fonte, somavel=False)
+    dias_mes = ultimo_dia(ins.mes).day
+    dias = max(0, (ultimo_dia(ins.mes) - max(ins.mes, DEVOLUCAO_SHOPEE_INICIO)).days + 1)
+    if dias == 0:
+        return _comp(motivo=f"captura de devolucoes comeca em {DEVOLUCAO_SHOPEE_INICIO.strftime('%d/%m/%Y')}; "
+                            f"{MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA}", fonte=fonte, somavel=False)
+    r = ins.devolucao_export
+    if r is None or not int(r.get("devolucoes") or 0):
+        # Mais conservador que o /cx (la', "sem linha" = zero): aqui ausencia nao vira zero.
+        return _comp(motivo=f"nenhuma devolucao da marca no export para o mes (ausencia nao e' zero); "
+                            f"{MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA}", fonte=fonte, somavel=False)
+    meta = {"fonte": fonte, "data_as_of": r.get("data_max_origem")}
+    reemb = _num(r.get("reembolsado"))
+    if reemb is None and int(r.get("aceitas") or 0):
+        return _comp(motivo=f"devolucao aceita sem refund_amount no export; {MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA}",
+                     somavel=False, **meta)
+    valor = 0.0 if reemb is None else reemb  # sem aceita = nada reembolsado (medido, como no /cx)
+    if valor < 0:
+        return _comp(status=SINAL_INESPERADO, somavel=False, **meta,
+                     motivo=f"reembolso negativo no export; {MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA}")
+    return _devolucao_com_cobertura(ins, valor, dias / dias_mes, MOTIVO_DEVOLUCAO_RECEITA_LIQUIDA,
+                                    somavel=False, **meta)
 
 
 #: T-0068: frete pago pelo comprador do TikTok, por dia x marca.
@@ -945,7 +1095,8 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
         else:
             c["entra_na_margem"] = nome in agregado["usados_em_alguma"]
 
-    aplicaveis = [c for c in CUSTOS_SOMAVEIS if comps[c]["status"] != NAO_APLICAVEL]
+    # T-0093: componente so' informativo (devolucao da Kokeshi) nao e' custo aplicavel.
+    aplicaveis = [c for c in CUSTOS_SOMAVEIS if comps[c]["status"] != NAO_APLICAVEL and comps[c]["somavel"]]
     if agregado is None:
         usados = [c for c in CUSTOS_SOMAVEIS if comps[c]["entra_na_margem"]]
         usados_algum = list(usados)
@@ -973,11 +1124,28 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
     }
 
     faltam = [c for c in aplicaveis if c not in usados]
-    if valor is None or receita is None:
+    # T-0101: suspensao (celula: custo obrigatorio vencido/ausente; agregado: alguma
+    # celula suspensa). Receita e componentes seguem visiveis; so' a margem some.
+    if agregado is None:
+        suspensao = _suspensao_da_celula(comps) if receita is not None else None
+    else:
+        suspensao = agregado.get("suspensao")
+    if suspensao is not None:
+        celula["motivos_classificacao"].insert(0, suspensao["motivo"])
         celula["margem_contribuicao_conhecida"] = {
             "valor": None, "pct_receita": None, "rotulo": ROTULO_MARGEM,
             "formula": None, "componentes_usados": [], "componentes_parciais": [],
             "faltam": faltam, "aviso": None,
+            "suspensa": True, "motivo_suspensao": suspensao["motivo"],
+            # Internas, para o agregado: o contrato as descarta.
+            "_suspensa_desde": suspensao["desde"], "_suspensa_tipos": suspensao["tipos"],
+        }
+        return celula
+    if valor is None or receita is None:
+        celula["margem_contribuicao_conhecida"] = {
+            "valor": None, "pct_receita": None, "rotulo": ROTULO_MARGEM,
+            "formula": None, "componentes_usados": [], "componentes_parciais": [],
+            "faltam": faltam, "aviso": None, "suspensa": False, "motivo_suspensao": None,
         }
         return celula
     if agregado is not None and usados_algum != usados:
@@ -999,8 +1167,57 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
         "componentes_parciais": list(parciais),
         "faltam": faltam,
         "aviso": aviso,
+        "suspensa": False,
+        "motivo_suspensao": None,
     }
     return celula
+
+
+def _texto_suspensao(desde) -> str:
+    """Fecho comum do motivo: "...; margem suspensa até a republicação (publicado em DD/MM/AAAA)"."""
+    texto = "margem suspensa até a republicação"
+    return f"{texto} (publicado em {data_brt(desde).strftime('%d/%m/%Y')})" if desde is not None else texto
+
+
+def _suspensao_da_celula(comps: dict) -> dict | None:
+    """T-0101: custo obrigatorio com insumo vencido/ausente suspende a margem. None = nao suspende.
+
+    So' `snapshot_vencido`/`snapshot_ausente` disparam: o parcial NAO vencido
+    segue entrando pelo valor medido ou extrapolado (T-0090). `desde` = o
+    `publicado_em` mais antigo dos componentes envolvidos (None se nenhum tem).
+    """
+    envolvidos = [n for n in REQUISITOS_PARCIAL if n != "receita" and comps[n]["status"] in STATUS_SUSPENDEM_MARGEM]
+    if not envolvidos:
+        return None
+    partes = []
+    for status, palavra in ((SNAPSHOT_VENCIDO, "vencido"), (SNAPSHOT_AUSENTE, "ausente")):
+        nomes = [n for n in envolvidos if comps[n]["status"] == status]
+        if nomes:
+            partes.append(f"insumo {palavra}: {', '.join(nomes)}")
+    datas = [comps[n]["publicado_em"] for n in envolvidos if comps[n].get("publicado_em") is not None]
+    desde = min(datas) if datas else None
+    tipos = {comps[n]["status"] for n in envolvidos}
+    return {"motivo": f"{'; '.join(partes)}; {_texto_suspensao(desde)}", "desde": desde, "tipos": tipos}
+
+
+def _suspensao_do_agregado(margens: list[dict]) -> dict | None:
+    """T-0101: agregado com ALGUMA celula suspensa tem a margem suspensa (None).
+
+    Escolha conservadora: somar so' as celulas com margem mostraria a margem de
+    parte dos canais/marcas como se fosse a do recorte inteiro — o mesmo engano
+    da margem inflada, so' que diluido.
+    """
+    suspensas = [m for m in margens if m.get("suspensa")]
+    if not suspensas:
+        return None
+    tipos: set[str] = set().union(*(m.get("_suspensa_tipos") or set() for m in suspensas))
+    datas = [m["_suspensa_desde"] for m in suspensas if m.get("_suspensa_desde") is not None]
+    desde = min(datas) if datas else None
+    palavra = ("vencido ou ausente" if len(tipos) > 1 else
+               "ausente" if tipos == {SNAPSHOT_AUSENTE} else "vencido")
+    motivo = (f"{len(suspensas)} de {len(margens)} células com margem suspensa (insumo {palavra}); "
+              f"{_texto_suspensao(desde)}")
+    return {"motivo": motivo, "desde": desde, "tipos": tipos, "celulas": len(suspensas)}
 
 
 def _cobertura_agregada(destino: dict, partes: list[dict]) -> None:
@@ -1073,8 +1290,15 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
     receita_total = sum(c["componentes"]["receita"]["valor"] for c in com_receita) if com_receita else None
     comps: dict[str, dict] = {}
     for nome in COMPONENTES:
-        parts = [c["componentes"][nome] for c in celulas]
-        aplic = [(p, c) for p, c in zip(parts, celulas) if p["status"] != NAO_APLICAVEL]
+        pares = [(c["componentes"][nome], c) for c in celulas]
+        # T-0093: celula com o custo so' INFORMATIVO (devolucao da Kokeshi, ja' fora
+        # da receita) nao soma no valor de um agregado em que outras o deduzem.
+        informativas = 0
+        if nome in CUSTOS_SOMAVEIS and len({bool(p["somavel"]) for p, _ in pares}) > 1:
+            informativas = sum(1 for p, _ in pares if not p["somavel"])
+            pares = [(p, c) for p, c in pares if p["somavel"]]
+        parts = [p for p, _ in pares]
+        aplic = [(p, c) for p, c in pares if p["status"] != NAO_APLICAVEL]
         somavel = parts[0]["somavel"]
         if not aplic:
             comps[nome] = _comp(status=NAO_APLICAVEL, somavel=somavel, motivo=parts[0]["motivo"])
@@ -1100,6 +1324,9 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
             comps[nome]["valor_medido"] = sum(
                 p["valor"] if p.get("valor_medido") is None else p["valor_medido"] for p, _ in com_valor)
             comps[nome]["_extrapolado"] = any(p.get("_extrapolado") for p, _ in com_valor)
+        if informativas:
+            fora = f"{informativas} celula(s) com valor so' informativo (receita ja' liquida) fora da soma"
+            comps[nome]["motivo"] = f"{comps[nome]['motivo']}; {fora}" if comps[nome]["motivo"] else fora
         if origem_componente(comps[nome]["valor"], comps[nome]["status"]) == ORIGEM_PARCIAL:
             comps[nome]["cobertura_rotulo"] = _rotulo_agregado(nome, aplic, receita_total)
         # Datas do insumo publicado: a MAIS ANTIGA entre as celulas. Um agregado
@@ -1153,6 +1380,8 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         "usados_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in u for u in usados_cel)],
         "parciais_em_alguma": [n for n in CUSTOS_SOMAVEIS if any(n in p for p in parciais_cel)],
         "margem": sum(m["valor"] for m in com_margem) if com_margem else None,
+        # T-0101: alguma celula suspensa suspende a margem do agregado (ver `_suspensao_do_agregado`).
+        "suspensao": _suspensao_do_agregado([c["margem_contribuicao_conhecida"] for c in celulas]),
     }
     fechas = [c["fecha_em"] for c in celulas if c.get("fecha_em")]
     out = {
@@ -1160,6 +1389,7 @@ def agregar(celulas: list[dict], **chave) -> dict | None:
         "previa": classificacao == PREVIA, "fecha_em": max(fechas) if fechas else None,
         "motivos_classificacao": motivos, "avisos_qualidade": avisos, "data_maxima": datas,
         "celulas": len(celulas),
+        "celulas_suspensas": (agregado["suspensao"] or {}).get("celulas", 0),
     }
     return _finalizar(out, agregado=agregado)
 
@@ -1270,6 +1500,40 @@ def ler_frete_comprador(db: Session, inicio: date, fim: date, marcas: list[str])
     rows = db.execute(text(SQL_FRETE_COMPRADOR), {"inicio": inicio, "fim": fim, "mkt_id": TIKTOK_ID,
                                                   "marcas": marcas}).mappings().all()
     return LeituraFreteComprador(coluna_existe=True, linhas=[dict(r) for r in rows])
+
+
+#: T-0093: devolucao da Kokeshi (export do Seller Centre, migration 036). Mesma
+#: regra do /cx (`cx_atendimento_service._SQL_DEVOLUCOES_MARCAS`): reembolsado =
+#: refund_amount das ACCEPTED, pelo dia de CRIACAO da devolucao em BRT.
+SQL_DEVOLUCOES_EXPORT_EXISTE = f"SELECT to_regclass('{TABELA_DEVOLUCOES_EXPORT}') IS NOT NULL"
+SQL_DEVOLUCOES_EXPORT = f"""
+    SELECT date_trunc('month', (create_time AT TIME ZONE 'America/Sao_Paulo')::date)::date AS mes,
+           brand                                                 AS marca,
+           COUNT(*)                                              AS devolucoes,
+           COUNT(*) FILTER (WHERE status = 'ACCEPTED')           AS aceitas,
+           SUM(refund_amount) FILTER (WHERE status = 'ACCEPTED') AS reembolsado,
+           MAX(update_time)                                      AS data_max_origem
+    FROM {TABELA_DEVOLUCOES_EXPORT}
+    WHERE brand = ANY(:marcas)
+      AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
+    GROUP BY 1, 2
+"""
+
+
+@dataclass
+class LeituraDevolucoesExport:
+    tabela_existe: bool
+    linhas: list[dict] = field(default_factory=list)
+
+
+def ler_devolucoes_export(db: Session, inicio: date, fim: date, marcas: list[str]) -> LeituraDevolucoesExport:
+    """Devolucao da Kokeshi por mes (T-0093). Tabela ausente (036 nao aplicada)
+    nao e' erro: `tabela_existe=False`. `to_regclass` evita a excecao que
+    envenenaria a transacao da sessao."""
+    if not db.execute(text(SQL_DEVOLUCOES_EXPORT_EXISTE)).scalar():
+        return LeituraDevolucoesExport(tabela_existe=False)
+    rows = db.execute(text(SQL_DEVOLUCOES_EXPORT), {"inicio": inicio, "fim": fim, "marcas": marcas}).mappings().all()
+    return LeituraDevolucoesExport(tabela_existe=True, linhas=[dict(r) for r in rows])
 
 
 def marcas_ativas(db: Session) -> list[str]:
@@ -1406,6 +1670,26 @@ def indexar_impostos(linhas: list[dict], agora: datetime) -> dict:
     return out
 
 
+def indexar_devolucao_shopee(linhas: list[dict], agora: datetime) -> dict:
+    """Devolucao Shopee publicada (`shopee_devolucao_reembolso`, T-0093) por chave.
+
+    Funcao propria, como `indexar_taxa_shopee`. O estado do lote e' o da
+    propria linha (mesma regra de `_estado_do_lote`).
+    """
+    out = {}
+    for r in linhas:
+        if r["componente"] != "shopee_devolucao_reembolso":
+            continue
+        estado, motivo = _estado_do_lote([r], agora)
+        out[(_chave_mes(r["competencia"]), r["canal"], r["marca"])] = {
+            "_estado": estado, "_motivo": motivo,
+            "valor": r["valor"], "sinal": r["sinal_origem"], "cobertura": r.get("cobertura"),
+            "status": r["status_reconciliacao"], "motivo": r["motivo"],
+            "data_as_of": r["data_max_origem"], "publicado_em": r["publicado_em"], "lote_id": r["lote_id"],
+        }
+    return out
+
+
 def resumo_insumos(leitura: LeituraInsumos, agora: datetime) -> dict:
     if not leitura.tabela_existe:
         return {"estado": "tabela_ausente", "publicado_em": None,
@@ -1487,12 +1771,15 @@ def montar_dre(
     periodo_origem: str = "informado",
     premissas: dre_premissas.LeituraPremissas | None = None,
     frete_comprador: LeituraFreteComprador | None = None,
+    devolucoes_export: LeituraDevolucoesExport | None = None,
 ) -> dict:
     """Monta a resposta inteira a partir de linhas ja lidas. Funcao PURA.
 
     `premissas` (opcional) acrescenta `cenario_premissas` — sempre estimado —
     sem alterar nenhum campo realizado. `frete_comprador` (T-0068) ausente
     equivale a coluna inexistente: receita TikTok com frete, com motivo.
+    `devolucoes_export` (T-0093) ausente: a devolucao da Kokeshi fica como
+    antes (sem fonte).
     """
     meses = meses_do_periodo(inicio, fim)
     af_idx = {(_chave_mes(r["mes"]), r["marca"]): r for r in afiliado_rows}
@@ -1501,6 +1788,9 @@ def montar_dre(
     cmv_idx, rep_idx = indexar_insumos(insumos.linhas, agora)
     txs_idx = indexar_taxa_shopee(insumos.linhas, agora)
     imp_idx = indexar_impostos(insumos.linhas, agora)
+    dev_idx = indexar_devolucao_shopee(insumos.linhas, agora)
+    dev_exp_idx = ({(_chave_mes(r["mes"]), r["marca"]): r for r in devolucoes_export.linhas}
+                   if devolucoes_export is not None else {})
     motivo_sem = ("marts.fact_dre_insumo_mensal nao existe (migration 025 nao aplicada)"
                   if not insumos.tabela_existe else
                   "competencia nao publicada em marts.fact_dre_insumo_mensal")
@@ -1521,6 +1811,10 @@ def montar_dre(
             motivo_sem_insumo=motivo_sem,
             frete_comprador=fc_idx.get((mes, r["marca"])) if canal == "tiktok" else None,
             frete_comprador_coluna=fc.coluna_existe,
+            devolucao_shopee=dev_idx.get((mes, canal, r["marca"])) if canal == "shopee" else None,
+            devolucao_export=dev_exp_idx.get((mes, r["marca"])) if canal == "shopee" else None,
+            devolucao_export_lida=devolucoes_export is not None,
+            devolucao_export_tabela=devolucoes_export is not None and devolucoes_export.tabela_existe,
         )
         base.append(montar_celula_base(ins, hoje))
     base.sort(key=lambda c: (c["mes"], CANAIS.index(c["canal"]), c["marca"]))
@@ -1562,6 +1856,9 @@ def montar_dre(
             "impostos": "realizado do webgex (ICMS + DIFAL + PIS/COFINS) onde publicado; parcial entra na "
                         "margem conhecida como parcial; sem publicacao, indisponivel. Premissa so' no cenario estimado",
             "previa": "mes imaturo (M+2) sai como PREVIA com valores e fecha_em",
+            "devolucoes": "Shopee (T-0093): lojas com API = reembolso das devolucoes aceitas publicado, por dia de "
+                          "criacao, na margem (parcial pelo medido); Kokeshi = informativa, fora da margem (GMV do "
+                          "shop-stats ja' liquido); ML e TikTok sem fonte",
             "margem_conhecida": "receita − custos com origem realizado, parcial ou extrapolado (entra_na_margem); "
                                 "CMV que nao cobre a receita entra extrapolado pela razao coberta (valor_medido = "
                                 "o cru); custo nao medido nao entra, entao com parciais a margem tende a estar "
@@ -1594,7 +1891,10 @@ def get_dre(db: Session, *, inicio: date, fim: date, canais: list[str],
     premissas = ler_premissas(db, inicio, fim, escopo_marcas)
     frete_comprador = (ler_frete_comprador(db, inicio, fim, escopo_marcas)
                        if "tiktok" in canais else None)
+    marcas_export = [m for m in escopo_marcas if m in MARCAS_SHOPEE_RECEITA_LIQUIDA]
+    devolucoes_export = (ler_devolucoes_export(db, inicio, fim, marcas_export)
+                         if "shopee" in canais and marcas_export else None)
     return montar_dre(inicio=inicio, fim=fim, canais=canais, marcas=escopo_marcas,
                       mart_rows=mart_rows, afiliado_rows=afiliado_rows, insumos=insumos,
                       hoje=hoje, agora=agora, periodo_origem=periodo_origem, premissas=premissas,
-                      frete_comprador=frete_comprador)
+                      frete_comprador=frete_comprador, devolucoes_export=devolucoes_export)

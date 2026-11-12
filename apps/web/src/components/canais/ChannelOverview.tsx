@@ -1,6 +1,7 @@
 import { Columns3 } from "lucide-react";
 import Panel from "@/components/ui/Panel";
 import InfoDica from "@/components/ui/InfoDica";
+import { SO_PAGOS } from "@/lib/base-vendas";
 import TableScrollHint from "@/components/TableScrollHint";
 import type { CanaisChannelMedian } from "@/lib/api-client";
 import { formatChannelMetric, type FormattedMetric } from "@/lib/canais-channel-metrics";
@@ -66,11 +67,14 @@ export default function ChannelOverview({
   fmtBrl,
   fmtNumber,
   carregando,
+  notaVendas = SO_PAGOS,
 }: {
   colunas: ColunaCanal[];
   fmtBrl: (v: number) => string;
   fmtNumber: (v: number) => string;
   carregando: boolean;
+  /** O que GMV e pedidos contam (pagos ou realizados). */
+  notaVendas?: string;
 }) {
   // Mesmo recorte da "participacao no GMV" que a Gerencial ja' exibe: fatia
   // de cada canal entre os canais selecionados COM dado.
@@ -141,7 +145,7 @@ export default function ChannelOverview({
         <>
           Canais lado a lado
           <InfoDica
-            texto={`Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
+            texto={`GMV e pedidos — ${notaVendas} Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
               carregando ? "" : ` (${colunas.map((c) => `${c.rotulo}: ${c.mediana?.brands_with_data ?? 0} marcas`).join(" · ")})`
             }. N/A = não se aplica · Sem dado = deveria existir, mas falta.`}
           />

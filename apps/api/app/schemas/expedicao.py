@@ -100,9 +100,8 @@ class Cobertura(BaseModel):
     missing_accounts: list[str]
     unexpected_accounts: list[str]
     accounts: list[CoberturaConta]
-    #: Marcas que a torre acompanha mas que esta FONTE nao cobre. Hoje:
-    #: Kokeshi, que existe em `marts.dim_loja` e nao existe em
-    #: `raw.shopee_orders` — medido, nao suposto.
+    #: Marcas que a torre acompanha mas que esta FONTE nao cobre. Vazio desde
+    #: 11/2026 (a Kokeshi passou a vir da API da Shopee).
     brands_not_covered: list[str]
 
 
@@ -318,7 +317,7 @@ class Limitacoes(BaseModel):
     no_automation: bool = True
     load_mode: LoadMode = "manual_snapshot"
     snapshot_age_hours: Optional[float] = None
-    #: Kokeshi nao e' coberta por esta fonte.
+    #: Marcas acompanhadas que esta fonte nao cobre (hoje nenhuma).
     brands_not_covered: list[str] = Field(default_factory=list)
     order_identifier_withheld: bool = True
     notes: list[str] = Field(default_factory=list)

@@ -11,11 +11,6 @@ corte (a ultima hora que a fonte dele fechou): a Shopee atrasada nao segura o
 ML e o TikTok. Hoje e ontem do MESMO canal somam ate' o mesmo corte, entao a
 comparacao continua justa; o total e' a soma dos canais, cada um no seu corte.
 `corte_hora` (topo) e' o do canal mais fresco, so' para dizer "ha' dado".
-
-A KOKESHI NA SHOPEE
--------------------
-Chega por arquivo, sem hora de pedido: nao esta' na tabela. Quando o filtro a
-inclui, a resposta diz isso em `limitacoes` — ausencia nao vira zero calado.
 """
 from __future__ import annotations
 
@@ -33,12 +28,6 @@ FONTES = "marts.fact_marketplace_hourly_sales_fonte"
 
 CANAL_POR_ID = {1: "tiktok", 2: "ml", 3: "shopee"}
 SHOPEE_ID = 3
-
-LIMITACAO_KOKESHI_SHOPEE = (
-    "Kokeshi na Shopee fica fora do corte por hora: os pedidos dela chegam por "
-    "arquivo exportado, sem o horário de cada pedido."
-)
-
 
 def _bloco(gmv, pedidos) -> dict:
     gmv = float(gmv or 0)
@@ -76,16 +65,23 @@ def calcular_cortes(fontes: dict[int, Optional[datetime]], mkt_ids: list[int],
 
 
 def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list[str]],
-                      agora: Optional[datetime] = None) -> dict:
+                      agora: Optional[datetime] = None, base: str = "pagos") -> dict:
+    """`base="realizados"` soma os nao pagos (colunas paralelas `unpaid_*`) a pedidos,
+    GMV e tendencia; `pagos` (padrao) nem le' essas colunas. ML nao tem fonte de nao
+    pago: `nao_pago_disponivel.ml` = false (NULL conta como 0 na soma)."""
+    realizados = base == "realizados"
     agora = (agora or datetime.now(APP_TIMEZONE)).astimezone(APP_TIMEZONE)
     hoje = agora.date()
     dias = {"hoje": hoje, "ontem": hoje - timedelta(days=1), "semana_passada": hoje - timedelta(days=7)}
 
     existe = db.execute(text("SELECT to_regclass(:t) IS NOT NULL AND to_regclass(:f) IS NOT NULL"),
                         {"t": TABELA, "f": FONTES}).scalar()
-    base = {"dia": hoje.isoformat(), "corte_hora": None, "canais": [], "limitacoes": []}
+    # `{**base}` abaixo: o nome `base` da assinatura e' a base de vendas, entao o
+    # esqueleto da resposta chama-se `esqueleto`.
+    esqueleto = {"dia": hoje.isoformat(), "corte_hora": None, "canais": [], "limitacoes": [],
+                 "base": base, "nao_pago_disponivel": None}
     if not existe:
-        return {**base, "disponivel": False,
+        return {**esqueleto, "disponivel": False,
                 "motivo": "As vendas por hora ainda não estão publicadas no banco."}
 
     fontes = {r[0]: r[1] for r in db.execute(
@@ -99,12 +95,13 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
                "horas_fechadas_hoje": hora_fechada_do_canal(fontes.get(m), hoje),
                "corte_hora": cortes[m]}
               for m in mkt_ids]
-    limitacoes = []
-    if SHOPEE_ID in mkt_ids and (brand_keys is None or "kokeshi" in brand_keys):
-        limitacoes.append(LIMITACAO_KOKESHI_SHOPEE)
+    limitacoes: list[str] = []
 
+    gmv_expr = "h.gmv + COALESCE(h.unpaid_gmv, 0)" if realizados else "h.gmv"
+    pedidos_expr = "h.pedidos + COALESCE(h.unpaid_orders, 0)" if realizados else "h.pedidos"
+    nao_pago_n = ", COUNT(h.unpaid_orders) AS unpaid_n" if realizados else ""
     linhas = db.execute(text(f"""
-        SELECT h.dia, h.marketplace_id, SUM(h.gmv) AS gmv, SUM(h.pedidos) AS pedidos
+        SELECT h.dia, h.marketplace_id, SUM({gmv_expr}) AS gmv, SUM({pedidos_expr}) AS pedidos{nao_pago_n}
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
         WHERE h.dia = ANY(:dias)
@@ -116,14 +113,18 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
            "brands": brand_keys}).mappings().all()
 
     somas = {(r["dia"], r["marketplace_id"]): (r["gmv"], r["pedidos"]) for r in linhas}
+    # Ha' fonte de nao pago no canal se alguma hora dele (nos dias lidos) tem
+    # `unpaid_orders` preenchido; zero conta (zero provado), NULL nao.
+    nao_pago_disponivel = ({nome: any(int(r["unpaid_n"] or 0) > 0 for r in linhas if r["marketplace_id"] == mid)
+                            for mid, nome in CANAL_POR_ID.items()} if realizados else None)
 
     # Tendencia de fechamento por marca: hoje e ontem ate' o corte, e ontem inteiro.
     por_marca_linhas = db.execute(text(f"""
         -- por_marca
         SELECT l.brand_key AS brand, h.dia, h.marketplace_id,
-               SUM(h.gmv) FILTER (
+               SUM({gmv_expr}) FILTER (
                    WHERE h.hora < (CAST(:cortes AS jsonb) ->> CAST(h.marketplace_id AS text))::int) AS gmv_corte,
-               SUM(h.gmv) AS gmv_dia
+               SUM({gmv_expr}) AS gmv_dia
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
         WHERE h.dia = ANY(:dias)
@@ -134,14 +135,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
            "brands": brand_keys}).mappings().all() if any(cortes.values()) else []
     # Por marca E canal: quem mostra a tendencia soma so' os canais do valor
     # ao lado dela (ex.: so' os canais com meta), nunca um conjunto diferente.
-    def _sem_hora(brand: str, mk: int) -> bool:
-        return brand == "kokeshi" and mk == SHOPEE_ID and SHOPEE_ID in mkt_ids
-
     marcas: dict[str, dict[int, dict]] = {}
     for r in por_marca_linhas:
-        # Kokeshi na Shopee nao tem hora de pedido: sai da conta so' ela (o ML dela entra).
-        if _sem_hora(r["brand"], r["marketplace_id"]):
-            continue
         m = marcas.setdefault(r["brand"], {}).setdefault(
             r["marketplace_id"], {"hoje": 0.0, "ontem_ate": 0.0, "ontem_dia": 0.0})
         if r["dia"] == dias["hoje"]:
@@ -157,8 +152,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     por_marca = [{
         "brand": b, **_tendencia(list(canais.values())),
         "por_canal": [{"channel": CANAL_POR_ID[mk], **_tendencia([p])} for mk, p in sorted(canais.items())],
-        # Quem mostra a marca com a Shopee dela (Kokeshi) nao pode usar esta conta como total.
-        "canais_fora": [CANAL_POR_ID[SHOPEE_ID]] if _sem_hora(b, SHOPEE_ID) else [],
+        # Vazio desde que a Kokeshi na Shopee passou a ter hora de pedido (API, 11/2026).
+        "canais_fora": [],
     } for b, canais in sorted(marcas.items())]
 
     def total(dia: date, ids: list[int]) -> dict:
@@ -167,7 +162,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
         return _bloco(gmv, pedidos)
 
     return {
-        **base,
+        **esqueleto,
+        "nao_pago_disponivel": nao_pago_disponivel,
         "disponivel": True,
         "corte_hora": max(cortes.values(), default=0),
         "canais": canais,

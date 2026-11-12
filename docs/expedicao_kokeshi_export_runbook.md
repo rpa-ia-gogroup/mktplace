@@ -1,5 +1,7 @@
 # Expedição Shopee da Kokeshi pelo export do Seller Centre
 
+> **Atualização 11/2026:** o app Shopee da Kokeshi foi aprovado. Depois da virada (seção "Virada para a API", no fim), a Kokeshi vem da API e este fluxo do bot é desligado; o export segue suportado para outras contas sem app.
+
 A Kokeshi não tem app na Shopee Open Platform, então não aparece em `raw.shopee_orders` e a aba Expedição nunca a mostrou. A partir deste runbook, o operador da Kokeshi (o bot) carrega o export de pedidos do Seller Centre a cada 2 horas. A Kokeshi passa a aparecer na Expedição Shopee nos mesmos lugares das outras marcas:
 
 - os cartões (vencidos, perto de vencer, mais de 48 h e travados);
@@ -21,7 +23,7 @@ Seller Centre (export de pedidos)
 
 - **Nada passa pelo Data Mart nem pelo Airflow.** As tabelas ficam no Neon, onde o bot já grava a diária.
 - O publicador agendado (`marketplace_tower_expedicao_refresh`) não é alterado. Ele apaga e regrava a fila da Shopee a cada 2 h, e por isso a Kokeshi tem tabelas próprias.
-- A Kokeshi **não** entra em `marts.dim_seller_account`. Lá, o publicador agendado passaria a esperá-la no Data Mart e travaria a Shopee inteira. O cadastro dela fica em `marts.expedicao_conta_export`, com `shop_id` 395166866.
+- Até a virada, a Kokeshi **não** entra em `marts.dim_seller_account`. Lá, o publicador agendado passaria a esperá-la no Data Mart e travaria a Shopee inteira. O cadastro dela fica em `marts.expedicao_conta_export`, com `shop_id` 395166866.
 - A classificação é a mesma das outras contas (`transform.build_fila_shopee`): vencido, perto de vencer, mais de 48 h, lento contra a mediana de 30 dias e etapa.
 - Status do export:
 
@@ -84,8 +86,81 @@ Status fora do mapeamento (por exemplo, um status novo de devolução) **não** 
 
 - A Kokeshi aparece na tabela com **"atualizada dd/mm HH:mm"** quando a carga dela é de outra hora que a "Última atualização" do topo.
 - Se o bot parar, o frescor da Kokeshi passa a "Fonte atrasando" depois de 8 h e a "Fonte desatualizada" depois de 24 h, contados contra a fotografia mais recente da tela.
-- Se a fila da Kokeshi publicada estiver incoerente (lote partido), ela sai da resposta e volta a "fora da cobertura". As outras quatro contas continuam no ar.
+- Se a fila da Kokeshi publicada estiver incoerente (lote partido), ela sai da resposta (não aparece como zero). As outras quatro contas continuam no ar.
 
 ## Fora deste runbook
 
 A **LDR operacional e a coorte** da Kokeshi ainda não são calculadas. A LDR está desligada para todas as marcas: a DAG está pausada no Airflow. Os dados de que ela precisa já ficam gravados em `marts.expedicao_shopee_export_pedido`: pagamento, prazo, coleta, status, FBS e motivo de cancelamento. Quando a LDR for ligada, o bot não muda nada.
+
+## Virada para a API (11/2026)
+
+O app Shopee da Kokeshi foi aprovado e o `shopee_orders_etl` já grava a conta (`shop_id` 395166866) em `raw.shopee_orders`. A partir da virada, a Kokeshi sai do export e passa a vir do publicador agendado, como as outras quatro contas. O código já está pronto (`MARCAS_SEM_COBERTURA` vazia na API); falta só o registry no Neon.
+
+Conferido no código: `marts.dim_seller_account` tem `seller_account_id` (serial), `marketplace_id`, `loja_id`, `external_seller_id`, `account_name`, `ativo`, `created_at` e `updated_at`, com `UNIQUE (marketplace_id, external_seller_id)`. Nenhuma migration cadastra contas nela: o cadastro é manual, como o das outras quatro (16/09/2026). A Kokeshi é `loja_id` 3 em `marts.dim_loja`. A identidade da conta na Shopee é a marca (`raw.shopee_orders.shop_account` = `kokeshi`), por isso `account_name` é `kokeshi`.
+
+### Ordem
+
+1. Merge dos PRs da Kokeshi (diária, vendas por hora e produtos; Expedição e Full/FBS).
+2. Wheel no Airflow (inclui `sync_shopee_fbs_daily` com a Kokeshi).
+3. Backfill do `sync_shopee_fbs_daily`, se houver janela.
+4. **Transação abaixo, no Neon, logo depois de um ciclo do `marketplace_tower_expedicao_refresh`.** Assim a próxima execução (2 h) já publica a Kokeshi. Enquanto a conta existe em `raw.shopee_orders` e não está no registry, o publicador vê "conta inesperada" (`UNEXPECTED_ACCOUNT`) e não publica a Shopee: não adie a transação.
+5. Deploy da API (Render) e do web (Vercel).
+6. Avisar o operador do bot para **parar** a carga. O CLI já recusa a conta (exit 6), então nada é gravado em dobro.
+
+### SQL da virada
+
+Conferência antes (leitura): deve devolver `loja_id` 3 para `kokeshi`, `marketplace_id` 3 para `shopee` e nenhuma linha da Kokeshi no registry.
+
+```sql
+SELECT l.loja_id, l.brand_key, l.ativo, m.marketplace_id, m.slug
+FROM marts.dim_loja l CROSS JOIN marts.dim_marketplace m
+WHERE l.brand_key = 'kokeshi' AND m.slug = 'shopee';
+
+SELECT * FROM marts.dim_seller_account WHERE external_seller_id = '395166866';
+```
+
+A transação (uma só; se qualquer instrução falhar, `ROLLBACK`):
+
+```sql
+BEGIN;
+
+INSERT INTO marts.dim_seller_account
+    (marketplace_id, loja_id, external_seller_id, account_name, ativo)
+VALUES
+    (3, 3, '395166866', 'kokeshi', true);
+
+UPDATE marts.expedicao_conta_export
+   SET ativo = false
+ WHERE channel = 'shopee' AND shop_account = 'kokeshi';
+
+-- Conferência: 1 linha no registry da API (ativa) e 1 no export (inativa).
+SELECT 'api' AS fonte, sa.external_seller_id, l.brand_key, sa.ativo
+FROM marts.dim_seller_account sa
+JOIN marts.dim_loja l ON l.loja_id = sa.loja_id
+WHERE sa.marketplace_id = 3 AND sa.external_seller_id = '395166866'
+UNION ALL
+SELECT 'export', c.external_seller_id, c.brand, c.ativo
+FROM marts.expedicao_conta_export c
+WHERE c.channel = 'shopee' AND c.shop_account = 'kokeshi';
+
+COMMIT;
+```
+
+O `INSERT` deve responder `INSERT 0 1` e o `UPDATE`, `UPDATE 1`. Se o `UPDATE` responder `UPDATE 0`, dê `ROLLBACK` e confira o cadastro do export.
+
+Depois do `COMMIT`: no próximo ciclo do `marketplace_tower_expedicao_refresh`, `GET /expedicao` mostra a Kokeshi em `accounts` (sem origem `export`) e `brands_not_covered` vem vazio.
+
+### Rollback
+
+```sql
+BEGIN;
+UPDATE marts.dim_seller_account SET ativo = false, updated_at = now()
+ WHERE marketplace_id = 3 AND external_seller_id = '395166866';
+UPDATE marts.expedicao_conta_export SET ativo = true
+ WHERE channel = 'shopee' AND shop_account = 'kokeshi';
+COMMIT;
+```
+
+Desativar não apaga a linha, para guardar o histórico da chave. Atenção: o CLI do export (`CONTA_SQL`) recusa a conta se existir **qualquer** linha dela em `dim_seller_account`, ativa ou não. Para o bot voltar a carregar, é preciso apagar a linha do registry da API (DELETE), com o time da Torre.
+
+Com a conta desativada no registry da API e ainda presente em `raw.shopee_orders`, o publicador agendado volta a ver "conta inesperada"; o rollback só serve junto com a pausa da ingestão da Kokeshi no `shopee_orders_etl`.
