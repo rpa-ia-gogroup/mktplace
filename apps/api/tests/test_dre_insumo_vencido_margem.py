@@ -176,6 +176,31 @@ def test_agregado_com_uma_celula_suspensa_fica_suspenso():
     assert cen["motivos"][0].startswith("1 de 2 células com margem estimada suspensa")
 
 
+def test_cenario_agregado_suspenso_traz_a_data_mais_antiga():
+    # kokeshi publicado em 11/10, barbours dois dias antes (09/10): vale a mais antiga.
+    rows = [mart("ml", "kokeshi", dias=31), mart("ml", "barbours", dias=31)]
+    insumos = [*cmv("ml", "kokeshi", publicado_em=VELHO),
+               *cmv("ml", "barbours", publicado_em=VELHO - timedelta(days=2))]
+    body, validado = _montar(rows, insumos, premissas=[*prem(JUL, "kokeshi"), *prem(JUL, "barbours")])
+    motivos_celulas = [c["cenario_premissas"]["motivo_suspensao"] for c in body["celulas_base"]]
+    assert {m[-11:-1] for m in motivos_celulas} == {"09/10/2026", DATA_VELHO}
+    cen = body["total"]["cenario_premissas"]
+    motivo = ("2 de 2 células com margem estimada suspensa (insumo vencido ou ausente); "
+              "margem suspensa até a republicação (publicado em 09/10/2026)")
+    assert cen["suspensa"] is True and cen["motivo_suspensao"] == motivo and cen["motivos"][0] == motivo
+    assert validado["total"]["cenario_premissas"]["motivo_suspensao"] == motivo
+
+
+def test_cenario_agregado_suspenso_sem_data_mantem_o_texto():
+    # CMV ausente sem publicacao nas duas celulas: nenhuma data a herdar.
+    rows = [mart("ml", "kokeshi", dias=31), mart("ml", "barbours", dias=31)]
+    body, _ = _montar(rows, [], premissas=[*prem(JUL, "kokeshi"), *prem(JUL, "barbours")])
+    cen = body["total"]["cenario_premissas"]
+    assert cen["suspensa"] is True and cen["motivo_suspensao"] == (
+        "2 de 2 células com margem estimada suspensa (insumo vencido ou ausente); "
+        "margem suspensa até a republicação")
+
+
 def test_agregado_com_todas_suspensas_e_none():
     rows = [mart("ml", "kokeshi"), mart("ml", "barbours")]
     body, _ = _montar(rows, [*cmv("ml", "kokeshi", publicado_em=VELHO)])  # barbours: CMV ausente

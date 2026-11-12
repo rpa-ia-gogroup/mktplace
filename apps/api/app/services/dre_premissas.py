@@ -44,6 +44,7 @@ REGRAS
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -526,6 +527,20 @@ def _subtotais(linhas: dict[str, dict], receita: float | None, *, calcular: bool
 # Agregacao — soma de celulas, nunca reaplicacao de taxa
 # ---------------------------------------------------------------------------
 
+_RE_PUBLICADO_EM = re.compile(r"publicado em (\d{2})/(\d{2})/(\d{4})")
+
+
+def _publicado_mais_antigo(motivos) -> date | None:
+    """T-0101: a data "publicado em DD/MM/AAAA" mais antiga entre os motivos de suspensao.
+
+    O cenario da celula so' carrega o texto herdado da margem conhecida
+    (`dre_service._texto_suspensao`, data ja' em BRT); o `desde` estruturado
+    fica na margem conhecida. Sem nenhuma data -> None.
+    """
+    datas = [date(int(a), int(m), int(d)) for t in motivos if t for d, m, a in _RE_PUBLICADO_EM.findall(t)]
+    return min(datas) if datas else None
+
+
 def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
     """Soma os cenarios das celulas base do recorte.
 
@@ -571,6 +586,9 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
     if suspensas:
         motivo_suspensao = (f"{suspensas} de {len(validos)} células com margem estimada suspensa "
                             "(insumo vencido ou ausente); margem suspensa até a republicação")
+        desde = _publicado_mais_antigo(c.get("motivo_suspensao") for c in validos if c.get("suspensa"))
+        if desde is not None:
+            motivo_suspensao += f" (publicado em {desde.strftime('%d/%m/%Y')})"
         motivos.insert(0, motivo_suspensao)
     for c in validos:
         for m in c["motivos"]:
