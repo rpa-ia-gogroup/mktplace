@@ -618,8 +618,9 @@ def read_source(conn, ref_date: date) -> Snapshot:
         raise ShopeeStockSyncError(
             f"contas sem produto FBS nesta fotografia: {ausentes}")
     avisos.append(
-        "Kokeshi NAO e' coberta: nao esta' na esteira API da Shopee. Ausencia "
-        "de linha dela e' falta de fonte, nunca estoque zero.")
+        "A esteira API da Shopee cobre as 5 contas (apice, barbours, kokeshi, "
+        "lescent e rituaria); Kokeshi entrou em 12/11/2026. Conta ausente "
+        "aborta a publicacao: falta de fonte, nunca estoque zero.")
 
     location_rows = [
         LocationRow(

@@ -685,12 +685,13 @@ def test_limitacoes_viajam_no_payload(engine, sessao):
     _estado(engine, DDL + SEED)
     r = _bloco(sessao)
     texto = " ".join(r.limitacoes)
-    assert "Kokeshi" in texto
+    assert "5 contas" in texto
+    assert "kokeshi" in texto
     assert "10:15" in texto
     assert "manual" not in texto.lower()
     assert "não existe agendamento" not in texto
     assert "Kits ficam FORA" in texto
-    assert r.marcas_nao_cobertas == ["kokeshi"]
+    assert r.marcas_nao_cobertas == []
     assert r.limites.provisorio is True
 
 
