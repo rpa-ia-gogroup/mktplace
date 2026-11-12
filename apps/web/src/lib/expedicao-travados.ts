@@ -145,6 +145,7 @@ export const LIMITE_TRAVADOS = 200;
  * rota da fila por outra situacao.
  */
 export type TipoLista =
+  | "backlog"
   | "travados"
   | "vencidos"
   | "perto_de_vencer"
@@ -153,7 +154,8 @@ export type TipoLista =
   | "acima_48h";
 
 export interface ConfigLista {
-  situacao: Situacao;
+  /** Ausente = a fila inteira (backlog). */
+  situacao?: Situacao;
   ordem: Ordenacao;
   limite: number;
   /** "travados de 722 na fila", "vencem no próximo dia de prazo de 722 na fila". */
@@ -170,6 +172,12 @@ export interface ConfigLista {
 }
 
 export const LISTAS: Record<TipoLista, ConfigLista> = {
+  // A fila inteira, mais antigo primeiro. So' a 1a pagina (500): a fila da
+  // Kokeshi passa de 10 mil e cada pagina e' uma chamada em fila ao Data Mart.
+  backlog: {
+    ordem: "oldest", limite: LIMIT_MAX, nome: "pedidos em aberto",
+    vazio: "Nenhum pedido em aberto nesta fotografia.", arquivo: "backlog", tom: "atencao",
+  },
   travados: {
     situacao: "stalled", ordem: "oldest", limite: LIMITE_TRAVADOS, nome: "travados",
     vazio: "Nenhum pedido travado nesta fotografia.", arquivo: "travados", tom: "atencao",
@@ -241,7 +249,7 @@ export function queryDaLista(
     channel: canal,
     brands: marca ? [marca] : [],
     accounts: conta ? [conta] : [],
-    situacao: [l.situacao],
+    situacao: l.situacao ? [l.situacao] : [],
     orderBy: l.ordem,
     limit: l.limite,
     offset,

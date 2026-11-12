@@ -213,11 +213,12 @@ test("nome do CSV pelo tipo da lista", () => {
   assert.equal(nomeDoCsv("travados", "shopee", "barbours", d), "travados-shopee-barbours-2026-10-30.csv");
 });
 
-test("toda lista tem nome, texto de vazio e situacao", () => {
+test("toda lista tem nome, texto de vazio e situacao (backlog = fila inteira, sem situacao)", () => {
   for (const [tipo, l] of Object.entries(LISTAS)) {
     assert.ok(l.nome.length > 2, tipo);
     assert.ok(l.vazio.length > 2, tipo);
-    assert.ok((SITUACOES as readonly string[]).includes(l.situacao), tipo);
+    if (tipo === "backlog") assert.equal(l.situacao, undefined);
+    else assert.ok((SITUACOES as readonly string[]).includes(l.situacao!), tipo);
   }
 });
 

@@ -215,6 +215,7 @@ const LISTA_DO_KPI: Partial<Record<string, TipoLista>> = {
   stalled: "travados",
 };
 const MEDIDA_DA_LISTA: Record<TipoLista, keyof Totais> = {
+  backlog: "backlog_count",
   travados: "stalled_count",
   vencidos: "overdue_count",
   perto_de_vencer: "due_soon_count",
@@ -282,6 +283,7 @@ const SEM_SERIE: SerieDoCard = { serie: undefined, deltaPp: null, antesPct: null
 
 /** Titulo do dialogo aberto por um item de "O que exige atenção agora". */
 const ROTULO_DA_LISTA: Record<TipoLista, string> = {
+  backlog: "Backlog",
   vencidos: "Vencidos",
   perto_de_vencer: "Perto de vencer",
   vence_24h: "Vence em 24 h",
@@ -932,7 +934,32 @@ export default function ExpedicaoClient({
                 lista: "perto_de_vencer",
               })
           : undefined,
+      // Todo numero da tabela abre a lista (backlog: sem "de N na fila", e' a fila).
+      aoVerBacklog:
+        a.backlog_count > 0
+          ? () =>
+              setAlvoTravados({
+                titulo: `Backlog · ${brandLabel(a.brand)}`,
+                marca: a.brand,
+                conta: a.shop_account,
+                travados: a.backlog_count,
+                backlog: 0,
+                lista: "backlog",
+              })
+          : undefined,
       acima48h: a.over_48h_count,
+      aoVerAcima48h:
+        a.over_48h_count > 0
+          ? () =>
+              setAlvoTravados({
+                titulo: `Acima de 48 h · ${brandLabel(a.brand)}`,
+                marca: a.brand,
+                conta: a.shop_account,
+                travados: a.over_48h_count,
+                backlog: a.backlog_count,
+                lista: "acima_48h",
+              })
+          : undefined,
       travados: a.stalled_count,
       pctTravados: percentualDaFila(a.stalled_count, a.backlog_count),
       aoVerTravados:
