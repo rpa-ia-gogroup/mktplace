@@ -446,7 +446,11 @@ export function ondeAgirTikTok(abertos: AbertosTikTok): ItemFila | null {
 // ---------------------------------------------------------------------------
 // Backlog por marca — o MESMO titulo e o mesmo painel da Shopee e do ML
 // ---------------------------------------------------------------------------
-const DICA_PERTO = "Vencem hoje ou no próximo dia útil, pelo prazo reconstruído.";
+const DICAS_DA_TABELA = {
+  vencidos: <InfoDica texto="Passaram do prazo reconstruído (envio até 1 dia útil, coleta até 2 dias úteis após o pagamento)." />,
+  pertoDeVencer: <InfoDica texto="Vencem hoje ou no próximo dia útil, pelo prazo reconstruído." />,
+  acima48h: <InfoDica texto="Pagos há mais de 48 h e ainda em aberto." />,
+};
 
 export function BacklogPorMarcaTikTok({
   abertos,
@@ -490,7 +494,7 @@ export function BacklogPorMarcaTikTok({
             resposta={null}
             semTendencia
             semBarra
-            ajudas={{ pertoDeVencer: <InfoDica texto={DICA_PERTO} /> }}
+            ajudas={DICAS_DA_TABELA}
             ajudaPace={<InfoDica texto={textoDoPace("tiktok", pace)} />}
             fila={d.brands.map((b) => {
               const perto = b.due_today + b.due_next_day;
