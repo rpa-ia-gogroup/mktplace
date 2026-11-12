@@ -14,7 +14,7 @@ Legenda de disponibilidade:
 |---|---|---|---|---|---|
 | Faturamento bruto (GMV) | Soma dos valores brutos dos pedidos antes de descontos e taxas | `SUM(total_amount)` | dia/mÃªs/brand | âœ… `gmv` (ver §TikTok â€” GMV comercial) | âœ… `gmv` |
 | Faturamento lÃ­quido | GMV menos taxas e descontos | `gmv - total_fees - descontos` | dia/brand | âœ… `total_settlement` | â“ (verificar ml_billing) |
-| Pedidos | Contagem de pedidos | `COUNT(order_id)` | dia/brand | âœ… `orders` | âœ… `paid_orders` |
+| Pedidos | Contagem de pedidos (na tela /pedidos: ver §Pedidos (sem cancelados)) | `COUNT(order_id)` | dia/brand | âœ… `orders` | âœ… `paid_orders` |
 | Unidades vendidas | Soma de itens vendidos | `SUM(quantity)` | dia/brand | âœ… `items_sold` | âœ… `total_units` |
 | Ticket mÃ©dio | GMV / pedidos, **da mesma populaÃ§Ã£o** | `gmv / orders` | dia/brand | âœ… `avg_ticket` (ver §TikTok â€” GMV comercial) | âœ… `avg_ticket` |
 | Receita por SKU | GMV atribuÃ­do a cada SKU | join com gold.tiktok_product_daily / ml_produto_diario | dia/sku | âœ… | âœ… |
@@ -516,3 +516,30 @@ O cancelamento Shopee NAO muda: `Σ cancelados / (Σ pedidos + Σ cancelados)` d
 
 Exemplo (out/26, 5 marcas, so' a kokeshi com devolucao): antes, 260 / 95.945 = **0,27%** (diluido); depois,
 260 / 69.073 = **0,38%**, "parcial (1 de 5 marcas)".
+
+---
+
+## Pedidos (sem cancelados) — tela /pedidos (T-0095, QA B1-04, PR #386, 2026-11-11)
+
+Regra: o numero de pedidos da tela e' **liquido** = pagos = total bruto − cancelados. Cancelados aparecem como
+informacao a parte, nunca somados.
+
+Fonte: API `GET /api/v1/performance/pedidos` (`apps/api/app/services/performance_service.py`, `get_pedidos`);
+o desconto e' feito no web, em `apps/web/src/lib/pedidos-cartoes.ts` (`paraPedidosLiquidos`,
+`pedidosLiquidosDaMarca`).
+
+| Onde aparece | Formula (web) |
+|---|---|
+| Card "Pedidos (sem cancelados)" (consolidado) e detalhe do card | `kpis.total_orders − tk_canceled − ml_canceled` |
+| Card de pedidos do ML | `ml.orders − ml.canceled` |
+| Coluna "Total" da tabela por marca | `by_brand.total_orders − ml_canceled` (o TikTok ja' vem liquido nesse campo) |
+
+Mesma base (pagos) do ticket medio (`kpis.avg_ticket`) e do grafico diario.
+Filtros/dimensoes: os filtros globais da tela (periodo, marcas, canais).
+
+Limitacoes conhecidas:
+- A API mistura bases: `kpis.total_orders`, `ml.orders` e `by_brand.total_orders` vem **brutos** (pagos +
+  cancelados); `tiktok.orders` e `daily` vem **liquidos**. Por isso o desconto mora no web.
+- Se a API passar a mandar liquido, o desconto do web tem de sair (risco de descontar duas vezes). O ideal e'
+  alinhar a API e remover `paraPedidosLiquidos`.
+- A **taxa de cancelamento continua sobre o bruto**, como a API calcula.
