@@ -167,7 +167,7 @@ export default function KpiDrilldownContent({
  * investimento e o ROAS sem consolidado mudam.
  */
 const DICA: Partial<Record<KpiKind, string>> = {
-  gmv: `${SO_PAGOS} ${KPI_META.gmv.definition}`,
+  gmv: `${KPI_META.gmv.definition} ${SO_PAGOS}`,
   orders: SO_PAGOS,
   avg_ticket: SO_PAGOS,
   ad_spend: KPI_META.ad_spend.caveat,
