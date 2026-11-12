@@ -804,7 +804,7 @@ test("chip da foto: aviso de cobertura escrito no chip ('sem RITUÁRIA'), o avis
   assert.match(f.texto, /· sem RITUÁRIA$/);
   assert.equal(f.atencao, true);
   assert.match(f.titulo, /Total parcial: Sem fotografia no dia: RITUÁRIA\./);
-  const limpo = resumoShopee(SHOPEE);
+  const limpo = resumoShopee({ ...SHOPEE, contas_cobertas: ["apice", "barbours", "kokeshi", "lescent", "rituaria"], marcas_nao_cobertas: [] });
   if (limpo.status !== "ok") throw new Error("esperava ok");
   assert.equal(chipFoto(limpo).texto, "foto de 08/11, hoje");
 });
