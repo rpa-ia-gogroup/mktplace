@@ -48,7 +48,6 @@ import {
   ondeAgirNosAbertos,
   queryAbertos,
   type ListaAbertos,
-  type MarcaAbertos,
   type RespostaAbertos,
 } from "@/lib/expedicao-tiktok-abertos";
 import { percentualDaFila } from "@/lib/expedicao-travados";
@@ -444,52 +443,11 @@ export function ondeAgirTikTok(abertos: AbertosTikTok): ItemFila | null {
   return o ? { chave: `onde-agir-${o.chave}`, severidade: o.tom, titulo: o.texto } : null;
 }
 
-const SEGMENTOS_PRAZO = [
-  { chave: "overdue", rotulo: "Vencidos", cor: "bg-crit" },
-  { chave: "perto", rotulo: "Perto de vencer", cor: "bg-warn" },
-  { chave: "on_time", rotulo: "No prazo", cor: "bg-ok" },
-] as const;
-
-/** Vencidos / perto de vencer / no prazo da marca; os pedidos retidos nao entram em nenhuma faixa. */
-function BarraDePrazoTikTok({ b }: { b: MarcaAbertos }) {
-  const valores = { overdue: b.overdue, perto: b.due_today + b.due_next_day, on_time: b.on_time };
-  return (
-    <div
-      className="flex h-4 w-full min-w-[120px] overflow-hidden rounded bg-raised"
-      role="img"
-      aria-label={SEGMENTOS_PRAZO.map((x) => `${x.rotulo}: ${formatarInteiro(valores[x.chave])}`).join(", ")}
-    >
-      {SEGMENTOS_PRAZO.map((x) => (
-        <div
-          key={x.chave}
-          className={x.cor}
-          style={{ width: b.open > 0 ? `${(valores[x.chave] / b.open) * 100}%` : "0%" }}
-          title={`${x.rotulo}: ${formatarInteiro(valores[x.chave])}`}
-        />
-      ))}
-    </div>
-  );
-}
-
-function LegendaDaBarra() {
-  return (
-    <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-muted">
-      {SEGMENTOS_PRAZO.map((x) => (
-        <li key={x.chave} className="flex items-center gap-1.5">
-          <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 rounded-sm ${x.cor}`} />
-          {x.rotulo}
-        </li>
-      ))}
-      <li>
-        <InfoDica texto="A barra mostra a fatia do backlog de cada marca por situação do prazo reconstruído: vencidos, perto de vencer (vencem hoje ou no próximo dia útil) e no prazo. Pedidos retidos pelo TikTok não entram na barra." />
-      </li>
-    </ul>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Backlog por marca — o MESMO titulo e o mesmo painel da Shopee e do ML
 // ---------------------------------------------------------------------------
+const DICA_PERTO = "Vencem hoje ou no próximo dia útil, pelo prazo reconstruído.";
+
 export function BacklogPorMarcaTikTok({
   abertos,
   api,
@@ -519,7 +477,6 @@ export function BacklogPorMarcaTikTok({
       // EXPEDICAO-TIKTOK-COLETA-PERDIDA: por dia de prazo, inclusive os ja' coletados depois.
       rodape={
         <div className="flex flex-col gap-2">
-          {d.brands.length ? <LegendaDaBarra /> : null}
           <TikTokColetaPerdida api={api} marca={marca} embutida />
         </div>
       }
@@ -532,6 +489,8 @@ export function BacklogPorMarcaTikTok({
           <EvolucaoPorMarca
             resposta={null}
             semTendencia
+            semBarra
+            ajudas={{ pertoDeVencer: <InfoDica texto={DICA_PERTO} /> }}
             ajudaPace={<InfoDica texto={textoDoPace("tiktok", pace)} />}
             fila={d.brands.map((b) => {
               const perto = b.due_today + b.due_next_day;
@@ -553,7 +512,6 @@ export function BacklogPorMarcaTikTok({
                 acima48h: b.over_48h,
                 aoVerAcima48h: b.over_48h > 0 ? () => abertos.abrir("over_48h", b.over_48h, b.brand) : undefined,
                 travados: null,
-                barra: <BarraDePrazoTikTok b={b} />,
               };
             })}
           />
