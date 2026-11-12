@@ -1535,7 +1535,7 @@ export default function ExpedicaoClient({
               <th scope="col" className="w-[34%]">Distribuição</th>
               <th scope="col" className="text-right">Backlog</th>
               {mostrarPace && filtros.channel === "shopee" && (
-                <th scope="col" className="text-right">Backlog vendedor</th>
+                <th scope="col" className="text-right">Backlog sem FBS</th>
               )}
               {mostrarPace && (
                 <>

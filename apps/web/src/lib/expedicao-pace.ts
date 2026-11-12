@@ -88,12 +88,13 @@ export function textoDoPace(canal: string, r: RespostaPace | null): string {
   const dias = r?.totais?.find((t) => t.channel === canal)?.dias ?? [];
   const com = dias.filter((d) => d.despachados !== null).map((d) => rotuloDoDia(d.dia));
   const sem = dias.filter((d) => d.despachados === null).map((d) => rotuloDoDia(d.dia));
-  let usados = "dos 2 últimos dias úteis fechados";
-  if (com.length === 2) usados = `de ${com[0]} e ${com[1]}`;
-  else if (com.length === 1) usados = `só ${com[0]}${sem.length ? ` (${sem[0].split(" ")[0]} sem dado)` : ""}`;
-  else if (dias.length) usados = `sem dado em ${sem.join(" e ")}`;
+  const divisao = canal === "shopee" ? "Backlog sem FBS ÷ ritmo" : "backlog ÷ ritmo";
+  let media = "Média dos 2 últimos dias úteis fechados";
+  if (com.length === 2) media = `Média de ${com[0]} e ${com[1]}`;
+  else if (com.length === 1) media = `Média só ${com[0]}${sem.length ? ` (${sem[0].split(" ")[0]} sem dado)` : ""}`;
+  else if (dias.length) media = `Sem dado em ${sem.join(" e ")}: ritmo indisponível`;
   return (
-    `Ritmo/dia: média de pedidos despachados por dia. Média ${usados} (seg–sex, sem feriado nacional). ` +
-    `Dias de backlog = backlog ÷ ritmo. Só a operação do vendedor (sem ${fora}); dia sem dado não conta.`
+    `Ritmo/dia: média de pedidos despachados por dia. ${media} (seg–sex, sem feriado nacional). ` +
+    `Dias de backlog = ${divisao}. Só a operação do vendedor (sem ${fora}); dia sem dado não conta.`
   );
 }

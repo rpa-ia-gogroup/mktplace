@@ -80,6 +80,13 @@ test("4. rotulo do dia e texto do ⓘ citam as datas usadas", () => {
   // So' um dia com dado.
   assert.match(textoDoPace("mercadolivre", R), /só sex 06 \(qui sem dado\)/);
   assert.match(textoDoPace("mercadolivre", R), /sem Full/);
+  // A divisao citada e' a da linha: Shopee usa o Backlog sem FBS.
+  assert.match(textoDoPace("shopee", R), /Dias de backlog = Backlog sem FBS ÷ ritmo/);
+  assert.match(textoDoPace("mercadolivre", R), /Dias de backlog = backlog ÷ ritmo/);
+  // Nenhum dia com dado: diz que o ritmo esta' indisponivel.
+  const vazio = { ...R, totais: [{ ...R.totais![0], channel: "shopee",
+    dias: [{ dia: "2026-11-05", despachados: null }, { dia: "2026-11-06", despachados: null }] }] } as typeof R;
+  assert.match(textoDoPace("shopee", vazio), /Sem dado em qui 05 e sex 06: ritmo indisponível/);
   // Sem resposta: texto generico, sem inventar data.
   assert.match(textoDoPace("shopee", null), /2 últimos dias úteis/);
 });
