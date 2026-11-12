@@ -118,7 +118,9 @@ SELECT shop_account AS marca,
 def consultar_datamart(sql: str, params: dict) -> list[dict]:
     from app.services import datamart_leitura  # import tardio: testes injetam `consultar`
 
-    return datamart_leitura.consultar(sql, params)
+    # Dias uteis FECHADOS: o resultado so' muda quando chega a ingestao de D-1
+    # (de manha). 1 h guardado tira a maioria das aberturas da fila do Metabase.
+    return datamart_leitura.consultar(sql, params, ttl_s=3600.0)
 
 
 def dias_uteis_fechados(agora: datetime, n: int = DIAS_DA_MEDIA) -> list[date]:
