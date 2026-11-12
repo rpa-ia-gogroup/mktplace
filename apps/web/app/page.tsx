@@ -28,6 +28,9 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { useBaseVendas } from "@/hooks/useBaseVendas";
+import { notaBase } from "@/lib/base-vendas";
+import SeletorBase from "@/components/SeletorBase";
 import { useGerencialSources } from "@/hooks/useGerencialSources";
 import { HOME_FILTER_DEFAULTS } from "@/lib/filters/home-defaults";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
@@ -155,6 +158,7 @@ function GerencialComGrandes() {
   // pode ser decidida (ritmo, projecao e quanto falta por dia). O mes fechado
   // continua a um clique no seletor de periodo.
   const [filtersRaw, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
+  const [base] = useBaseVendas();
   // Marcas grandes (Data Mart) e menores (Bling) vem no mesmo filtro; o resto da pagina so' ve as grandes
   // (`filters.brands` vazio = todas as grandes) e as menores entram por `menores`, sem meta.
   const escopo = escopoDeMarcas(filtersRaw.brands);
@@ -179,6 +183,7 @@ function GerencialComGrandes() {
     dateTo: filters.dateTo,
     compare: filters.compare,
     granularity,
+    base,
   });
 
   /**
@@ -193,6 +198,7 @@ function GerencialComGrandes() {
     filters.dateFrom,
     filters.dateTo,
     String(filters.compare),
+    base,
   ].join("|");
 
   useEffect(() => {
@@ -400,7 +406,7 @@ function GerencialComGrandes() {
     setHojePorHora(null);
     if (!diaEmAndamento || sources.demoMode) return;
     let vivo = true;
-    fetchHojePorHora(filters.channels, filters.brands).then((d) => {
+    fetchHojePorHora(filters.channels, filters.brands, base).then((d) => {
       if (vivo) setHojePorHora(d);
     });
     return () => {
@@ -719,6 +725,7 @@ function GerencialComGrandes() {
         loading={sources.anyLoading}
       >
         <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} />
+        <SeletorBase />
       </GerencialHeader>
 
       <span className="sr-only" aria-live="polite" aria-atomic="true">
@@ -735,6 +742,7 @@ function GerencialComGrandes() {
         prevGmv={topo.prevGmv}
         momPct={topo.momPct}
         notaMenores={notaDasMenores}
+        notaVendas={notaBase(overview, filters.channels)}
         linhaMenores={linhaMenores}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}

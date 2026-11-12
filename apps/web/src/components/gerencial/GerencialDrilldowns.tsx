@@ -14,6 +14,7 @@
  * de canal e variacao por linha. Paragrafos de metodologia sairam; a ressalva
  * que muda a leitura ficou em uma linha ou no "ⓘ".
  */
+import { useBaseVendas } from "@/hooks/useBaseVendas";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDownRight, ArrowRight, ArrowUpRight } from "lucide-react";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
@@ -337,11 +338,12 @@ export function TrendBucketDrilldownContent({
   });
 
   const range = bucketRange(bucket.date, merged.granularity, bounds);
+  const [base] = useBaseVendas();
 
   useEffect(() => {
     let ignore = false;
     setState({ overview: null, brands: null, overviewStatus: "loading", brandsStatus: "loading" });
-    const opts = { brands: brandsFilter, dateFrom: range.dateFrom, dateTo: range.dateTo, compare: false };
+    const opts = { brands: brandsFilter, dateFrom: range.dateFrom, dateTo: range.dateTo, compare: false, base };
 
     // Estados INDEPENDENTES: uma fonte em falha nao apaga a outra.
     fetchOverview(channels, undefined, opts)
@@ -377,7 +379,7 @@ export function TrendBucketDrilldownContent({
     return () => {
       ignore = true;
     };
-  }, [range.dateFrom, range.dateTo, channels, brandsFilter, demoMode]);
+  }, [range.dateFrom, range.dateTo, channels, brandsFilter, demoMode, base]);
 
   const position = merged.buckets.findIndex((b) => b.date === bucket.date) + 1;
   const anyLoading = state.overviewStatus === "loading" || state.brandsStatus === "loading";

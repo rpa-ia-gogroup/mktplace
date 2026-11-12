@@ -4,6 +4,7 @@ import {
   BRANDS, GMV_MONTHLY,
 } from "./mock-data";
 import type { HojePorHora } from "./gerencial/hoje-por-hora";
+import type { BaseVendas, EcoBase } from "./base-vendas.ts";
 import { torreFetch } from "./torre-fetch.ts";
 import { calcMoM } from "./formatters";
 import {
@@ -27,7 +28,7 @@ export type Filter = MarketplaceSelection;
 
 // ---------- tipos espelhando a API ----------
 
-export interface OverviewData {
+export interface OverviewData extends EcoBase {
   gmv: number;
   tiktok_gmv: number | null;
   ml_gmv: number | null;
@@ -183,6 +184,8 @@ export interface GlobalFilterParams {
   dateFrom?: string;
   dateTo?: string;
   compare?: boolean;
+  /** So' overview, brands, trend, executive-summary e canais aceitam; "pagos" nao vai na URL. */
+  base?: BaseVendas;
 }
 
 export interface ResponseMeta {
@@ -227,6 +230,7 @@ function buildFilterQuery(marketplace: string, period: string | undefined, filte
     qs.set("ref_month", period ?? refMonth());
   }
   if (filters?.compare) qs.set("compare", "true");
+  if (filters?.base === "realizados") qs.set("base", "realizados");
   return qs;
 }
 
@@ -359,6 +363,8 @@ export function fetchOverview(
       shopee_gmv?: number | null;
     };
     gmv_mom_pct: number | null;
+    base?: EcoBase["base"];
+    nao_pago_disponivel?: EcoBase["nao_pago_disponivel"];
     date_from?: string | null;
     date_to?: string | null;
     compare_date_from?: string | null;
@@ -397,6 +403,8 @@ export function fetchOverview(
           prev_tiktok_gmv: raw.previous.tiktok_gmv ?? null,
           prev_ml_gmv: raw.previous.ml_gmv ?? null,
           prev_shopee_gmv: raw.previous.shopee_gmv ?? null,
+          base: raw.base ?? null,
+          nao_pago_disponivel: raw.nao_pago_disponivel ?? null,
         },
       };
     }
@@ -1326,6 +1334,7 @@ export function fetchCanais(
   affiliateCosts: AffiliateCostsBlock | null;
   tiktokOrderDiscounts: TikTokOrderDiscountsBlock | null;
   live: boolean; meta: ResponseMeta;
+  eco?: EcoBase;
 }> {
   const marketplace = serializeMarketplaceSelection(selection);
   const qs = buildFilterQuery(marketplace, period, filters);
@@ -1335,6 +1344,7 @@ export function fetchCanais(
       channel_rows?: CanaisChannelRow[]; channel_medians?: CanaisChannelMedian[];
       affiliate_costs?: AffiliateCostsBlock | null;
       tiktok_order_discounts?: TikTokOrderDiscountsBlock | null;
+      base?: EcoBase["base"]; nao_pago_disponivel?: EcoBase["nao_pago_disponivel"];
       date_from?: string | null; date_to?: string | null;
       compare_date_from?: string | null; compare_date_to?: string | null;
       refreshed_at?: string | null;
@@ -1358,6 +1368,7 @@ export function fetchCanais(
       // presente em qualquer estado. Nao se fabrica um bloco vazio aqui.
       affiliateCosts: raw.affiliate_costs ?? null,
       tiktokOrderDiscounts: raw.tiktok_order_discounts ?? null,
+      eco: { base: raw.base ?? null, nao_pago_disponivel: raw.nao_pago_disponivel ?? null },
     };
   }
 
@@ -1683,8 +1694,9 @@ export function fetchQuality(
 
 /** Sem cache de proposito: o numero muda de hora em hora e o bloco so' busca
  * quando o periodo e' "Hoje" ou o filtro muda. */
-export async function fetchHojePorHora(channels: string[], brands?: string[]): Promise<HojePorHora | null> {
+export async function fetchHojePorHora(channels: string[], brands?: string[], base?: BaseVendas): Promise<HojePorHora | null> {
   const qs = new URLSearchParams();
+  if (base === "realizados") qs.set("base", base);
   qs.set("channels", channels.length > 0 ? channels.join(",") : "all");
   if (brands && brands.length > 0) qs.set("brands", [...brands].sort().join(","));
   return apiFetch<HojePorHora>(`/api/v1/performance/hoje-por-hora?${qs.toString()}`);

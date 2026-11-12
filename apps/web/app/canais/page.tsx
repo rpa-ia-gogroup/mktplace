@@ -14,6 +14,9 @@ import {
 } from "@/lib/api-client";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
+import { useBaseVendas } from "@/hooks/useBaseVendas";
+import { notaBase, type EcoBase } from "@/lib/base-vendas";
+import SeletorBase from "@/components/SeletorBase";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import { Store } from "lucide-react";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
@@ -237,6 +240,8 @@ const ABA_DA_ANCORA: Record<string, CanalId> = {
 
 function CanaisPageInner() {
   const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_anterior" });
+  const [base] = useBaseVendas();
+  const [eco, setEco] = useState<EcoBase | undefined>(undefined);
   const searchParams = useSearchParams();
   const filter = filters.channels; // alias — preserva as referencias existentes abaixo
   const [kpis, setKpis] = useState<CanaisKpis | null>(null);
@@ -260,8 +265,8 @@ function CanaisPageInner() {
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
 
   const requestKey = useMemo(
-    () => buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey),
-    [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey],
+    () => `${buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey)}|${base}`,
+    [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey, base],
   );
 
   useEffect(() => {
@@ -272,12 +277,13 @@ function CanaisPageInner() {
     // Fecha qualquer detalhe marca x canal aberto — o dado subjacente
     // (channelRows) so faz sentido para o filtro que estava fresco ate agora.
     setDetailRow(null);
-    const key = buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey);
-    const opts = { brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare };
+    const key = `${buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey)}|${base}`;
+    const opts = { brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare, base };
     fetchCanais(filters.channels, undefined, opts)
       .then((r) => {
         if (ignore) return;
         setKpis(r.kpis);
+        setEco(r.eco);
         setBrands(r.brands);
         setChannelRows(r.channelRows);
         setChannelMedians(r.channelMedians);
@@ -294,7 +300,7 @@ function CanaisPageInner() {
         setLoading(false);
       });
     return () => { ignore = true; };
-  }, [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey]);
+  }, [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey, base]);
 
   // Dados so sao considerados "frescos" quando: nao esta carregando, nao ha
   // erro, e a chave resolvida bate com a chave da requisicao atual — fecha
@@ -564,7 +570,12 @@ function CanaisPageInner() {
             <Freshness live={dataIsFresh ? isLive : null} refreshedAt={dataIsFresh ? refreshedAt : null} loading={loading} />
           </>
         }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} />}
+        filters={
+          <>
+            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} />
+            <SeletorBase />
+          </>
+        }
       />
 
       {/* Navegacao interna compacta */}
@@ -602,7 +613,7 @@ function CanaisPageInner() {
           canal — a matriz abaixo ja' declara isso; aqui o painel nem aparece,
           em vez de mostrar colunas vazias. */}
       {!error && !isEmpty && colunasCanal.length > 0 && (!dataIsFresh || isLive) && (
-        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto} carregando={!dataIsFresh} />
+        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto} carregando={!dataIsFresh} notaVendas={notaBase(eco, filters.channels)} />
       )}
 
       {/* ── Comparativo entre Canais: Ads, Custo e Frete (Gate 2) ── */}
