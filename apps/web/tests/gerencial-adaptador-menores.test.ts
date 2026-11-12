@@ -12,7 +12,8 @@ import {
   seriesDeMenores,
   topProdutosDeMenores,
 } from "../src/lib/gerencial/marcas-menores-adaptador.ts";
-import { filtrarMarcasMenores, menoresNaGerencial, overviewDeMenores } from "../src/lib/gerencial/marcas-menores-gerencial.ts";
+import { buildKpiBand } from "../src/lib/gerencial/kpi-band.ts";
+import { filtrarMarcasMenores, gmvComMenores, menoresNaGerencial, overviewDeMenores, pedidosTicketComMenores } from "../src/lib/gerencial/marcas-menores-gerencial.ts";
 import { mergeChannelSeries, reconcileSeriesTotal } from "../src/lib/gerencial/trend-series.ts";
 
 const dia = (data: string, sh: number | null, tk: number | null, pSh = 1, pTk = 1) => ({
@@ -172,13 +173,95 @@ test("pagina so' menores: monta a Gerencial dos mesmos componentes, sem Data Mar
   assert.match(pagina, /MARCAS_MENORES_KEYS\.includes\(brand\)\) setDialog/);
 });
 
-test("UX: nenhum controle sem destino na visao das menores; Pedidos/Ticket de Todas/mista avisam 'so' marcas grandes' de forma visivel", () => {
+test("UX: nenhum controle sem destino na visao das menores; Pedidos/Ticket incluem as menores e o aviso 'so marcas grandes' saiu", () => {
   const so = readFileSync(new URL("../app/GerencialMarcasMenores.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(so, /(onOpenGmv|onOpen|onSelectBucket|onOpenChannelSeries)=\{\(\) => \{\}\}/, "handler vazio: botao que nao leva a lugar nenhum");
   for (const prop of ["onOpenGmv", "onOpen", "onSelectBucket", "onOpenChannelSeries"]) assert.match(so, new RegExp(`${prop}=\{abrirAbaMenores\}`), `${prop} sem destino`);
   assert.match(so, /router\.push\(`\/marcas-menores\?date_from=/);
   const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(pagina, /Pedidos e Ticket: só marcas grandes \(sem as menores\)\./);
-  assert.match(pagina, /text-xs font-semibold text-warn-ink" role="status"/);
-  assert.ok(pagina.indexOf("const avisoKpisSoGrandes") > pagina.indexOf("const menoresOk"), "TDZ");
+  assert.doesNotMatch(pagina, /só marcas grandes|avisoKpisSoGrandes/);
+  assert.ok(pagina.indexOf("const kpisComMenores") > pagina.indexOf("const topo = gmvComMenores"), "TDZ");
+  assert.match(pagina, /kpis=\{kpisDaTela\}/);
+});
+
+// Grandes: 1000 pedidos, GMV 50.000 (ticket 50); antes 800 pedidos, GMV 36.000 (ticket 45).
+const OV = { gmv: 50000, prev_gmv: 36000, gmv_mom_pct: 38.9, orders: 1000, prev_orders: 800, avg_ticket: 50, prev_avg_ticket: 45 } as never;
+const kpisDe = (m: ReturnType<typeof menoresNaGerencial>, comparar = true) => {
+  const mo = m.estado === "ok" ? m : null;
+  const topo = gmvComMenores({ gmv: 50000, prevGmv: 36000, momPct: 38.9 }, mo, comparar);
+  const k = pedidosTicketComMenores(buildKpiBand(OV, [...TODOS], comparar), OV, topo, mo);
+  return { pedidos: k[1], ticket: k[2], topo };
+};
+
+test("Pedidos e Ticket com as menores: pedidos somados, ticket = GMV do topo / pedidos, variacao nos dois periodos", () => {
+  const m = menoresNaGerencial(BRUTO, TODOS, true);
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  assert.deepEqual([m.pedidos, m.pedidosAnterior], [8, 7]); // yenzah 7 + aua 1; antes 6 + 1
+  const { pedidos, ticket, topo } = kpisDe(m);
+  assert.equal(topo.gmv, 50500);
+  assert.equal(pedidos.exactValue, "1.008");
+  assert.equal(pedidos.reference, "antes 807");
+  assert.ok(Math.abs(pedidos.deltaPct! - ((1008 - 807) / 807) * 100) < 1e-9);
+  assert.match(ticket.value ?? "", /50,1$/); // 50.500 / 1.008
+  assert.ok(Math.abs(ticket.deltaPct! - ((50500 / 1008 - 36330 / 807) / (36330 / 807)) * 100) < 1e-9); // antes: (36.000 + 330) / 807
+});
+
+test("Pedidos e Ticket: filtro de canal vale; so' Shopee conta os pedidos da Shopee", () => {
+  const m = menoresNaGerencial(BRUTO, ["shopee"], true);
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  assert.deepEqual([m.pedidos, m.pedidosAnterior], [6, 5]); // 5 + 1; antes 4 + 1
+});
+
+test("Pedidos e Ticket: menor sem base no anterior fica sem elas na variacao (como o GMV), valor leva elas", () => {
+  const semBase = { ...BRUTO, marcas: [{ ...aua, total_anterior: null, por_plataforma_anterior: {}, pedidos_por_plataforma_anterior: {} }, yenzah] } as never;
+  const m = menoresNaGerencial(semBase, TODOS, true);
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  assert.equal(m.pedidosAnterior, null);
+  const { pedidos, ticket } = kpisDe(m);
+  assert.equal(pedidos.exactValue, "1.008");
+  assert.match(ticket.value ?? "", /50,1$/);
+  // variacao das grandes (1000 vs 800), sem "antes" (que seria so' das grandes ao lado de um total com menores)
+  assert.ok(Math.abs(pedidos.deltaPct! - 25) < 1e-9);
+  assert.equal(pedidos.reference, null);
+  assert.ok(Math.abs(ticket.deltaPct! - (50 / 45 - 1) * 100) < 1e-9);
+  assert.equal(ticket.reference, null);
+});
+
+test("Pedidos e Ticket: comparar desligado nao inventa variacao; menor sem pedidos nunca vira 0", () => {
+  const m = menoresNaGerencial(BRUTO, TODOS, true);
+  const sem = kpisDe(m, false);
+  assert.equal(sem.pedidos.deltaPct, null);
+  assert.equal(sem.pedidos.exactValue, "1.008");
+  const semPedidos = menoresNaGerencial({ ...BRUTO, marcas: [{ ...yenzah, pedidos_por_plataforma: undefined }, aua] } as never, TODOS, true);
+  if (semPedidos.estado !== "ok") throw new Error("esperava ok");
+  assert.equal(semPedidos.pedidos, null);
+  const { pedidos, ticket } = kpisDe(semPedidos);
+  assert.equal(pedidos.exactValue, "1.000"); // grandes, e o card diz
+  assert.match(ticket.value ?? "", /50$/);
+  assert.match(pedidos.subvalue ?? "", /pedidos das menores não vieram/);
+});
+
+test("Pedidos: menor que nao vende no canal do filtro (zero de verdade) nao derruba a faixa para 'indisponivel'", () => {
+  const m = menoresNaGerencial(BRUTO, ["tiktok"], true); // aua so' vende na Shopee: fora, nao e' falta de dado
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  assert.deepEqual([m.marcas.map((x) => x.brand), m.pedidos, m.pedidosAnterior], [["yenzah"], 2, 2]);
+  // so' menores sem nada no canal: sem menores no total, a faixa fica nas grandes sem aviso
+  const soAua = menoresNaGerencial({ ...BRUTO, marcas: [aua] } as never, ["tiktok"], true);
+  if (soAua.estado !== "ok") throw new Error("esperava ok");
+  const { pedidos } = kpisDe(soAua);
+  assert.equal(pedidos.exactValue, "1.000");
+  assert.equal(pedidos.subvalue, null);
+  // marca com GMV e pedidos_por_plataforma presente mas vazio: GMV > 0 com 0 pedidos = sem dado, nunca 0
+  const incoerente = menoresNaGerencial({ ...BRUTO, marcas: [{ ...aua, pedidos_por_plataforma: {} }] } as never, TODOS, true);
+  if (incoerente.estado !== "ok") throw new Error("esperava ok");
+  assert.equal(incoerente.pedidos, null);
+});
+
+test("Pedidos: o subtexto de compradores diz que e' das marcas grandes quando as menores entram", () => {
+  const ov = { ...(OV as object), tiktok_customers: 120 } as never;
+  const m = menoresNaGerencial(BRUTO, TODOS, true);
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  const topo = gmvComMenores({ gmv: 50000, prevGmv: 36000, momPct: 38.9 }, m, true);
+  const [, pedidos] = pedidosTicketComMenores(buildKpiBand(ov, [...TODOS], true), ov, topo, m);
+  assert.equal(pedidos.subvalue, "120 compradores nas marcas grandes (soma diária)");
 });
