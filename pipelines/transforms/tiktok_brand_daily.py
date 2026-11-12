@@ -59,6 +59,9 @@ def transform(row: dict) -> Optional[dict]:
         # Passthrough do valor MEDIDO, nunca da Gold (que grava 0 literal).
         "canceled_orders": row.get("canceled_orders"),
         "cancel_rate_pct": row.get("cancel_rate_pct"),
+        # Base "Realizados": UNPAID da Raw, colunas paralelas (nao somam em gmv/orders).
+        "unpaid_orders": row.get("unpaid_orders"),
+        "unpaid_gmv": row.get("unpaid_gmv"),
         # Devolvido/reembolsado/taxa-de-problema NÃO têm fonte: a Raw não tem
         # nenhum status de devolução ou reembolso, e problem_rate depende dos
         # dois. Forçados a None AQUI TAMBÉM, e não só no conector: um 0 vindo

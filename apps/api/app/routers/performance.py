@@ -142,27 +142,40 @@ def _parse_month(ref_month: Optional[str]) -> tuple[int, int]:
     return (today.year - 1, 12) if today.month == 1 else (today.year, today.month - 1)
 
 
+#: Base de vendas da Gerencial: `pagos` (padrao, identico ao contrato anterior) ou
+#: `realizados` (pagos + nao pagos). Valor fora disso e' 422 (Literal).
+BaseVendas = Literal["pagos", "realizados"]
+BASE_QUERY_DESCRIPTION = (
+    "Base de vendas: 'pagos' (padrao) ou 'realizados' (pagos + nao pagos; cancelados "
+    "seguem fora). Muda so' pedidos, GMV e ticket; margem, Ads e o resto seguem pagos."
+)
+
+
 @router.get("/overview", response_model=OverviewResponse)
 def overview(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
     return perf_svc.get_overview(
         _require_db(db), filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
 
 
 @router.get("/brands", response_model=BrandsResponse)
 def brands(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
     return perf_svc.get_brands(
         _require_db(db), filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
 
 
@@ -186,6 +199,7 @@ def trend(
             "na segunda-feira) ou month."
         ),
     ),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Serie de GMV/pedidos no grao do intervalo filtrado — respeita
@@ -209,12 +223,14 @@ def trend(
         filters.period,
         granularity=granularity,
         compare_period=filters.compare_period,
+        base=base,
     )
 
 
 @router.get("/executive-summary", response_model=ExecutiveSummaryResponse)
 def executive_summary(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Resumo executivo da Gerencial (Gate 2, Fase 1 — docs/sections/
@@ -222,7 +238,7 @@ def executive_summary(
     Reaproveita get_overview/get_brands/get_quality/get_canais e
     regioes_service.get_summary — nao duplica SQL. Opportunities e Matriz
     Marca x Canal ficam para a Fase 2."""
-    return executive_summary_service.get_executive_summary(_require_db(db), filters)
+    return executive_summary_service.get_executive_summary(_require_db(db), filters, base=base)
 
 
 @router.get("/daily", response_model=DailyResponse)
@@ -375,6 +391,7 @@ def produtos_shopee_summary(
 @router.get("/canais", response_model=CanaisResponse)
 def canais(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     year, month = _year_month_for_service(filters.period)
@@ -382,6 +399,7 @@ def canais(
     resposta = perf_svc.get_canais(
         sessao, filters.channels, year, month,
         brand_keys=filters.brands, period=filters.period, compare_period=filters.compare_period,
+        base=base,
     )
     # Bloco ADITIVO de afiliados (§23), composto AQUI e nao dentro de
     # `get_canais`: o corpo historico da resposta e as consultas que o produzem
@@ -438,12 +456,13 @@ def quality(
 @router.get("/hoje-por-hora", response_model=HojePorHoraResponse)
 def hoje_por_hora(
     filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
     db: Session = Depends(get_db),
 ):
     """Hoje ate' a ultima hora cheia fechada em TODOS os canais do filtro, contra
     ontem e a semana passada ate' a mesma hora. O periodo do filtro e' ignorado:
     a resposta e' sempre do dia corrente (BRT)."""
-    return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands)
+    return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands, base=base)
 
 
 @router.get("/tempo-real", response_model=TempoRealResponse)

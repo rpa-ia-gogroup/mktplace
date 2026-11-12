@@ -80,7 +80,8 @@ def _year_month_for_period(period: EffectivePeriod) -> tuple[int, int]:
     return period.start.year, period.start.month
 
 
-def get_executive_summary(db: Session, filters: ResolvedFilters, *, now: datetime | None = None) -> dict:
+def get_executive_summary(db: Session, filters: ResolvedFilters, *, now: datetime | None = None,
+                          base: str = "pagos") -> dict:
     """`now` injetavel (mesmo padrao de `pipelines/ops/health_check.py._now()`
     e `app.deps.period.today_brt()`) — permite testes deterministicos das
     regras de frescor sem depender do relogio real da maquina."""
@@ -97,13 +98,15 @@ def get_executive_summary(db: Session, filters: ResolvedFilters, *, now: datetim
     compare_period = filters.compare_period or resolve_compare_period(period, compare=True)
     year, month = _year_month_for_period(period)
 
+    # So' Health (GMV/pedidos/ticket/MoM) e Changes mudam com `base`; riscos,
+    # qualidade e canais seguem na base paga.
     overview = perf_svc.get_overview(
         db, filters.channels, year, month,
-        brand_keys=filters.brands, period=period, compare_period=compare_period,
+        brand_keys=filters.brands, period=period, compare_period=compare_period, base=base,
     )
     brands = perf_svc.get_brands(
         db, filters.channels, year, month,
-        brand_keys=filters.brands, period=period, compare_period=compare_period,
+        brand_keys=filters.brands, period=period, compare_period=compare_period, base=base,
     )
     quality = perf_svc.get_quality(
         db, filters.channels, year, month,
@@ -120,12 +123,15 @@ def get_executive_summary(db: Session, filters: ResolvedFilters, *, now: datetim
     brand_freshness = _fetch_brand_freshness(db, filters.mkt_ids, filters.brands)
     regional_max_date = _fetch_regional_freshness(db, filters.mkt_ids)
 
-    return _compose_executive_summary(
+    resumo = _compose_executive_summary(
         overview=overview, brands=brands, quality=quality, canais=canais,
         regioes_summary=regioes_summary, channels=filters.channels, mkt_ids=filters.mkt_ids,
         daily_freshness=daily_freshness, regional_max_date=regional_max_date,
         now=now, brand_freshness=brand_freshness,
     )
+    resumo["base"] = base
+    resumo["nao_pago_disponivel"] = overview.get("nao_pago_disponivel")
+    return resumo
 
 
 # ---------------------------------------------------------------------------

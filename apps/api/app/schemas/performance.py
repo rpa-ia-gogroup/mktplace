@@ -5,6 +5,14 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
+class NaoPagoDisponivel(BaseModel):
+    """Por canal: ha' fonte de pedido NAO PAGO no recorte? So' vem preenchido com
+    `base=realizados`. `false` = o canal entra so' com pagos (ML nunca tem fonte)."""
+    tiktok: bool
+    ml: bool
+    shopee: bool
+
+
 class FiltersEcho(BaseModel):
     """Ecoa os filtros efetivamente aplicados — canal(is) e marca(s) — para
     o cliente confirmar o que o backend realmente usou (ver
@@ -41,6 +49,8 @@ class OverviewResponse(BaseModel):
     compare_date_to: Optional[date] = None
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
+    base: Literal["pagos", "realizados"] = "pagos"
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None
 
 
 class TikTokMaturacao(BaseModel):
@@ -97,6 +107,8 @@ class BrandsResponse(BaseModel):
     refreshed_at: Optional[str] = None
     tiktok_maturacao: Optional[TikTokMaturacao] = None  # T-0074, aditivo
     ml_maturacao: Optional[MlMaturacao] = None  # T-0077, aditivo
+    base: Literal["pagos", "realizados"] = "pagos"
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None
 
 
 class MonthlyBrandGmv(BaseModel):
@@ -152,6 +164,8 @@ class TrendResponse(BaseModel):
     date_to: date
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
+    base: Literal["pagos", "realizados"] = "pagos"
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None
 
 
 class DailyRow(BaseModel):
@@ -783,6 +797,8 @@ class CanaisResponse(BaseModel):
     #: ADITIVO e opcional (§28, UE8-I3). `None` quando o bloco nao foi montado.
     #: Independente de `affiliate_costs`: grao, fonte e frescor sao outros.
     tiktok_order_discounts: Optional[TikTokOrderDiscountsBlock] = None
+    base: Literal["pagos", "realizados"] = "pagos"
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None
 
 
 class ProdutoShopeeRow(BaseModel):

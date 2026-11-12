@@ -67,6 +67,20 @@ def test_formulas_iguais_as_do_export():
     assert r["seller_shipping_cost"] == 100.0
 
 
+def test_nao_pagos_vao_para_a_fato_em_colunas_paralelas_e_sao_da_api():
+    r = D.linha_da_fato(bruta(unpaid_orders=3, unpaid_gmv=123.456))
+    assert (r["unpaid_orders"], r["unpaid_gmv"]) == (3, 123.46)
+    assert (r["orders"], r["gmv"]) == (10, 900.0)              # pagos intactos
+    assert {"unpaid_orders", "unpaid_gmv"} <= set(D.COLUNAS_API)
+    z = D.linha_da_fato(bruta())                                # dia sem unpaid: zero provado, nao NULL
+    assert (z["unpaid_orders"], z["unpaid_gmv"]) == (0, 0.0)
+    # mudou so' o nao pago => a linha e' regravada.
+    assert D.conteudo(r) != D.conteudo(D.linha_da_fato(bruta(unpaid_orders=3, unpaid_gmv=1.0)))
+    # os carregadores de arquivo nunca escrevem essas colunas.
+    for sql in (DP.PATCH_SHOPEE_ORDERS_SQL, DP.PATCH_SHOP_STATS_SQL, DP.PATCH_SHOP_STATS_SEM_GMV_SQL):
+        assert "unpaid" not in str(sql)
+
+
 def test_ausencia_nao_vira_zero_colunas_sem_fonte_ficam_nulas():
     r = D.linha_da_fato(bruta())
     for c in D.COLUNAS_ANULADAS:

@@ -132,6 +132,11 @@ raw_daily AS (
         -- aqui, no MESMO raw_daily do GMV, e nunca lido da Gold (que grava 0).
         -- CANCELLED continua fora de `gmv` e de `orders_commercial`.
         COUNT(*) FILTER (WHERE order_status = 'CANCELLED')                               AS orders_canceled,
+        -- Base "Realizados" (pagos + nao pagos): UNPAID, mesma deduplicacao, mesmo dia
+        -- e mesma base de valor (total_amount) do GMV. ON_HOLD fica fora, como sempre.
+        -- Dia que existe na Raw sem UNPAID prova zero (nunca NULL).
+        COUNT(*) FILTER (WHERE order_status = 'UNPAID')                                  AS orders_unpaid,
+        COALESCE(SUM(total_amount) FILTER (WHERE order_status = 'UNPAID'), 0)            AS gmv_unpaid,
         COUNT(*) FILTER (
             WHERE order_status IS NULL OR order_status NOT IN :known_statuses
         )                                                                                AS orders_unknown_status,
@@ -174,6 +179,10 @@ SELECT
     -- grava 0 literal em 120/120 linhas de ago/2026, com a Raw registrando
     -- 37.598 CANCELLED no mesmo período).
     r.orders_canceled             AS canceled_orders,
+
+    -- Nao pagos (UNPAID) em colunas PARALELAS: nunca entram em gmv/orders/ticket.
+    r.orders_unpaid               AS unpaid_orders,
+    r.gmv_unpaid                  AS unpaid_gmv,
 
     -- Taxa de cancelamento sobre a população de pedidos COLOCADOS que se
     -- resolveram: comercial + cancelado. Mesmo contrato já adotado pela Torre

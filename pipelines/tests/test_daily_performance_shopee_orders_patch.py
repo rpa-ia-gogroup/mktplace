@@ -333,9 +333,13 @@ def test_source_shopee_ads_continua_no_patch_proprio(monkeypatch):
     assert usados and all(s == str(dp.PATCH_ADS_SQL) for s in usados)
 
 
-def test_source_tiktok_continua_no_upsert_completo(monkeypatch):
+def test_source_tiktok_usa_o_upsert_completo_mais_os_nao_pagos(monkeypatch):
     usados = _upserts_usados(monkeypatch, "tiktok")
-    assert usados and all(s == str(dp.UPSERT_SQL) for s in usados)
+    assert usados and all(s == str(dp.UPSERT_TIKTOK_SQL) for s in usados)
+    # o ML segue no UPSERT_SQL, que nao conhece os nao pagos (ficam NULL).
+    assert "unpaid" not in str(dp.UPSERT_SQL)
+    assert {"unpaid_orders", "unpaid_gmv"} <= set(_atribuicoes_do_set(dp.UPSERT_TIKTOK_SQL))
+    assert ":unpaid_gmv" in str(dp.UPSERT_TIKTOK_SQL)
 
 
 def test_source_ml_continua_no_upsert_completo(monkeypatch):

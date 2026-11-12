@@ -10,7 +10,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas.performance import FiltersEcho
+from app.schemas.performance import FiltersEcho, NaoPagoDisponivel
 
 Severity = Literal["info", "warning", "critical"]
 # Categoria semantica (Gate G1) — separa desempenho comercial, eficiencia/
@@ -100,3 +100,5 @@ class ExecutiveSummaryResponse(BaseModel):
     risks: list[ExecutiveRisk] = Field(default_factory=list)
     data_warnings: list[ExecutiveDataWarning] = Field(default_factory=list)
     filters: Optional[FiltersEcho] = None
+    base: Literal["pagos", "realizados"] = "pagos"
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None

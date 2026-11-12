@@ -42,6 +42,7 @@ DDL = [
         ad_spend NUMERIC(14,2), total_settlement NUMERIC(14,2), total_fees NUMERIC(14,2),
         avg_fee_pct NUMERIC(8,2), avg_settlement_pct NUMERIC(8,2), seller_shipping_cost NUMERIC(14,2),
         shipping_pct_of_gmv NUMERIC(8,2), new_buyers INT, repeat_buyers INT, repeat_buyer_rate_pct NUMERIC(8,2),
+        unpaid_orders INT, unpaid_gmv NUMERIC(14,2),
         source_updated_at TIMESTAMPTZ, ingested_at TIMESTAMPTZ DEFAULT NOW(),
         UNIQUE (date, loja_id, marketplace_id))""",
     """CREATE TABLE silver.stg_shopee_orders (
@@ -140,6 +141,17 @@ def test_publica_e_segunda_execucao_identica_nao_grava(eng):
     aud = _auditorias(eng)
     assert [a[:3] for a in aud] == [("shopee_daily_api", "success", 6), ("shopee_daily_api", "success", 0)]
     assert aud[0][3:] == (date(2026, 8, 22), date(2026, 10, 20))
+
+
+def test_nao_pagos_vao_para_colunas_paralelas_sem_entrar_em_pagos(eng):
+    _semear(eng)
+    _pedido(eng, "apice", "AU1", D1, "unpaid", 3, [(1, 20), (1, 5)])
+    D.run(apply=True, agora=AGORA, ambiente=LIGADO)
+    fato = _fato(eng)
+    a1 = fato[(D1, 1)]
+    assert (a1["orders"], a1["gmv"], a1["canceled_orders"]) == (2, Decimal("120.00"), 1)     # pagos intactos
+    assert (a1["unpaid_orders"], a1["unpaid_gmv"]) == (1, Decimal("25.00"))
+    assert (fato[(D1, 2)]["unpaid_orders"], fato[(D1, 2)]["unpaid_gmv"]) == (0, Decimal("0.00"))   # zero provado
 
 
 def test_cancelamento_tardio_e_capturado_na_janela(eng):
