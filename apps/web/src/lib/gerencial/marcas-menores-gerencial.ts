@@ -67,6 +67,13 @@ function somaCanais(p: Record<string, number> | undefined, canais: readonly Mark
 
 const soma = (p: PorCanal) => Object.values(p).reduce((a, v) => a + (v ?? 0), 0);
 
+/** Pedidos nos canais do filtro. null só quando o dado não veio, ou há GMV e 0 pedidos; GMV 0 com 0 pedidos é 0 de verdade. */
+function pedidosOuNull(p: Record<string, number> | undefined, canais: readonly Marketplace[], gmv: number): number | null {
+  if (p == null) return null;
+  const n = soma(somaCanais(p, canais));
+  return n > 0 || gmv <= 0 ? n : null;
+}
+
 /** `ativo` = filtros permitem (todas as marcas, algum canal Shopee/TikTok, não é demonstração). */
 export function menoresNaGerencial(
   d: MarcasMenores | null | undefined,
@@ -101,10 +108,8 @@ export function menoresNaGerencial(
     semBase.push(...semBaseDaMarca);
     anteriores.push(ant);
     const anteriorDaMarca = m.total_anterior == null || motivo ? null : soma(ant);
-    const ped = soma(somaCanais(m.pedidos_por_plataforma, canais));
-    const pedAnt = soma(somaCanais(m.pedidos_por_plataforma_anterior, canais));
-    pedidosDasMarcas.push(ped > 0 ? ped : null);
-    pedidosAnteriores.push(anteriorDaMarca != null && pedAnt > 0 ? pedAnt : null);
+    pedidosDasMarcas.push(pedidosOuNull(m.pedidos_por_plataforma, canais, total));
+    pedidosAnteriores.push(anteriorDaMarca == null ? null : pedidosOuNull(m.pedidos_por_plataforma_anterior, canais, anteriorDaMarca));
     marcas.push({
       brand: m.id,
       label: m.label,
@@ -177,7 +182,7 @@ export function pedidosTicketComMenores(
 ): KpiDescriptor[] {
   if (!m || !overview || topo.gmv == null || m.total <= 0) return [...kpis];
   if (m.pedidos == null) {
-    const aviso = "Sem as demais marcas: pedidos delas indisponíveis";
+    const aviso = "Só marcas grandes: pedidos das menores não vieram";
     return kpis.map((k) => (k.key === "orders" || k.key === "avg_ticket" ? { ...k, subvalue: aviso } : k));
   }
   const pedidos = overview.orders + m.pedidos;
@@ -192,6 +197,8 @@ export function pedidosTicketComMenores(
         value: fmtNumCurto(pedidos),
         exactValue: pedidos.toLocaleString("pt-BR"),
         // Sem as duas bases, o percentual é o das grandes e o "antes" (sem as menores) some.
+        // O "compradores" vem do overview: só das grandes (as menores não trazem compradores).
+        subvalue: k.subvalue?.replace(/ compradores .*$/, " compradores nas marcas grandes (soma diária)") ?? null,
         deltaPct: prevPedidos != null ? pedidosPct : k.deltaPct,
         reference: prevPedidos != null && pedidosPct != null ? `antes ${fmtNumCurto(prevPedidos)}` : null,
       };

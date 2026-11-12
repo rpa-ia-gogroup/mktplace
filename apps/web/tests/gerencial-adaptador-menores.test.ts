@@ -238,5 +238,30 @@ test("Pedidos e Ticket: comparar desligado nao inventa variacao; menor sem pedid
   const { pedidos, ticket } = kpisDe(semPedidos);
   assert.equal(pedidos.exactValue, "1.000"); // grandes, e o card diz
   assert.match(ticket.value ?? "", /50$/);
-  assert.match(pedidos.subvalue ?? "", /indisponíveis/);
+  assert.match(pedidos.subvalue ?? "", /pedidos das menores não vieram/);
+});
+
+test("Pedidos: menor que nao vende no canal do filtro (zero de verdade) nao derruba a faixa para 'indisponivel'", () => {
+  const m = menoresNaGerencial(BRUTO, ["tiktok"], true); // aua so' vende na Shopee: fora, nao e' falta de dado
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  assert.deepEqual([m.marcas.map((x) => x.brand), m.pedidos, m.pedidosAnterior], [["yenzah"], 2, 2]);
+  // so' menores sem nada no canal: sem menores no total, a faixa fica nas grandes sem aviso
+  const soAua = menoresNaGerencial({ ...BRUTO, marcas: [aua] } as never, ["tiktok"], true);
+  if (soAua.estado !== "ok") throw new Error("esperava ok");
+  const { pedidos } = kpisDe(soAua);
+  assert.equal(pedidos.exactValue, "1.000");
+  assert.equal(pedidos.subvalue, null);
+  // marca com GMV e pedidos_por_plataforma presente mas vazio: GMV > 0 com 0 pedidos = sem dado, nunca 0
+  const incoerente = menoresNaGerencial({ ...BRUTO, marcas: [{ ...aua, pedidos_por_plataforma: {} }] } as never, TODOS, true);
+  if (incoerente.estado !== "ok") throw new Error("esperava ok");
+  assert.equal(incoerente.pedidos, null);
+});
+
+test("Pedidos: o subtexto de compradores diz que e' das marcas grandes quando as menores entram", () => {
+  const ov = { ...(OV as object), tiktok_customers: 120 } as never;
+  const m = menoresNaGerencial(BRUTO, TODOS, true);
+  if (m.estado !== "ok") throw new Error("esperava ok");
+  const topo = gmvComMenores({ gmv: 50000, prevGmv: 36000, momPct: 38.9 }, m, true);
+  const [, pedidos] = pedidosTicketComMenores(buildKpiBand(ov, [...TODOS], true), ov, topo, m);
+  assert.equal(pedidos.subvalue, "120 compradores nas marcas grandes (soma diária)");
 });
