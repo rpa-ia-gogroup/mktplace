@@ -23,7 +23,7 @@ export function appendQuery(href: string, query: string): string {
 /** Chaves de filtro global preservadas ao navegar entre paginas filter-aware
  * (canal, marca, periodo, comparacao) — mesma lista que o AppNav usava
  * inline, extraida para ser compartilhada pela Sidebar e pelo MobileDrawer. */
-export const FILTER_QUERY_KEYS = ["channels", "brands", "date_from", "date_to", "compare"];
+export const FILTER_QUERY_KEYS = ["channels", "brands", "date_from", "date_to", "compare", "base"];
 
 /** Monta a querystring de filtros a preservar ao navegar a partir de
  * `pathname`, usando um leitor de parametro generico (`searchParams.get` do

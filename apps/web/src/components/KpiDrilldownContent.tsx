@@ -14,7 +14,8 @@ import {
   type KpiKind,
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { SO_PAGOS, acosDoRoas } from "@/lib/gerencial/kpi-band";
+import { acosDoRoas } from "@/lib/gerencial/kpi-band";
+import { notaBase } from "@/lib/base-vendas";
 import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
@@ -129,7 +130,8 @@ export default function KpiDrilldownContent({
 }: Props) {
   const meta = KPI_META[kind];
   const comparacao = comparar ? comparacaoDoCard : undefined;
-  const explicacao = [DICA[kind], nota].filter(Boolean).join(" ") || undefined;
+  const venda = kind === "gmv" || kind === "orders" || kind === "avg_ticket" ? notaBase(overview, channels) : null;
+  const explicacao = [DICA[kind], venda, nota].filter(Boolean).join(" ") || undefined;
 
   return (
     <div className="flex flex-col gap-4 text-sm">
@@ -167,9 +169,7 @@ export default function KpiDrilldownContent({
  * investimento e o ROAS sem consolidado mudam.
  */
 const DICA: Partial<Record<KpiKind, string>> = {
-  gmv: `${KPI_META.gmv.definition} ${SO_PAGOS}`,
-  orders: SO_PAGOS,
-  avg_ticket: SO_PAGOS,
+  gmv: KPI_META.gmv.definition,
   ad_spend: KPI_META.ad_spend.caveat,
   roas: KPI_META.roas.caveat,
 };

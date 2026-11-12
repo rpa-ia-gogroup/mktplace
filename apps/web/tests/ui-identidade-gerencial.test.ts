@@ -77,9 +77,10 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/gerencial/GerencialDrilldowns.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", "src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
   // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
   // MetaHero: linha de tendencia do dia no topo (pedido da Nathalia)
+  // GerencialDrilldowns: so' aditivo, o detalhe do ponto da serie segue a base Pagos | Realizados (pedido da Nathalia)
   // InfoDica: so' aditivo (quebra de linha no balao e encaixe na tela quando ele e' maior que o espaco) — PR do aviso de total parcial
   // MarcasMeta e app/page.tsx: tendencia do mes por marca (pedido da operacao), mudanca de produto intencional
   // KpiDrilldownDialog: EXCECAO aprovada (10/11/2026, padronizacao das abas, PR 0): props opcionais `icone` +

@@ -16,6 +16,7 @@
 import type { OverviewData } from "../api-client.ts";
 import { isMarketplaceSelected } from "../marketplace-filter.ts";
 import type { Marketplace } from "../mock-data.ts";
+import { notaBase, notaSoPagos } from "../base-vendas.ts";
 import { fmtBrlFull, fmtNumber, fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "../formatters.ts";
 
 export type KpiKey = "gmv" | "orders" | "avg_ticket" | "ad_spend" | "roas";
@@ -167,9 +168,6 @@ export function avgTicketDisplay(overview: OverviewData): { value: string | null
   return { value: fmtBrlFull(overview.avg_ticket), reason: null };
 }
 
-/** Pedidos, GMV e Ticket contam so' pedido pago: vai no (i) do card e do detalhe. */
-export const SO_PAGOS = "Só pedidos pagos: sem cancelados nem aguardando pagamento.";
-
 export function buildKpiBand(
   overview: OverviewData | null,
   channels: readonly Marketplace[],
@@ -179,6 +177,8 @@ export function buildKpiBand(
   const mlSelected = isMarketplaceSelected(channels, "ml");
   const shopeeSelected = isMarketplaceSelected(channels, "shopee");
   const anyAdsChannel = mlSelected || shopeeSelected;
+  // Pedidos, GMV e Ticket: o que contam (pagos ou realizados) vai no (i).
+  const nota = notaBase(overview, channels);
 
   const gmv: KpiDescriptor = {
     key: "gmv",
@@ -195,7 +195,7 @@ export function buildKpiBand(
         : null,
     comparisonNote:
       overview && !(overview.prev_gmv > 0) ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: SO_PAGOS,
+    coverageNote: nota,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-1",
@@ -213,7 +213,7 @@ export function buildKpiBand(
     deltaTone: "higher_is_better",
     reference: ordersDelta != null ? `antes ${fmtNumCurto(overview!.prev_orders!)}` : null,
     comparisonNote: compare && ordersDelta == null ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: SO_PAGOS,
+    coverageNote: nota,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-2",
@@ -232,7 +232,7 @@ export function buildKpiBand(
     deltaTone: "higher_is_better",
     reference: ticketDelta != null ? `antes ${fmtBrlFull(overview!.prev_avg_ticket!)}` : null,
     comparisonNote: compare && ticket.value && ticketDelta == null ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: SO_PAGOS,
+    coverageNote: nota,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-4",
@@ -259,7 +259,7 @@ export function buildKpiBand(
     deltaTone: "neutral",
     reference: adsDelta != null ? `antes ${fmtBrlCurto(overview!.prev_ad_spend!)}` : null,
     comparisonNote: null,
-    coverageNote: adsCoverageNote(channels),
+    coverageNote: [adsCoverageNote(channels), notaSoPagos(overview)].filter(Boolean).join(" · ") || null,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-5",
@@ -305,7 +305,7 @@ export function buildKpiBand(
     deltaTone: "lower_is_better",
     reference: null,
     comparisonNote: null,
-    coverageNote: null,
+    coverageNote: notaSoPagos(overview),
     channelValues: roasChannels.length ? roasChannels : null,
     highlightChannel: compatibleWithValue.length === 1 ? compatibleWithValue[0].channel : null,
     accent: compatibleWithValue.length ? "bg-chart-3" : "bg-line",

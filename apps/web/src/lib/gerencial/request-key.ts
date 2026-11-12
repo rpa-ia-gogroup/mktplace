@@ -26,6 +26,8 @@ export interface GerencialKeyInput {
   dateTo: string;
   compare: boolean;
   retryKey: number;
+  /** So' "realizados" entra na chave: com "pagos" a chave fica igual a de antes. */
+  base?: string;
 }
 
 /** Chave de FETCH: tudo que muda o resultado de qualquer uma das seis fontes. */
@@ -37,6 +39,7 @@ export function buildGerencialRequestKey(input: GerencialKeyInput): string {
     input.dateTo,
     String(input.compare),
     String(input.retryKey),
+    ...(input.base === "realizados" ? ["realizados"] : []),
   ].join("|");
 }
 

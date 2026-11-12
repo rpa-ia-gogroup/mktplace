@@ -735,7 +735,7 @@ test("20. CTAs preservam filtros via mergeFilteredHref e ctx_* fica fora da allo
   assert.match(page, /mergeFilteredHref\(href, searchParams\)/);
   assert.doesNotMatch(page, /ctx_/, "a Gerencial não produz contexto de chegada neste gate");
   const navLinks = read("src/lib/filters/nav-links.ts");
-  assert.match(navLinks, /FILTER_QUERY_KEYS = \["channels", "brands", "date_from", "date_to", "compare"\]/);
+  assert.match(navLinks, /FILTER_QUERY_KEYS = \["channels", "brands", "date_from", "date_to", "compare", "base"\]/);
   assert.doesNotMatch(navLinks, /ctx_/, "ctx_* nunca entra em FILTER_QUERY_KEYS");
 });
 
