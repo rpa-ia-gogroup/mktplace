@@ -80,8 +80,8 @@ export interface LinhaDaFila {
   /** Pace (ja' formatados): so' aparecem com `ajudaPace`. "—" sem dado. */
   diasDeBacklog?: string;
   ritmo?: string;
-  /** Barra de prazo (ou de distribuicao) desenhada pelo cliente do canal. */
-  barra: ReactNode;
+  /** Barra de prazo (ou de distribuicao) desenhada pelo cliente do canal; ausente com `semBarra`. */
+  barra?: ReactNode;
 }
 
 /** O "ⓘ" de cada classificacao no cabecalho da tabela, montado pelo canal. */
@@ -212,6 +212,7 @@ export default function EvolucaoPorMarca({
   rotuloBarra = "Prazo",
   ajudas = {},
   semTendencia = false,
+  semBarra = false,
   ajudaPace,
 }: {
   resposta: RespostaTendencia | null;
@@ -220,6 +221,8 @@ export default function EvolucaoPorMarca({
   ajudas?: AjudasDaTabela;
   /** Canal sem serie real (TikTok): a coluna Tendencia nem existe. */
   semTendencia?: boolean;
+  /** Canal sem a barra (TikTok): a coluna da barra nem existe. */
+  semBarra?: boolean;
   /** "ⓘ" do pace; ausente = colunas Dias de backlog / Ritmo/dia nem existem. */
   ajudaPace?: ReactNode;
 }) {
@@ -231,6 +234,7 @@ export default function EvolucaoPorMarca({
         rotuloBarra={rotuloBarra}
         ajudas={ajudas}
         semTendencia={semTendencia}
+        semBarra={semBarra}
         ajudaPace={ajudaPace}
       />
     );
@@ -326,6 +330,7 @@ function TabelaUnica({
   rotuloBarra,
   ajudas,
   semTendencia,
+  semBarra,
   ajudaPace,
 }: {
   resposta: RespostaTendencia | null;
@@ -333,6 +338,7 @@ function TabelaUnica({
   rotuloBarra: string;
   ajudas: AjudasDaTabela;
   semTendencia: boolean;
+  semBarra: boolean;
   ajudaPace?: ReactNode;
 }) {
   const comTravados = fila.some((l) => l.travados !== null);
@@ -397,7 +403,7 @@ function TabelaUnica({
                   Travados<ComAjuda ajuda={ajudas.travados} />
                 </th>
               ) : null}
-              <th scope="col" className="w-[22%]">{rotuloBarra}</th>
+              {semBarra ? null : <th scope="col" className="w-[22%]">{rotuloBarra}</th>}
               {/* EXPEDICAO-TRAVADOS-1: variacao e linha falam do MESMO periodo,
                   por isso moram na mesma coluna, com o periodo no cabecalho. */}
               {semTendencia ? null : (
@@ -572,7 +578,7 @@ function TabelaUnica({
                     </span>
                   </td>
                   ) : null}
-                  <td>{f?.barra ?? null}</td>
+                  {semBarra ? null : <td>{f?.barra ?? null}</td>}
                   {semTendencia ? null : (
                   <td>
                     {s && dominioX ? (

@@ -348,6 +348,15 @@ test("tabela por marca: sem a medida (ML ou API antiga), a coluna nao existe", (
   assert.doesNotMatch(html, /Perto de vencer/);
 });
 
+test("tabela por marca: TikTok (semBarra) nao tem a coluna Prazo", () => {
+  const linha = { conta: "1", titulo: "KOKESHI", apelido: null, backlog: 9, vencidos: 2, acima48h: 1, travados: null };
+  const com = renderToStaticMarkup(h(EvolucaoPorMarca, { resposta: null, semTendencia: true, fila: [{ ...linha, barra: null }] }));
+  const sem = renderToStaticMarkup(h(EvolucaoPorMarca, { resposta: null, semTendencia: true, semBarra: true, fila: [linha] }));
+  assert.match(com, />Prazo</);
+  assert.doesNotMatch(sem, />Prazo</);
+  assert.match(sem, /Vencidos/);
+});
+
 test("vencidos em destaque vermelho: titulo da coluna e numero em etiqueta vermelha", () => {
   const html = renderToStaticMarkup(
     h(EvolucaoPorMarca, {
