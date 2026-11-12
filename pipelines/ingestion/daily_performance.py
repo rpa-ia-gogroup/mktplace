@@ -269,7 +269,6 @@ def colunas_da_api_por_loja(source: str, rows: list[dict], upsert_sql) -> list[t
       * `shopee` (pedidos do export): linhas dessas lojas sao DESCARTADAS;
       * `shopee-stats`: funil sim, `gmv` nao (`PATCH_SHOP_STATS_SEM_GMV_SQL`);
       * `shopee-ads` e os outros marketplaces: inalterados.
-    A kokeshi (sem API) segue exatamente como antes.
     """
     api = shopee_transform.LOJAS_COM_API
     if source == "shopee":

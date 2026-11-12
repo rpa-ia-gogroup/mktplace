@@ -35,15 +35,14 @@ def bruta(brand="apice", d=D1, **kw) -> SH.LinhaDiaria:
 # Lojas: API x arquivo
 # ---------------------------------------------------------------------------
 
-def test_lojas_com_api_sao_as_quatro_e_kokeshi_fica_fora():
+def test_lojas_com_api_sao_as_cinco_contas():
     assert T.CONTAS_COM_API == SH.CONTAS_API
-    assert T.LOJAS_COM_API == {1, 2, 4, 5}
-    assert T.BRAND_TO_LOJA["kokeshi"] == 3 and 3 not in T.LOJAS_COM_API
+    assert T.LOJAS_COM_API == {1, 2, 3, 4, 5}
 
 
-def test_kokeshi_nunca_vira_linha_da_api():
+def test_conta_fora_da_allowlist_nunca_vira_linha_da_api():
     with pytest.raises(D.ShopeeDailyApiError):
-        D.linha_da_fato(bruta(brand="kokeshi"))
+        D.linha_da_fato(bruta(brand="gocase"))
 
 
 def test_colunas_donas_nao_incluem_funil_nem_ads():
@@ -169,18 +168,19 @@ def _linha_arquivo(loja):
 
 
 def test_precedencia_pedidos_do_arquivo_nao_escrevem_lojas_com_api():
-    escritas = DP.colunas_da_api_por_loja("shopee", [_linha_arquivo(l) for l in (1, 2, 3, 4, 5)],
+    # 9: loja hipotetica sem API, a unica que o arquivo ainda escreve.
+    escritas = DP.colunas_da_api_por_loja("shopee", [_linha_arquivo(l) for l in (1, 2, 3, 4, 5, 9)],
                                           DP.PATCH_SHOPEE_ORDERS_SQL)
-    assert [r["loja_id"] for _sql, r in escritas] == [3]
+    assert [r["loja_id"] for _sql, r in escritas] == [9]
     assert all(sql is DP.PATCH_SHOPEE_ORDERS_SQL for sql, _ in escritas)
 
 
 def test_precedencia_shop_stats_escreve_funil_mas_nao_gmv_nas_lojas_com_api():
-    escritas = DP.colunas_da_api_por_loja("shopee-stats", [_linha_arquivo(l) for l in (1, 3)],
+    escritas = DP.colunas_da_api_por_loja("shopee-stats", [_linha_arquivo(l) for l in (3, 9)],
                                           DP.PATCH_SHOP_STATS_SQL)
     por_loja = {r["loja_id"]: sql for sql, r in escritas}
-    assert por_loja[3] is DP.PATCH_SHOP_STATS_SQL           # kokeshi: inalterado, com gmv
-    assert por_loja[1] is DP.PATCH_SHOP_STATS_SEM_GMV_SQL
+    assert por_loja[9] is DP.PATCH_SHOP_STATS_SQL           # loja sem API: inalterado, com gmv
+    assert por_loja[3] is DP.PATCH_SHOP_STATS_SEM_GMV_SQL   # kokeshi agora e' da API
     sem_gmv = str(DP.PATCH_SHOP_STATS_SEM_GMV_SQL)
     assert "gmv" not in sem_gmv and "visitors" in sem_gmv
 

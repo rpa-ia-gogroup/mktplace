@@ -282,7 +282,8 @@ def _upserts_usados(monkeypatch, source):
         ),
     )
 
-    linha = {"date": date(2026, 8, 14), "loja_id": 3, "marketplace_id": 3,
+    # loja 9: hipotetica sem API (as 5 contas Shopee sao da API desde 11/2026).
+    linha = {"date": date(2026, 8, 14), "loja_id": 9, "marketplace_id": 3,
              "empresa_id": 1}
     alvo = {
         "shopee": (dp.shopee_connector, "fetch_backfill", dp.shopee_transform),

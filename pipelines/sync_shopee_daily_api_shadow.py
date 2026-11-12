@@ -70,10 +70,9 @@ ITEMS = "silver.stg_shopee_order_items"
 SOURCE_API = "api"
 OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 
-#: Default de cada run (sem `--marcas`). A kokeshi entra aqui so' depois do
-#: backfill dela: antes disso `validate_frescor` reprova a conta sem carga e o run
-#: inteiro cai, levando junto as outras 4.
-CONTAS_API = ("apice", "barbours", "lescent", "rituaria")
+#: Default de cada run (sem `--marcas`). A kokeshi entrou em 11/2026, depois do
+#: backfill dela desde 31/08 no `shopee_orders_etl`.
+CONTAS_API = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 #: 🔑 Dominio FECHADO, igual ao CHECK da migration 044 (app da kokeshi aprovado em 11/2026).
 CONTAS_PERMITIDAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 

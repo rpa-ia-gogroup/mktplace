@@ -78,10 +78,9 @@ def test_marca_fora_da_allowlist_e_recusada(marcas):
         S.validar_marcas(marcas)
 
 
-def test_kokeshi_e_aceita_mas_fica_fora_do_default():
+def test_kokeshi_entra_no_default():
     assert S.validar_marcas(("kokeshi",)) == ("kokeshi",)
-    assert S.validar_marcas(None) == S.CONTAS_API
-    assert "kokeshi" not in S.CONTAS_API
+    assert S.validar_marcas(None) == S.CONTAS_API == S.CONTAS_PERMITIDAS
 
 
 def test_allowlist_igual_ao_check_da_migration_044():
@@ -119,7 +118,7 @@ def test_frete_ausente_aborta_nunca_vira_zero():
 
 def test_conta_inesperada_na_fonte_aborta():
     with pytest.raises(S.ShopeeDailyShadowError, match="fora da allowlist"):
-        S.montar_linhas([bruta(brand="kokeshi")], S.CONTAS_API, HOJE)
+        S.montar_linhas([bruta(brand="kokeshi")], ("apice",), HOJE)
 
 
 # ---------------------------------------------------------------------------

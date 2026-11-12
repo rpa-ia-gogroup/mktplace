@@ -11,11 +11,6 @@ corte (a ultima hora que a fonte dele fechou): a Shopee atrasada nao segura o
 ML e o TikTok. Hoje e ontem do MESMO canal somam ate' o mesmo corte, entao a
 comparacao continua justa; o total e' a soma dos canais, cada um no seu corte.
 `corte_hora` (topo) e' o do canal mais fresco, so' para dizer "ha' dado".
-
-A KOKESHI NA SHOPEE
--------------------
-Chega por arquivo, sem hora de pedido: nao esta' na tabela. Quando o filtro a
-inclui, a resposta diz isso em `limitacoes` — ausencia nao vira zero calado.
 """
 from __future__ import annotations
 
@@ -33,12 +28,6 @@ FONTES = "marts.fact_marketplace_hourly_sales_fonte"
 
 CANAL_POR_ID = {1: "tiktok", 2: "ml", 3: "shopee"}
 SHOPEE_ID = 3
-
-LIMITACAO_KOKESHI_SHOPEE = (
-    "Kokeshi na Shopee fica fora do corte por hora: os pedidos dela chegam por "
-    "arquivo exportado, sem o horário de cada pedido."
-)
-
 
 def _bloco(gmv, pedidos) -> dict:
     gmv = float(gmv or 0)
@@ -99,9 +88,7 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
                "horas_fechadas_hoje": hora_fechada_do_canal(fontes.get(m), hoje),
                "corte_hora": cortes[m]}
               for m in mkt_ids]
-    limitacoes = []
-    if SHOPEE_ID in mkt_ids and (brand_keys is None or "kokeshi" in brand_keys):
-        limitacoes.append(LIMITACAO_KOKESHI_SHOPEE)
+    limitacoes: list[str] = []
 
     linhas = db.execute(text(f"""
         SELECT h.dia, h.marketplace_id, SUM(h.gmv) AS gmv, SUM(h.pedidos) AS pedidos
@@ -134,14 +121,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
            "brands": brand_keys}).mappings().all() if any(cortes.values()) else []
     # Por marca E canal: quem mostra a tendencia soma so' os canais do valor
     # ao lado dela (ex.: so' os canais com meta), nunca um conjunto diferente.
-    def _sem_hora(brand: str, mk: int) -> bool:
-        return brand == "kokeshi" and mk == SHOPEE_ID and SHOPEE_ID in mkt_ids
-
     marcas: dict[str, dict[int, dict]] = {}
     for r in por_marca_linhas:
-        # Kokeshi na Shopee nao tem hora de pedido: sai da conta so' ela (o ML dela entra).
-        if _sem_hora(r["brand"], r["marketplace_id"]):
-            continue
         m = marcas.setdefault(r["brand"], {}).setdefault(
             r["marketplace_id"], {"hoje": 0.0, "ontem_ate": 0.0, "ontem_dia": 0.0})
         if r["dia"] == dias["hoje"]:
@@ -157,8 +138,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
     por_marca = [{
         "brand": b, **_tendencia(list(canais.values())),
         "por_canal": [{"channel": CANAL_POR_ID[mk], **_tendencia([p])} for mk, p in sorted(canais.items())],
-        # Quem mostra a marca com a Shopee dela (Kokeshi) nao pode usar esta conta como total.
-        "canais_fora": [CANAL_POR_ID[SHOPEE_ID]] if _sem_hora(b, SHOPEE_ID) else [],
+        # Vazio desde que a Kokeshi na Shopee passou a ter hora de pedido (API, 11/2026).
+        "canais_fora": [],
     } for b, canais in sorted(marcas.items())]
 
     def total(dia: date, ids: list[int]) -> dict:

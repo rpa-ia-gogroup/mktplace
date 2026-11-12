@@ -33,9 +33,9 @@ marca e' um UPDATE de uma linha, feito depois da reconciliacao.
 Consequencia: rodar este publisher com todas as marcas em `manual_export` e'
 uma publicacao em SHADOW -- as linhas existem, e nenhuma tela as le'.
 
-A `kokeshi` nunca entra: ela nao tem aplicacao Shopee cadastrada (o app e'
-registrado por loja, no console da empresa dona) e por isso nao existe na
-fonte. As linhas `manual_export` dela nunca sao tocadas por este codigo.
+A `kokeshi` entrou em 11/2026 (app aprovado, gold desde 31/08). Como as
+outras, a tela so' passa a le-la depois do UPDATE no interruptor; as linhas
+`manual_export` dela nunca sao tocadas por este codigo.
 
 O QUE ESTA FONTE NAO ENTREGA
 -----------------------------
@@ -90,8 +90,7 @@ OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 
 #: 🔑 Dominio FECHADO. A fonte e' o gold, mas o publisher so' escreve por estas
 #: contas: conta nova aparecendo no gold nao vira publicacao por acidente.
-#: `kokeshi` esta ausente de proposito -- ver o cabecalho.
-CONTAS_API = ("apice", "barbours", "lescent", "rituaria")
+CONTAS_API = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 #: Competencias recalculadas por execucao, contando a corrente. Tres cobre a
 #: maturacao observada (o mes fecha em ~100% ja' no mes seguinte) com folga.
@@ -615,8 +614,7 @@ def run(apply: bool = False, meses: int = JANELA_MESES,
         # Fail-closed: marca fora da allowlist nunca e' publicada por engano.
         raise ShopeeProdutosSyncError(
             f"marcas fora da allowlist da API: {desconhecidas}. "
-            f"Cobertas: {list(CONTAS_API)}. A kokeshi e' manual por nao ter "
-            "aplicacao Shopee cadastrada."
+            f"Cobertas: {list(CONTAS_API)}."
         )
 
     meses_ref = competencias(hoje, meses)
