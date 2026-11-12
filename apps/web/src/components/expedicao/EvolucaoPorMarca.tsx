@@ -77,6 +77,9 @@ export interface LinhaDaFila {
    * outra hora que a do topo (carga do export do Seller Centre).
    */
   atualizadaEm?: string | null;
+  /** Pace (ja' formatados): so' aparecem com `ajudaPace`. "—" sem dado. */
+  diasDeBacklog?: string;
+  ritmo?: string;
   /** Barra de prazo (ou de distribuicao) desenhada pelo cliente do canal. */
   barra: ReactNode;
 }
@@ -209,6 +212,7 @@ export default function EvolucaoPorMarca({
   rotuloBarra = "Prazo",
   ajudas = {},
   semTendencia = false,
+  ajudaPace,
 }: {
   resposta: RespostaTendencia | null;
   fila?: LinhaDaFila[];
@@ -216,6 +220,8 @@ export default function EvolucaoPorMarca({
   ajudas?: AjudasDaTabela;
   /** Canal sem serie real (TikTok): a coluna Tendencia nem existe. */
   semTendencia?: boolean;
+  /** "ⓘ" do pace; ausente = colunas Dias de backlog / Ritmo/dia nem existem. */
+  ajudaPace?: ReactNode;
 }) {
   if (fila) {
     return (
@@ -225,6 +231,7 @@ export default function EvolucaoPorMarca({
         rotuloBarra={rotuloBarra}
         ajudas={ajudas}
         semTendencia={semTendencia}
+        ajudaPace={ajudaPace}
       />
     );
   }
@@ -322,12 +329,14 @@ function TabelaUnica({
   rotuloBarra,
   ajudas,
   semTendencia,
+  ajudaPace,
 }: {
   resposta: RespostaTendencia | null;
   fila: LinhaDaFila[];
   rotuloBarra: string;
   ajudas: AjudasDaTabela;
   semTendencia: boolean;
+  ajudaPace?: ReactNode;
 }) {
   const comTravados = fila.some((l) => l.travados !== null);
   const series = resposta ? montarEvolucaoPorMarca(resposta.points) : [];
@@ -365,6 +374,14 @@ function TabelaUnica({
             <tr className="border-b border-line">
               <th scope="col">Marca</th>
               <th scope="col" className="text-right">Backlog</th>
+              {ajudaPace ? (
+                <>
+                  <th scope="col" className="text-right">Dias de backlog</th>
+                  <th scope="col" className="whitespace-nowrap text-right">
+                    Ritmo/dia<ComAjuda ajuda={ajudaPace} />
+                  </th>
+                </>
+              ) : null}
               {comVencidos ? (
                 <th scope="col" className="text-right text-crit-ink">
                   Vencidos<ComAjuda ajuda={ajudas.vencidos} />
@@ -443,6 +460,12 @@ function TabelaUnica({
                       inteiro(f ? f.backlog : (s?.atual ?? 0))
                     )}
                   </td>
+                  {ajudaPace ? (
+                    <>
+                      <td className="text-right font-semibold tabular-nums text-ink">{f?.diasDeBacklog ?? "—"}</td>
+                      <td className="text-right tabular-nums text-ink">{f?.ritmo ?? "—"}</td>
+                    </>
+                  ) : null}
                   {comVencidos ? (
                     <td className="whitespace-nowrap text-right tabular-nums text-ink" title={f?.pctVencidos ? `${f.pctVencidos} da fila` : undefined}>
                       {f?.vencidos == null ? (
