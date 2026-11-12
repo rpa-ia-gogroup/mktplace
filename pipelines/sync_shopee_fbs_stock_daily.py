@@ -68,8 +68,8 @@ FACT_PRODUTO = "marts.fact_shopee_fbs_stock_daily"
 #: Fuso operacional da Torre.
 OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 
-#: Contas da esteira API da Shopee. Kokeshi NAO esta aqui.
-CONTAS_ESPERADAS = ("apice", "barbours", "lescent", "rituaria")
+#: Contas da esteira API da Shopee. Kokeshi entrou em 12/11/2026 (raw.shopee_products).
+CONTAS_ESPERADAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 # --------------------------------------------------------------------------- #
 # POPULACAO DA DEMANDA                                                         #

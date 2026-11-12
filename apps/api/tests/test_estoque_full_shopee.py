@@ -153,10 +153,9 @@ def test_motivos_de_ausencia_negam_estoque_zero_por_escrito():
         assert "não significa estoque zero" in motivo
 
 
-def test_kokeshi_declarada_fora_da_cobertura():
-    assert "kokeshi" in svc.BRANDS_NOT_COVERED
-    assert "kokeshi" not in svc.EXPECTED_BRANDS
-    assert "Kokeshi" in svc.LIMITACAO_COBERTURA
+def test_kokeshi_dentro_da_cobertura():
+    assert svc.BRANDS_NOT_COVERED == ()
+    assert "kokeshi" in svc.EXPECTED_BRANDS
 
 
 # ===========================================================================
@@ -183,8 +182,8 @@ def test_escapar_like(entrada, esperado):
 def test_marca_desconhecida_e_erro_nao_filtro_vazio():
     """Silenciar faria a tela mostrar zero produtos e parecer 'sem estoque'."""
     with pytest.raises(svc.FiltroInvalido) as exc:
-        svc._validar_lista(["kokeshi"], svc.EXPECTED_BRANDS, "brands")
-    assert exc.value.recebidos == ("kokeshi",)
+        svc._validar_lista(["magalu"], svc.EXPECTED_BRANDS, "brands")
+    assert exc.value.recebidos == ("magalu",)
     assert "apice" in exc.value.mensagem_segura, (
         "a recusa precisa listar o que e' aceito")
 
