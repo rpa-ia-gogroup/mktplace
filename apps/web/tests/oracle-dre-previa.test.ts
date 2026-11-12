@@ -418,6 +418,96 @@ test("teto de 240 KB preservado com linhas do cenario e textos longos; corte dec
   assert.ok(new TextEncoder().encode(JSON.stringify(res)).byteLength < 256 * 1024);
 });
 
+// T-0101 — a API SUSPENDE a margem quando o insumo de taxas/CMV esta' vencido
+// ou ausente (valor null, componentes_usados vazio). O conector diz o motivo
+// real, nao "sem receita", e nunca expoe numero de margem suspensa.
+const MOTIVO_SUSP = "insumo vencido: cmv; margem suspensa até a republicação (publicado em 09/11/2026)";
+
+function celulaSuspensa(over: Over = {}) {
+  const c = celulaPrevia(over) as any;
+  c.componentes.cmv = comp("snapshot_vencido", null, "indisponivel", { publicado_em: "2026-11-09T13:00:00Z" });
+  c.motivos_classificacao = [MOTIVO_SUSP, ...c.motivos_classificacao];
+  c.margem_contribuicao_conhecida = {
+    valor: null, pct_receita: null, rotulo: "Margem de contribuicao conhecida", formula: null,
+    componentes_usados: [], componentes_parciais: [], faltam: ["devolucoes", "ads", "impostos"], aviso: null,
+    suspensa: true, motivo_suspensao: MOTIVO_SUSP,
+  };
+  c.cenario_premissas = cenario({
+    estado: "nao_calculavel", margem_contribuicao_estimada: null, margem_contribuicao_estimada_pct: null,
+    motivos: [MOTIVO_SUSP], suspensa: true, motivo_suspensao: MOTIVO_SUSP, celulas_suspensas: 1,
+  });
+  return c;
+}
+
+test("margem suspensa (T-0101): nula com o motivo da suspensao, flag e limitacao; cenario tambem", () => {
+  const raw = resposta([celulaSuspensa(), celulaCompleta()]) as any;
+  raw.total = {
+    ...celulaSuspensa(), escopo: "total", canal: null, marca: null, celulas: 2, celulas_suspensas: 1,
+    margem_contribuicao_conhecida: {
+      ...celulaSuspensa().margem_contribuicao_conhecida,
+      motivo_suspensao: "1 de 2 células com margem suspensa (insumo vencido); margem suspensa até a republicação (publicado em 09/11/2026)",
+    },
+  };
+  const env = proj(raw);
+  const [tk, ml] = env.data.celulas;
+  assert.equal(tk.resultado.valor, null);
+  assert.equal(tk.resultado.status, "NAO_CALCULAVEL");
+  assert.equal(tk.resultado.status_fonte, "margem_suspensa");
+  assert.equal(tk.resultado.motivo, MOTIVO_SUSP, "o motivo e' a suspensao, nao 'sem receita'");
+  assert.equal(tk.margem_pct, null);
+  assert.equal(tk.custos_conhecidos.valor, null);
+  assert.equal(tk.custos_conhecidos.status_fonte, "margem_suspensa");
+  assert.equal(tk.margem_conhecida.suspensa, true);
+  assert.equal(tk.margem_conhecida.motivo_suspensao, MOTIVO_SUSP);
+  // Receita e componentes seguem visiveis; o insumo vencido sai nulo.
+  assert.equal(tk.receita.valor, 1000);
+  assert.equal(tk.cmv.valor, null);
+  assert.equal(tk.cmv.status_fonte, "snapshot_vencido");
+  // Cenario suspenso: margem estimada nula, flag, e a principal volta a ser a conhecida (margemPrincipal).
+  assert.equal(tk.cenario_premissas.suspensa, true);
+  assert.equal(tk.cenario_premissas.margem_estimada, null);
+  assert.equal(tk.cenario_premissas.motivos[0], MOTIVO_SUSP);
+  assert.equal(tk.margem_principal, "conhecida");
+  // Agregado com alguma celula suspensa: suspenso, com o motivo do agregado.
+  assert.equal(env.data.total.resultado.valor, null);
+  assert.match(env.data.total.resultado.motivo, /1 de 2 células com margem suspensa/);
+  // Celula nao suspensa: sem os campos novos.
+  assert.equal(ml.resultado.valor, 280);
+  assert.ok(!("suspensa" in ml.margem_conhecida));
+  assert.ok(!("motivo_suspensao" in ml.margem_conhecida));
+  const lim = env.data.limitations.find((l: any) => l.topic === "dre_margem_suspensa");
+  assert.ok(lim, "suspensao declarada em limitations");
+  assert.equal(lim.motivo, "MARGEM_SUSPENSA");
+  assert.match(lim.description, /2 recorte\(s\) de 2026-10 com a margem conhecida SUSPENSA/);
+  assert.match(lim.description, /2 com a margem estimada do cenario suspensa/);
+  assert.match(lim.description, /nao e' margem zero nem 100%/);
+  assert.match(lim.description, /publicado em 09\/11\/2026/);
+});
+
+test("margem suspensa com numero da fonte continua nula; sem o campo (API anterior) nada muda", () => {
+  const comNumero = celulaSuspensa();
+  comNumero.margem_contribuicao_conhecida = { ...celulaPrevia().margem_contribuicao_conhecida, suspensa: true, motivo_suspensao: null };
+  const tk = proj(resposta([comNumero])).data.celulas[0];
+  assert.equal(tk.resultado.valor, null, "suspensa nunca sai como numero");
+  assert.equal(tk.resultado.status, "NAO_CALCULAVEL");
+  assert.match(tk.resultado.motivo, /margem suspensa pela fonte/);
+  assert.equal(tk.margem_pct, null);
+  // `suspensa: false` (API nova) e campo ausente (API anterior): como antes, sem limitacao.
+  for (const suspensa of [false, undefined]) {
+    const c = celulaPrevia() as any;
+    if (suspensa !== undefined) {
+      c.margem_contribuicao_conhecida.suspensa = suspensa;
+      c.cenario_premissas.suspensa = suspensa;
+    }
+    const env = proj(resposta([c]));
+    const x = env.data.celulas[0];
+    assert.equal(x.resultado.valor, 250);
+    assert.ok(!("suspensa" in x.margem_conhecida));
+    assert.ok(!("suspensa" in x.cenario_premissas));
+    assert.ok(!topicos(env).includes("dre_margem_suspensa"));
+  }
+});
+
 test("payload realista T-0090 (3 celulas) cabe sem corte", () => {
   const env = projectDre(T0090(), { ref_month: "2026-10" }, NOW, DRE_MAX_RESPONSE_BYTES) as any;
   assert.equal(env.meta.truncated, false);

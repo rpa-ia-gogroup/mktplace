@@ -22,7 +22,9 @@
  *   se a API nao a calculou ou se algum custo que a API pos nela nao foi
  *   exposto pelo conector (ex.: lote vencido) ou se o CMV nao entrou na
  *   conta (R172: null, "sem CMV na conta"); PARCIAL se a API declarou
- *   parciais ou se a receita e' parcial;
+ *   parciais ou se a receita e' parcial. T-0101: margem `suspensa` pela API
+ *   (insumo de taxas/CMV vencido ou ausente) sai null com o motivo da
+ *   suspensao, `margem_conhecida.suspensa` e a limitacao `dre_margem_suspensa`;
  * - custos conhecidos = soma dos custos que a API pos na margem, so' quando
  *   todos tem valor exposto;
  * - cenario_premissas sai com as linhas ESTIMADAS, compactas (linha -> valor):
@@ -140,6 +142,8 @@ const cenarioPremissas = z.object({
     .nullish(),
   /** T-0090 — celulas do recorte sem premissa publicada (fora do cenario). */
   celulas_sem_premissa: z.number().int().nonnegative().nullish(),
+  /** T-0101 — margem estimada suspensa pela regra da conhecida; ausente em API anterior. */
+  suspensa: z.boolean().nullish(),
 });
 
 const celula = z.object({
@@ -165,6 +169,12 @@ const celula = z.object({
     faltam: z.array(z.string()),
     /** T-0090 — presente quando ha parciais (margem tende a estar acima da real). */
     aviso: optStr,
+    /**
+     * T-0101 — custo obrigatorio (taxas, CMV) com insumo vencido/ausente; no
+     * agregado, alguma celula assim. `valor` vem null. Ausente em API anterior.
+     */
+    suspensa: z.boolean().nullish(),
+    motivo_suspensao: optStr,
   }),
   data_maxima: z.object({
     receita_ultimo_dia: optStr,
@@ -274,6 +284,12 @@ const celulaOut = z.object({
     componentes_parciais: z.array(z.string()),
     /** Aviso da API (margem tende a estar acima da real com parciais). */
     aviso: z.string().nullable(),
+    /**
+     * T-0101 — a API SUSPENDEU a margem (insumo de taxas/CMV vencido ou
+     * ausente): resultado nulo ate' a republicacao. AUSENTE quando nao suspensa.
+     */
+    suspensa: z.literal(true).optional(),
+    motivo_suspensao: z.string().nullable().optional(),
   }),
   frescor: z.object({
     receita_ultimo_dia: z.string().nullable(),
@@ -305,6 +321,8 @@ const celulaOut = z.object({
        */
       linhas_premissa: z.record(z.string(), z.number().nullable()).nullable(),
       linhas_extrapoladas: z.record(z.string(), z.number().nullable()).nullable(),
+      /** T-0101 — margem estimada suspensa (motivo em `motivos`). AUSENTE quando nao suspensa. */
+      suspensa: z.literal(true).optional(),
     })
     .nullable(),
 });
@@ -445,7 +463,15 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
   // resposta antiga sem `origem`): a margem da API nao pode sair como numero.
   const naoExpostos = custosUsados.filter((n) => !COM_VALOR.includes(l[n].status));
   const algumParcial = custosUsados.some((n) => l[n].status === "PARCIAL");
-  const custos: Linha = custosUsados.length > 0 && naoExpostos.length === 0
+  // T-0101: a API suspende a margem (insumo de taxas/CMV vencido ou ausente) e
+  // manda `componentes_usados` vazio; o motivo e' a suspensao, nao "sem receita".
+  const suspensa = m.suspensa === true;
+  const motivoSuspensao = suspensa
+    ? safeText(m.motivo_suspensao, DRE_TEXT_MAX) ?? "margem suspensa pela fonte: insumo vencido ou ausente"
+    : null;
+  const custos: Linha = suspensa
+    ? naoCalc("margem suspensa pela fonte: custos nao somados", "margem_suspensa")
+    : custosUsados.length > 0 && naoExpostos.length === 0
     ? derivada({
         valor: custosUsados.reduce((acc, n) => acc + (l[n].valor ?? 0), 0),
         pct_receita: null,
@@ -459,7 +485,10 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
   const margemValor = numOrNull(m.valor);
   const semCmv = !custosUsados.includes("cmv");
   let resultado: Linha;
-  if (margemValor === null || !COM_VALOR.includes(l.receita.status)) {
+  if (motivoSuspensao !== null) {
+    // Mesmo que a fonte mande numero: margem suspensa nunca sai como valor.
+    resultado = naoCalc(motivoSuspensao, "margem_suspensa");
+  } else if (margemValor === null || !COM_VALOR.includes(l.receita.status)) {
     resultado = naoCalc(margemValor === null ? "a fonte nao calculou a margem conhecida (sem receita)" : "receita sem valor exposto: margem nao existe");
   } else if (naoExpostos.length > 0) {
     resultado = naoCalc(`custo usado na margem pela fonte sem valor exposto (${naoExpostos.join(", ")}): margem nao exposta`);
@@ -506,6 +535,8 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
       componentes_usados: m.componentes_usados,
       componentes_parciais: parciaisApi,
       aviso: safeText(m.aviso, DRE_TEXT_MAX * 2),
+      // Campos so' presentes quando suspensa (teto de bytes).
+      ...(suspensa ? { suspensa: true as const, motivo_suspensao: motivoSuspensao } : {}),
     },
     frescor: {
       receita_ultimo_dia: dm.receita_ultimo_dia ?? null,
@@ -532,6 +563,7 @@ function projetarCelula(c: CelulaIn, nivel: Nivel, mes: string, loteVencido: boo
           // subtotais ja' estao em margem_estimada (cabe no teto de resposta).
           linhas_premissa: linhasDaOrigem(cp.linhas, "premissa"),
           linhas_extrapoladas: linhasDaOrigem(cp.linhas, "extrapolado"),
+          ...(cp.suspensa === true ? { suspensa: true as const } : {}),
         }
       : null,
   };
@@ -643,6 +675,24 @@ export function projectDre(
         `${fechas.length ? `, que fecham em ${fechas.join(", ")}` : ""}. Previa e' ESTIMATIVA do mes em andamento: ` +
         "os valores mudam ate' o fechamento e nao devem ser tratados como DRE fechada.",
       motivo: "DRE_PREVIA",
+    });
+  }
+
+  // T-0101 — margem SUSPENSA pela API (dado velho nao e' dado parcial).
+  const suspensas = todas.filter((c) => c.margem_conhecida.suspensa === true);
+  const cenariosSuspensos = todas.filter((c) => c.cenario_premissas?.suspensa === true).length;
+  if (suspensas.length > 0 || cenariosSuspensos > 0) {
+    const motivos = [...new Set(suspensas.map((c) => c.margem_conhecida.motivo_suspensao).filter((x): x is string => !!x))].slice(0, 3);
+    fixas.push({
+      topic: "dre_margem_suspensa",
+      scope: `DRE ${mes} — margem suspensa`,
+      description:
+        `${suspensas.length} recorte(s) de ${mes} com a margem conhecida SUSPENSA pela API` +
+        `${cenariosSuspensos ? ` e ${cenariosSuspensos} com a margem estimada do cenario suspensa` : ""}: ` +
+        "custo obrigatorio (taxas, CMV) com insumo vencido ou ausente. A margem sai nula (NAO_CALCULAVEL) ate' a " +
+        "republicacao do insumo — nao e' margem zero nem 100%; agregado com alguma celula suspensa fica suspenso." +
+        (motivos.length ? ` Motivo da fonte: ${motivos.join(" | ")}` : ""),
+      motivo: "MARGEM_SUSPENSA",
     });
   }
 
@@ -821,7 +871,7 @@ export const dreTool: OracleTool = {
       "Use para 'DRE de outubro', 'margem de contribuicao por canal ou marca', 'CMV, taxas, frete, ads, afiliados, impostos do mes'.",
       "Um mes por chamada (ref_month YYYY-MM), com filtro opcional de canais e marcas. Devolve o total, por canal, por marca e as celulas canal x marca da DRE gerencial da Torre.",
       "Cada linha traz valor, status (CALCULADO, PARCIAL, NAO_CALCULAVEL, NAO_APLICAVEL), status_fonte (o status real da API: parcial, nao_reconciliado, indisponivel...), motivo, origem (realizado, parcial, extrapolado...), entra_na_margem e cobertura_rotulo. PARCIAL = valor com cobertura incompleta (extrapolado: valor_medido e' o medido cru). Valor nulo = nao calculado, nunca zero.",
-      "Resultado = margem de contribuicao CONHECIDA da API, com margem_conhecida (componentes_usados, componentes_parciais, aviso); com parciais ela sai PARCIAL e tende a ficar acima da real; sem CMV na conta ela sai nula (NAO_CALCULAVEL); nao e' lucro. cenario_premissas (com linhas_premissa e linhas_extrapoladas) e' ESTIMATIVA com premissas de orcamento, nao realizado: origem premissa nao foi medida.",
+      "Resultado = margem de contribuicao CONHECIDA da API, com margem_conhecida (componentes_usados, componentes_parciais, aviso); com parciais ela sai PARCIAL e tende a ficar acima da real; sem CMV na conta ela sai nula (NAO_CALCULAVEL); com insumo de taxas/CMV vencido ou ausente a API a suspende (margem_conhecida.suspensa, nula ate' a republicacao, nunca zero); nao e' lucro. cenario_premissas (com linhas_premissa e linhas_extrapoladas) e' ESTIMATIVA com premissas de orcamento, nao realizado: origem premissa nao foi medida.",
       "Mes imaturo (regra M+2) sai com classificacao_fonte PREVIA e fecha_em (data em que fecha): numeros provisorios. PREVIA, parciais, cenario estimado, impostos e premissas nao publicados, insumos vencidos e qualquer corte por tamanho aparecem em limitations.",
     ].join(" "),
     inputSchema: dreInput,
