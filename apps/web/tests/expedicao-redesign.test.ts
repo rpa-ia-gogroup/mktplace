@@ -342,8 +342,8 @@ test("o estado vazio da tendencia continua explicado", () => {
   assert.match(CLIENTE, /Sem pontos na janela escolhida/);
 });
 
-test("serie parcial segue visivel, numa linha", () => {
-  assert.match(CLIENTE, /Série parcial: faltam contas em algumas horas\./);
+test("serie parcial nao vira aviso: a lacuna ja' aparece na linha", () => {
+  assert.doesNotMatch(CLIENTE, /Série parcial/);
 });
 
 // ===========================================================================

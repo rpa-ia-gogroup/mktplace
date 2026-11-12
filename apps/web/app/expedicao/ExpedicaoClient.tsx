@@ -718,6 +718,7 @@ export default function ExpedicaoClient({
   // Shopee e' a fila ACIONAVEL do vendedor; FBS aparece a' parte. Sem ela, a
   // tela segue com a fila publicada E diz que ela inclui FBS (nunca zera nada).
   const divisao = filtros.channel === "shopee" ? divisaoDaFila(ldr.resposta) : null;
+  const mostrarPace = paceDisponivel(filtros.channel, divisao !== null);
   const totaisRisco = divisao ? divisao.vendedor : recorte.totais;
   const contasRisco = divisao ? divisao.contasVendedor : recorte.contas;
   const risco = montarRiscoAtual(totaisRisco, recorte.frescor, filtros.channel, fotografiaDoPrazo).map((k) =>
@@ -876,9 +877,24 @@ export default function ExpedicaoClient({
   const linhasDaFila: LinhaDaFila[] = recorte.contas.map((a) => {
     const irmas = recorte.contas.filter((x) => x.brand === a.brand);
     const linha = mapa.linhas.find((l) => l.conta === a.shop_account);
+    // Pace na visao do gestor: a MESMA conta da "Concentracao por marca" do detalhe.
+    const media = irmas.length > 1 ? null : mediaDaMarca(pace, filtros.channel, a.brand);
+    const backlogVendedor =
+      divisao?.contasVendedor.find((c) => c.shop_account === a.shop_account)?.backlog_count ?? null;
     return {
       conta: a.shop_account,
       titulo: brandLabel(a.brand),
+      diasDeBacklog: formatarDecimal(
+        diasDaLinha({
+          canal: filtros.channel,
+          backlog: a.backlog_count,
+          backlogVendedor,
+          media,
+          variasContas: irmas.length > 1,
+        }),
+        1,
+      ),
+      ritmo: formatarDecimal(media, 0),
       apelido: irmas.length > 1 ? `conta ${irmas.indexOf(a) + 1} de ${irmas.length}` : null,
       // EXPEDICAO-KOKESHI-EXPORT: so' a conta carregada em outra hora ganha a hora.
       atualizadaEm: horaPropriaDaConta(a.observed_at, dados?.snapshot?.effective_at),
@@ -1408,11 +1424,6 @@ export default function ExpedicaoClient({
           {relogios?.efetivoEm ? ` Última fotografia: ${dataCurta(relogios.efetivoEm)}.` : ""}
         </p>
       )}
-      {estadoTend === "parcial" && (
-        <Note tom="atencao" papel="status" className="mb-2">
-          Série parcial: faltam contas em algumas horas.
-        </Note>
-      )}
       <div className="mb-3">
         <Segmented
           rotulo="Período da tabela"
@@ -1437,6 +1448,7 @@ export default function ExpedicaoClient({
       <EvolucaoPorMarca
         resposta={temSerieNaTendencia ? tendencia : null}
         fila={linhasDaFila}
+        ajudaPace={mostrarPace ? <InfoDica texto={textoDoPace(filtros.channel, pace)} /> : undefined}
         rotuloBarra={temPrazo ? "Prazo" : "Distribuição"}
         ajudas={{
           vencidos: ajudaDaFila("overdue"),
@@ -1501,7 +1513,6 @@ export default function ExpedicaoClient({
 
   // 7. CONCENTRACAO POR CONTA — nas duas profundidades: para o gestor e'
   // "onde concentra"; para o operador, as contas do detalhe.
-  const mostrarPace = paceDisponivel(filtros.channel, divisao !== null);
   const painelContas = (classe: string) => (
     <Panel
       className={classe}
