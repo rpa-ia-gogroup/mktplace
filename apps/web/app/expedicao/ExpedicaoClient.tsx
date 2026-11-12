@@ -159,6 +159,8 @@ import {
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import { formatarDecimal, formatarInteiro } from "@/lib/expedicao-formato";
+import { diasDeBacklog, mediaDaMarca } from "@/lib/expedicao-pace";
+import { usePaceDespachados } from "@/components/expedicao/usePaceDespachados";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { AJUDA_CANAL_SEM_PRAZO, chaveDoKpiDaFila, type ChaveMetrica } from "@/lib/expedicao-definicoes";
 
@@ -457,6 +459,15 @@ function BarraDeRisco({
  * IDENTIDADE-GERENCIAL: o selo "inclui FBS" fica so' no heroi. Nas tabelas da
  * fila publicada (que nao separa FBS) ele vira `title` + `sr-only` do titulo.
  */
+/** Explicacao do pace no "ⓘ" da coluna Despachados/dia. */
+function textoDoPace(canal: string): string {
+  return (
+    "Média de pedidos despachados por dia nos 2 últimos dias úteis fechados (seg–sex, sem feriado nacional). " +
+    `"Dura (dias)" = backlog ÷ essa média. Só a operação do vendedor (sem ${canal === "shopee" ? "FBS" : "Full"}); ` +
+    'dia ainda sem dado não conta; sem média, "—".'
+  );
+}
+
 function TituloComFbs({ titulo, incluiFbs }: { titulo: string; incluiFbs: boolean }) {
   if (!incluiFbs) return <>{titulo}</>;
   return (
@@ -691,6 +702,7 @@ export default function ExpedicaoClient({
   // O LDR e' sempre dos ultimos 7 dias (regra da Shopee), nao do periodo do
   // topo: com 3 dias no topo o painel mostrava uma taxa que nao e' a do canal.
   const ldr = useLdrShopee(API, marcaAtiva, LDR_SHOPEE_LIGADA && filtros.channel === "shopee", DIAS_LDR_SHOPEE);
+  const pace = usePaceDespachados(API, filtros.channel, true);
 
   const temFiltro =
     filtros.brands.length > 0 || filtros.accounts.length > 0 || filtros.situacao.length > 0;
@@ -1515,6 +1527,10 @@ export default function ExpedicaoClient({
               <th scope="col">Marca</th>
               <th scope="col" className="w-[34%]">Distribuição</th>
               <th scope="col" className="text-right">Backlog</th>
+              <th scope="col" className="text-right">
+                Despachados/dia <InfoDica texto={textoDoPace(filtros.channel)} />
+              </th>
+              <th scope="col" className="text-right">Dura (dias)</th>
               {temPrazo && (
                 <th scope="col" className="text-right">
                   Vencidos {ajudaDaFila("overdue")}
@@ -1532,6 +1548,13 @@ export default function ExpedicaoClient({
           <tbody>
             {recorte.contas.map((a) => {
               const linha = mapa.linhas.find((l) => l.conta === a.shop_account);
+              const media = mediaDaMarca(pace, filtros.channel, a.brand);
+              // Shopee: o backlog da tabela inclui FBS; so' a fila do vendedor
+              // (divisao) fala a mesma lingua do despachado. Sem ela, "—".
+              const backlogDoPace =
+                filtros.channel !== "shopee"
+                  ? a.backlog_count
+                  : (divisao?.contasVendedor.find((c) => c.shop_account === a.shop_account)?.backlog_count ?? null);
               return (
                 <tr key={a.shop_account} className="border-t border-line">
                   {/* Marca e' a identidade; a conta so' aparece, discreta,
@@ -1555,6 +1578,10 @@ export default function ExpedicaoClient({
                   </td>
                   <td className="text-right font-semibold tabular-nums text-ink">
                     {numero(a.backlog_count)}
+                  </td>
+                  <td className="text-right tabular-nums text-ink">{formatarDecimal(media, 0)}</td>
+                  <td className="text-right font-semibold tabular-nums text-ink">
+                    {formatarDecimal(diasDeBacklog(backlogDoPace, media), 1)}
                   </td>
                   {temPrazo && (
                     <td className="text-right tabular-nums text-ink">

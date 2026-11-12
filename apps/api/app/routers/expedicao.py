@@ -20,6 +20,7 @@ from app.schemas.expedicao import (
     TendenciaResponse,
     TikTokDispatchResponse,
 )
+from app.services import expedicao_despachados_service as despachados_svc
 from app.services import expedicao_service as svc
 from app.services import expedicao_shopee_ldr_service as shopee_ldr_svc
 from app.services import expedicao_tiktok_service as tiktok_svc
@@ -277,3 +278,25 @@ def jornada(
                                evento=evento)
     return svc.get_jornada(_require_db(db), channel=channel, brands=brands,
                            dias=days, evento=evento)
+
+
+# ---------------------------------------------------------------------------
+# Pace de despacho (Planejamento de Vendas): dias de backlog = backlog / media
+# ---------------------------------------------------------------------------
+_CANAIS_DESPACHADOS = despachados_svc.CANAIS
+_MSG_CANAL_DESPACHADOS = "Canal invalido. Valores aceitos: " + ", ".join(_CANAIS_DESPACHADOS)
+
+
+@router.get("/despachados")
+def despachados(
+    channel: Optional[str] = Query(None, description="shopee, mercadolivre ou tiktok. Omitido = todos."),
+    brands: Optional[list[str]] = Depends(brands_query),
+    db: Session = Depends(get_db),
+):
+    """Despachados por dia nos 2 ultimos dias uteis fechados, por marca e total do canal.
+
+    A tela divide o backlog que ja' tem pela `media_2du`. Sem dado = `null`.
+    """
+    if channel is not None and channel not in _CANAIS_DESPACHADOS:
+        raise HTTPException(422, _MSG_CANAL_DESPACHADOS)  # mensagem fixa, sem eco
+    return despachados_svc.obter_despachados(channel=channel, brands=brands, db=db)
