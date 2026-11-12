@@ -66,7 +66,7 @@ import {
   type ShopeeFbsResponse,
 } from "@/lib/shopee-fbs";
 
-const CONTAS = ["apice", "barbours", "lescent", "rituaria"] as const;
+const CONTAS = ["apice", "barbours", "kokeshi", "lescent", "rituaria"] as const;
 const MARCAS = CONTAS;
 
 const METRICAS: { key: MetricaSerie; label: string }[] = [
