@@ -141,7 +141,7 @@ export default function ChannelOverview({
         <>
           Canais lado a lado
           <InfoDica
-            texto={`Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
+            texto={`GMV e pedidos: só pedidos pagos (sem cancelados nem aguardando pagamento). Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
               carregando ? "" : ` (${colunas.map((c) => `${c.rotulo}: ${c.mediana?.brands_with_data ?? 0} marcas`).join(" · ")})`
             }. N/A = não se aplica · Sem dado = deveria existir, mas falta.`}
           />
