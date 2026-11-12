@@ -63,8 +63,8 @@ def test_regra_do_tiktok_deduplica_e_usa_a_allowlist_do_conector():
     assert TIKTOK.extra["status_comerciais"] == tuple(COMMERCIAL_ORDER_STATUSES)
 
 
-def test_regra_da_shopee_tira_cancelado_e_soma_item_total():
-    assert "lower(order_status) <> 'cancelled'" in V.SHOPEE_SQL
+def test_regra_da_shopee_tira_cancelado_e_nao_pago_e_soma_item_total():
+    assert "lower(order_status) NOT IN ('cancelled', 'unpaid')" in V.SHOPEE_SQL
     assert "SUM(item_total)" in V.SHOPEE_SQL
 
 

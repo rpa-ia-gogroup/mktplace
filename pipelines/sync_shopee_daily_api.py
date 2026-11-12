@@ -25,16 +25,16 @@ cada loja tem UM dono:
 Por (dia BRT de CRIACAO do pedido, loja) — o mesmo eixo do export:
 
   gmv                 soma de `item_total` (preco com desconto x quantidade) dos
-                      pedidos nao cancelados. Valor de produto, SEM frete.
+                      pedidos pagos (nem cancelados nem unpaid). Valor de produto, SEM frete.
                       ⚠️ NAO desconta reembolso/devolucao: a API de pedidos nao
                       tem esse dado. O GMV do shop-stats (arquivo) desconta, e
                       mede "vendas" de vitrine; medido em jun/2026 o daqui fica
                       +1,9% a +4,2% acima. Pedidos e unidades casam exato.
-  orders              pedidos com status <> cancelled
+  orders              pedidos pagos (status fora de cancelled e unpaid)
   units_sold          soma de quantity desses pedidos
   canceled_orders     pedidos cancelled
   delivered_orders    pedidos completed
-  seller_shipping_cost  soma de estimated_shipping_fee dos nao cancelados
+  seller_shipping_cost  soma de estimated_shipping_fee dos pagos
   avg_ticket          gmv / orders (NULL se orders = 0)
   cancel_rate_pct     canceled / (orders + canceled) x 100
   shipping_pct_of_gmv seller_shipping_cost / gmv x 100 (NULL se gmv = 0)

@@ -135,7 +135,7 @@ def test_chave_duplicada_aborta():
         S.validate_contract(snap([linha(), linha()]))
 
 
-@pytest.mark.parametrize("kw", [{"delivered_orders": 11}, {"unpaid_orders": 11}, {"to_return_orders": 11},
+@pytest.mark.parametrize("kw", [{"delivered_orders": 11}, {"to_return_orders": 11},
                                 {"orders": -1}, {"seller_shipping_cost": -0.01}])
 def test_linha_incoerente_aborta(kw):
     with pytest.raises(S.ShopeeDailyShadowError):
@@ -280,3 +280,11 @@ def test_publicado_nulo_nao_entra_em_nenhum_lado():
 
 def test_divergencia_sobre_zero_publicado_e_none_nao_infinito():
     assert R.Divergencia("apice", "2026-01", "orders", 5.0, 0.0).pct is None
+
+
+def test_nao_pago_fica_fora_dos_pedidos_e_da_receita():
+    # Pedido feito e ainda nao pago nao e' venda (12/11/2026, pedido da Nath).
+    assert S.SQL_DIARIO.text.count("NOT IN ('cancelled', 'unpaid')") == 6
+    assert "o.st <> 'cancelled'" not in S.SQL_DIARIO.text
+    # unpaid maior que orders e' valido agora: nao aborta.
+    S.validate_contract(snap([linha(unpaid_orders=11)]))
