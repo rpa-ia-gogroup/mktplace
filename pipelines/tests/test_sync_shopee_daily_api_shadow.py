@@ -285,6 +285,9 @@ def test_divergencia_sobre_zero_publicado_e_none_nao_infinito():
 def test_nao_pago_fica_fora_dos_pedidos_e_da_receita():
     # Pedido feito e ainda nao pago nao e' venda (12/11/2026, pedido da Nath).
     assert S.SQL_DIARIO.text.count("NOT IN ('cancelled', 'unpaid')") == 6
+    # nao pagos: colunas paralelas (contagem e item_total), fora de orders/product_subtotal.
+    assert "COUNT(*) FILTER (WHERE o.st = 'unpaid')" in S.SQL_DIARIO.text
+    assert "SUM(it.subtotal) FILTER (WHERE o.st = 'unpaid')" in S.SQL_DIARIO.text
     assert "o.st <> 'cancelled'" not in S.SQL_DIARIO.text
     # unpaid maior que orders e' valido agora: nao aborta.
     S.validate_contract(snap([linha(unpaid_orders=11)]))

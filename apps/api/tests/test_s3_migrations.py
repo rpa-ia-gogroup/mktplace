@@ -212,7 +212,9 @@ def test_m02_head_unico_em_todas_as_revisoes():
     # 042/043 (Bling) e 044 (shadow Shopee aceita kokeshi) vieram depois.
     # T-0093: head avancado de 044 para 045, que so' troca o CHECK de
     # componentes de marts.fact_dre_insumo_mensal (aceita `shopee_devolucao_reembolso`).
-    assert heads == ["045"], f"head deveria ser unico e igual a 045, veio {heads}"
+    # VENDAS-REALIZADAS: head avancado de 045 para 046 (colunas anulaveis de nao
+    # pagos na fato diaria e na de vendas por hora).
+    assert heads == ["046"], f"head deveria ser unico e igual a 046, veio {heads}"
 
 
 def test_m03_as_tres_revisoes_novas_existem_uma_vez_cada():

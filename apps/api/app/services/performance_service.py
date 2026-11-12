@@ -431,6 +431,63 @@ def _brand_filter_sql(brand_keys: list[str] | None, params: dict, alias: str = "
     return f" AND {alias}.brand_key = ANY(:brand_keys)"
 
 
+# ---------------------------------------------------------------------------
+# Base de vendas: "pagos" (padrao) x "realizados" (pagos + NAO PAGOS)
+#
+# Os nao pagos vivem em colunas PARALELAS da fato (`unpaid_orders`/`unpaid_gmv`),
+# nunca dentro de `orders`/`gmv`. `base="pagos"` nem le' essas colunas: o SQL e a
+# resposta sao os de sempre. Com `realizados`, so' pedidos, GMV e ticket mudam;
+# margem, Ads, ROAS, cancelamento e o resto seguem na base paga. Canal sem fonte
+# de nao pago (ML) soma NULL = 0 e vem marcado `false` em `nao_pago_disponivel`.
+# ---------------------------------------------------------------------------
+
+BASES = ("pagos", "realizados")
+
+_NAO_PAGOS_COLS = """,
+            COALESCE(SUM(f.unpaid_orders), 0)    AS unpaid_orders,
+            COALESCE(SUM(f.unpaid_gmv), 0)       AS unpaid_gmv"""
+
+
+def _nao_pagos_cols(base: str) -> str:
+    return _NAO_PAGOS_COLS if base == "realizados" else ""
+
+
+def _gmv_orders(raw: dict, base: str) -> tuple[float, int]:
+    """(GMV, pedidos) de um recorte canal x marca: pagos, ou pagos + nao pagos."""
+    gmv, orders = _f(raw.get("gmv")), int(_f(raw.get("orders")))
+    if base == "realizados":
+        gmv += _f(raw.get("unpaid_gmv"))
+        orders += int(_f(raw.get("unpaid_orders")))
+    return gmv, orders
+
+
+def _nao_pago_disponivel(
+    db: Session, start: date, end: date, mkt_ids: list[int],
+    brand_keys: list[str] | None, base: str,
+) -> dict | None:
+    """Por canal: ha' fonte de nao pago no recorte? `None` na base paga.
+
+    `true` = alguma linha do canal, no periodo e marcas filtrados, tem
+    `unpaid_orders` preenchido (zero conta: e' zero provado). `false` = tudo NULL
+    (ML nunca tem fonte; Shopee/TikTok antes da carga) ou canal fora do filtro.
+    """
+    if base != "realizados":
+        return None
+    params: dict = {"start": start, "end": end, "mkt_ids": mkt_ids}
+    brand_filter = _brand_filter_sql(brand_keys, params)
+    rows = db.execute(text(f"""
+        SELECT f.marketplace_id, COUNT(f.unpaid_orders) AS n
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date BETWEEN :start AND :end
+          AND f.marketplace_id = ANY(:mkt_ids)
+          {brand_filter}
+        GROUP BY f.marketplace_id
+    """), params).mappings().all()
+    com_fonte = {r["marketplace_id"] for r in rows if int(r["n"] or 0) > 0}
+    return {nome: mid in com_fonte for nome, mid in _MKT_IDS.items()}
+
+
 def _max_refreshed_at(
     db: Session, start: date, end: date, mkt_ids: list[int], brand_keys: list[str] | None = None
 ) -> str | None:
@@ -452,7 +509,8 @@ def _max_refreshed_at(
 
 
 def _mkt_kpis(
-    db: Session, start: date, end: date, mkt_ids: list[int], brand_keys: list[str] | None = None
+    db: Session, start: date, end: date, mkt_ids: list[int], brand_keys: list[str] | None = None,
+    base: str = "pagos",
 ) -> dict[int, dict]:
     """KPIs agregados por marketplace_id para um intervalo de datas, com
     filtro opcional de marca(s)."""
@@ -466,7 +524,7 @@ def _mkt_kpis(
             COALESCE(SUM(f.canceled_orders), 0)  AS canceled_orders,
             COALESCE(SUM(f.unique_buyers), 0)    AS unique_buyers,
             COALESCE(SUM(f.ad_spend), 0)         AS ad_spend,
-            COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue
+            COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue{_nao_pagos_cols(base)}
         FROM marts.fact_marketplace_daily_performance f
         JOIN marts.dim_loja l ON l.loja_id = f.loja_id
         WHERE f.date BETWEEN :start AND :end
@@ -480,7 +538,7 @@ def _mkt_kpis(
 
 def _brand_mkt_rows(
     db: Session, start: date, end: date, mkt_ids: list[int], extra_cols: str = "",
-    brand_keys: list[str] | None = None,
+    brand_keys: list[str] | None = None, base: str = "pagos",
 ) -> dict[str, dict[int, dict]]:
     """KPIs por brand_key × marketplace_id para um intervalo de datas, com
     filtro opcional de marca(s)."""
@@ -494,7 +552,7 @@ def _brand_mkt_rows(
             COALESCE(SUM(f.orders), 0)           AS orders,
             COALESCE(SUM(f.canceled_orders), 0)  AS canceled_orders,
             COALESCE(SUM(f.ad_spend), 0)         AS ad_spend,
-            COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue
+            COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue{_nao_pagos_cols(base)}
             {', ' + extra_cols if extra_cols else ''}
         FROM marts.fact_marketplace_daily_performance f
         JOIN marts.dim_loja l ON l.loja_id = f.loja_id
@@ -523,6 +581,7 @@ def get_overview(
     brand_keys: list[str] | None = None,
     period: EffectivePeriod | None = None,
     compare_period: EffectivePeriod | None = None,
+    base: str = "pagos",
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     if period is not None:
@@ -558,14 +617,10 @@ def get_overview(
         ml = data.get(ML_ID, {})
         sh = data.get(SHOPEE_ID, {})
 
-        tk_gmv = _f(tk.get("gmv"))
-        ml_gmv = _f(ml.get("gmv"))
-        sh_gmv = _f(sh.get("gmv"))
+        tk_gmv, tk_orders = _gmv_orders(tk, base)
+        ml_gmv, ml_orders = _gmv_orders(ml, base)
+        sh_gmv, sh_orders = _gmv_orders(sh, base)
         gmv = tk_gmv + ml_gmv + sh_gmv
-
-        tk_orders = int(_f(tk.get("orders")))
-        ml_orders = int(_f(ml.get("orders")))
-        sh_orders = int(_f(sh.get("orders")))
         orders = tk_orders + ml_orders + sh_orders
 
         ml_canceled = int(_f(ml.get("canceled_orders")))
@@ -593,9 +648,9 @@ def get_overview(
             "shopee_unique_buyers": int(_f(sh.get("unique_buyers"))) or None,
         }
 
-    cur = _assemble(_mkt_kpis(db, start, end, mkt_ids, brand_keys))
+    cur = _assemble(_mkt_kpis(db, start, end, mkt_ids, brand_keys, base))
     if pstart is not None:
-        prev = _assemble(_mkt_kpis(db, pstart, pend, mkt_ids, brand_keys))
+        prev = _assemble(_mkt_kpis(db, pstart, pend, mkt_ids, brand_keys, base))
         mom = round((cur["gmv"] - prev["gmv"]) / prev["gmv"] * 100, 2) if prev["gmv"] > 0 else None
     else:
         prev = _assemble({})
@@ -616,6 +671,8 @@ def get_overview(
         "compare_date_to": pend,
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
+        "base": base,
+        "nao_pago_disponivel": _nao_pago_disponivel(db, start, end, mkt_ids, brand_keys, base),
     }
 
 
@@ -629,6 +686,7 @@ def get_brands(
     period: EffectivePeriod | None = None,
     compare_period: EffectivePeriod | None = None,
     today: date | None = None,
+    base: str = "pagos",
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     if period is not None:
@@ -660,8 +718,8 @@ def get_brands(
         pstart, pend = None, None
 
     extra = "COALESCE(SUM(f.total_fees), 0) AS total_fees"
-    cur = _brand_mkt_rows(db, start, end, mkt_ids, extra, brand_keys)
-    prev = _brand_mkt_rows(db, pstart, pend, mkt_ids, extra, brand_keys) if pstart is not None else {}
+    cur = _brand_mkt_rows(db, start, end, mkt_ids, extra, brand_keys, base)
+    prev = _brand_mkt_rows(db, pstart, pend, mkt_ids, extra, brand_keys, base) if pstart is not None else {}
 
     result = []
     for brand in sorted(set(list(cur.keys()) + list(prev.keys()))):
@@ -675,21 +733,18 @@ def get_brands(
         ml_p = p.get(ML_ID, {})
         sh_p = p.get(SHOPEE_ID, {})
 
-        tk_gmv = _f(tk_c.get("gmv"))
-        ml_gmv = _f(ml_c.get("gmv"))
-        sh_gmv = _f(sh_c.get("gmv"))
+        tk_gmv, tk_orders = _gmv_orders(tk_c, base)
+        ml_gmv, ml_orders = _gmv_orders(ml_c, base)
+        sh_gmv, sh_orders = _gmv_orders(sh_c, base)
         total = tk_gmv + ml_gmv + sh_gmv
         if total == 0:
             continue
 
-        tk_prev_gmv = _f(tk_p.get("gmv"))
-        ml_prev_gmv = _f(ml_p.get("gmv"))
-        sh_prev_gmv = _f(sh_p.get("gmv"))
+        tk_prev_gmv, _ = _gmv_orders(tk_p, base)
+        ml_prev_gmv, _ = _gmv_orders(ml_p, base)
+        sh_prev_gmv, _ = _gmv_orders(sh_p, base)
         total_prev = tk_prev_gmv + ml_prev_gmv + sh_prev_gmv
 
-        tk_orders = int(_f(tk_c.get("orders")))
-        ml_orders = int(_f(ml_c.get("orders")))
-        sh_orders = int(_f(sh_c.get("orders")))
         orders = tk_orders + ml_orders + sh_orders
 
         ml_canceled = int(_f(ml_c.get("canceled_orders")))
@@ -715,7 +770,8 @@ def get_brands(
             "shopee_gmv_prev": sh_prev_gmv or None,
             "total_gmv_prev": total_prev,
             "mom_pct": round((total - total_prev) / total_prev * 100, 2) if total_prev > 0 else None,
-            "cos_pct": round(tk_fees / tk_gmv * 100, 2) if tk_gmv > 0 else None,
+            # Custo sobre a base PAGA (as tarifas so' existem sobre pedido pago).
+            "cos_pct": round(tk_fees / _f(tk_c.get("gmv")) * 100, 2) if _f(tk_c.get("gmv")) > 0 else None,
             "gpm": None,  # requer total_views, não disponível no mart
             "ml_roas": round(ml_revenue / ml_spend, 2) if ml_spend > 0 else None,
             "ml_cancel_rate_pct": round(ml_canceled / ml_total * 100, 1) if ml_total > 0 else None,
@@ -738,6 +794,8 @@ def get_brands(
         "refreshed_at": refreshed_at,
         "tiktok_maturacao": tiktok_maturacao_info(mkt_ids, today),
         "ml_maturacao": ml_maturacao_info(mkt_ids, today),
+        "base": base,
+        "nao_pago_disponivel": _nao_pago_disponivel(db, start, end, mkt_ids, brand_keys, base),
     }
 
 
@@ -853,6 +911,7 @@ def _trend_series(
     brand_keys: list[str] | None,
     period: EffectivePeriod,
     granularity: str,
+    base: str = "pagos",
 ) -> list[dict]:
     """Agregacao da serie num intervalo. UNICA implementacao do SQL — o periodo
     anterior usa exatamente esta funcao, com a MESMA granularidade e os MESMOS
@@ -862,8 +921,8 @@ def _trend_series(
     brand_filter = _brand_filter_sql(brand_keys, params)
     sql = text(f"""
         SELECT {trunc_expr} AS bucket,
-               COALESCE(SUM(f.gmv), 0)    AS gmv,
-               COALESCE(SUM(f.orders), 0) AS orders
+               COALESCE(SUM(f.gmv), 0){' + COALESCE(SUM(f.unpaid_gmv), 0)' if base == 'realizados' else ''}    AS gmv,
+               COALESCE(SUM(f.orders), 0){' + COALESCE(SUM(f.unpaid_orders), 0)' if base == 'realizados' else ''} AS orders
         FROM marts.fact_marketplace_daily_performance f
         JOIN marts.dim_loja l ON l.loja_id = f.loja_id
         WHERE f.date BETWEEN :start AND :end
@@ -892,6 +951,7 @@ def get_trend(
     *,
     granularity: str = "auto",
     compare_period: EffectivePeriod | None = None,
+    base: str = "pagos",
 ) -> dict:
     """Serie temporal do escopo filtrado.
 
@@ -907,7 +967,7 @@ def get_trend(
     mkt_ids = parse_marketplace_param(marketplace)
     effective = resolve_trend_granularity(granularity, period)
 
-    data = _trend_series(db, mkt_ids, brand_keys, period, effective)
+    data = _trend_series(db, mkt_ids, brand_keys, period, effective, base)
 
     comparison: dict | None = None
     if compare_period is not None:
@@ -917,7 +977,7 @@ def get_trend(
         comparison = {
             "date_from": compare_period.start,
             "date_to": compare_period.end,
-            "data": _trend_series(db, mkt_ids, brand_keys, compare_period, effective),
+            "data": _trend_series(db, mkt_ids, brand_keys, compare_period, effective, base),
         }
 
     refreshed_at = _max_refreshed_at(db, period.start, period.end, mkt_ids, brand_keys)
@@ -929,6 +989,8 @@ def get_trend(
         "date_to": period.end,
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
+        "base": base,
+        "nao_pago_disponivel": _nao_pago_disponivel(db, period.start, period.end, mkt_ids, brand_keys, base),
     }
 
 
@@ -1041,6 +1103,7 @@ def get_canais(
     brand_keys: list[str] | None = None,
     period: EffectivePeriod | None = None,
     compare_period: EffectivePeriod | None = None,
+    base: str = "pagos",
 ) -> dict:
     mkt_ids = parse_marketplace_param(marketplace)
     start, end = canais_period_bounds(period, year, month)
@@ -1068,7 +1131,7 @@ def get_canais(
             COALESCE(SUM(f.seller_shipping_cost), 0)      AS seller_shipping_cost,
             COUNT(f.ad_spend)                             AS ad_spend_n,
             COUNT(f.total_fees)                           AS total_fees_n,
-            COUNT(f.seller_shipping_cost)                 AS seller_shipping_cost_n
+            COUNT(f.seller_shipping_cost)                 AS seller_shipping_cost_n{_nao_pagos_cols(base)}
         FROM marts.fact_marketplace_daily_performance f
         JOIN marts.dim_loja l ON l.loja_id = f.loja_id
         WHERE f.date BETWEEN :start AND :end
@@ -1224,6 +1287,9 @@ def get_canais(
         "shopee_conversion_rate": _pct(sh_buyers_t, sh_vis_t, 2),
     }
 
+    if base == "realizados":
+        _somar_nao_pagos_canais(by_brand, brand_rows, kpis, channel_rows)
+
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
     return {
         "ref_month": period.ref_month if period is not None else f"{year:04d}-{month:02d}",
@@ -1246,7 +1312,33 @@ def get_canais(
         "refreshed_at": refreshed_at,
         # `affiliate_costs` NAO e' montado aqui: o bloco de afiliados (§23) e'
         # composto na rota, sobre esta resposta. Ver `canais_period_bounds`.
+        "base": base,
+        "nao_pago_disponivel": _nao_pago_disponivel(db, start, end, mkt_ids, brand_keys, base),
     }
+
+
+def _somar_nao_pagos_canais(
+    by_brand: dict[str, dict[int, dict]], brand_rows: list[dict], kpis: dict, channel_rows: list[dict],
+) -> None:
+    """Base "realizados" em /canais: soma os nao pagos so' no GMV/pedidos de
+    TikTok e Shopee. Roda DEPOIS de tudo ser calculado na base paga: share de
+    conteudo, ads, custo, frete, sinais e medianas continuam pagos."""
+    campo = {TIKTOK_ID: "tiktok_gmv", SHOPEE_ID: "shopee_gmv"}
+    total = {"tiktok_gmv": 0.0, "shopee_gmv": 0.0}
+    for row in brand_rows:
+        for mid, nome in campo.items():
+            nao_pago = _f((by_brand.get(row["brand"], {}).get(mid) or {}).get("unpaid_gmv"))
+            if nao_pago and nome in row:
+                row[nome] = (row[nome] or 0) + nao_pago
+            total[nome] += _f(row.get(nome))
+    for nome, valor in total.items():
+        if kpis.get(nome) is not None or valor:
+            kpis[nome] = valor or None
+    for row in channel_rows:
+        raw = by_brand.get(row["brand"], {}).get(_MKT_IDS[row["channel"]]) or {}
+        row["gmv"] = _f(row["gmv"]) + _f(raw.get("unpaid_gmv"))
+        row["orders"] = int(row["orders"]) + int(_f(raw.get("unpaid_orders")))
+    channel_rows.sort(key=lambda r: r["gmv"] or 0, reverse=True)
 
 
 # ---------------------------------------------------------------------------

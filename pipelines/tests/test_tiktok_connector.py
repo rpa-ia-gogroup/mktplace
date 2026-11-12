@@ -150,6 +150,10 @@ def test_query_cancelados_sao_contados_na_raw_deduplicada():
     order_id. Contado no MESMO raw_daily do GMV, por data/marca."""
     assert "COUNT(*) FILTER (WHERE order_status = 'CANCELLED')" in connector.QUERY
     assert "AS orders_canceled" in connector.QUERY
+    # nao pagos: mesma Raw deduplicada, UNPAID, total_amount; zero provado; ON_HOLD fora.
+    assert "COUNT(*) FILTER (WHERE order_status = 'UNPAID')" in connector.QUERY
+    assert "SUM(total_amount) FILTER (WHERE order_status = 'UNPAID')" in connector.QUERY
+    assert "AS unpaid_orders" in connector.QUERY and "AS unpaid_gmv" in connector.QUERY
     assert "r.orders_canceled             AS canceled_orders" in connector.QUERY
     # o COUNT vive dentro de raw_daily, que agrupa por data/marca sobre raw_dedup
     assert "FROM raw_dedup" in connector.QUERY

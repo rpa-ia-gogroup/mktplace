@@ -38,6 +38,8 @@ Por (dia BRT de CRIACAO do pedido, loja) — o mesmo eixo do export:
   avg_ticket          gmv / orders (NULL se orders = 0)
   cancel_rate_pct     canceled / (orders + canceled) x 100
   shipping_pct_of_gmv seller_shipping_cost / gmv x 100 (NULL se gmv = 0)
+  unpaid_orders       pedidos unpaid (base "Realizados" = pagos + nao pagos)
+  unpaid_gmv          soma de `item_total` dos pedidos unpaid
 
 `COLUNAS_ANULADAS` (devolvidos, repasse, taxas e seus percentuais) sao da familia
 de pedidos mas NAO existem na API de pedidos (repasse e taxa vivem no escrow, nao
@@ -111,9 +113,11 @@ AUDIT_SOURCE = "shopee_daily_api"
 TARGET_STATEMENT_TIMEOUT_MS = 180_000
 AUDIT_ERRO_MAX_CHARS = 4000
 
-COLUNAS_INTEIRAS = ("orders", "units_sold", "canceled_orders", "delivered_orders", "returned_orders")
+COLUNAS_INTEIRAS = ("orders", "units_sold", "canceled_orders", "delivered_orders", "returned_orders",
+                    "unpaid_orders")
 COLUNAS_API = ("gmv", "orders", "units_sold", "avg_ticket", "canceled_orders", "cancel_rate_pct",
-               "delivered_orders", "seller_shipping_cost", "shipping_pct_of_gmv")
+               "delivered_orders", "seller_shipping_cost", "shipping_pct_of_gmv",
+               "unpaid_orders", "unpaid_gmv")
 COLUNAS_ANULADAS = ("returned_orders", "total_settlement", "total_fees", "avg_fee_pct",
                     "avg_settlement_pct")
 COLUNAS_DONAS = COLUNAS_API + COLUNAS_ANULADAS
@@ -146,6 +150,7 @@ def linha_da_fato(r: SH.LinhaDiaria) -> dict:
         "delivered_orders": r.delivered_orders,
         "seller_shipping_cost": frete,
         "shipping_pct_of_gmv": _pct(frete, gmv),
+        "unpaid_orders": r.unpaid_orders, "unpaid_gmv": round(r.unpaid_gmv, 2),
     }
     linha.update({c: None for c in COLUNAS_ANULADAS})
     return linha

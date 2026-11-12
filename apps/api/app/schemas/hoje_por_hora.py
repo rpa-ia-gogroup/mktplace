@@ -8,6 +8,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel
 
+from app.schemas.performance import NaoPagoDisponivel
+
 Canal = Literal["tiktok", "ml", "shopee"]
 
 
@@ -71,3 +73,7 @@ class HojePorHoraResponse(BaseModel):
     semana_passada: Optional[BlocoVendas] = None
     por_canal: list[CanalVendas] = []
     por_marca: list[MarcaTendencia] = []
+    #: `realizados` soma os nao pagos a pedidos, GMV e tendencia; `pagos` e' o padrao.
+    base: Literal["pagos", "realizados"] = "pagos"
+    #: So' com `base=realizados`: por canal, ha' fonte de nao pago? (ML = false.)
+    nao_pago_disponivel: Optional[NaoPagoDisponivel] = None

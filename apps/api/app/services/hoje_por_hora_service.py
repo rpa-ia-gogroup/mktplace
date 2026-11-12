@@ -65,16 +65,23 @@ def calcular_cortes(fontes: dict[int, Optional[datetime]], mkt_ids: list[int],
 
 
 def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list[str]],
-                      agora: Optional[datetime] = None) -> dict:
+                      agora: Optional[datetime] = None, base: str = "pagos") -> dict:
+    """`base="realizados"` soma os nao pagos (colunas paralelas `unpaid_*`) a pedidos,
+    GMV e tendencia; `pagos` (padrao) nem le' essas colunas. ML nao tem fonte de nao
+    pago: `nao_pago_disponivel.ml` = false (NULL conta como 0 na soma)."""
+    realizados = base == "realizados"
     agora = (agora or datetime.now(APP_TIMEZONE)).astimezone(APP_TIMEZONE)
     hoje = agora.date()
     dias = {"hoje": hoje, "ontem": hoje - timedelta(days=1), "semana_passada": hoje - timedelta(days=7)}
 
     existe = db.execute(text("SELECT to_regclass(:t) IS NOT NULL AND to_regclass(:f) IS NOT NULL"),
                         {"t": TABELA, "f": FONTES}).scalar()
-    base = {"dia": hoje.isoformat(), "corte_hora": None, "canais": [], "limitacoes": []}
+    # `{**base}` abaixo: o nome `base` da assinatura e' a base de vendas, entao o
+    # esqueleto da resposta chama-se `esqueleto`.
+    esqueleto = {"dia": hoje.isoformat(), "corte_hora": None, "canais": [], "limitacoes": [],
+                 "base": base, "nao_pago_disponivel": None}
     if not existe:
-        return {**base, "disponivel": False,
+        return {**esqueleto, "disponivel": False,
                 "motivo": "As vendas por hora ainda não estão publicadas no banco."}
 
     fontes = {r[0]: r[1] for r in db.execute(
@@ -90,8 +97,11 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
               for m in mkt_ids]
     limitacoes: list[str] = []
 
+    gmv_expr = "h.gmv + COALESCE(h.unpaid_gmv, 0)" if realizados else "h.gmv"
+    pedidos_expr = "h.pedidos + COALESCE(h.unpaid_orders, 0)" if realizados else "h.pedidos"
+    nao_pago_n = ", COUNT(h.unpaid_orders) AS unpaid_n" if realizados else ""
     linhas = db.execute(text(f"""
-        SELECT h.dia, h.marketplace_id, SUM(h.gmv) AS gmv, SUM(h.pedidos) AS pedidos
+        SELECT h.dia, h.marketplace_id, SUM({gmv_expr}) AS gmv, SUM({pedidos_expr}) AS pedidos{nao_pago_n}
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
         WHERE h.dia = ANY(:dias)
@@ -103,14 +113,18 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
            "brands": brand_keys}).mappings().all()
 
     somas = {(r["dia"], r["marketplace_id"]): (r["gmv"], r["pedidos"]) for r in linhas}
+    # Ha' fonte de nao pago no canal se alguma hora dele (nos dias lidos) tem
+    # `unpaid_orders` preenchido; zero conta (zero provado), NULL nao.
+    nao_pago_disponivel = ({nome: any(int(r["unpaid_n"] or 0) > 0 for r in linhas if r["marketplace_id"] == mid)
+                            for mid, nome in CANAL_POR_ID.items()} if realizados else None)
 
     # Tendencia de fechamento por marca: hoje e ontem ate' o corte, e ontem inteiro.
     por_marca_linhas = db.execute(text(f"""
         -- por_marca
         SELECT l.brand_key AS brand, h.dia, h.marketplace_id,
-               SUM(h.gmv) FILTER (
+               SUM({gmv_expr}) FILTER (
                    WHERE h.hora < (CAST(:cortes AS jsonb) ->> CAST(h.marketplace_id AS text))::int) AS gmv_corte,
-               SUM(h.gmv) AS gmv_dia
+               SUM({gmv_expr}) AS gmv_dia
         FROM {TABELA} h
         JOIN marts.dim_loja l ON l.loja_id = h.loja_id
         WHERE h.dia = ANY(:dias)
@@ -148,7 +162,8 @@ def get_hoje_por_hora(db: Session, mkt_ids: list[int], brand_keys: Optional[list
         return _bloco(gmv, pedidos)
 
     return {
-        **base,
+        **esqueleto,
+        "nao_pago_disponivel": nao_pago_disponivel,
         "disponivel": True,
         "corte_hora": max(cortes.values(), default=0),
         "canais": canais,

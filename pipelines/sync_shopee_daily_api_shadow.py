@@ -150,6 +150,8 @@ class LinhaDiaria:
     seller_shipping_cost: float
     product_subtotal: float
     is_partial: bool
+    #: Soma de item_total dos pedidos unpaid (base "Realizados"): vai para a fato, nao para o shadow.
+    unpaid_gmv: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -184,6 +186,7 @@ SQL_DIARIO = text(f"""
            COUNT(*) FILTER (WHERE o.st = 'completed')                        AS delivered_orders,
            COUNT(*) FILTER (WHERE o.st = 'to_return')                        AS to_return_orders,
            COUNT(*) FILTER (WHERE o.st = 'unpaid')                           AS unpaid_orders,
+           COALESCE(SUM(it.subtotal) FILTER (WHERE o.st = 'unpaid'), 0)      AS unpaid_gmv,
            COALESCE(SUM(it.qty) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)       AS units_sold,
            COALESCE(SUM(o.frete) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)      AS seller_shipping_cost,
            COALESCE(SUM(it.subtotal) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)  AS product_subtotal,
@@ -245,6 +248,7 @@ def montar_linhas(linhas: list[dict], marcas: tuple[str, ...], hoje: date) -> li
             seller_shipping_cost=round(float(r["seller_shipping_cost"]), 2),
             product_subtotal=round(float(r["product_subtotal"]), 2),
             is_partial=r["d"] > corte_parcial,
+            unpaid_gmv=round(float(r.get("unpaid_gmv") or 0), 2),
         ))
     return out
 
@@ -265,7 +269,7 @@ def validate_contract(snap: Snapshot) -> list[str]:
             raise ShopeeDailyShadowError(f"contagem negativa em {r.brand}/{r.date}")
         if r.delivered_orders > r.orders or r.to_return_orders > r.orders:
             raise ShopeeDailyShadowError(f"subconjunto maior que o total em {r.brand}/{r.date}")
-        if r.seller_shipping_cost < 0 or r.product_subtotal < 0:
+        if r.seller_shipping_cost < 0 or r.product_subtotal < 0 or r.unpaid_gmv < 0:
             raise ShopeeDailyShadowError(f"valor negativo em {r.brand}/{r.date}")
     avisos = []
     ausentes = sorted(set(snap.marcas) - {r.brand for r in snap.rows})

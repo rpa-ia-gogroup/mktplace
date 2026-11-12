@@ -289,15 +289,16 @@ def test_cadeia_real_e_linear_e_passa_pela_033(tmp_path):
     (T-0018, anuncio-ancora do estoque Full ML), a 039 (vendas por hora) e a 040
     (T-0069, CHECK dos insumos da DRE aceita os impostos) e a 041 (T-0068, frete do comprador na
     fato de descontos TikTok), a 042 e a 043 (Bling), a 044 (shadow Shopee aceita kokeshi) e a 045
-    (T-0093, CHECK dos insumos da DRE aceita as devolucoes Shopee) entraram depois da 033 e nao a alteram.
+    (T-0093, CHECK dos insumos da DRE aceita as devolucoes Shopee) entraram depois da 033 e nao a alteram (a 046, VENDAS-REALIZADAS, so' acrescenta colunas de nao pagos).
     """
     grafo = json.loads(
         _python_isolado(ROTEIRO_GRAFO, str(VERSIONS.parent), cwd=tmp_path)
     )
-    assert grafo["heads"] == ["045"]
+    assert grafo["heads"] == ["046"]
     assert grafo["bases"] == ["001"]
-    assert grafo["revisoes"][:16] == ["045", "044", "043", "042", "041", "040", "039", "038", "037", "036",
-                                      "035", "034", "033", "032", "031", "030"]
+    assert grafo["revisoes"][:16] == ["046", "045", "044", "043", "042", "041", "040", "039", "038", "037", "036",
+                                      "035", "034", "033", "032", "031"]
+    assert grafo["pais"]["046"] == "045"
     assert grafo["pais"]["045"] == "044"
     assert grafo["pais"]["044"] == "043"
     assert grafo["pais"]["043"] == "042"
