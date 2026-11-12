@@ -33,5 +33,11 @@ export function notaBase(eco: EcoBase | null | undefined, canais: readonly Marke
   const soPagos = canais
     .filter((c) => eco.nao_pago_disponivel?.[c] === false)
     .map((c) => `${CURTO[c]}: só pagos (${c === "ml" ? "sem fonte de não pagos" : "sem não pagos no período"}).`);
-  return [REALIZADOS, ...soPagos].join(" ");
+  // Canal so' com pagos muda a leitura do numero: abre o ⓘ.
+  return [...soPagos, REALIZADOS].join(" ");
+}
+
+/** Ads, ROAS e ACOS nunca mudam de base: com Realizados, o ⓘ deles avisa. */
+export function notaSoPagos(eco: EcoBase | null | undefined): string | null {
+  return eco?.base === "realizados" ? "Sempre sobre pedidos pagos." : null;
 }

@@ -16,7 +16,7 @@ test("notaBase segue a base que a API devolveu", () => {
   const eco = { base: "realizados" as const, nao_pago_disponivel: { tiktok: true, ml: false, shopee: false } };
   assert.equal(
     notaBase(eco, todos),
-    `${REALIZADOS} ML: só pagos (sem fonte de não pagos). Shopee: só pagos (sem não pagos no período).`,
+    `ML: só pagos (sem fonte de não pagos). Shopee: só pagos (sem não pagos no período). ${REALIZADOS}`,
   );
   // Canal fora do filtro nao aparece.
   assert.equal(notaBase(eco, ["tiktok"]), REALIZADOS);

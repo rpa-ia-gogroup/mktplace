@@ -725,7 +725,7 @@ function GerencialComGrandes() {
         loading={sources.anyLoading}
       >
         <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} />
-        <SeletorBase />
+        <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
       </GerencialHeader>
 
       <span className="sr-only" aria-live="polite" aria-atomic="true">

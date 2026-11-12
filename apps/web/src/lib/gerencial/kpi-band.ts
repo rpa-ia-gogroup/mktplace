@@ -16,7 +16,7 @@
 import type { OverviewData } from "../api-client.ts";
 import { isMarketplaceSelected } from "../marketplace-filter.ts";
 import type { Marketplace } from "../mock-data.ts";
-import { notaBase } from "../base-vendas.ts";
+import { notaBase, notaSoPagos } from "../base-vendas.ts";
 import { fmtBrlFull, fmtNumber, fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "../formatters.ts";
 
 export type KpiKey = "gmv" | "orders" | "avg_ticket" | "ad_spend" | "roas";
@@ -259,7 +259,7 @@ export function buildKpiBand(
     deltaTone: "neutral",
     reference: adsDelta != null ? `antes ${fmtBrlCurto(overview!.prev_ad_spend!)}` : null,
     comparisonNote: null,
-    coverageNote: adsCoverageNote(channels),
+    coverageNote: [adsCoverageNote(channels), notaSoPagos(overview)].filter(Boolean).join(" · ") || null,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-5",
@@ -305,7 +305,7 @@ export function buildKpiBand(
     deltaTone: "lower_is_better",
     reference: null,
     comparisonNote: null,
-    coverageNote: null,
+    coverageNote: notaSoPagos(overview),
     channelValues: roasChannels.length ? roasChannels : null,
     highlightChannel: compatibleWithValue.length === 1 ? compatibleWithValue[0].channel : null,
     accent: compatibleWithValue.length ? "bg-chart-3" : "bg-line",

@@ -573,7 +573,7 @@ function CanaisPageInner() {
         filters={
           <>
             <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} />
-            <SeletorBase />
+            <SeletorBase semRealizados={dataIsFresh && eco?.base !== "realizados"} />
           </>
         }
       />

@@ -70,7 +70,7 @@ test("nao herda parametros fora do contrato de filtros globais do estado atual",
 });
 
 test("FILTER_QUERY_KEYS cobre exatamente as chaves do contrato de filtros globais", () => {
-  assert.deepEqual([...FILTER_QUERY_KEYS].sort(), ["brands", "channels", "compare", "date_from", "date_to"]);
+  assert.deepEqual([...FILTER_QUERY_KEYS].sort(), ["base", "brands", "channels", "compare", "date_from", "date_to"]);
 });
 
 // Drill-down marca x canal (Gate U3, Task 4/6) — destino da matriz de Canais
