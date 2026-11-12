@@ -16,14 +16,16 @@ O QUE ESTA PUBLICACAO MEDE — mesma regra do export manual
 ---------------------------------------------------------
 Por (dia BRT de criacao do pedido, marca), espelhando `_parser.py` do export:
 
-  orders           pedidos com status <> cancelled   (export: status <> Cancelado)
+  orders           pedidos pagos: status fora de cancelled e unpaid
+                   (o export contava o nao pago; desde 12/11/2026 a Torre nao conta)
   units_sold       soma de quantity desses pedidos
   canceled_orders  pedidos cancelled
   delivered_orders pedidos completed                 (export: Concluido)
-  seller_shipping_cost  soma de estimated_shipping_fee dos nao cancelados
+  seller_shipping_cost  soma de estimated_shipping_fee dos pagos (nem cancelados nem unpaid)
                         (export: "Valor estimado do frete")
-  product_subtotal soma de item_total dos nao cancelados — NAO e' o GMV da tela
+  product_subtotal soma de item_total dos pagos (nem cancelados nem unpaid) — NAO e' o GMV da tela
   to_return_orders, unpaid_orders  informativos, sem equivalente publicado
+                   (unpaid fica FORA de orders: pedido feito ainda nao e' venda)
 
 Medido no gate (01/01–12/10/2026, 4 contas, 1.140 dias-marca): janeiro a junho
 fecham em 0,00% em orders, canceled, delivered, units e frete; o eixo de data
@@ -177,16 +179,16 @@ SQL_DIARIO = text(f"""
          GROUP BY 1, 2
     )
     SELECT o.brand, o.d,
-           COUNT(*) FILTER (WHERE o.st <> 'cancelled')                       AS orders,
+           COUNT(*) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid'))                       AS orders,
            COUNT(*) FILTER (WHERE o.st = 'cancelled')                        AS canceled_orders,
            COUNT(*) FILTER (WHERE o.st = 'completed')                        AS delivered_orders,
            COUNT(*) FILTER (WHERE o.st = 'to_return')                        AS to_return_orders,
            COUNT(*) FILTER (WHERE o.st = 'unpaid')                           AS unpaid_orders,
-           COALESCE(SUM(it.qty) FILTER (WHERE o.st <> 'cancelled'), 0)       AS units_sold,
-           COALESCE(SUM(o.frete) FILTER (WHERE o.st <> 'cancelled'), 0)      AS seller_shipping_cost,
-           COALESCE(SUM(it.subtotal) FILTER (WHERE o.st <> 'cancelled'), 0)  AS product_subtotal,
-           COUNT(*) FILTER (WHERE o.st <> 'cancelled' AND it.order_sn IS NULL) AS sem_item,
-           COUNT(*) FILTER (WHERE o.frete IS NULL AND o.st <> 'cancelled')   AS frete_nulo
+           COALESCE(SUM(it.qty) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)       AS units_sold,
+           COALESCE(SUM(o.frete) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)      AS seller_shipping_cost,
+           COALESCE(SUM(it.subtotal) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid')), 0)  AS product_subtotal,
+           COUNT(*) FILTER (WHERE o.st NOT IN ('cancelled', 'unpaid') AND it.order_sn IS NULL) AS sem_item,
+           COUNT(*) FILTER (WHERE o.frete IS NULL AND o.st NOT IN ('cancelled', 'unpaid'))   AS frete_nulo
       FROM o
       LEFT JOIN it ON it.brand = o.brand AND it.order_sn = o.order_sn
      GROUP BY 1, 2
@@ -261,7 +263,7 @@ def validate_contract(snap: Snapshot) -> list[str]:
         if min(r.orders, r.units_sold, r.canceled_orders, r.delivered_orders,
                r.to_return_orders, r.unpaid_orders) < 0:
             raise ShopeeDailyShadowError(f"contagem negativa em {r.brand}/{r.date}")
-        if r.delivered_orders > r.orders or r.to_return_orders > r.orders or r.unpaid_orders > r.orders:
+        if r.delivered_orders > r.orders or r.to_return_orders > r.orders:
             raise ShopeeDailyShadowError(f"subconjunto maior que o total em {r.brand}/{r.date}")
         if r.seller_shipping_cost < 0 or r.product_subtotal < 0:
             raise ShopeeDailyShadowError(f"valor negativo em {r.brand}/{r.date}")

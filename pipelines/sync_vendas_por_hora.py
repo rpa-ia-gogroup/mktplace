@@ -18,7 +18,7 @@ Por (dia BRT, hora BRT, canal, loja), pedido a pedido, no Data Mart:
   TikTok  `raw.tiktok_shop_orders` deduplicada por `order_id` (ultima versao),
           status da allowlist comercial, GMV = `total_amount`. A regra de
           `connectors/tiktok`.
-  Shopee  `silver.stg_shopee_orders` + `_order_items`, status <> cancelled,
+  Shopee  `silver.stg_shopee_orders` + `_order_items`, status fora de cancelled e unpaid,
           GMV = soma de `item_total`. A regra de `sync_shopee_daily_api`, so'
           nas lojas com API.
 
@@ -160,7 +160,7 @@ WITH o AS (
     WHERE brand IN :brands
       AND create_time >= CAST(:inicio AS timestamp) AT TIME ZONE 'America/Sao_Paulo'
       AND create_time <  CAST(:fim_exclusivo AS timestamp) AT TIME ZONE 'America/Sao_Paulo'
-      AND lower(order_status) <> 'cancelled'
+      AND lower(order_status) NOT IN ('cancelled', 'unpaid')
 ),
 i AS (
     SELECT order_sn, SUM(item_total) AS total
