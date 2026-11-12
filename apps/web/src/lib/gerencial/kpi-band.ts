@@ -167,6 +167,9 @@ export function avgTicketDisplay(overview: OverviewData): { value: string | null
   return { value: fmtBrlFull(overview.avg_ticket), reason: null };
 }
 
+/** Pedidos, GMV e Ticket contam so' pedido pago: vai no (i) do card e do detalhe. */
+export const SO_PAGOS = "Só pedidos pagos: sem cancelados nem aguardando pagamento.";
+
 export function buildKpiBand(
   overview: OverviewData | null,
   channels: readonly Marketplace[],
@@ -192,7 +195,7 @@ export function buildKpiBand(
         : null,
     comparisonNote:
       overview && !(overview.prev_gmv > 0) ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: null,
+    coverageNote: SO_PAGOS,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-1",
@@ -210,7 +213,7 @@ export function buildKpiBand(
     deltaTone: "higher_is_better",
     reference: ordersDelta != null ? `antes ${fmtNumCurto(overview!.prev_orders!)}` : null,
     comparisonNote: compare && ordersDelta == null ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: null,
+    coverageNote: SO_PAGOS,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-2",
@@ -229,7 +232,7 @@ export function buildKpiBand(
     deltaTone: "higher_is_better",
     reference: ticketDelta != null ? `antes ${fmtBrlFull(overview!.prev_avg_ticket!)}` : null,
     comparisonNote: compare && ticket.value && ticketDelta == null ? COMPARISON_UNAVAILABLE : null,
-    coverageNote: null,
+    coverageNote: SO_PAGOS,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-4",

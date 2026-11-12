@@ -14,7 +14,7 @@ import {
   type KpiKind,
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { acosDoRoas } from "@/lib/gerencial/kpi-band";
+import { SO_PAGOS, acosDoRoas } from "@/lib/gerencial/kpi-band";
 import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtBrlCurto, fmtNumCurto, fmtPctBr, fmtPctSimples } from "@/lib/formatters";
@@ -167,7 +167,9 @@ export default function KpiDrilldownContent({
  * investimento e o ROAS sem consolidado mudam.
  */
 const DICA: Partial<Record<KpiKind, string>> = {
-  gmv: KPI_META.gmv.definition,
+  gmv: `${SO_PAGOS} ${KPI_META.gmv.definition}`,
+  orders: SO_PAGOS,
+  avg_ticket: SO_PAGOS,
   ad_spend: KPI_META.ad_spend.caveat,
   roas: KPI_META.roas.caveat,
 };

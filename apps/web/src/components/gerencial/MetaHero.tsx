@@ -21,7 +21,7 @@ import { ArrowDownRight, ArrowUpRight, Target, TriangleAlert } from "lucide-reac
 
 import type { Marketplace } from "@/lib/mock-data";
 import { CHANNEL_DOT as PONTO } from "@/lib/gerencial/channel-colors";
-import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
+import { CHANNEL_LABEL, SO_PAGOS } from "@/lib/gerencial/kpi-band";
 import { ROTULO_STATUS, type ProgressoMeta, type StatusMeta } from "@/lib/gerencial/meta-progress";
 import { diaDaSemana, type ProgressoDia, type StatusDia } from "@/lib/metas-curva";
 import { MARCAS, fmtCompacto, rotuloMes } from "@/lib/metas";
@@ -145,7 +145,7 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
         <h2 id="meta-hero-titulo" className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
           GMV do período{ate}
         </h2>
-        {notaMenores && <InfoDica texto={notaMenores} />}
+        <InfoDica texto={notaMenores ? `${SO_PAGOS} ${notaMenores}` : SO_PAGOS} />
       </div>
       {error ? (
         <>
