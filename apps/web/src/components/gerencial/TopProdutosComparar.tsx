@@ -52,7 +52,7 @@ export default function TopProdutosComparar({
     : oportunidades.length
       ? [{
           chave: "resumo",
-          texto: `${oportunidades.length} ${oportunidades.length === 1 ? "produto forte" : "produtos fortes"} em outros canais e ${oportunidades.length === 1 ? "fraco" : "fracos"} ${noCanal(canalOp)}. Maior lacuna: ${textoDaOportunidade(oportunidades[0], canalOp)}.`,
+          texto: `${oportunidades.length} ${oportunidades.length === 1 ? "produto forte" : "produtos fortes"} em outros canais e ${oportunidades.length === 1 ? "fraco" : "fracos"} ${noCanal(canalOp)}. Maior lacuna: ${oportunidades[0].produto.produto} (${textoDaOportunidade(oportunidades[0], canalOp).slice(oportunidades[0].produto.produto.length + 2)}).`,
         }]
       : [];
   const parcialNoFoco = canalOp ? parciais.find((c) => c.canal === canalOp) : undefined;
