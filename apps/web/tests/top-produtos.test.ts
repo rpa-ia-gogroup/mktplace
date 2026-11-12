@@ -144,3 +144,31 @@ test("comparar: busca de novo uma vez se falhar; cancelada nao repete", async ()
   await assert.rejects(buscarComparacao(q, ac.signal, async () => { n += 1; throw new DOMException("x", "AbortError"); }));
   assert.equal(n, 1, "cancelada nao repete");
 });
+
+test("oportunidade por canal: forte fora e fraco (ou sem venda) aqui, maior lacuna primeiro", async () => {
+  const { oportunidadesNoCanal, textoDaOportunidade } = await import("../src/lib/gerencial/top-produtos.ts");
+  const m: MarcaComparada = {
+    marca: "barbours",
+    canais: TRES.map((canal) => ({ canal, cobertura: 1 })),
+    produtos: [
+      prod("fraco", { shopee: 0.12, ml: 0.015, tiktok: 0.05 }), // 12% x 1,5%: lacuna 10,5 p.p.
+      prod("ausente", { shopee: 0.06, tiktok: 0.02 }), // sem venda no ML: lacuna 6 p.p.
+      prod("parelho", { shopee: 0.1, ml: 0.08 }), // < 2x: nao e' oportunidade
+      prod("pequeno", { shopee: 0.02 }), // abaixo do piso de 3%
+      prod("forte-no-ml", { ml: 0.2, shopee: 0.01 }), // forte AQUI, nao fora
+    ],
+  };
+  const ops = oportunidadesNoCanal(m, "ml");
+  assert.deepEqual(ops.map((o) => o.produto.chave), ["fraco", "ausente"]);
+  assert.equal(ops[0].melhor, "shopee");
+  assert.ok(Math.abs(ops[0].lacuna - 0.105) < 1e-9);
+  assert.equal(ops[1].semVenda, true);
+  assert.equal(textoDaOportunidade(ops[0], "ml"), "Kit fraco: 12% na Shopee · 1,5% no ML");
+  assert.equal(textoDaOportunidade(ops[1], "ml"), "Kit ausente: 6% na Shopee · sem venda no ML");
+});
+
+test("comparar canais: seletor de oportunidade so' com os canais da marca", () => {
+  const src = readFileSync(new URL("../src/components/gerencial/TopProdutosComparar.tsx", import.meta.url), "utf8");
+  assert.match(src, /canais\.includes\(foco\)/);
+  assert.match(src, /oportunidadesNoCanal\(m, canalOp\)/);
+});

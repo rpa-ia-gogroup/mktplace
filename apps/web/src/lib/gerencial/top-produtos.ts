@@ -301,3 +301,38 @@ export function achadosDaMarca(m: MarcaComparada, max = 3): { chave: string; tex
     return { chave: p.chave, texto: [`${p.produto}: ${fmtFatia(topo.fatia)} da receita ${noCanal(topo.canal)}`, ...resto].join(" · ") };
   });
 }
+
+/**
+ * OPORTUNIDADE-POR-CANAL (pedido 13/11/2026): forte em outro canal e fraco (ou
+ * sem venda) em `canal`. A MESMA regua do selo "forte", vista do canal fraco:
+ * melhor outro canal >= 3% e (sem venda aqui OU >= 2x a fatia daqui com
+ * >= 3 p.p. de diferenca). Ordem: maior lacuna em p.p. primeiro.
+ */
+export interface Oportunidade {
+  produto: ProdutoComparado;
+  melhor: CanalTop;
+  /** Fatia no melhor outro canal menos a fatia daqui (sem venda = 0), 0-1. */
+  lacuna: number;
+  semVenda: boolean;
+}
+
+export function oportunidadesNoCanal(m: MarcaComparada, canal: CanalTop): Oportunidade[] {
+  return m.produtos
+    .flatMap((p) => {
+      const aqui = p.celulas.find((c) => c.canal === canal)?.fatia;
+      const melhor = p.celulas.filter((c) => c.canal !== canal).sort((a, b) => b.fatia - a.fatia)[0];
+      if (!melhor || melhor.fatia < PISO_FATIA) return [];
+      const lacuna = melhor.fatia - (aqui ?? 0);
+      if (aqui !== undefined && !(melhor.fatia >= VEZES_FORTE * aqui && lacuna >= DIFERENCA_MINIMA)) return [];
+      return [{ produto: p, melhor: melhor.canal, lacuna, semVenda: aqui === undefined }];
+    })
+    .sort((a, b) => b.lacuna - a.lacuna);
+}
+
+/** "Kit X: 12% na Shopee · 1,5% no ML" / "Kit X: 12% na Shopee · sem venda no ML". */
+export function textoDaOportunidade(o: Oportunidade, canal: CanalTop): string {
+  const fora = o.produto.celulas.find((c) => c.canal === o.melhor)!.fatia;
+  const aqui = o.produto.celulas.find((c) => c.canal === canal)?.fatia;
+  const daqui = aqui === undefined ? `sem venda ${noCanal(canal)}` : `${fmtFatia(aqui)} ${noCanal(canal)}`;
+  return `${o.produto.produto}: ${fmtFatia(fora)} ${noCanal(o.melhor)} · ${daqui}`;
+}
