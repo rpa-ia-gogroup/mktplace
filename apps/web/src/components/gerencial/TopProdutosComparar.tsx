@@ -46,9 +46,16 @@ export default function TopProdutosComparar({
   // Canal da oportunidade so' entre os canais que a marca tem (troca de marca volta a "todos").
   const canalOp = foco !== "todos" && canais.includes(foco) ? foco : null;
   const oportunidades = canalOp ? oportunidadesNoCanal(m, canalOp) : [];
-  const achados = canalOp
-    ? oportunidades.slice(0, 3).map((o) => ({ chave: o.produto.chave, texto: textoDaOportunidade(o, canalOp) }))
-    : achadosDaMarca(m);
+  // Com canal escolhido a tabela ja' lista as oportunidades: o topo vira UMA linha de resumo.
+  const achados = !canalOp
+    ? achadosDaMarca(m)
+    : oportunidades.length
+      ? [{
+          chave: "resumo",
+          texto: `${oportunidades.length} ${oportunidades.length === 1 ? "produto forte" : "produtos fortes"} em outros canais e ${oportunidades.length === 1 ? "fraco" : "fracos"} ${noCanal(canalOp)}. Maior lacuna: ${textoDaOportunidade(oportunidades[0], canalOp)}.`,
+        }]
+      : [];
+  const parcialNoFoco = canalOp ? parciais.find((c) => c.canal === canalOp) : undefined;
   const lista = canalOp ? oportunidades.map((o) => o.produto) : m.produtos;
   const visiveis = aberta ? lista : lista.slice(0, VISIVEIS);
 
@@ -66,15 +73,25 @@ export default function TopProdutosComparar({
         </span>
       )}
 
-      <Segmented
-        rotulo="Oportunidade em"
-        opcoes={[
-          { valor: "todos", texto: "Todos os produtos" },
-          ...canais.map((c) => ({ valor: c, texto: `Oportunidade ${noCanal(c)}` })),
-        ]}
-        valor={canalOp ?? "todos"}
-        aoEscolher={setFoco}
-      />
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <span id={`op-${m.marca}`} className="text-sm text-ink-muted">Oportunidade em:</span>
+        <Segmented
+          rotulo="Oportunidade em"
+          rotuladoPor={`op-${m.marca}`}
+          opcoes={[
+            { valor: "todos", texto: "Todos" },
+            ...canais.map((c) => ({ valor: c, texto: CANAL_CURTO[c] })),
+          ]}
+          valor={canalOp ?? "todos"}
+          aoEscolher={(v) => { setFoco(v); setAberta(false); }}
+        />
+      </div>
+
+      {parcialNoFoco && canalOp && (
+        <p className="text-sm text-warn-ink">
+          {`${noCanal(canalOp).replace(/^n/, "N")}, só ${fmtFatia(parcialNoFoco.cobertura)} da receita tem SKU: "sem venda" pode ser produto sem SKU.`}
+        </p>
+      )}
 
       <section aria-label="Achados entre canais" className="rounded-lg bg-raised px-3 py-2">
         {achados.length ? (
@@ -143,7 +160,9 @@ export default function TopProdutosComparar({
           aria-expanded={aberta}
           className="inline-flex min-h-11 w-fit items-center gap-1 rounded-lg px-2 text-xs font-semibold text-accent hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          {aberta ? `Mostrar só o top ${VISIVEIS}` : `Ver top ${lista.length}`}
+          {canalOp
+            ? aberta ? `Mostrar só as ${VISIVEIS} maiores` : `Ver as ${lista.length} oportunidades`
+            : aberta ? `Mostrar só o top ${VISIVEIS}` : `Ver top ${lista.length}`}
           <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${aberta ? "rotate-180" : ""}`} />
         </button>
       )}
