@@ -14,9 +14,11 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
 import TableScrollHint from "@/components/TableScrollHint";
+import Segmented from "@/components/ui/Segmented";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import {
-  CANAL_CURTO, COBERTURA_MINIMA, achadosDaMarca, fmtFatia, noCanal, seloDoProduto, textoDoSelo,
+  CANAL_CURTO, COBERTURA_MINIMA, achadosDaMarca, fmtFatia, noCanal, oportunidadesNoCanal, seloDoProduto,
+  textoDaOportunidade, textoDoSelo,
   type CanalTop, type MarcaComparada, type ProdutoComparado,
 } from "@/lib/gerencial/top-produtos";
 
@@ -30,6 +32,7 @@ export default function TopProdutosComparar({
   abrir: (p: ProdutoComparado, canal: CanalTop) => void;
 }) {
   const [aberta, setAberta] = useState(false);
+  const [foco, setFoco] = useState<CanalTop | "todos">("todos");
   const canais = m.canais.map((c) => c.canal);
   const parciais = m.canais.filter((c) => c.cobertura < COBERTURA_MINIMA);
 
@@ -40,8 +43,14 @@ export default function TopProdutosComparar({
       </p>
     );
   }
-  const achados = achadosDaMarca(m);
-  const visiveis = aberta ? m.produtos : m.produtos.slice(0, VISIVEIS);
+  // Canal da oportunidade so' entre os canais que a marca tem (troca de marca volta a "todos").
+  const canalOp = foco !== "todos" && canais.includes(foco) ? foco : null;
+  const oportunidades = canalOp ? oportunidadesNoCanal(m, canalOp) : [];
+  const achados = canalOp
+    ? oportunidades.slice(0, 3).map((o) => ({ chave: o.produto.chave, texto: textoDaOportunidade(o, canalOp) }))
+    : achadosDaMarca(m);
+  const lista = canalOp ? oportunidades.map((o) => o.produto) : m.produtos;
+  const visiveis = aberta ? lista : lista.slice(0, VISIVEIS);
 
   return (
     <div className="flex flex-col gap-3">
@@ -57,6 +66,16 @@ export default function TopProdutosComparar({
         </span>
       )}
 
+      <Segmented
+        rotulo="Oportunidade em"
+        opcoes={[
+          { valor: "todos", texto: "Todos os produtos" },
+          ...canais.map((c) => ({ valor: c, texto: `Oportunidade ${noCanal(c)}` })),
+        ]}
+        valor={canalOp ?? "todos"}
+        aoEscolher={setFoco}
+      />
+
       <section aria-label="Achados entre canais" className="rounded-lg bg-raised px-3 py-2">
         {achados.length ? (
           <ul className="flex flex-col gap-1">
@@ -65,7 +84,11 @@ export default function TopProdutosComparar({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-ink-muted">Sem diferença forte entre canais neste período.</p>
+          <p className="text-sm text-ink-muted">
+            {canalOp
+              ? `Nenhum produto forte nos outros canais e fraco ${noCanal(canalOp)} neste período.`
+              : "Sem diferença forte entre canais neste período."}
+          </p>
         )}
       </section>
 
@@ -79,7 +102,7 @@ export default function TopProdutosComparar({
             <tr className="border-b border-line">
               <th scope="col" className={`${TH} text-left`}>Produto</th>
               {canais.map((c) => (
-                <th key={c} scope="col" className={`${TH} w-32 text-right`}>
+                <th key={c} scope="col" className={`${TH} w-32 text-right ${c === canalOp ? "bg-accent-soft/60 text-accent-ink" : ""}`}>
                   <span className="inline-flex items-center gap-1.5">
                     <span aria-hidden="true" className={`h-2 w-2 rounded-full ${CHANNEL_DOT[c]}`} />
                     {CANAL_CURTO[c]}
@@ -90,7 +113,7 @@ export default function TopProdutosComparar({
           </thead>
           <tbody>
             {visiveis.map((p) => (
-              <Linha key={p.chave} p={p} canais={canais} abrir={abrir} />
+              <Linha key={p.chave} p={p} canais={canais} abrir={abrir} foco={canalOp} />
             ))}
           </tbody>
         </table>
@@ -113,14 +136,14 @@ export default function TopProdutosComparar({
         ))}
       </ul>
 
-      {m.produtos.length > VISIVEIS && (
+      {lista.length > VISIVEIS && (
         <button
           type="button"
           onClick={() => setAberta((a) => !a)}
           aria-expanded={aberta}
           className="inline-flex min-h-11 w-fit items-center gap-1 rounded-lg px-2 text-xs font-semibold text-accent hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          {aberta ? `Mostrar só o top ${VISIVEIS}` : `Ver top ${m.produtos.length}`}
+          {aberta ? `Mostrar só o top ${VISIVEIS}` : `Ver top ${lista.length}`}
           <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${aberta ? "rotate-180" : ""}`} />
         </button>
       )}
@@ -129,8 +152,12 @@ export default function TopProdutosComparar({
 }
 
 function Linha({
-  p, canais, abrir,
-}: { p: ProdutoComparado; canais: CanalTop[]; abrir: (p: ProdutoComparado, canal: CanalTop) => void }) {
+  p, canais, abrir, foco,
+}: {
+  p: ProdutoComparado; canais: CanalTop[]; abrir: (p: ProdutoComparado, canal: CanalTop) => void;
+  /** Canal da oportunidade: a coluna ganha fundo. */
+  foco: CanalTop | null;
+}) {
   const selo = seloDoProduto(p, canais);
   const fatias = new Map(p.celulas.map((c) => [c.canal, c.fatia]));
   const maior = Math.max(...p.celulas.map((c) => c.fatia));
@@ -151,14 +178,14 @@ function Linha({
         const f = fatias.get(c);
         if (f === undefined) {
           return (
-            <td key={c} className="px-2 py-2 text-right align-top text-sm text-ink-faint" title={`Sem venda ${noCanal(c)} no período`}>
+            <td key={c} className={`px-2 py-2 text-right align-top text-sm text-ink-faint ${c === foco ? "bg-accent-soft/40" : ""}`} title={`Sem venda ${noCanal(c)} no período`}>
               <span aria-hidden="true">—</span>
               <span className="sr-only">sem venda {noCanal(c)} no período</span>
             </td>
           );
         }
         return (
-          <td key={c} className="px-1 py-1 text-right align-top">
+          <td key={c} className={`px-1 py-1 text-right align-top ${c === foco ? "bg-accent-soft/40" : ""}`}>
             <button
               type="button"
               onClick={() => abrir(p, c)}
