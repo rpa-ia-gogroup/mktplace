@@ -97,8 +97,7 @@ def test_4_apenas_produtos_fbs_entram():
 
 
 def test_5_contas_restritas_a_allowlist():
-    assert mod.CONTAS_ESPERADAS == ("apice", "barbours", "lescent", "rituaria")
-    assert "kokeshi" not in str(mod.SQL_PRODUTOS).lower()
+    assert mod.CONTAS_ESPERADAS == ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 
 # --------------------------------------------------------------------- #
@@ -577,10 +576,9 @@ def test_56_conta_esperada_sem_linha_recusa():
     assert mod.avaliar_portao(linhas, REF) == ["lescent: conta esperada ausente do portao"]
 
 
-def test_57_kokeshi_nao_e_cobrada_pelo_portao():
-    """Kokeshi esta' fora da esteira API: o portao nao pode exigi-la."""
-    assert "kokeshi" not in str(mod.SQL_PORTAO_FONTE).lower()
-    assert "kokeshi" not in mod.CONTAS_ESPERADAS
+def test_57_kokeshi_e_cobrada_pelo_portao():
+    """Kokeshi entrou na esteira API (12/11/2026): o portao a exige."""
+    assert "kokeshi" in mod.CONTAS_ESPERADAS
 
 
 def test_58_portao_e_a_primeira_leitura_e_recusa_com_erro_repetivel():

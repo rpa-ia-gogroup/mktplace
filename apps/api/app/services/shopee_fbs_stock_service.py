@@ -55,13 +55,13 @@ FACT_TABLE = "marts.fact_shopee_fbs_stock_daily"
 FACT_LOCATION_TABLE = "marts.fact_shopee_fbs_stock_location_daily"
 
 #: Contas da esteira API. ALLOWLIST: ausencia de filtro significa exatamente
-#: estas quatro, nunca "tudo que estiver na tabela".
-EXPECTED_ACCOUNTS = ("apice", "barbours", "lescent", "rituaria")
-EXPECTED_BRANDS = ("apice", "barbours", "lescent", "rituaria")
+#: estas cinco, nunca "tudo que estiver na tabela".
+EXPECTED_ACCOUNTS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
+EXPECTED_BRANDS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 #: Marcas Shopee FORA da esteira API. Declaradas para que a ausencia viaje no
 #: payload em vez de virar silencio.
-BRANDS_NOT_COVERED = ("kokeshi",)
+BRANDS_NOT_COVERED = ()
 
 SCOPE_LABEL = "Estoque Full Shopee — cobertura API"
 
@@ -127,9 +127,8 @@ MOTIVO_SEM_FOTOGRAFIA = (
 )
 
 LIMITACAO_COBERTURA = (
-    "Cobertura PARCIAL: a esteira de API cobre apice, barbours, lescent e "
-    "rituaria. Kokeshi NÃO está na API — este total é “Estoque Full Shopee "
-    "(cobertura API)”, nunca “Shopee total”."
+    "A esteira de API cobre as 5 contas Shopee (apice, barbours, kokeshi, "
+    "lescent e rituaria). Conta sem fotografia no dia fica fora do total."
 )
 LIMITACAO_REGIME_CARGA = (
     "Atualização diária: a cadeia da Torre publica a fotografia às 10:15 "
