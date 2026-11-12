@@ -947,7 +947,8 @@ def test_81_o_bloco_nao_altera_nenhum_campo_existente_de_CanaisResponse():
         "compare_date_to", "filters", "refreshed_at", "affiliate_costs",
     }
     assert historicos <= campos
-    assert campos - historicos == {"tiktok_order_discounts"}
+    # `base` e `nao_pago_disponivel`: VENDAS-REALIZADAS, aditivos (base=pagos|realizados).
+    assert campos - historicos == {"tiktok_order_discounts", "base", "nao_pago_disponivel"}
 
 
 def test_82_affiliate_costs_continua_opcional_e_independente():
