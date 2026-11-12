@@ -40,18 +40,19 @@ from sqlalchemy.orm import Session
 FACT_TABLE = "marts.fact_shopee_fbs_daily"
 
 #: Contas da esteira API. ALLOWLIST: ausencia de filtro significa exatamente
-#: estas quatro, nunca "tudo que estiver na tabela".
-EXPECTED_ACCOUNTS = ("apice", "barbours", "lescent", "rituaria")
+#: estas cinco, nunca "tudo que estiver na tabela". A Kokeshi entrou em
+#: 11/2026, com o app Shopee aprovado.
+EXPECTED_ACCOUNTS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 #: Marcas COBERTAS pela esteira API. Hoje coincidem 1:1 com as contas, mas sao
 #: dominios DIFERENTES -- uma marca poderia ganhar uma segunda loja sem que a
 #: lista de contas mudasse. Validar `brands` contra a lista de contas
 #: funcionaria por acidente, e deixaria de funcionar no dia da divergencia.
-EXPECTED_BRANDS = ("apice", "barbours", "lescent", "rituaria")
+EXPECTED_BRANDS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
-#: Marcas Shopee que NAO estao na esteira API. Declaradas para que a ausencia
-#: viaje com o payload em vez de virar silencio.
-BRANDS_NOT_COVERED = ("kokeshi",)
+#: Marcas Shopee que NAO estao na esteira API (vazia desde 11/2026). Declaradas
+#: para que a ausencia viaje com o payload em vez de virar silencio.
+BRANDS_NOT_COVERED: tuple[str, ...] = ()
 
 #: Dominio FECHADO. Classe fora disto e' contrato quebrado.
 VALID_CLASSES = ("fbs", "seller")
@@ -83,9 +84,10 @@ GMV_DEFINITION = (
 )
 
 LIMITACAO_COBERTURA = (
-    "Cobertura PARCIAL: a esteira API cobre apice, barbours, lescent e "
-    "rituaria. Kokeshi NAO esta na API e nao e' suprida por planilha aqui -- "
-    "este total e' 'Shopee (cobertura API)', nunca 'Shopee total'."
+    "Cobertura: a esteira API cobre as cinco contas Shopee (apice, barbours, "
+    "kokeshi, lescent e rituaria). A Kokeshi so' tem historico desde que o "
+    "app dela foi aprovado e a ingestao comecou -- antes disso ela nao entra "
+    "no total e nao e' suprida por planilha."
 )
 LIMITACAO_REGIME_CARGA = (
     "Atualizacao diaria: a cadeia da Torre publica a fato as 10:15 (BRT), com "

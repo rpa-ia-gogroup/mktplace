@@ -22,8 +22,8 @@ permanentemente `fail`/`high`. Ver a secao propria mais abaixo.
 |---|---|
 | Migration `018` | **aplicada** no Neon em 16/09/2026 (`016` = Full ML, `017` = PMA) |
 | Tabelas em producao | criadas e populadas; `expedicao_refresh_run` acumula 4 linhas por hora |
-| Registry (`marts.dim_seller_account`) | **4 contas ativas** (Kokeshi fora: nao existe na fonte) |
-| Kokeshi Shopee | **pelo export do Seller Centre** (migration `034`, EXPEDICAO-KOKESHI-EXPORT): registry proprio, fila em tabelas proprias, juntada pela API. Ver `docs/expedicao_kokeshi_export_runbook.md` |
+| Registry (`marts.dim_seller_account`) | **4 contas ativas** ate a virada de 11/2026; **5 com a Kokeshi** depois dela (secao "Virada para a API" do runbook da Kokeshi) |
+| Kokeshi Shopee | **pela API da Shopee** (app aprovado; `shopee_orders_etl` grava `raw.shopee_orders`) depois da virada de 11/2026. Ate la, pelo export do Seller Centre (migration `034`, EXPEDICAO-KOKESHI-EXPORT), que segue suportado para outras contas. Ver `docs/expedicao_kokeshi_export_runbook.md` |
 | Orquestracao do `--apply` | implementada (EXP-1D-H1) e **executada em producao** (EXP-1E, 1F-P, 2C1-P) |
 | Refresh publicado | 3, todos **manuais** (ultimo: batch `494c2441-52b3-48bf-afea-dbea850effe7`, auditoria #319 `success`, 821 pedidos) |
 | API read-only | **implementada e ATIVA** (EXP-2A), `EXPEDICAO_API_ENABLED=true` no Render |
@@ -50,15 +50,19 @@ com `python -m pipelines.expedicao.shopee_export_cli` (runbook proprio). Regras:
   `marts.expedicao_refresh_run_export` tem a MESMA forma da fila e do resumo da
   `018`/`033` (`LIKE ... INCLUDING ALL`). O publicador agendado apaga a fila da
   Shopee inteira; uma linha do export gravada la' sumiria.
-- **Registry proprio**: `marts.expedicao_conta_export`. A conta NAO entra em
-  `dim_seller_account`, onde viraria `ACCOUNT_MISSING` no publicador agendado e
-  travaria a Shopee. O CLI recusa conta que ja' esteja em `dim_seller_account`.
+- **Registry proprio**: `marts.expedicao_conta_export`. Conta sem ingestao em
+  `raw.shopee_orders` NAO entra em `dim_seller_account`, onde viraria
+  `ACCOUNT_MISSING` no publicador agendado e travaria a Shopee. O CLI recusa
+  conta que ja' esteja em `dim_seller_account` (e' o que desliga o bot da
+  Kokeshi na virada de 11/2026: a conta passa a vir da API e a linha do export
+  e' desativada).
 - **Mesma publicacao**: `publish_channel` com `Destino(fila, resumo, contas)`. O
   DELETE continua restrito ao canal e ganha `AND shop_account = ANY(...)`. O
   destino padrao e' identico ao de antes.
 - **Leitura**: a API junta o lote agendado com o ultimo lote coerente de cada
-  conta do export (`_fotografia_export`). Conta incoerente fica fora e volta a
-  `brands_not_covered`; nunca derruba a Shopee. `snapshot.effective_at` continua
+  conta do export (`_fotografia_export`). Conta incoerente fica fora; nunca
+  derruba a Shopee. Conta que ja' vem do lote agendado tambem fica fora do
+  export, para nao contar o pedido duas vezes. `snapshot.effective_at` continua
   sendo o do lote agendado; `accounts[].observed_at` traz a hora de cada conta.
   As contagens, as listas, a Jornada e a tendencia leem a uniao (`_origem_da_fila`).
 - **Frescor** da conta do export: idade do watermark contra o instante mais
@@ -105,7 +109,8 @@ perder o historico da chave. `REGISTRY_SQL` exige `sa.ativo AND l.ativo`.
 ### DML de cadastro das contas — EXECUTADO em 16/09/2026 (EXP-1E)
 
 ```sql
--- Kokeshi (loja_id 3) NAO entra: nao ha ingestao Shopee para ela.
+-- Kokeshi (loja_id 3) NAO entrou nesta data: nao havia ingestao Shopee para ela.
+-- Entrou na virada de 11/2026 (ver docs/expedicao_kokeshi_export_runbook.md).
 INSERT INTO marts.dim_seller_account
     (marketplace_id, loja_id, external_seller_id, account_name, ativo)
 VALUES
@@ -730,10 +735,14 @@ registry, `observed_accounts` da fotografia, e as diferencas viram
 `missing_accounts` / `unexpected_accounts`. Conta que some da fonte aparece como
 **faltando**, nao como silencio.
 
-`brands_not_covered` lista **Kokeshi**: ela existe em `marts.dim_loja` e **nao
-existe em `raw.shopee_orders`** (medido no EXP-1E). Nao e' conta faltando — e'
-marca fora do alcance desta fonte, e por isso nunca entra em
-`missing_accounts`.
+`brands_not_covered` lista as marcas que a torre acompanha e que a fonte do
+canal nao cobre. **Vazio na Shopee desde a virada de 11/2026**: a Kokeshi
+(que no EXP-1E existia em `marts.dim_loja` e nao em `raw.shopee_orders`) passou
+a vir da API, cadastrada em `dim_seller_account`. Ela e' conta esperada como as
+outras quatro: se sumir da fonte, aparece em `missing_accounts`, nao como
+marca sem cobertura. A lista (`MARCAS_SEM_COBERTURA`, por canal) continua no
+codigo para a proxima marca que ficar sem fonte. Conta do export com lote
+incoerente sai da resposta sem aparecer como lacuna.
 
 ### Politica de identificadores
 
@@ -854,9 +863,11 @@ calcula-la na tela seria agregacao que a API nao fez.
 Conta esperada ausente vira aviso de **conta faltando**; conta observada sem
 cadastro vira **conta inesperada**. Sao avisos diferentes.
 
-**Kokeshi** aparece so' como marca **fora do escopo**, com o texto explicito de
-que e' ausencia de cobertura e nao backlog zero. Ela nao entra em denominador,
-nao aparece na tabela de contas e nunca e' exibida como zero.
+Marca em `brands_not_covered` aparece como **fora do escopo**, com o texto
+explicito de que e' ausencia de cobertura e nao backlog zero: nao entra em
+denominador, nao aparece na tabela de contas e nunca e' exibida como zero. Desde
+a virada de 11/2026 a lista da Shopee esta vazia e a **Kokeshi** aparece na
+tabela como as demais contas.
 
 ### Carga manual
 
@@ -948,8 +959,9 @@ e' apagado; a fotografia publicada segue no banco.
 * **Sem automacao: a fotografia envelhece ate alguem rodar o refresh.** Nao ha
   DAG nem Scheduler; a automacao segue pendente.
 * A tendencia depende de quantas fotografias existirem.
-* Kokeshi continua **fora da cobertura** — declarada em `brands_not_covered`,
-  nunca como zero.
+* Marca sem fonte fica **fora da cobertura** — declarada em
+  `brands_not_covered`, nunca como zero. Hoje nenhuma marca esta nessa lista
+  (a Kokeshi entrou pela API na virada de 11/2026).
 * `order_ref` desativado; o numero real do pedido e' servido sem autenticacao
   por decisao de 30/10/2026, ate' haver login.
 

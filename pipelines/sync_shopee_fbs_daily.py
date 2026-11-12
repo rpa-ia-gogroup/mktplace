@@ -12,7 +12,9 @@ O QUE ESTE PIPELINE NAO FAZ
 - NAO usa `is_sale`: aquele predicado exclui `to_return` e `unpaid`, que por
   decisao deste gate PERMANECEM no GMV bruto.
 - NAO le nenhuma coluna de comprador, documento, telefone ou endereco.
-- NAO mistura Kokeshi: ela nao existe na esteira API e o XLSX nao entra aqui.
+- NAO usa o XLSX do Seller Centre. Desde 11/2026 a Kokeshi (app aprovado) vem
+  da esteira API como as outras quatro contas; o historico dela comeca quando
+  o `shopee_orders_etl` passou a grava-la.
 
 GMV = SUM(item_total) DOS PEDIDOS NAO CANCELADOS
 -------------------------------------------------
@@ -56,13 +58,13 @@ OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 #: pedidos de 2025-12-31, residuo de fronteira de fuso -- nao serie.
 SOURCE_COMPLETE_FROM_DATE = date(2026, 1, 1)
 
-#: As quatro contas da esteira API. Kokeshi NAO esta aqui e nao deve ser
-#: adicionada sem um gate proprio: ela vive so' no XLSX, com outro contrato.
-CONTAS_ESPERADAS = ("apice", "barbours", "lescent", "rituaria")
+#: As cinco contas da esteira API. A Kokeshi entrou em 11/2026, quando o app
+#: Shopee dela foi aprovado e o `shopee_orders_etl` passou a grava-la.
+CONTAS_ESPERADAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
-#: Marca conhecida por estar FORA da esteira API. Declarada para que a
-#: cobertura diga "ausente" em vez de omitir.
-MARCAS_FORA_DA_API = ("kokeshi",)
+#: Marca conhecida por estar FORA da esteira API (vazia desde 11/2026).
+#: Declarada para que a cobertura diga "ausente" em vez de omitir.
+MARCAS_FORA_DA_API: tuple[str, ...] = ()
 
 #: Dominio FECHADO de `fulfillment_flag`. Valor novo ou NULL falha a carga.
 FLAG_FBS = "fulfilled_by_shopee"
@@ -412,11 +414,15 @@ def validate_contract(snapshot: SourceSnapshot) -> list[str]:
             "parcial e o total nao representa a Shopee inteira."
         )
     avisos.append(
-        f"cobertura API: {len(pf.get('contas_observadas', []))} conta(s). "
-        f"{', '.join(MARCAS_FORA_DA_API)} NAO esta(o) na esteira API e nao "
-        "e(sao) somada(s) aqui -- este total e' 'Shopee (cobertura API)', "
-        "nunca 'Shopee total'."
+        f"cobertura API: {len(pf.get('contas_observadas', []))} de "
+        f"{len(CONTAS_ESPERADAS)} conta(s) esperada(s)."
     )
+    if MARCAS_FORA_DA_API:
+        avisos.append(
+            f"{', '.join(MARCAS_FORA_DA_API)} NAO esta(o) na esteira API e nao "
+            "e(sao) somada(s) aqui -- este total e' 'Shopee (cobertura API)', "
+            "nunca 'Shopee total'."
+        )
     avisos.append(
         "handling = pay_time -> pickup_done_time (COLETA). A API da Shopee nao "
         "expoe data real de entrega; nao ha metrica de entrega nesta fato."

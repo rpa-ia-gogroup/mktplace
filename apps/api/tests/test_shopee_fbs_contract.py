@@ -233,7 +233,7 @@ def test_6_date_from_maior_que_date_to_recusado(client, ligada):
 def test_7_entrada_maliciosa_nao_e_ecoada(client, ligada):
     payloads = ["'; DROP TABLE marts.fact_shopee_fbs_daily; --",
                 "<script>alert(1)</script>", "../../etc/passwd",
-                "kokeshi", "OR 1=1"]
+                "outramarca", "OR 1=1"]
     for p in payloads:
         r = client.get(ROTA, params={"date_from": "2026-08-01",
                                      "date_to": "2026-08-31", "brands": p})
@@ -329,13 +329,18 @@ def test_12_apice_com_denominador_positivo_da_share_zero():
     assert marca["share_fbs_gmv"] == 0.0
 
 
-def test_13_kokeshi_fora_da_cobertura_nunca_zero():
-    db = FakeDB(classe=[_linha()])
+def test_13_kokeshi_e_conta_da_esteira_api_e_sem_linha_nao_vira_zero():
+    assert "kokeshi" in svc.EXPECTED_ACCOUNTS and "kokeshi" in svc.EXPECTED_BRANDS
+    quatro = [{"shop_account": c, "brand": c}
+              for c in ("apice", "barbours", "lescent", "rituaria")]
+    db = FakeDB(classe=[_linha()], observadas=quatro)
     b = _bloco(db)
-    assert "kokeshi" in b["meta"]["brands_not_covered"]
+    assert b["meta"]["brands_not_covered"] == []
     assert "kokeshi" not in b["meta"]["covered_brands"]
     assert all(x["brand"] != "kokeshi" for x in b["by_brand"])
     assert all(x["shop_account"] != "kokeshi" for x in b["by_account"])
+    assert any("kokeshi" in a for a in b["meta"]["warnings"]), (
+        "esperada e sem linha na janela: aviso de ausencia, nunca 0%")
     # E o XLSX nao e' consultado para completar.
     assert "order_item_snapshots" not in SERVICE_CODE
     assert "silver." not in SERVICE_CODE
@@ -346,7 +351,7 @@ def test_14_conta_ausente_aparece_em_missing_accounts():
                 observadas=[{"shop_account": "barbours", "brand": "barbours"}])
     b = _bloco(db)
     m = b["meta"]
-    assert sorted(m["missing_accounts"]) == ["apice", "lescent", "rituaria"]
+    assert sorted(m["missing_accounts"]) == ["apice", "kokeshi", "lescent", "rituaria"]
     assert m["observed_accounts"] == ["barbours"]
     assert m["unexpected_accounts"] == []
     assert any("sem linha na janela" in w for w in m["warnings"])

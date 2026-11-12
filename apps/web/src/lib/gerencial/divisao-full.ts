@@ -7,7 +7,7 @@
 export interface FullDaMarca {
   full: Partial<Record<"tiktok" | "ml" | "shopee", number>>;
   semFull: Partial<Record<"tiktok" | "ml" | "shopee", number>>;
-  /** Canal com venda e sem modalidade medida (ex.: Kokeshi na Shopee). */
+  /** Canal com venda e sem modalidade medida (proporcao ausente na fato). */
   semDado: Partial<Record<"tiktok" | "ml" | "shopee", number>>;
 }
 
@@ -55,7 +55,7 @@ export interface FullDoDetalhe {
  * Pedidos de uma marca em Full e sem Full. A contagem de Full e' real (fatos de
  * modalidade); sem Full e' o resto dos pedidos da marca, TikTok incluso.
  * `null` = sem medida: marca sem Full medido, ou com canal vendendo sem
- * modalidade (Kokeshi na Shopee) -- nunca vira "tudo sem Full".
+ * modalidade medida -- nunca vira "tudo sem Full".
  * Janela diferente do periodo (dia em andamento): vale a PROPORCAO da janela.
  */
 export function fullPedidosDaMarca(

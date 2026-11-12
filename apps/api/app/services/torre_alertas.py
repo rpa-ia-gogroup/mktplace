@@ -60,7 +60,7 @@ NO_CANAL = {k: no_canal(k, v) for k, v in ROTULO_CANAL.items()}
 
 #: Contas por canal (mesma cobertura da faixa). Fora daqui nao e' avaliado.
 CONTAS_POR_CANAL: dict[str, tuple[str, ...]] = {
-    "shopee": ("apice", "barbours", "lescent", "rituaria"),
+    "shopee": ("apice", "barbours", "kokeshi", "lescent", "rituaria"),
     "mercadolivre": ("barbours", "kokeshi", "lescent", "rituaria"),
     "tiktokshop": ("apice", "barbours", "kokeshi", "lescent", "rituaria"),
 }

@@ -117,18 +117,19 @@ def test_channel_shopee_explicito_produz_o_mesmo_payload(ligada):
     assert a == b
 
 
-def test_shopee_mantem_kokeshi_fora_da_cobertura(ligada):
+def test_shopee_nao_tem_marca_fora_da_cobertura(ligada):
+    """Desde 11/2026 a Kokeshi vem da API (registry), nao e' mais lacuna."""
     r = svc.get_expedicao(SessaoFake())
-    assert r["limitations"]["brands_not_covered"] == ["kokeshi"]
-    assert r["coverage"]["brands_not_covered"] == ["kokeshi"]
+    assert r["limitations"]["brands_not_covered"] == []
+    assert r["coverage"]["brands_not_covered"] == []
 
 
-def test_shopee_continua_com_as_quatro_notas_originais(ligada, monkeypatch):
+def test_shopee_tem_as_tres_notas_sem_a_da_kokeshi(ligada, monkeypatch):
     monkeypatch.setattr(svc.settings, "expedicao_numero_pedido_publico", False, raising=False)
     r = svc.get_expedicao(SessaoFake())
     notas = r["limitations"]["notes"]
-    assert len(notas) == 4
-    assert "raw.shopee_orders" in notas[1]
+    assert len(notas) == 3
+    assert not any("kokeshi" in n.lower() for n in notas)
 
 
 def test_com_numero_publico_a_nota_de_identificador_retido_sai(ligada, monkeypatch):
@@ -136,7 +137,7 @@ def test_com_numero_publico_a_nota_de_identificador_retido_sai(ligada, monkeypat
     monkeypatch.setattr(svc.settings, "expedicao_numero_pedido_publico", True, raising=False)
     notas = svc.get_expedicao(SessaoFake())["limitations"]["notes"]
     assert svc.NOTA_SEM_IDENTIFICADOR not in notas
-    assert len(notas) == 3
+    assert len(notas) == 2
 
 
 # ===========================================================================
@@ -810,7 +811,7 @@ def test_brands_not_covered_segue_no_campo_de_MARCAS(ml_ligado):
     """A cobertura por marca nao foi removida — mudou de lugar nenhum."""
     sh = _cobertura_de(SessaoFake(), "shopee")
     ml = _cobertura_de(sessao_ml(), "mercadolivre")
-    assert sh["brands_not_covered"] == ["kokeshi"]
+    assert sh["brands_not_covered"] == []
     assert ml["brands_not_covered"] == []
 
 
