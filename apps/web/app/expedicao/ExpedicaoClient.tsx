@@ -159,7 +159,13 @@ import {
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import { formatarDecimal, formatarInteiro } from "@/lib/expedicao-formato";
-import { diasDeBacklog, mediaDaMarca } from "@/lib/expedicao-pace";
+import {
+  AVISO_PACE_INDISPONIVEL,
+  diasDaLinha,
+  mediaDaMarca,
+  paceDisponivel,
+  textoDoPace,
+} from "@/lib/expedicao-pace";
 import { usePaceDespachados } from "@/components/expedicao/usePaceDespachados";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
 import { AJUDA_CANAL_SEM_PRAZO, chaveDoKpiDaFila, type ChaveMetrica } from "@/lib/expedicao-definicoes";
@@ -459,15 +465,6 @@ function BarraDeRisco({
  * IDENTIDADE-GERENCIAL: o selo "inclui FBS" fica so' no heroi. Nas tabelas da
  * fila publicada (que nao separa FBS) ele vira `title` + `sr-only` do titulo.
  */
-/** Explicacao do pace no "ⓘ" da coluna Despachados/dia. */
-function textoDoPace(canal: string): string {
-  return (
-    "Média de pedidos despachados por dia nos 2 últimos dias úteis fechados (seg–sex, sem feriado nacional). " +
-    `"Dura (dias)" = backlog ÷ essa média. Só a operação do vendedor (sem ${canal === "shopee" ? "FBS" : "Full"}); ` +
-    'dia ainda sem dado não conta; sem média, "—".'
-  );
-}
-
 function TituloComFbs({ titulo, incluiFbs }: { titulo: string; incluiFbs: boolean }) {
   if (!incluiFbs) return <>{titulo}</>;
   return (
@@ -1504,13 +1501,23 @@ export default function ExpedicaoClient({
 
   // 7. CONCENTRACAO POR CONTA — nas duas profundidades: para o gestor e'
   // "onde concentra"; para o operador, as contas do detalhe.
+  const mostrarPace = paceDisponivel(filtros.channel, divisao !== null);
   const painelContas = (classe: string) => (
     <Panel
       className={classe}
       titulo={<TituloComFbs titulo="Concentração por marca" incluiFbs={filtros.channel === "shopee"} />}
       semPadding
       acao={<InfoDica texto={mapa.nota} />}
-      rodape={legendaDaBarra}
+      rodape={
+        mostrarPace ? (
+          legendaDaBarra
+        ) : (
+          <>
+            {legendaDaBarra}
+            <p className="mt-1">{AVISO_PACE_INDISPONIVEL}</p>
+          </>
+        )
+      }
     >
       {/* UMA tabela, com a barra DENTRO dela. Antes eram duas leituras do
           MESMO dado empilhadas: uma lista de barras e, logo abaixo, a
@@ -1527,10 +1534,17 @@ export default function ExpedicaoClient({
               <th scope="col">Marca</th>
               <th scope="col" className="w-[34%]">Distribuição</th>
               <th scope="col" className="text-right">Backlog</th>
-              <th scope="col" className="text-right">
-                Despachados/dia <InfoDica texto={textoDoPace(filtros.channel)} />
-              </th>
-              <th scope="col" className="text-right">Dura (dias)</th>
+              {mostrarPace && filtros.channel === "shopee" && (
+                <th scope="col" className="text-right">Backlog vendedor</th>
+              )}
+              {mostrarPace && (
+                <>
+                  <th scope="col" className="text-right">Dias de backlog</th>
+                  <th scope="col" className="text-right">
+                    Ritmo/dia <InfoDica texto={textoDoPace(filtros.channel, pace)} />
+                  </th>
+                </>
+              )}
               {temPrazo && (
                 <th scope="col" className="text-right">
                   Vencidos {ajudaDaFila("overdue")}
@@ -1548,13 +1562,12 @@ export default function ExpedicaoClient({
           <tbody>
             {recorte.contas.map((a) => {
               const linha = mapa.linhas.find((l) => l.conta === a.shop_account);
-              const media = mediaDaMarca(pace, filtros.channel, a.brand);
-              // Shopee: o backlog da tabela inclui FBS; so' a fila do vendedor
-              // (divisao) fala a mesma lingua do despachado. Sem ela, "—".
-              const backlogDoPace =
-                filtros.channel !== "shopee"
-                  ? a.backlog_count
-                  : (divisao?.contasVendedor.find((c) => c.shop_account === a.shop_account)?.backlog_count ?? null);
+              // Ritmo e' da MARCA: com mais de uma conta, a linha da conta nao divide.
+              const variasContas = recorte.contas.filter((c) => c.brand === a.brand).length > 1;
+              const media = variasContas ? null : mediaDaMarca(pace, filtros.channel, a.brand);
+              // Shopee: o ritmo exclui FBS, entao divide a fila do vendedor (coluna propria).
+              const backlogVendedor =
+                divisao?.contasVendedor.find((c) => c.shop_account === a.shop_account)?.backlog_count ?? null;
               return (
                 <tr key={a.shop_account} className="border-t border-line">
                   {/* Marca e' a identidade; a conta so' aparece, discreta,
@@ -1579,10 +1592,28 @@ export default function ExpedicaoClient({
                   <td className="text-right font-semibold tabular-nums text-ink">
                     {numero(a.backlog_count)}
                   </td>
-                  <td className="text-right tabular-nums text-ink">{formatarDecimal(media, 0)}</td>
-                  <td className="text-right font-semibold tabular-nums text-ink">
-                    {formatarDecimal(diasDeBacklog(backlogDoPace, media), 1)}
-                  </td>
+                  {mostrarPace && filtros.channel === "shopee" && (
+                    <td className="text-right tabular-nums text-ink">
+                      {backlogVendedor === null ? "—" : numero(backlogVendedor)}
+                    </td>
+                  )}
+                  {mostrarPace && (
+                    <>
+                      <td className="text-right font-semibold tabular-nums text-ink">
+                        {formatarDecimal(
+                          diasDaLinha({
+                            canal: filtros.channel,
+                            backlog: a.backlog_count,
+                            backlogVendedor,
+                            media,
+                            variasContas,
+                          }),
+                          1,
+                        )}
+                      </td>
+                      <td className="text-right tabular-nums text-ink">{formatarDecimal(media, 0)}</td>
+                    </>
+                  )}
                   {temPrazo && (
                     <td className="text-right tabular-nums text-ink">
                       {numero(a.overdue_count)}
