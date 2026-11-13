@@ -158,9 +158,13 @@ function Etiqueta({ classe }: { classe: Classificacao }) {
  */
 function PorCD({ produto }: { produto: ProdutoEstoque }) {
   if (!produto.por_cd.length) return <span className="text-ink-faint">{SEM_DADO}</span>;
+  // So' os CDs com saldo (ou com alerta de venda); os zerados vao para o title, sem inchar a linha.
+  const visiveis = produto.por_cd.filter((cd) => cd.full_stock > 0 || cd.is_saleable !== true);
+  const todos = produto.por_cd.map((cd) => `${rotuloCD(cd.location_id)}: ${fmtInt(cd.full_stock)}`).join(" · ");
+  if (!visiveis.length) return <span className="tabular-nums text-ink-faint" title={todos}>0 nos {fmtInt(produto.por_cd.length)} CDs</span>;
   return (
-    <ul className="flex flex-col gap-0.5">
-      {produto.por_cd.map((cd, i) => (
+    <ul className="flex flex-col gap-0.5" title={todos}>
+      {visiveis.map((cd, i) => (
         <li key={`${cd.location_id}-${i}`} className="whitespace-nowrap">
           <span className="text-ink-faint">{rotuloCD(cd.location_id)}: </span>
           <span className="tabular-nums">{fmtInt(cd.full_stock)}</span>
@@ -187,7 +191,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
         </caption>
         <thead>
           <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
-            <th scope="col" className="px-4 py-3">Conta / marca</th>
+            <th scope="col" className="px-4 py-3">Conta / marca<span className="sr-only"> e Fotografia</span></th>
             <th scope="col" className="px-4 py-3">SKU e produto</th>
             {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
             <th scope="col" className="px-4 py-3 text-right">Estoque Full vendável</th>
@@ -206,7 +210,6 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
               </span>
             </th>
             <th scope="col" className="px-4 py-3">Por CD</th>
-            <th scope="col" className="px-4 py-3">Fotografia</th>
           </tr>
         </thead>
         <tbody>
@@ -217,6 +220,8 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
             >
               <td className="px-4 py-3 whitespace-nowrap text-ink-muted">
                 {tituloMarca(p.shop_account)}
+                {/* A fotografia da linha vai embaixo da conta: uma coluna a menos, a tabela cabe em 1440. */}
+                <span className="block text-xs text-ink-faint" title="Fotografia">{fmtData(p.ref_date)}</span>
               </td>
               <td className="px-4 py-3">
                 <span className="block font-medium text-ink">
@@ -267,9 +272,6 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
               </td>
               <td className="px-4 py-3 text-xs text-ink-muted">
                 <PorCD produto={p} />
-              </td>
-              <td className="px-4 py-3 whitespace-nowrap text-xs text-ink-faint">
-                {fmtData(p.ref_date)}
               </td>
             </tr>
           ))}
@@ -491,7 +493,7 @@ export default function EstoqueFullClient() {
             value={buscaDigitada}
             onChange={(e) => setBuscaDigitada(e.target.value)}
             placeholder="Buscar SKU ou produto"
-            className="rounded-lg border border-line px-3 py-1.5 text-sm w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint px-3 py-1.5 text-sm w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -637,7 +639,7 @@ export default function EstoqueFullClient() {
                     {comCurva && (
                       <p className="text-sm font-medium text-ink">
                         {/* Panorama: sem o filtro de curva (os da API ja' valem na lista). */}
-                        {resumoAcao(payload.produtos, (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
+                        {resumoAcao(payload.produtos.filter((p) => !p.situacao), (p) => EXIGEM_ACAO.includes(p.classificacao_torre))}
                       </p>
                     )}
                     {/* So' para cards sem chip de Classificação (Exigem ação, Unidades). */}

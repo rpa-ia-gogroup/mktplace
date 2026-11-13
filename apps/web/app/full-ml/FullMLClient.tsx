@@ -27,8 +27,12 @@ import { janelaDaUrl, urlComJanela } from "@/lib/full-janela-url";
 import PageContainer from "@/components/layout/PageContainer";
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
-import { Ban, CircleDollarSign, Package, ShoppingBag, Truck } from "lucide-react";
-import KpiTile from "@/components/ui/KpiTile";
+import { Ban, CircleDollarSign, ShoppingBag, Truck } from "lucide-react";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import Segmented from "@/components/ui/Segmented";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import { AvisoTopo } from "@/components/full/CategoriasEstoque";
+import { fmtBrlCurto } from "@/lib/formatters";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock from "@/components/ui/StateBlock";
 import MLFulfillmentTrend from "@/components/MLFulfillmentTrend";
@@ -51,6 +55,7 @@ import {
   fmtShare,
   fmtTempo,
   isVazioReal,
+  parseGmv,
   presetRange,
   serieDiaria,
   validateRange,
@@ -94,13 +99,19 @@ function hojeIsoBrt(): string {
   return new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
 }
 
-function Aviso({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs leading-relaxed border rounded-lg px-3 py-2 bg-warn-soft border-warn/40 text-warn-ink">
-      {children}
-    </p>
-  );
+/** R$ curto ("R$ 4,48 mi"), como nas outras abas; o valor cheio, com centavo, fica no title. */
+function Reais({ v }: { v: string | number | null | undefined }) {
+  const n = typeof v === "string" ? parseGmv(v) : v;
+  if (n === null || n === undefined || !Number.isFinite(n)) return <>{SEM_DADO}</>;
+  return <span title={fmtGmv(n)}>{fmtBrlCurto(n)}</span>;
 }
+
+/** "2026-11-12" -> "12/11". */
+const dm = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : SEM_DADO);
+
+/** Participacao diaria do Full, so' dias medidos (dia sem venda classificada nao vira 0%). */
+const serieShare = (pontos: { share_full: number | null }[]) =>
+  pontos.map((p) => p.share_full).filter((v): v is number => v !== null);
 
 function FullMLPageInner() {
   const abas = useVisoesFull();
@@ -186,114 +197,69 @@ function FullMLPageInner() {
   const vazio = isVazioReal(dados);
 
   const frescor = dados?.freshness;
-  const statusBadge = frescor ? (
-    <span
-      className={
-        "inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full " +
-        (frescor.freshness_status === "fresh"
-          ? "bg-ok-soft text-ok-ink border border-ok/30"
-          : "bg-warn-soft text-warn-ink border border-warn/40")
-      }
-    >
-      {FRESHNESS_LABEL[frescor.freshness_status]} · {LOAD_MODE_LABEL[frescor.load_mode]}
-      <InfoDica texto={AVISO_MANUAL_SNAPSHOT} />
-    </span>
-  ) : null;
+  const selo = (
+    <>
+      <span className="inline-flex items-center gap-1 text-xs text-ink-muted tabular-nums">
+        {dm(from)} a {dm(to)}
+        {frescor?.source_max_date && <> · fonte até {dm(frescor.source_max_date)}</>}
+        <InfoDica texto={`${AVISO_COBERTURA} ${AVISO_MANUAL_SNAPSHOT}`} />
+      </span>
+      <SeloAtualizado
+        em={frescor?.refreshed_at ?? null}
+        carregando={carregando}
+        atrasado={!!frescor && frescor.freshness_status !== "fresh"}
+        detalhe={frescor ? `${FRESHNESS_LABEL[frescor.freshness_status]} · ${LOAD_MODE_LABEL[frescor.load_mode]}` : undefined}
+      />
+    </>
+  );
+  const presetAtivo = PERIOD_PRESETS.find((p) => {
+    const r = presetRange(p.days, hoje);
+    return r.from === from && r.to === to;
+  });
+  const serieGmv = useMemo(() => serieShare(serieDiaria(dados, "gmv")), [dados]);
+  const seriePedidos = useMemo(() => serieShare(serieDiaria(dados, "orders")), [dados]);
 
   const filtros = (
-    <div className="flex flex-wrap items-end gap-2">
-      <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-de" className="text-xs font-medium text-ink-muted">
-          De
-        </label>
-        <input
-          id="full-ml-de"
-          type="date"
-          value={from}
-          max={to}
-          onChange={(e) => setFrom(e.target.value)}
-          className={CONTROLE}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-ate" className="text-xs font-medium text-ink-muted">
-          Até
-        </label>
-        <input
-          id="full-ml-ate"
-          type="date"
-          value={to}
-          min={from}
-          onChange={(e) => setTo(e.target.value)}
-          className={CONTROLE}
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label htmlFor="full-ml-marca" className="text-xs font-medium text-ink-muted">
-          Marca
-        </label>
-        <select
-          id="full-ml-marca"
-          value={marca}
-          onChange={(e) => setMarca(e.target.value)}
-          className={CONTROLE}
-        >
-          {MARCAS.map((m) => (
-            <option key={m.key} value={m.key}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <span className="text-xs font-medium text-ink-muted">Períodos</span>
-        <div className="flex gap-1" role="group" aria-label="Períodos predefinidos">
-          {PERIOD_PRESETS.map((p) => (
-            <button
-              key={p.days}
-              type="button"
-              onClick={() => aplicarPreset(p.days)}
-              className={`${CONTROLE} font-medium hover:bg-raised`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <button
-        type="button"
-        onClick={limpar}
-        className={`${CONTROLE} font-medium text-ink-muted hover:bg-raised`}
-      >
-        Limpar filtros
+    <div className="flex flex-wrap items-center gap-2">
+      <Segmented
+        rotulo="Marca"
+        opcoes={MARCAS.map((m) => ({ valor: m.key || "todas", texto: m.key ? m.label : "Todas" }))}
+        valor={marca || "todas"}
+        aoEscolher={(v) => setMarca(v === "todas" ? "" : v)}
+        className="whitespace-nowrap"
+      />
+      <Segmented
+        rotulo="Período"
+        opcoes={PERIOD_PRESETS.map((p) => ({ valor: String(p.days), texto: p.label }))}
+        valor={presetAtivo ? String(presetAtivo.days) : ""}
+        aoEscolher={(v) => aplicarPreset(Number(v))}
+        className="whitespace-nowrap"
+      />
+      <label className="sr-only" htmlFor="full-ml-de">De</label>
+      <input id="full-ml-de" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={CONTROLE} />
+      <span aria-hidden="true" className="text-xs text-ink-muted">a</span>
+      <label className="sr-only" htmlFor="full-ml-ate">Até</label>
+      <input id="full-ml-ate" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={CONTROLE} />
+      <button type="button" onClick={limpar} className={`${CONTROLE_BASE} inline-flex items-center border-transparent font-semibold text-accent-ink hover:underline`}>
+        Limpar
       </button>
     </div>
-  );
-
-  const escopo = (
-    <span className="inline-flex flex-wrap items-center gap-1 text-xs text-ink-muted">
-      {from} a {to}
-      {dados?.freshness.source_max_date && (
-        <> · fonte até {dados.freshness.source_max_date}</>
-      )}
-      {marca && <> · {MARCAS.find((m) => m.key === marca)?.label}</>}
-      <InfoDica texto={AVISO_COBERTURA} />
-    </span>
   );
 
   return (
     <Aba
       {...abas}
-      selo={<>{escopo}{statusBadge}</>}
+      selo={selo}
       filtros={filtros}
     >
 
       {/* --- Alertas do payload (frescor, completude, unknown) ----------- */}
       {listaAlertas.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {listaAlertas.map((a) => (
-            <Aviso key={a}>{a}</Aviso>
-          ))}
+        <div className="flex flex-col gap-1">
+          {listaAlertas.map((a) => {
+            const curto = a.split(/[.:;]/)[0];
+            return <AvisoTopo key={a} texto={curto} ajuda={curto === a ? undefined : a} />;
+          })}
         </div>
       )}
 
@@ -316,21 +282,43 @@ function FullMLPageInner() {
       {/* --- Conteudo ---------------------------------------------------- */}
       {!erroJanela && !erro && !carregando && dados && !vazio && (
         <>
-          <section aria-labelledby="full-ml-kpis" className="flex flex-col gap-3">
-            <h2 id="full-ml-kpis" className="text-sm font-semibold text-ink">
-              Participação do Full
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Share de GMV Full" valor={fmtShare(dados.share_full_gmv)} comparacao={`Não-Full: ${fmtGmv(naoFull?.paid_gmv ?? null)}`} />
-              <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Share de pedidos Full" valor={fmtShare(dados.share_full_orders)} comparacao={`Não-Full: ${fmtCount(naoFull?.paid_orders ?? null)} pedidos`} />
-              <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Share de unidades Full" valor={fmtShare(dados.share_full_units)} comparacao={`Não-Full: ${fmtCount(naoFull?.paid_units ?? null)} unidades`} />
-              <KpiTile variante="gerencial" identidade="ads" icone={Ban} rotulo="Cancelamento Full" valor={fmtShare(full?.cancellation_rate ?? null)} comparacao={`Não-Full: ${fmtShare(naoFull?.cancellation_rate ?? null)}`} />
-              <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="GMV Full" valor={fmtGmv(full?.paid_gmv ?? null)} comparacao={`Total pago: ${fmtGmv(dados.paid_gmv_total)}`} />
-              <KpiTile variante="gerencial" identidade="pedidos" icone={ShoppingBag} rotulo="Pedidos Full" valor={fmtCount(full?.paid_orders ?? null)} comparacao={`Total pago: ${fmtCount(dados.paid_orders_total)}`} />
-              <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Unidades Full" valor={fmtCount(full?.paid_units ?? null)} comparacao={`Total pago: ${fmtCount(dados.paid_units_total)}`} />
-              <KpiTile variante="gerencial" identidade="prazo" icone={Truck} rotulo="Entrega Full" valor={fmtTempo(full?.delivery ?? null)} comparacao={`Não-Full: ${fmtTempo(naoFull?.delivery ?? null)}`} />
-            </div>
-          </section>
+          <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+            <CartaoIndicador
+              rotulo="Participação no GMV"
+              icone={CircleDollarSign}
+              cor="rgb(var(--tc-kpi-gmv))"
+              valor={dados.share_full_gmv === null ? null : fmtShare(dados.share_full_gmv)}
+              progresso={dados.share_full_gmv}
+              legenda={<>Full <Reais v={full?.paid_gmv} /> de <Reais v={dados.paid_gmv_total} /></>}
+              serie={serieGmv}
+              tendencia="Participação diária do Full no GMV, no período"
+            />
+            <CartaoIndicador
+              rotulo="Participação nos pedidos"
+              icone={ShoppingBag}
+              cor="rgb(var(--tc-kpi-pedidos))"
+              valor={dados.share_full_orders === null ? null : fmtShare(dados.share_full_orders)}
+              progresso={dados.share_full_orders}
+              legenda={`Full ${fmtCount(full?.paid_orders ?? null)} de ${fmtCount(dados.paid_orders_total)}`}
+              serie={seriePedidos}
+              tendencia="Participação diária do Full nos pedidos, no período"
+            />
+            <CartaoIndicador
+              rotulo="Cancelamento Full"
+              icone={Ban}
+              cor="rgb(var(--tc-kpi-ads))"
+              valor={full?.cancellation_rate == null ? null : fmtShare(full.cancellation_rate)}
+              progresso={full?.cancellation_rate ?? null}
+              legenda={`Não-Full: ${fmtShare(naoFull?.cancellation_rate ?? null)}`}
+            />
+            <CartaoIndicador
+              rotulo="Entrega Full"
+              icone={Truck}
+              cor="rgb(var(--tc-kpi-prazo))"
+              valor={full?.delivery ? fmtTempo(full.delivery) : null}
+              legenda={`Não-Full: ${fmtTempo(naoFull?.delivery ?? null)}`}
+            />
+          </div>
 
           {/* --- Tendencia ------------------------------------------------ */}
           <section
@@ -339,7 +327,7 @@ function FullMLPageInner() {
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 id="full-ml-trend" className="text-sm font-semibold text-ink">
-                Tendência diária do share de Full
+                Participação diária do Full
               </h2>
               <div className="flex gap-1" role="group" aria-label="Métrica da série">
                 {METRICAS.map((m) => (
@@ -401,7 +389,7 @@ function FullMLPageInner() {
                             <InfoDica texto={CLASS_DESCRICAO[c]} />
                           </span>
                         </th>
-                        <td className="text-right py-2 px-3 tabular-nums">{fmtGmv(linha.paid_gmv)}</td>
+                        <td className="text-right py-2 px-3 tabular-nums"><Reais v={linha.paid_gmv} /></td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtCount(linha.paid_orders)}</td>
                         <td className="text-right py-2 px-3 tabular-nums">{fmtCount(linha.paid_units)}</td>
                         <td className="text-right py-2 px-3 tabular-nums text-ink-muted">{fmtCount(linha.eligible_orders)}</td>
@@ -442,7 +430,7 @@ function FullMLPageInner() {
                       <tr key={`${t.logistic_type_original}-${t.fulfillment_class}`} className="border-b border-line">
                         <td className="py-2 pr-3 font-mono text-xs text-ink">{t.logistic_type_original}</td>
                         <td className="py-2 px-3 text-ink-muted">{CLASS_LABEL[t.fulfillment_class]}</td>
-                        <td className="text-right py-2 px-3 tabular-nums">{fmtGmv(t.paid_gmv)}</td>
+                        <td className="text-right py-2 px-3 tabular-nums"><Reais v={t.paid_gmv} /></td>
                         <td className="text-right py-2 pl-3 tabular-nums">{fmtCount(t.paid_orders)}</td>
                       </tr>
                     ))}
@@ -501,8 +489,8 @@ function FullMLPageInner() {
                           <td className="px-3 py-2 text-ink-muted">
                             {o.listing_class === "mixed" ? "Misto" : "Somente não-Full"}
                           </td>
-                          <td className="text-right px-3 py-2 tabular-nums font-medium">{fmtGmv(o.non_full_gmv)}</td>
-                          <td className="text-right px-3 py-2 tabular-nums text-ink-muted">{fmtGmv(o.full_gmv)}</td>
+                          <td className="text-right px-3 py-2 tabular-nums font-medium"><Reais v={o.non_full_gmv} /></td>
+                          <td className="text-right px-3 py-2 tabular-nums text-ink-muted"><Reais v={o.full_gmv} /></td>
                         </tr>
                       ))}
                     </tbody>
@@ -536,7 +524,7 @@ function FullMLPageInner() {
               <div>
                 <dt className="text-xs text-ink-muted">Última carga</dt>
                 <dd className="font-semibold text-xs">
-                  {dados.freshness.refreshed_at?.slice(0, 16).replace("T", " ") ?? SEM_DADO}
+                  {dados.freshness.refreshed_at ? `${dm(dados.freshness.refreshed_at)} ${dados.freshness.refreshed_at.slice(11, 16)}` : SEM_DADO}
                 </dd>
               </div>
             </dl>

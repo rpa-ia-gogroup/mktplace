@@ -442,9 +442,9 @@ test("todo controle interativo declara alvo minimo de 44px", () => {
   // regex de atributos: arrow functions contem `>`, que truncaria `[^>]*` no
   // meio da tag e daria falso positivo.
   const blocos = PAGE.split("<button").slice(1);
-  // 3 literais `<button`: os presets e o seletor de metrica saem de
-  // `.map()`, entao um limiar maior reprovaria codigo correto.
-  assert.equal(blocos.length, 3, "a tela tem 3 literais de botao");
+  // ALVO-GRADE: 2 literais `<button` (Limpar e o seletor de metrica, de `.map()`);
+  // marca e periodo sao o `Segmented` da casa, que ja' fixa o alvo de 44px.
+  assert.equal(blocos.length, 2, "a tela tem 2 literais de botao");
   for (const b of blocos) {
     const tag = b.split(">")[0] + b.split(">").slice(1).join(">").split("</button>")[0];
     assert.ok(tag.includes("className="), "todo button precisa de className");
@@ -519,14 +519,14 @@ test("foco visivel em todo controle", () => {
 
 test("todo input e select tem label associado por id", () => {
   const ids = [...PAGE.matchAll(/<(?:input|select)[^>]*\bid="([^"]+)"/g)].map((m) => m[1]);
-  assert.ok(ids.length >= 3, "de, ate e marca");
+  assert.ok(ids.length >= 2, "de e ate (a marca e' o Segmented, com rotulo proprio)");
   for (const id of ids) {
     assert.ok(PAGE.includes(`htmlFor="${id}"`), `falta <label htmlFor="${id}">`);
   }
 });
 
 test("grupos de botoes sem label individual tem aria-label", () => {
-  assert.ok(PAGE.includes('role="group" aria-label="Períodos predefinidos"'));
+  assert.ok(PAGE.includes('rotulo="Período"') && PAGE.includes('rotulo="Marca"'), "Segmented da casa: o rotulo vira o nome do grupo");
   assert.ok(PAGE.includes('role="group" aria-label="Métrica da série"'));
 });
 

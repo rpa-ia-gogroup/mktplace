@@ -515,6 +515,7 @@ export default function MLFullEstoqueClient() {
       })();
   const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria;
 
+  const fotoEmUso = payload && !isIndisponivelML(payload) ? payload.frescor.ref_date : "";
   const filtrosUI = (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-wrap items-center gap-2">
@@ -546,13 +547,14 @@ export default function MLFullEstoqueClient() {
             type="date"
             max={hoje}
             ref={dataRef}
-            value={dataDigitada}
+            // Sem data escolhida, o campo mostra a foto em uso (nao "dd/mm/aaaa"); so' vira filtro se a pessoa mudar.
+            value={dataDigitada || fotoEmUso}
             onChange={(e) => digitarData(e.target.value)}
-            onBlur={(e) => confirmarData(e.target.value)}
+            onBlur={(e) => { if (dataDigitada || e.target.value !== fotoEmUso) confirmarData(e.target.value); }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") confirmarData(e.currentTarget.value);
+              if (e.key === "Enter" && (dataDigitada || e.currentTarget.value !== fotoEmUso)) confirmarData(e.currentTarget.value);
             }}
-            className="rounded-lg border border-line px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -695,7 +697,7 @@ export default function MLFullEstoqueClient() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
                 {comCurva && (
                   <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full), exigeAcaoML)}</p>
+                    <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full && !i.situacao), exigeAcaoML)}</p>
                   </div>
                 )}
                 {categoria && (

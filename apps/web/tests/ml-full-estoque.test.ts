@@ -367,10 +367,11 @@ test("D1: data parcial do input nao vira filtro; vazio limpa", () => {
 
   // Wiring: o campo mostra o rascunho e so' aplica via dataParaFiltroML.
   const input = CLIENT_SRC.split('type="date"')[1]?.split("/>")[0] ?? "";
-  assert.ok(input.includes("value={dataDigitada}"));
+  // Sem rascunho, o campo mostra a foto em uso; so' vira filtro se a pessoa mudar.
+  assert.ok(input.includes("value={dataDigitada || fotoEmUso}"));
   assert.ok(input.includes("onChange={(e) => digitarData(e.target.value)}"));
-  assert.ok(input.includes("onBlur={(e) => confirmarData(e.target.value)}"));
-  assert.match(input, /e\.key === "Enter"\) confirmarData/);
+  assert.ok(input.includes("confirmarData(e.target.value)") && input.includes("e.target.value !== fotoEmUso"));
+  assert.match(input, /e\.key === "Enter" && .*\) confirmarData/);
   assert.ok(!input.includes("refDate: e.target.value"), "valor cru nao vai ao filtro");
   for (const fn of ["const digitarData", "const confirmarData"]) {
     const corpo = CLIENT_SRC.split(fn)[1]?.split("\n  };")[0] ?? "";
