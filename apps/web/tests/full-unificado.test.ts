@@ -987,7 +987,7 @@ test("clique no bloco do heroi: canal + AA/A; filtros na URL vao e voltam", () =
   assert.equal(filtrosNaUrl("", "todos", "todas"), "");
   assert.deepEqual(lerFiltrosUrl(new URLSearchParams("canal=tiktok&curva=zz")), { canal: "todos", curva: "todas" }, "valor estranho = padrao");
   const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  assert.ok(tela.includes("aplicar(filtroCanal, \"aa_a\", true)") && tela.includes("aplicar(canal, \"todas\", true)"), "cartoes levam a fila");
+  assert.ok(tela.includes("aplicar(\"todos\", comCurva ? \"aa_a\" : \"todas\", true)") && tela.includes("aplicar(canal, \"todas\", true)"), "cartoes levam a fila");
   assert.ok(tela.includes("por marca →") && tela.includes("Limpar filtros"));
 });
 

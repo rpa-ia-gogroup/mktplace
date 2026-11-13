@@ -126,7 +126,7 @@ function FullMLPageInner() {
   const [from, setFrom] = useState(inicial.from);
   const [to, setTo] = useState(inicial.to);
   const [marca, setMarca] = useState("");
-  const [metrica, setMetrica] = useState<MetricaSerie>("units");
+  const [metrica, setMetrica] = useState<MetricaSerie>("gmv");
 
   const [dados, setDados] = useState<MLFulfillmentResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -187,7 +187,7 @@ function FullMLPageInner() {
     setFrom(r.from);
     setTo(r.to);
     setMarca("");
-    setMetrica("units");
+    setMetrica("gmv");
   }, [hoje]);
 
   const full = byClass(dados, "full");
@@ -302,6 +302,7 @@ function FullMLPageInner() {
               legenda={`Full ${fmtCount(full?.paid_orders ?? null)} de ${fmtCount(dados.paid_orders_total)}`}
               serie={seriePedidos}
               tendencia="Participação diária do Full nos pedidos, no período"
+              ajuda={<InfoDica emControle texto={`Share de unidades Full: ${fmtShare(dados.share_full_units ?? null)} (Full ${fmtCount(full?.paid_units ?? null)} de ${fmtCount(dados.paid_units_total)} unidades).`} />}
             />
             <CartaoIndicador
               rotulo="Cancelamento Full"

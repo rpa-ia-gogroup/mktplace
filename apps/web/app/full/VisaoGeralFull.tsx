@@ -51,6 +51,7 @@ import {
   impactosOk,
   antesHeroi,
   antesImpacto,
+  antesParamVenda,
   semComparacao,
   contarFiltros,
   curvaDe,
@@ -468,6 +469,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
     .sort((a, b) => (b.perdaDia as number) - (a.perdaDia as number))
     .slice(0, 5);
   const paramVenda = kpiParamVenda(shopee);
+  const antesPv = antesParamVenda(shopee, antes?.shopee ?? null);
   return (
     <Aba
       {...abas}
@@ -517,9 +519,18 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
                   ? CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]} ${fmtInt(curvaH.blocos[c]!.n)}`).join(" · ")
                   : curvaH?.contexto || undefined
               }
-              tendencia={curvaH?.titulo}
-              ajuda={<InfoDica emControle texto={DICA_RUPTURA} nota={[curvaH?.parcial ? DICA_HEROI_PARCIAL : null, fotosHeroi(canais), NOTA_VENDEDOR].filter(Boolean).join(" ")} />}
-              onAbrir={comCurva ? () => aplicar(filtroCanal, "aa_a", true) : undefined}
+              // Por canal: % do impacto potencial ou a cobertura curta da curva (o que o heroi antigo mostrava).
+              tendencia={curvaH && Object.keys(curvaH.blocos).length
+                ? CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]}: ${curvaH.blocos[c]!.apoio ?? curvaH.blocos[c]!.detalhe ?? "—"}`).join(" · ")
+                : curvaH?.titulo}
+              ajuda={<InfoDica emControle texto={DICA_RUPTURA} nota={[
+                curvaH?.titulo && curvaH.valor !== "—" ? `${curvaH.valor} AA/A ${curvaH.titulo}.` : null,
+                ...CANAIS.filter((c) => curvaH?.blocos[c]?.poucaCobertura).map((c) => `A curva da planilha cobre poucos itens ${noCanal(c, NOME_CANAL[c])}: os demais não entram no ${fmtInt(curvaH!.blocos[c]!.n)}.`),
+                curvaH?.parcial ? DICA_HEROI_PARCIAL : null, fotosHeroi(canais), NOTA_VENDEDOR,
+              ].filter(Boolean).join(" ")} />}
+              // O numero soma os canais: a fila abre com TODOS (bate com o cartao) e o filtro de canal deixa escolher.
+              // Sem curva, abre a fila inteira (o clique nunca some).
+              onAbrir={() => aplicar("todos", comCurva ? "aa_a" : "todas", true)}
             />
             <CartaoIndicador
               rotulo="Sem estoque com demanda"
@@ -828,7 +839,10 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
                 <span className="inline-flex items-center gap-1.5">Param a venda <InfoDica texto={NOTA_VENDEDOR} /></span>
               </th>
               <td className="px-3 py-2 sm:px-4 text-right tabular-nums"><Ausente motivo="não se aplica ao ML" /></td>
-              <td className="px-3 py-2 sm:px-4 text-right tabular-nums"><Escondido texto={paramVenda.valor} detalhe={[paramVenda.comparacao, paramVenda.detalhe].filter(Boolean).join(" · ")} /></td>
+              <td className="px-3 py-2 sm:px-4 text-right tabular-nums">
+                <Escondido texto={paramVenda.valor} detalhe={[paramVenda.comparacao, paramVenda.detalhe].filter(Boolean).join(" · ")} />
+                {antesPv && <span className="block text-xs text-ink-muted">{antesPv.texto}</span>}
+              </td>
               <td className="px-3 py-2 sm:px-4 text-right tabular-nums"><Ausente motivo="só a Shopee" /></td>
             </tr>
             <tr>
