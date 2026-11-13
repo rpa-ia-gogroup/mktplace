@@ -41,6 +41,23 @@ export default function Popover({
   const id = useId();
   const raiz = useRef<HTMLDivElement>(null);
   const gatilho = useRef<HTMLButtonElement>(null);
+  const painel = useRef<HTMLDivElement>(null);
+  // O painel fechado continua no DOM (para a transicao de saida) e, alinhado a'
+  // esquerda perto da borda, criava rolagem lateral no celular (Revisor UX, #421).
+  // Sem espaco a' direita do gatilho, ele se alinha pela borda direita.
+  const [virar, setVirar] = useState(false);
+  useEffect(() => {
+    if (alinhar === "fim") return;
+    const medir = () => {
+      const g = gatilho.current?.getBoundingClientRect();
+      const w = painel.current?.offsetWidth ?? 0;
+      if (g) setVirar(g.left + w > window.innerWidth - 8);
+    };
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [alinhar]);
+  const noFim = alinhar === "fim" || virar;
 
   // Fechar por ESCOLHA devolve o foco ao gatilho: o botao escolhido some com
   // o painel, e sem isto o foco de quem usa teclado cairia no <body>.
@@ -107,9 +124,10 @@ export default function Popover({
           poder sair com transicao. A visibilidade so' troca no FIM da saida. */}
       <div
         id={id}
+        ref={painel}
         tabIndex={-1}
         className={`absolute top-full z-40 mt-1.5 outline-none max-w-[calc(100vw-2rem)] rounded-xl border border-line bg-surface p-1.5 shadow-[0_8px_24px_-6px_rgb(var(--tc-ink)/0.18)] ${largura} ${
-          alinhar === "fim" ? "right-0 origin-top-right" : "left-0 origin-top-left"
+          noFim ? "right-0 origin-top-right" : "left-0 origin-top-left"
         } ${
           aberto
             ? "visible translate-y-0 scale-100 opacity-100 [transition:opacity_200ms_var(--mov-ease),transform_200ms_var(--mov-ease)]"
