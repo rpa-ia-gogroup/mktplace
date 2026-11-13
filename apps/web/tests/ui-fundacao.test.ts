@@ -109,7 +109,6 @@ const AINDA_FORA_DO_ESQUELETO = new Set([
   "/inteligencia",
   "/monitoramento-preco",
   "/monitoramento-preco/revendedores",
-  "/operacoes",
   "/referencias-externas/avoe",
   "/regioes",
   "/tempo-real",
