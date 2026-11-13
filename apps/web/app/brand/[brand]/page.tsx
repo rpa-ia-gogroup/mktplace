@@ -70,9 +70,9 @@ const BRAND_META: Record<string, { label: string; color: string; initials: strin
 const BRAND_PILLS = [
   { slug: "barbours", label: "BARBOURS" },
   { slug: "kokeshi",  label: "KOKESHI"  },
-  { slug: "apice",    label: "APICE"    },
+  { slug: "apice",    label: "ÁPICE"    },
   { slug: "lescent",  label: "LESCENT"  },
-  { slug: "rituaria", label: "RITUARIA" },
+  { slug: "rituaria", label: "RITUÁRIA" },
 ];
 
 /** Identidade estavel da requisicao diaria/GLOBAL (tendencia + ultimos 7
@@ -487,7 +487,10 @@ function BrandPageInner() {
       }
       filtros={
         <>
-          <MarketplaceFilter value={filter} onChange={(channels) => setFilters({ channels })} />
+          {/* No 390 o seletor de canal rola dentro da barra, sem cortar o ultimo canal. */}
+          <div className="min-w-0 max-w-full overflow-x-auto">
+            <MarketplaceFilter value={filter} onChange={(channels) => setFilters({ channels })} />
+          </div>
           <DateRangeFilter
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -540,7 +543,7 @@ function BrandPageInner() {
         aria-label={`Situação da marca no intervalo global ${periodLabel}`}
         aria-busy={!dailyIsFresh}
       >
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Situação da marca</SectionTitle>
+        <SectionTitle>Situação da marca</SectionTitle>
         {!dailyIsFresh ? (
           <FaixaCarregando cartoes={4} className="grid grid-cols-2 gap-3 md:grid-cols-4" />
         ) : (
@@ -564,7 +567,7 @@ function BrandPageInner() {
 
       {/* ══ 4. evolucao e mix de canais — INTERVALO GLOBAL ═══════════════ */}
       <section aria-label={`Evolução e mix de canais no intervalo global ${periodLabel}`} aria-busy={!dailyIsFresh}>
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Evolução e mix de canais</SectionTitle>
+        <SectionTitle>Evolução e mix de canais</SectionTitle>
         {!dailyIsFresh ? (
           <div className="h-64 rounded-2xl bg-slate-100 animate-pulse" aria-hidden="true" />
         ) : (
@@ -632,7 +635,7 @@ function BrandPageInner() {
       {/* ══ 5. o que mudou — so quando o dado existente sustenta ═════════ */}
       <section aria-label="O que mudou no intervalo global">
         <SectionTitle
-          badge={`intervalo global ${periodLabel} vs anterior`}
+          badge="vs período anterior"
           dica="GMV decomposto por canal contra o intervalo equivalente anterior. Sem variação % quando a base anterior não é positiva."
         >
           O que mudou
@@ -692,7 +695,7 @@ function BrandPageInner() {
 
       {/* ══ ultimos 7 dias — INTERVALO GLOBAL ═══════════════════════════ */}
       <section aria-label={`Últimos 7 dias do intervalo global ${periodLabel}`} aria-busy={!dailyIsFresh}>
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Últimos 7 dias</SectionTitle>
+        <SectionTitle>Últimos 7 dias</SectionTitle>
         {!ordersReliable && dailyIsFresh && (
           <p className="text-xs text-slate-500 -mt-2 mb-3">Pedidos e Ticket N/D nesta seleção.</p>
         )}
@@ -723,27 +726,27 @@ function BrandPageInner() {
                         {new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                       </td>
                       {hasTiktok && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.tiktok_gmv != null ? fmtBrl(r.tiktok_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
                       {hasMl && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.ml_gmv != null ? fmtBrl(r.ml_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
                       {hasShopee && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.shopee_gmv != null ? fmtBrl(r.shopee_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
-                      <td className="text-right px-4 py-3 font-bold text-gray-900 text-sm tabular-nums">
+                      <td className="text-right whitespace-nowrap px-4 py-3 font-bold text-gray-900 text-sm tabular-nums">
                         {fmtBrl(r.total_gmv)}
                       </td>
-                      <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                      <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                         {ordersReliable ? fmtNumber(r.orders) : <span className="text-slate-500 text-xs">N/D</span>}
                       </td>
-                      <td className="text-right px-5 py-3 text-sm text-gray-600 tabular-nums">
+                      <td className="text-right whitespace-nowrap px-5 py-3 text-sm text-gray-600 tabular-nums">
                         {!ordersReliable
                           ? <span className="text-slate-500 text-xs">N/D</span>
                           : r.avg_ticket != null ? fmtBrl(r.avg_ticket) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
