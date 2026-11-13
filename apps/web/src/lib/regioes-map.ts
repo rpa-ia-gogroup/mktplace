@@ -47,12 +47,6 @@ export function intensityToColor(intensity: number): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** Cor de texto com contraste razoável sobre intensityToColor — texto claro
- * quando o fundo fica escuro o suficiente, texto escuro caso contrário. */
-export function textColorForIntensity(intensity: number): string {
-  return intensity > 0.55 ? "#ffffff" : "#312e81";
-}
-
 /**
  * Marcador textual de cobertura — NUNCA depende só da cor de fundo (ver
  * requisito de acessibilidade). "ok" não tem marcador (estado normal,
@@ -74,8 +68,9 @@ export function coverageGlyph(level: CoverageLevel): string {
  */
 export function coverageStrokeColor(level: CoverageLevel): string | null {
   switch (level) {
-    case "low": return "#e11d48"; // rose-600
-    case "partial": return "#d97706"; // amber-600
+    // tokens do tema (CSS `stroke` em `style`), para o contorno seguir o escuro
+    case "low": return "rgb(var(--tc-crit))";
+    case "partial": return "rgb(var(--tc-warn))";
     default: return null;
   }
 }

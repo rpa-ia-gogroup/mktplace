@@ -105,28 +105,9 @@ test("Aba: titulo grande sem icone | selo, abas sob o titulo, barra sticky, e a 
 // Barreira: toda rota usa o esqueleto `Aba`, exceto as listadas (a migrar).
 // ---------------------------------------------------------------------------
 const AINDA_FORA_DO_ESQUELETO = new Set([
-  "/brand/[brand]",
-  "/canais",
-  "/cx",
-  "/dre",
-  "/estoque-full",
-  "/estoque-ml-full",
-  "/expedicao",
-  "/financeiro",
-  "/full",
-  "/full-ml",
-  "/full-shopee",
-  "/marcas-menores",
-  "/metas",
   "/monitoramento-preco",
   "/monitoramento-preco/revendedores",
-  "/operacoes",
-  "/pedidos",
-  "/performance-contas",
-  "/produtos",
-  "/qualidade",
   "/referencias-externas/avoe",
-  "/regioes",
   "/tempo-real",
 ]);
 

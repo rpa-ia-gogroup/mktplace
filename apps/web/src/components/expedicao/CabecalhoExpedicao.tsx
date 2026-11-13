@@ -1,37 +1,30 @@
 "use client";
 
 /**
- * Gate EXPEDICAO-UX-UNIFICADA-1 — o cabecalho que os tres canais compartilham.
+ * Gate EXPEDICAO-UX-UNIFICADA-1 + ALVO-GRADE (12/11/2026) — o cabecalho que os
+ * tres canais compartilham, agora como PARTES da moldura `Aba` (o titulo e as
+ * abas de canal sao da casca):
  *
- * Duas faixas, com papeis diferentes:
+ *   - `selo`: "Atualizado HH:MM" (ou "Desatualizado · HH:MM", escrito) e, ao
+ *     lado, a definicao da tela ("ⓘ") e os avisos curtos do painel;
+ *   - `filtros`: Marca · Período · [controles do canal], numa linha;
+ *   - `direita`: a profundidade (visao do gestor / detalhe operacional).
  *
- *   1. a faixa STICKY (PageBar): o titulo (com o canal) e a fotografia —
- *      publicacao e frescor. E' o que precisa continuar visivel durante a
- *      rolagem de uma fila de 100 linhas;
- *   2. a BARRA DE FILTROS (FILTROS-PADRAO, como nas outras abas), que rola com a
- *      pagina: Canal · Marca · Período · [controles do canal] e, a direita,
- *      a profundidade (visao do gestor / detalhe operacional). No mobile,
- *      cinco seletores dentro da faixa sticky comiam metade da tela.
- *
- * O componente nao conhece canal nenhum: recebe o rotulo, a `Fotografia` que o
- * contrato do canal montou e os controles que o painel quiser pendurar.
+ * Nao conhece canal nenhum: recebe a `Fotografia` que o contrato do canal
+ * montou e os controles que o painel quiser pendurar.
  */
 import type { ReactNode } from "react";
 import { CalendarDays, Check } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
-import Chip from "@/components/ui/Chip";
 import Popover from "@/components/ui/Popover";
-import PageBar from "@/components/ui/PageBar";
 import InfoDica from "@/components/ui/InfoDica";
 import Segmented from "@/components/ui/Segmented";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { ROTULO_VISAO, VISOES, type Fotografia, type Visao } from "@/lib/expedicao-ux";
 import { OPCAO_PERSONALIZADA } from "@/lib/expedicao-janela";
 import { marcaUnica } from "@/lib/cx";
 import { ALL_BRAND_OPTIONS, brandLabel } from "@/lib/filters/brands";
-
-/** Ancora da faixa de controles — o convite ao detalhe leva o foco ate' ela. */
-export const ID_FAIXA_DE_CONTROLES = "exp-controles";
 
 /** "30/10, 16:10", no fuso do navegador. */
 function dataHoraCurta(iso: string): string {
@@ -42,34 +35,20 @@ function dataHoraCurta(iso: string): string {
 }
 
 /**
- * EXPEDICAO-ULTIMA-ATUALIZACAO (pedido de 30/10/2026): no topo, UM selo —
- * "Última atualização 30/10, 16:10". "Fotografia", "Atualizada" e "Fonte até"
- * sairam da tela; a idade e a leitura da fonte ficam no `title` do selo.
- *
- * So' o aviso "Desatualizada" continua aparecendo, e ESCRITO (nao so'
- * pintado de ambar): cor nao pode ser o unico sinal de que os numeros
- * abaixo descrevem o passado. O veredito e' do contrato do canal.
+ * ALVO-GRADE: o selo unico das abas, "Atualizado HH:MM". A idade e a leitura
+ * da fonte ficam no `title`. Fotografia velha vira "Desatualizado · HH:MM",
+ * ESCRITO (nao so' pintado): cor nao pode ser o unico sinal de que os numeros
+ * descrevem o passado. O veredito e' do contrato do canal.
  */
 export function ChipsFotografia({ fotografia: f }: { fotografia: Fotografia }) {
   const detalhe = [
     f.idade !== null ? `Publicada há ${f.idade}.` : null,
     f.fonteLidaAte ? `Fonte lida até ${dataHoraCurta(f.fonteLidaAte)}.` : null,
+    f.desatualizada ? "Os números descrevem o instante da publicação, não agora." : null,
   ]
     .filter(Boolean)
     .join(" ");
-  return (
-    <>
-      <Chip title={detalhe || undefined}>
-        Última atualização{" "}
-        {f.publicadaEm ? <time dateTime={f.publicadaEm}>{dataHoraCurta(f.publicadaEm)}</time> : "—"}
-      </Chip>
-      {f.publicadaEm && f.desatualizada ? (
-        <Chip ponto tom="atencao" title="Os números descrevem o instante da publicação, não agora.">
-          Desatualizada
-        </Chip>
-      ) : null}
-    </>
-  );
+  return <SeloAtualizado em={f.publicadaEm} atrasado={Boolean(f.publicadaEm && f.desatualizada)} detalhe={detalhe || undefined} />;
 }
 
 /**
@@ -171,20 +150,16 @@ export function SeletorPeriodo({
   );
 }
 
-export default function CabecalhoExpedicao({
-  canal,
-  seletorCanal,
+/** As partes do cabecalho para `LayoutExpedicao` (`selo`, `filtros`, `direita`). */
+export default function cabecalhoExpedicao({
   fotografia,
   visao,
   aoTrocarVisao,
   controles,
   definicao,
   filtroMarca,
+  avisos,
 }: {
-  /** Rotulo do canal, que vai NO TITULO: numero de uma loja sob o titulo de
-   *  outra foi o defeito do EXP-3C2-R/V. */
-  canal: string;
-  seletorCanal?: ReactNode;
   fotografia: Fotografia | null;
   visao: Visao;
   aoTrocarVisao?: (v: Visao) => void;
@@ -193,49 +168,35 @@ export default function CabecalhoExpedicao({
   definicao?: string;
   /** `SeletorMarca` montado pelo painel, com as marcas do payload. */
   filtroMarca?: ReactNode;
-}) {
-  return (
-    <>
-      <PageBar
-        titulo={
-          <>
-            {/* h2, nao h1: o h1 da pagina e' do shell. */}
-            <h2 className="text-base font-semibold tracking-tight text-ink">
-              Expedição — {canal}
-            </h2>
-            {/* UI-EXPEDICAO-1: a definicao vira um "ⓘ" ao lado do titulo. */}
-            {definicao ? (
-              <span data-testid="exp-definicao" className="inline-flex">
-                <InfoDica texto={definicao} />
-              </span>
-            ) : null}
-          </>
-        }
-        meta={fotografia ? <ChipsFotografia fotografia={fotografia} /> : undefined}
-      />
-      {/* FILTROS-PADRAO: a ordem das outras abas — Canal · Marca · Período ·
-          [controles do canal] e, a direita, a profundidade. Sem rotulos soltos:
-          cada controle diz o que e' (gatilho com nome, ou rotulo acessivel). */}
-      {seletorCanal || aoTrocarVisao || controles || filtroMarca ? (
-        <div
-          id={ID_FAIXA_DE_CONTROLES}
-          className="flex scroll-mt-24 flex-wrap items-center gap-x-2 gap-y-2"
-        >
-          {seletorCanal}
+  /** Chips curtos ao lado do selo ("N marcas em alerta"). */
+  avisos?: ReactNode;
+}): { selo: ReactNode; filtros: ReactNode; direita: ReactNode } {
+  return {
+    selo: (
+      <>
+        {definicao ? (
+          <span data-testid="exp-definicao" className="inline-flex">
+            <InfoDica texto={definicao} />
+          </span>
+        ) : null}
+        {avisos}
+        {fotografia ? <ChipsFotografia fotografia={fotografia} /> : null}
+      </>
+    ),
+    filtros:
+      filtroMarca || controles ? (
+        <div className="flex flex-wrap items-center gap-2">
           {filtroMarca}
           {controles}
-          {aoTrocarVisao ? (
-            <div className="sm:ml-auto">
-              <Segmented
-                rotulo="Profundidade"
-                opcoes={VISOES.map((v) => ({ valor: v, texto: ROTULO_VISAO[v] }))}
-                valor={visao}
-                aoEscolher={aoTrocarVisao}
-              />
-            </div>
-          ) : null}
         </div>
-      ) : null}
-    </>
-  );
+      ) : null,
+    direita: aoTrocarVisao ? (
+      <Segmented
+        rotulo="Profundidade"
+        opcoes={VISOES.map((v) => ({ valor: v, texto: ROTULO_VISAO[v] }))}
+        valor={visao}
+        aoEscolher={aoTrocarVisao}
+      />
+    ) : null,
+  };
 }

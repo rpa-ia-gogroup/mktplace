@@ -4,6 +4,12 @@ import InfoDica from "@/components/ui/InfoDica";
 interface Props {
   quality: ScopeQuality | null | undefined;
   loading?: boolean;
+  /**
+   * ALVO-GRADE: dentro da faixa da grade unica (sem o recuo do cartao antigo) e
+   * com o aviso no tom de alerta (ambar), como os avisos dos outros canais. O
+   * critico continua `role="alert"`: so' a cor muda.
+   */
+  naGrade?: boolean;
 }
 
 /**
@@ -33,7 +39,7 @@ interface Props {
  *     formata o numero por conta propria, justamente para nao poder exibi-lo
  *     como "%".
  */
-export default function ScopeQualityBanner({ quality, loading }: Props) {
+export default function ScopeQualityBanner({ quality, loading, naGrade = false }: Props) {
   if (loading && !quality) {
     return <div className="mx-6 mt-3 h-4 w-56 rounded bg-raised animate-pulse" aria-hidden />;
   }
@@ -67,11 +73,11 @@ export default function ScopeQualityBanner({ quality, loading }: Props) {
     );
   }
 
-  const tom = pior === "critical" ? "text-crit-ink" : pior === "warning" ? "text-warn-ink" : "text-ink-muted";
+  const tom = pior === "critical" ? (naGrade ? "text-warn-ink" : "text-crit-ink") : pior === "warning" ? "text-warn-ink" : "text-ink-muted";
 
   return (
     <div
-      className={`mx-6 mt-3 flex items-center gap-1.5 text-xs font-medium ${tom}`}
+      className={`${naGrade ? "px-1" : "mx-6 mt-3"} flex items-center gap-1.5 text-xs font-medium ${tom}`}
       role={pior === "critical" ? "alert" : "status"}
       data-testid="scope-quality-banner"
       data-severity={pior}

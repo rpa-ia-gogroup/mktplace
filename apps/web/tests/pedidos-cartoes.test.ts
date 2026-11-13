@@ -125,7 +125,8 @@ test("pagina de Pedidos: sem KpiCard legado nem CanalCard, formato da casa, dial
   assert.equal((pag.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um dialogo na pagina");
   assert.ok(pag.includes("icone={detalhe ?") && pag.includes("identidade={detalhe ?"), "o modal herda icone e cor do cartao");
   assert.ok(pag.includes("{detalhe && dataIsFresh && ("), "detalhe so' com dado fresco");
-  assert.equal((pag.match(/<FaixaCarregando/g) ?? []).length, 2);
+  // ALVO-GRADE: uma faixa so' (a da aba ativa), um esqueleto so'.
+  assert.equal((pag.match(/<FaixaCarregando/g) ?? []).length, 1);
   for (const t of ['tipo="erro"', 'tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos."', 'tipo="indisponivel" titulo="API offline — pedidos indisponíveis."', 'tipo="vazio" titulo="Sem dados de canais disponíveis."']) {
     assert.ok(pag.includes(t), t);
   }
@@ -137,10 +138,12 @@ test("cartoes de Pedidos: so' as 7 identidades existentes; canal e' ponto; so' E
   const usadas = [...src.matchAll(/identidade[:=]\s*"([a-z]+)"/g)].map((m) => m[1]);
   assert.ok(usadas.length >= 10);
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
-  assert.ok(src.includes("CHANNEL_DOT[canal]"));
+  // ALVO-GRADE: o canal e' o ponto da aba (`visoes` na pagina), nunca cor de cartao.
+  assert.ok(ler("app/pedidos/page.tsx").includes('ponto: "bg-canal-tiktok"'));
+  assert.ok(src.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"), "cor do cartao so' por token de identidade");
   assert.ok(src.includes("valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)}"), "GMV do canal abre o detalhe por marca (a API traz tiktok_gmv/ml_gmv por marca)");
   assert.ok(/rotulo="Entregues"[^\n]*\/>/.test(src) && !/rotulo="Entregues"[^\n]*onAbrir/.test(src));
-  assert.ok(src.includes('tom={ausente ? "ausente" : tom ?? "neutro"}'), "ausencia = tom ausente, nunca zero");
+  assert.ok(src.includes("legenda={ausente ? AUSENTE : legenda}") && src.includes("onAbrir={ausente ? undefined : onAbrir}"), "ausencia = N/D com o motivo escrito, nunca zero");
 });
 
 test("GMV por canal: detalhe por marca existe, sem tendencia (a API nao traz GMV por canal por dia)", () => {

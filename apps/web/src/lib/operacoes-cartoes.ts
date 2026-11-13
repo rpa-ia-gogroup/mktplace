@@ -39,3 +39,16 @@ export function valoresVelocidade(r: LinhaVelocidade) {
     pedidos: fmtNumCurto(r.orders_7d),
   };
 }
+
+/**
+ * A mensagem do alerta vem pronta da API em formato EN ("ROAS 0.1x em
+ * 2026-11-11 ... R$2,430"). So' a escrita muda para pt-BR; nenhum numero e'
+ * recalculado. Trecho que nao casa fica como veio.
+ */
+export function mensagemBr(m: string): string {
+  return m
+    .replace(/R\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)(?![\d.,])/g, (_, n: string) =>
+      `R$ ${Number(n.replace(/,/g, "")).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`)
+    .replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, "$3/$2")
+    .replace(/\b(\d+)\.(\d+)x\b/g, "$1,$2x");
+}

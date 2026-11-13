@@ -2,7 +2,11 @@ import type { ProdutoMLRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
+
+/** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
+const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
@@ -38,6 +42,21 @@ const SIGNAL_COLOR: Record<string, string> = {
   "OPORTUNIDADE:": "bg-accent-soft border-line text-accent-ink",
   "REVIEW:": "bg-raised border-line text-ink-muted",
 };
+
+const VELOCITY_LABEL: Record<string, string> = { high: "Alta", medium: "Média", low: "Baixa", zero: "Sem venda" };
+
+/** Sinal da API em chip curto, em portugues; o texto inteiro fica no title. */
+const SINAL_CURTO: [RegExp, string][] = [
+  [/aumentar investimento/i, "Aumentar investimento"],
+  [/pausar ads/i, "Pausar ads?"],
+  [/cancelamento/i, "Cancelamento alto"],
+  [/vende organico/i, "Oportunidade orgânica"],
+  [/spend sem vendas/i, "Investe sem vender"],
+  [/variacao de preco/i, "Preço oscilando"],
+];
+export function sinalCurto(signal: string): string {
+  return SINAL_CURTO.find(([re]) => re.test(signal))?.[1] ?? signal;
+}
 
 function signalStyle(signal: string | null): string {
   if (!signal) return "";
@@ -77,7 +96,6 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">Pareto</th>
           <SortableHeader label="Cancel." column="cancel_rate_pct" sort={sort} onSort={onSort} align="right" />
           <SortableHeader label="Eficiência Ads" column="ad_roas" sort={sort} onSort={onSort} align="right" />
-          <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">Efic. Ads</th>
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Sinal</th>
         </tr>
       }
@@ -87,20 +105,20 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
             <p className="text-ink font-medium truncate leading-tight">{p.title}</p>
             {p.seller_sku && <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.seller_sku}</p>}
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink font-medium">{fmtBrl(p.gross_revenue)}</p>
+            <p className="tabular-nums text-ink font-medium">{fmtBrlCurto(p.gross_revenue)}</p>
             {p.revenue_share_pct != null && (
-              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.revenue_share_pct.toFixed(1)}% do total</p>
+              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{dec(p.revenue_share_pct, 1)}% do total</p>
             )}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-ink-muted">
-            {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-ink-faint">—</span>}
+            {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink-muted">{fmtNumber(p.units_sold)}</p>
+            <p className="tabular-nums text-ink-muted">{fmtNumCurto(p.units_sold)}</p>
             {p.unique_buyers != null && (
-              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.unique_buyers)} compr.</p>
+              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.unique_buyers)} compr.</p>
             )}
           </td>
           <td className="px-4 py-3 text-center">
@@ -112,7 +130,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
               )}
               {p.revenue_velocity && (
                 <span className={`text-[10px] font-medium ${VELOCITY_COLOR[p.revenue_velocity] ?? "text-ink-muted"}`}>
-                  {p.revenue_velocity}
+                  {VELOCITY_LABEL[p.revenue_velocity] ?? p.revenue_velocity}
                 </span>
               )}
             </div>
@@ -120,36 +138,35 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
           <td className="px-4 py-3 text-right tabular-nums">
             {p.cancel_rate_pct != null ? (
               <span className={p.cancel_rate_pct < 2 ? "text-ok-ink" : p.cancel_rate_pct < 5 ? "text-warn-ink font-semibold" : "text-crit-ink font-semibold"}>
-                {p.cancel_rate_pct.toFixed(1)}%
+                {dec(p.cancel_rate_pct, 1)}%
               </span>
             ) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
+            {/* Uma coluna so' de Ads: o selo (estrela, eficiente...) ao lado do ROAS, sem coluna homonima. */}
+            {p.ad_efficiency && (
+              <span className={`mr-1.5 inline-block align-middle text-[10px] font-semibold px-1.5 py-0.5 rounded ${EFFICIENCY_COLOR[p.ad_efficiency] ?? "bg-raised text-ink-muted"}`}>
+                {EFFICIENCY_LABEL[p.ad_efficiency] ?? p.ad_efficiency}
+              </span>
+            )}
             {p.ad_roas != null ? (
               <span className={p.ad_roas >= 4 ? "text-ok-ink font-semibold" : p.ad_roas >= 2.5 ? "text-warn-ink" : "text-crit-ink"}>
-                {p.ad_roas.toFixed(1)}x ROAS
+                {dec(p.ad_roas, 1)}x ROAS
               </span>
             ) : <span className="text-ink-faint">—</span>}
             {(p.ad_acos_pct != null || p.ad_spend != null) && (
               <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">
                 {[
-                  p.ad_acos_pct != null && `ACOS ${p.ad_acos_pct.toFixed(1)}%`,
-                  p.ad_spend != null && `Spend ${fmtBrl(p.ad_spend)}`,
+                  p.ad_acos_pct != null && `ACOS ${dec(p.ad_acos_pct, 1)}%`,
+                  p.ad_spend != null && `Investimento ${fmtBrlCurto(p.ad_spend)}`,
                 ].filter(Boolean).join(" · ")}
               </p>
             )}
           </td>
-          <td className="px-4 py-3 text-center">
-            {p.ad_efficiency && (
-              <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded ${EFFICIENCY_COLOR[p.ad_efficiency] ?? "bg-raised text-ink-muted"}`}>
-                {EFFICIENCY_LABEL[p.ad_efficiency] ?? p.ad_efficiency}
-              </span>
-            )}
-          </td>
           <td className="px-4 py-3 max-w-[200px]">
             {p.action_signal && (
-              <span className={`inline-block text-[10px] font-medium px-2 py-0.5 rounded border leading-tight ${signalStyle(p.action_signal)}`}>
-                {p.action_signal}
+              <span title={p.action_signal} className={`inline-block whitespace-nowrap text-[10px] font-medium px-2 py-0.5 rounded border leading-tight ${signalStyle(p.action_signal)}`}>
+                {sinalCurto(p.action_signal)}
               </span>
             )}
           </td>

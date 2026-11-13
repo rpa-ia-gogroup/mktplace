@@ -181,9 +181,6 @@ test("rota nao migrada volta ao tema claro em vez de ficar meio escura", () => {
   // `/` na lista NAO pode virar coringa: so' a raiz casa. As rotas ainda em
   // literais claros continuam presas ao claro.
   for (const r of [
-    "/pedidos",
-    "/qualidade",
-    "/regioes",
     "/brand/kokeshi",
     "/canais-legado",
     null,
@@ -204,7 +201,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
   // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/inteligencia"]);
+  assert.deepEqual([...ROTAS_TEMATIZADAS, "/inteligencia"], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/qualidade", "/pedidos", "/regioes"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -230,6 +227,9 @@ const PAGINA_DA_ROTA: Record<string, string> = {
   "/monitoramento-preco": "app/monitoramento-preco/page.tsx",
   "/operacoes": "app/operacoes/page.tsx",
   "/produtos": "app/produtos/page.tsx",
+  "/qualidade": "app/qualidade/page.tsx",
+  "/pedidos": "app/pedidos/page.tsx",
+  "/regioes": "app/regioes/page.tsx",
   "/inteligencia": "app/inteligencia/page.tsx",
 };
 
@@ -312,7 +312,7 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
     "app/cx/CxConteudo.tsx",
     "src/components/KpiDrilldownDialog.tsx",
     "src/components/gerencial/CxDrilldown.tsx",
-    "src/components/ui/Heroi.tsx",
+    "src/components/ui/CartaoIndicador.tsx",
   ]) {
     assert.ok(cx.includes(esperado), `percurso da /cx nao alcancou ${esperado}`);
   }

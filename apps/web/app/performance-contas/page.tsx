@@ -13,8 +13,8 @@
  */
 import { notFound } from "next/navigation";
 
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
 import { ALL_BRAND_KEYS, ALL_BRAND_OPTIONS, brandLabel } from "@/lib/filters/brands";
@@ -45,17 +45,12 @@ export default async function PerformanceContasPage({
   const filtros = lerFiltros(await searchParams, ALL_BRAND_KEYS);
   const resultado = await carregarPerformanceContas(filtros);
 
-  const escopo = resultado.ok
-    ? `Gerado em ${formatarInstante(resultado.dados.gerado_em) ?? resultado.dados.gerado_em}`
-    : "Sem dados nesta carga";
-
   return (
-    <PageContainer>
-      <PageHeader
-        title="Performance das contas"
-        scopeLine={escopo}
-        filters={<Filtros filtros={filtros} />}
-      />
+    <Aba
+      titulo="Performance das contas"
+      selo={<SeloAtualizado em={resultado.ok ? resultado.dados.gerado_em : null} />}
+      filtros={<Filtros filtros={filtros} />}
+    >
 
       {!resultado.ok ? (
         <StateBlock
@@ -74,7 +69,7 @@ export default async function PerformanceContasPage({
       ) : (
         <Canais canais={montarCanais(resultado.dados, filtros.canal, brandLabel)} />
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 
