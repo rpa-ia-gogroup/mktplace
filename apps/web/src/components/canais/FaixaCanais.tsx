@@ -4,7 +4,6 @@ import { CircleDollarSign, Handshake, Music2, ShoppingBag, type LucideIcon } fro
 
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
-import { formatChannelMetric } from "@/lib/canais-channel-metrics";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import type { CanalId, ColunaCanal } from "./ChannelOverview";
 
@@ -45,17 +44,15 @@ export default function FaixaCanais({
         icone={CircleDollarSign}
         cor="rgb(var(--tc-kpi-gmv))"
         valor={total != null ? fmtBrlCurto(total) : null}
-        legenda={total != null ? colunas.map((c) => c.rotulo).join(" + ") : "Sem dado no período"}
+        legenda={total != null ? undefined : "Sem dado no período"}
         serie={serieTotal}
         ajuda={<InfoDica texto={`GMV e pedidos — ${notaVendas}`} />}
       />
       {CANAIS.map(({ canal, titulo, icone }) => {
         const c = colunas.find((x) => x.canal === canal);
-        const custo = c ? formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, fmtPctSimples) : null;
         const linhas: [string, string, boolean][] = c
           ? [
               ["Pedidos", c.pedidos != null ? fmtNumCurto(c.pedidos) : "Sem dado", c.pedidos != null],
-              ["Custo marketplace / GMV", custo!.text, custo!.tone === "value"],
               ["Conversão", c.conversao, c.conversao !== "N/D" && c.conversao !== "—"],
             ]
           : [];

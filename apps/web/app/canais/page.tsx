@@ -159,7 +159,7 @@ const MIX_SERIE = {
 
 /** Origem dominante: destaque NEUTRO (relevo + peso), igual para as tres —
  * ser dominante nao e' bom nem ruim. */
-const DOMINANT_STYLE = "text-ink bg-raised ring-1 ring-inset ring-line-strong font-bold";
+const DOMINANT_STYLE = "text-ink font-bold";
 const CHANNEL_STYLE = {
   video: DOMINANT_STYLE,
   live: DOMINANT_STYLE,
@@ -169,16 +169,16 @@ const DIM_STYLE = "text-ink-faint";
 
 function convRateStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 4) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 2) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 4) return "text-ok-ink font-semibold";
+  if (v >= 2) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
 function repeatRateStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 15) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 8) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 15) return "text-ok-ink font-semibold";
+  if (v >= 8) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
 /** Faixas de cor das colunas e a ressalva de "Compradores" (soma diaria), no ⓘ
@@ -189,9 +189,9 @@ const LEGENDA_COMPRADORES =
 
 function newBuyerPctStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 85) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 70) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 85) return "text-ok-ink font-semibold";
+  if (v >= 70) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
 type Visao = "lado" | "marca" | "afiliados" | "descontos" | "canal";
@@ -640,28 +640,34 @@ function CanaisPageInner() {
       {visao === "lado" && temFaixa && (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
           {/* ── Participacao no GMV: composicao (identidade do canal, nunca estado) ── */}
-          <Panel titulo="Participação no GMV" ajuda="Fatia de cada canal entre os canais selecionados com dado.">
+          <Panel titulo="Participação no GMV" ajuda="Fatia de cada canal no GMV e nos pedidos, entre os canais selecionados com dado. Barra de pedidos maior que a de GMV = ticket menor.">
             {!dataIsFresh ? (
               <div className="h-[150px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
             ) : gmvTotal == null ? (
               <p className="py-6 text-center text-sm text-ink-faint">Sem GMV no período.</p>
             ) : (
               <div className="flex flex-col gap-4">
-                <div aria-hidden="true" className="tc-barra flex h-3 gap-0.5 overflow-hidden rounded-full">
-                  {comGmv.map((c) => (
-                    <span key={c.canal} className={`h-full ${PONTO_CANAL[c.canal]}`} style={{ flexGrow: c.gmv ?? 0 }} />
-                  ))}
-                </div>
-                <ul className="flex flex-col gap-2.5">
-                  {colunasCanal.map((c) => (
-                    <li key={c.canal} className="flex items-center gap-2 text-sm">
-                      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_CANAL[c.canal]}`} />
-                      <span className="min-w-0 flex-1 truncate text-ink-muted">{c.rotulo}</span>
-                      <span className="font-semibold tabular-nums text-ink">{c.gmv != null ? fmtBrlCurto(c.gmv) : "Sem dado"}</span>
-                      <span className="w-14 text-right tabular-nums text-ink-faint">{c.gmv != null ? fmtPctSimples((c.gmv / gmvTotal) * 100) : ""}</span>
-                    </li>
-                  ))}
-                </ul>
+                {/* GMV e pedidos lado a lado: a diferenca entre as duas barras e' o mix de ticket por canal. */}
+                {([
+                  ["GMV", (c: ColunaCanal) => c.gmv],
+                  ["Pedidos", (c: ColunaCanal) => c.pedidos],
+                ] as const).map(([rotulo, f]) => {
+                  const soma = colunasCanal.reduce((s, c) => s + (f(c) ?? 0), 0);
+                  return (
+                    <div key={rotulo} className="flex flex-col gap-1.5">
+                      <span className="text-xs font-medium text-ink-muted">{rotulo}</span>
+                      <div
+                        role="img"
+                        aria-label={`Participação em ${rotulo}: ${colunasCanal.map((c) => `${c.rotulo} ${f(c) != null && soma > 0 ? fmtPctSimples((f(c)! / soma) * 100) : "sem dado"}`).join(", ")}`}
+                        className="tc-barra flex h-3 gap-0.5 overflow-hidden rounded-full"
+                      >
+                        {colunasCanal.map((c) => (
+                          <span key={c.canal} className={`h-full ${PONTO_CANAL[c.canal]}`} style={{ flexGrow: f(c) ?? 0 }} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </Panel>
@@ -704,7 +710,7 @@ function CanaisPageInner() {
           canal — a matriz abaixo ja' declara isso; aqui o painel nem aparece,
           em vez de mostrar colunas vazias. */}
       {!error && !isEmpty && colunasCanal.length > 0 && (!dataIsFresh || isLive) && (
-        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto} carregando={!dataIsFresh} notaVendas={notaBase(eco, filters.channels)} />
+        <ChannelOverview colunas={colunasCanal} carregando={!dataIsFresh} />
       )}
 
         </>
@@ -952,7 +958,7 @@ function CanaisPageInner() {
                   <SortHeader rotulo="Marca" coluna="brand" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} alinhamento="left" />
                   <SortHeader rotulo="GMV comercial" coluna="gmv" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <th className="px-4 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    Share da marca no GMV comercial
+                    Participação no GMV comercial
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     Mix de conteúdo
@@ -961,7 +967,7 @@ function CanaisPageInner() {
                   <SortHeader rotulo="Live % da base" coluna="live_pct" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <SortHeader rotulo="Card % da base" coluna="card_pct" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <SortHeader rotulo="Visitantes" coluna="visitors" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
-                  <SortHeader rotulo="Conversao" coluna="conversion" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
+                  <SortHeader rotulo="Conversão" coluna="conversion" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -985,7 +991,7 @@ function CanaisPageInner() {
                               {b.label}
                             </Link>
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrlCurto(b.tiktok_gmv!)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium whitespace-nowrap">{fmtBrlCurto(b.tiktok_gmv!)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className="text-ink-faint text-xs">{formatContentPctBr(partPct)}</span>
                           </td>
@@ -1038,7 +1044,7 @@ function CanaisPageInner() {
                     {tkBrands.length > 0 && (
                       <tr className="bg-raised border-t border-line">
                         <td className="px-6 py-3 text-xs font-bold text-ink-muted uppercase tracking-wider">Total</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrlCurto(tkGmvTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm whitespace-nowrap">{fmtBrlCurto(tkGmvTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums"><span className="text-ink-faint text-xs">100%</span></td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">

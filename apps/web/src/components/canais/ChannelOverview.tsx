@@ -1,8 +1,6 @@
 import { Columns3 } from "lucide-react";
 import Panel from "@/components/ui/Panel";
-import CelulaBarra from "@/components/ui/CelulaBarra";
 import InfoDica from "@/components/ui/InfoDica";
-import { SO_PAGOS } from "@/lib/base-vendas";
 import TableScrollHint from "@/components/TableScrollHint";
 import type { CanaisChannelMedian } from "@/lib/api-client";
 import { formatChannelMetric, type FormattedMetric } from "@/lib/canais-channel-metrics";
@@ -65,60 +63,17 @@ function Celula({ m }: { m: FormattedMetric }) {
 
 export default function ChannelOverview({
   colunas,
-  fmtBrl,
-  fmtNumber,
   carregando,
-  notaVendas = SO_PAGOS,
 }: {
   colunas: ColunaCanal[];
-  fmtBrl: (v: number) => string;
-  fmtNumber: (v: number) => string;
   carregando: boolean;
-  /** O que GMV e pedidos contam (pagos ou realizados). */
-  notaVendas?: string;
 }) {
-  // Mesmo recorte da "participacao no GMV" que a Gerencial ja' exibe: fatia
-  // de cada canal entre os canais selecionados COM dado.
-  const total = colunas.reduce((s, c) => s + (c.gmv ?? 0), 0);
-  const share = (c: ColunaCanal) => (c.gmv != null && total > 0 ? (c.gmv / total) * 100 : null);
-  // Barrinha na cor do canal: o peso e' o valor sobre o maior entre os canais.
-  const maior = (f: (c: ColunaCanal) => number | null) => Math.max(0, ...colunas.map((c) => f(c) ?? 0));
-  const maiorGmv = maior((c) => c.gmv);
-  const maiorPedidos = maior((c) => c.pedidos);
-  const cor = (c: ColunaCanal) => `rgb(var(--tc-canal-${c.canal}))`;
-  const semDado = <span className="rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn-ink">Sem dado</span>;
 
   type Linha = { rotulo: string; dica?: string; valor: (c: ColunaCanal) => React.ReactNode };
   const grupos: { titulo: string; linhas: Linha[] }[] = [
     {
-      titulo: "Volume",
-      linhas: [
-        { rotulo: "GMV", valor: (c) => (c.gmv == null ? semDado : <CelulaBarra valor={fmtBrl(c.gmv)} peso={maiorGmv > 0 ? c.gmv / maiorGmv : 0} cor={cor(c)} />) },
-        {
-          rotulo: "Participação no GMV",
-          dica: "Entre os canais selecionados",
-          valor: (c) => {
-            const s = share(c);
-            return s == null ? <span className="text-xs text-ink-faint">—</span> : <span className="text-ink-muted">{fmtPctSimples(s)}</span>;
-          },
-        },
-        { rotulo: "Pedidos", valor: (c) => (c.pedidos == null ? semDado : <CelulaBarra valor={fmtNumber(c.pedidos)} peso={maiorPedidos > 0 ? c.pedidos / maiorPedidos : 0} cor={cor(c)} />) },
-      ],
-    },
-    {
       titulo: "Custo · mediana das marcas",
       linhas: [
-        {
-          rotulo: "Custo marketplace / GMV",
-          valor: (c) => (
-            <span className="inline-flex items-baseline gap-1.5">
-              <Celula m={formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, fmtPctSimples)} />
-              {c.mediana?.marketplace_cost_pct_p75 != null && c.aplicavel.custo && c.disponivel.custo && (
-                <span className="text-xs text-ink-faint">p75 {fmtPctSimples(c.mediana.marketplace_cost_pct_p75)}</span>
-              )}
-            </span>
-          ),
-        },
         {
           rotulo: "Ads / GMV",
           valor: (c) => <Celula m={formatChannelMetric(c.mediana?.ads_gmv_pct_median ?? null, c.aplicavel.ads, c.disponivel.ads, fmtPctSimples)} />,
@@ -151,7 +106,7 @@ export default function ChannelOverview({
         <>
           Canais lado a lado
           <InfoDica
-            texto={`GMV e pedidos — ${notaVendas} Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
+            texto={`Ads, ROAS e frete: mediana das marcas de cada canal${
               carregando ? "" : ` (${colunas.map((c) => `${c.rotulo}: ${c.mediana?.brands_with_data ?? 0} marcas`).join(" · ")})`
             }. N/A = não se aplica · Sem dado = deveria existir, mas falta.`}
           />
