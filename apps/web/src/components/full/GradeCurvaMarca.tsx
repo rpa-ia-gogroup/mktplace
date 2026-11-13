@@ -49,7 +49,7 @@ function CelulaAberta({ c, maximo }: { c: CelulaGrade; maximo: number }) {
           ? <span className="text-sm font-medium text-ink-faint">—</span>
           : <CelulaBarra valor={fmt(c.disponivel)} peso={maximo > 0 ? c.disponivel / maximo : 0} cor={COR_DISPONIVEL} />}
       </div>
-      {PILULAS.map((p) => <Pilula key={p.chave} rotulo={p.rotulo} valor={itens(c[p.chave])} tom={p.tom} />)}
+      {PILULAS.map((p) => <Pilula key={p.chave} rotulo={p.rotulo} valor={itens(c[p.chave])} tom={c[p.chave] > 0 ? p.tom : "bg-raised text-ink-faint"} />)}
       <Pilula rotulo="Permanência" valor={fmtPermanencia(c.permanencia)} tom="bg-raised text-ink-muted" />
     </div>
   );
