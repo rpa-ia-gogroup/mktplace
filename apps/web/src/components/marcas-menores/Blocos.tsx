@@ -7,6 +7,9 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 
+import { CircleDollarSign, Store } from "lucide-react";
+
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
 import StateBlock from "@/components/ui/StateBlock";
 import { fmtNumber, fmtPctBr } from "@/lib/formatters";
@@ -68,81 +71,38 @@ export function Topo({
   // Variacao so' sobre as marcas que tem base nos dois periodos, e so' se todo canal delas tem base no anterior.
   const vc = emAndamento ? { pct: null, motivo: null } : variacaoConsolidada(marcas);
   const v = vc.pct;
-  let inicio = 0;
-  const folga = partes.length > 1 ? 1 : 0;
-  const arcos = partes.map((p) => {
-    const tam = total ? (p.faturamento / total) * 100 : 0;
-    const arco = { ...p, tam: Math.max(tam - folga, 0), inicio };
-    inicio += tam;
-    return arco;
-  });
+  // Faixa de cartoes iguais: a receita e, ao lado, um cartao por plataforma com a parte dela (barra).
+  const colunas = ["", "", "min-[480px]:grid-cols-2", "min-[480px]:grid-cols-2 xl:grid-cols-3", "min-[480px]:grid-cols-2 xl:grid-cols-4"][Math.min(partes.length + 1, 4)];
   return (
-    <section aria-label="Receita consolidada" className="rounded-xl border border-kpi-gmv/30 bg-surface">
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr] lg:items-center lg:gap-6">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">{titulo}</p>
-          <p className="mt-1 text-3xl font-bold tracking-tight tabular-nums text-ink">{total == null ? "—" : fmtCompacto(total)}</p>
-          {(v != null || vc.motivo != null || parcial || emAndamento || semMeta) && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted tabular-nums">
-              {v != null && (
-                <span>
-                  <Variacao pct={v} /> vs período anterior
-                </span>
-              )}
-              {v == null && vc.motivo != null && (
-                <span>
-                  <Variacao pct={null} motivo={vc.motivo} />
-                </span>
-              )}
-              {semMeta && <span className="rounded bg-raised px-1.5 font-semibold text-ink-muted">sem meta</span>}
-              {emAndamento && <span>inclui hoje, dia em andamento</span>}
-              {parcial && (
-                <span className="font-semibold text-warn-ink">
-                  parcial (sem {marcas.filter((m) => m.total == null).map((m) => m.label).join(", ")})
-                </span>
-              )}
-            </p>
-          )}
-        </div>
-        {total != null && partes.length > 0 && (
-          <div className="flex items-center gap-4 text-xs text-ink-muted tabular-nums">
-            <svg
-              viewBox="0 0 42 42"
-              className="h-[84px] w-[84px] shrink-0 -rotate-90"
-              role="img"
-              aria-label={partes.map((p) => `${nomeDaPlataforma(p.plataforma)} ${pct(p.faturamento / total)}% da receita`).join("; ")}
-            >
-              <circle cx="21" cy="21" r="17" fill="none" className="stroke-raised" strokeWidth="4.5" />
-              {arcos.map((a) => (
-                <circle
-                  key={a.plataforma}
-                  cx="21"
-                  cy="21"
-                  r="17"
-                  fill="none"
-                  pathLength={100}
-                  stroke={corDaPlataforma(a.plataforma)}
-                  strokeWidth="4.5"
-                  strokeDasharray={`${a.tam} ${100 - a.tam}`}
-                  strokeDashoffset={-a.inicio}
-                />
-              ))}
-            </svg>
-            <ul className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
-              {partes.map((p) => (
-                <li key={p.plataforma} className="min-w-0 leading-snug">
-                  <p>
-                    <span aria-hidden="true" className="mr-1.5 inline-block h-2 w-2 rounded-full" style={{ background: corDaPlataforma(p.plataforma) }} />
-                    <span className="text-sm font-bold text-ink">{pct(p.faturamento / total)}%</span>{" "}
-                    <span className="font-semibold text-ink">{nomeDaPlataforma(p.plataforma)}</span>
-                  </p>
-                  <p className="pl-3.5">{fmtCompacto(p.faturamento)}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+    <section aria-label="Receita consolidada" className={`grid grid-cols-1 gap-3 ${colunas}`}>
+      <CartaoIndicador
+        rotulo={titulo}
+        icone={CircleDollarSign}
+        cor="rgb(var(--tc-kpi-gmv))"
+        valor={total == null ? "—" : fmtCompacto(total)}
+        pilula={v != null ? { texto: `${fmtPctBr(v)} vs anterior`, tom: v >= 0 ? "ok" : "crit" } : semMeta ? { texto: "sem meta", tom: "neutro" } : null}
+        legenda={
+          v == null && vc.motivo != null ? (
+            <Variacao pct={null} motivo={vc.motivo} />
+          ) : parcial ? (
+            <span className="font-semibold text-warn-ink">parcial (sem {marcas.filter((m) => m.total == null).map((m) => m.label).join(", ")})</span>
+          ) : emAndamento ? (
+            "inclui hoje, dia em andamento"
+          ) : null
+        }
+      />
+      {total != null &&
+        partes.slice(0, 3).map((p) => (
+          <CartaoIndicador
+            key={p.plataforma}
+            rotulo={nomeDaPlataforma(p.plataforma)}
+            icone={Store}
+            cor={corDaPlataforma(p.plataforma)}
+            valor={fmtCompacto(p.faturamento)}
+            progresso={total > 0 ? p.faturamento / total : null}
+            legenda={`${pct(p.faturamento / total)}% da receita`}
+          />
+        ))}
     </section>
   );
 }

@@ -24,6 +24,8 @@
  * ("Concentracao" e "Evolucao"). As linhas vem da fotografia — a conta sem
  * ponto no periodo continua na tabela, so' sem tendencia.
  */
+import TableScrollHint from "@/components/TableScrollHint";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import { useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
 import InfoDica from "@/components/ui/InfoDica";
@@ -214,6 +216,7 @@ export default function EvolucaoPorMarca({
   semTendencia = false,
   semBarra = false,
   ajudaPace,
+  corBacklog,
 }: {
   resposta: RespostaTendencia | null;
   fila?: LinhaDaFila[];
@@ -225,6 +228,8 @@ export default function EvolucaoPorMarca({
   semBarra?: boolean;
   /** "ⓘ" do pace; ausente = colunas Dias de backlog / Ritmo/dia nem existem. */
   ajudaPace?: ReactNode;
+  /** ALVO-GRADE: cor do canal (CSS) da barrinha sob o backlog; ausente = so' o numero. */
+  corBacklog?: string;
 }) {
   if (fila) {
     return (
@@ -236,6 +241,7 @@ export default function EvolucaoPorMarca({
         semTendencia={semTendencia}
         semBarra={semBarra}
         ajudaPace={ajudaPace}
+        corBacklog={corBacklog}
       />
     );
   }
@@ -258,7 +264,7 @@ function SoTendencia({ resposta }: { resposta: RespostaTendencia }) {
           <span className="font-medium text-ink">{cobertura.desde}</span> {cobertura.exibindo}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <TableScrollHint>
         <table className={CLASSE_TABELA}>
           <caption className="sr-only">
             Evolução do backlog por marca — uma linha por conta, contas nunca somadas
@@ -314,7 +320,7 @@ function SoTendencia({ resposta }: { resposta: RespostaTendencia }) {
             })}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </div>
   );
 }
@@ -332,6 +338,7 @@ function TabelaUnica({
   semTendencia,
   semBarra,
   ajudaPace,
+  corBacklog,
 }: {
   resposta: RespostaTendencia | null;
   fila: LinhaDaFila[];
@@ -340,7 +347,10 @@ function TabelaUnica({
   semTendencia: boolean;
   semBarra: boolean;
   ajudaPace?: ReactNode;
+  corBacklog?: string;
 }) {
+  // Peso da barrinha: o backlog da linha sobre o maior da tabela.
+  const maiorBacklog = Math.max(1, ...fila.map((l) => l.backlog));
   const comTravados = fila.some((l) => l.travados !== null);
   const series = resposta ? montarEvolucaoPorMarca(resposta.points) : [];
   const dominioX = dominioHorizontal(series);
@@ -368,7 +378,7 @@ function TabelaUnica({
           <InfoDica texto={NOTA_DO_EIXO} />
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <TableScrollHint>
         <table className={CLASSE_TABELA}>
           <caption className="sr-only">
             Backlog por marca — a fila de agora e a tendência do período, uma linha por conta, contas nunca somadas
@@ -450,7 +460,8 @@ function TabelaUnica({
                     ) : null}
                   </th>
                   <td className="text-right tabular-nums font-semibold text-ink">
-                    {f?.aoVerBacklog && f.backlog > 0 ? (
+                    {(() => {
+                      const numero = f?.aoVerBacklog && f.backlog > 0 ? (
                       <button
                         type="button"
                         onClick={f.aoVerBacklog}
@@ -461,7 +472,9 @@ function TabelaUnica({
                       </button>
                     ) : (
                       inteiro(f ? f.backlog : (s?.atual ?? 0))
-                    )}
+                    );
+                      return corBacklog && f ? <CelulaBarra valor={numero} peso={f.backlog / maiorBacklog} cor={corBacklog} /> : numero;
+                    })()}
                   </td>
                   {ajudaPace ? (
                     <>
@@ -609,7 +622,7 @@ function TabelaUnica({
             })}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </div>
   );
 }

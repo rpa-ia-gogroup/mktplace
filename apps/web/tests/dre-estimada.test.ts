@@ -84,9 +84,10 @@ test("trocar o cenario preserva o recorte e a URL sobrevive ao reload", () => {
 
 test("a pagina grava o cenario pela mesma funcao de URL e oferece o seletor acessivel", () => {
   const src = readFileSync(join(RAIZ, "app/dre/DreClient.tsx"), "utf8");
-  assert.match(src, /aoEscolher=\{\(c\) => aplicar\(\{ cenario: c \}\)\}/);
-  assert.match(src, /rotuladoPor="dre-cenario-rotulo"/);
-  assert.match(src, /texto: "Estimada com premissas"/);
+  // ALVO-GRADE: o cenario virou ABA sob o titulo (`visoes` da `Aba`), que e' um tablist acessivel.
+  assert.match(src, /onVisao=\{\(c\) => aplicar\(\{ cenario: c \}\)\}/);
+  assert.match(src, /visao=\{cenario\}/);
+  assert.match(src, /rotulo: "Estimada com premissas"/);
   // a requisicao continua dependendo so' da chave do recorte
   assert.match(src, /\}, \[chave, tentativa\]\);/);
 });

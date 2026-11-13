@@ -747,7 +747,7 @@ test("21. nenhuma regra hard-coded por marca sobrou no JSX da Gerencial", () => 
   }
   // a fila de atencao vem do contrato, nao de condicional local
   assert.match(page, /commercial=\{queue\.commercial\}/);
-  assert.match(page, /dataConfidence=\{queue\.dataConfidence\}/);
+  assert.match(page, /items=\{queue\.dataConfidence\}/, "os avisos de dado moram no detalhe do selo de confianca");
 });
 
 test("22. as seis fontes tem identidade propria e dado obsoleto nunca vaza", () => {
@@ -874,7 +874,7 @@ test("A. nenhum gate global de erro/vazio envolve os blocos da pagina", () => {
 // Task B — os quatro caminhos novos existem e usam o shell unico.
 test("B. os tres novos conteudos de drill-down abrem no shell unico", () => {
   const page = codeOnly(read("app/page.tsx"));
-  for (const kind of ["channelSeries", "matrixChannel", "concentration"]) {
+  for (const kind of ["channelSeries", "matrixChannel"]) {
     assert.match(page, new RegExp('kind: "' + kind + '"'), kind + " deve ser um estado do dialogo");
   }
   assert.equal((page.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um unico shell");
@@ -884,7 +884,6 @@ test("B. os tres novos conteudos de drill-down abrem no shell unico", () => {
   for (const fn of [
     "ChannelSeriesDrilldownContent",
     "MatrixChannelDrilldownContent",
-    "ConcentrationDrilldownContent",
   ]) {
     assert.match(drills, new RegExp("export function " + fn), fn + " deve existir");
   }
@@ -918,22 +917,16 @@ test("B2. cabecalho de canal da matriz e clicavel e o destino vence o filtro atu
   assert.match(page, /channels=\$\{dialog\.channel\}/, "destino explicito com o canal");
 });
 
-test("B3. concentracao explica antes de navegar", () => {
-  const panels = codeOnly(read("src/components/gerencial/MovementsPanels.tsx"));
-  const conc = panels.slice(
-    panels.indexOf("function ConcentrationPanel"),
-    panels.indexOf("export default function"),
-  );
-  assert.match(conc, /onOpenConcentration\(entry\)/, "clique abre explicacao");
-  assert.match(conc, /aria-haspopup="dialog"/);
-  assert.doesNotMatch(conc, /<Link/, "nao pode navegar direto sem explicacao");
-
-  const drills = read("src/components/gerencial/GerencialDrilldowns.tsx");
-  const cd = drills.slice(drills.indexOf("export function ConcentrationDrilldownContent"));
-  assert.match(cd, /brandHref/, "CTA primario para a marca");
-  assert.match(cd, /PRODUCTS_SCOPE_NOTE/, "CTA secundario declara o escopo proprio de Produtos");
+test("B3. Mais detalhes enxuto: sem Concentracao, sem Canais, sem Pulso separado; confianca no topo", () => {
+  const page = codeOnly(read("app/page.tsx"));
+  assert.doesNotMatch(page, /ConcentrationDrilldownContent|kind: "concentration"|PulseChannelsColumn/);
+  const detalhes = page.slice(page.indexOf("<details"), page.indexOf("</details>"));
+  assert.doesNotMatch(detalhes, /<ConfidenceStrip/, "confianca saiu do Mais detalhes");
+  assert.match(page.slice(page.indexOf("selo={"), page.indexOf("filtros={")), /<ConfidenceStrip/, "selo ao lado do Atualizado");
+  const fila = codeOnly(read("src/components/gerencial/AttentionQueue.tsx"));
+  assert.match(fila, /HEALTH_STATUS_LABEL/, "a saude do Pulso entra na Fila");
+  assert.match(fila, /onClick=\{onOpenAll\}/, "atalho para os sinais agrupados");
 });
-
 test("B4. sinais da matriz: rotulo humano no nome acessivel, sem chip e sem botao aninhado", () => {
   // ALVO-GRADE (12/11/2026): a tabela deixou de desenhar chips/pontos de sinal
   // (valor + CelulaBarra). Os sinais vivem no dialogo da celula e continuam

@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["canais"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -214,7 +214,8 @@ const FETCHERS_POR_ROTA: Record<string, string[]> = {
     "fetchProdutosShopeeSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
   ],
   regioes: ["fetchRegioesSummary", "fetchRegioesByUf", "fetchRegioesByBrand", "fetchRegioesTrend"],
-  financeiro: ["fetchFinanceiro"],
+  // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
+  financeiro: ["fetchFinanceiro", "fetchTrend"],
   qualidade: ["fetchQuality"],
   pedidos: ["fetchPedidos"],
   inteligencia: ["fetchInteligencia"],

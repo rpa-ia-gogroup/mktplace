@@ -77,7 +77,7 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/AtencaoLinha.tsx", ":(exclude)src/components/gerencial/BrandChannelMatrix.tsx", ":(exclude)src/components/gerencial/EvolutionCard.tsx", ":(exclude)src/components/gerencial/EvolutionChart.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/gerencial/GerencialDrilldowns.tsx", ":(exclude)src/components/gerencial/GerencialHeader.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", ":(exclude)src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/AtencaoLinha.tsx", ":(exclude)src/components/gerencial/BrandChannelMatrix.tsx", ":(exclude)src/components/gerencial/EvolutionCard.tsx", ":(exclude)src/components/gerencial/EvolutionChart.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/gerencial/GerencialDrilldowns.tsx", ":(exclude)src/components/gerencial/GerencialHeader.tsx", ":(exclude)src/components/gerencial/AttentionQueue.tsx", ":(exclude)src/components/gerencial/ConfidenceStrip.tsx", ":(exclude)src/components/gerencial/MovementsPanels.tsx", ":(exclude)src/components/gerencial/PulseChannelsColumn.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", ":(exclude)src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
   // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
   // MetaHero: linha de tendencia do dia no topo (pedido da Nathalia)
   // GerencialHeader: so' o ponto em que a barra sobe para a linha do titulo (1800 -> 1920px), para o "Limpar" caber (FILTROS-PADRAO, PR A); depois, a barra fica SEMPRE abaixo do titulo (FILTROS-UMA-LINHA)
@@ -88,6 +88,8 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   // GerencialDrilldowns: so' aditivo, o detalhe do ponto da serie segue a base Pagos | Realizados (pedido da Nathalia)
   // InfoDica: so' aditivo (quebra de linha no balao e encaixe na tela quando ele e' maior que o espaco) — PR do aviso de total parcial
   // MarcasMeta e app/page.tsx: tendencia do mes por marca (pedido da operacao), mudanca de produto intencional
+  // MAIS-DETALHES-ENXUTO (13/11/2026, aprovado pelo usuario): Fila de atencao absorve o Pulso (saude + atalho agrupado),
+  // Confianca no dado vira selo ao lado do Atualizado, saem Concentracao por marca e o bloco Canais (PulseChannelsColumn removido).
   // KpiDrilldownDialog: EXCECAO aprovada (10/11/2026, padronizacao das abas, PR 0): props opcionais `icone` +
   // `identidade` para o detalhe herdar o ladrilho e a cor do cartao. Aditivo; o teste abaixo trava o contrato.
   assert.equal(mudou, "", mudou);
@@ -119,8 +121,8 @@ test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
 });
 
 test("kpi-identidade.ts repete os pares icone + identidade do cartao da KpiBand (duas fontes, uma verdade)", () => {
-  // ALVO-GRADE: a KpiBand tem 4 cartoes (o ROAS virou o ACOS na legenda do Investimento em ads), com o
-  // mapa CARTAO { icone, cor }. O mapa do detalhe segue com os 5 (o detalhe do ROAS continua existindo).
+  // ALVO-GRADE: a KpiBand tem o mapa CARTAO { icone, cor } dos 5; na Gerencial o ACOS por canal e' o
+  // 1o cartao (GMV e meta voltaram para o MetaHero, 13/11).
   const mapa = ler("src/lib/gerencial/kpi-identidade.ts");
   const band = ler("src/components/gerencial/KpiBand.tsx");
   const pares: [string, string, string][] = [
@@ -132,9 +134,8 @@ test("kpi-identidade.ts repete os pares icone + identidade do cartao da KpiBand 
   ];
   for (const [kpi, icone, identidade] of pares) {
     assert.ok(mapa.includes(`${kpi}: { icone: ${icone}, identidade: "${identidade}" }`), `mapa novo: ${kpi}`);
-    if (kpi !== "roas") assert.ok(band.includes(`${kpi}: { icone: ${icone}, cor: `), `KpiBand: ${kpi}`);
+    assert.ok(band.includes(`${kpi}: { icone: ${icone}, cor: `), `KpiBand: ${kpi}`);
   }
-  assert.ok(!band.includes("roas: {"), "a faixa nao tem mais cartao de ROAS");
 });
 
 // A cor do cartao tem de ser a MESMA do ladrilho do detalhe: o token kpi-*, que tambem troca no escuro.

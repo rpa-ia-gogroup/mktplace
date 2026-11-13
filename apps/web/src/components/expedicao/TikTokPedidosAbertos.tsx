@@ -13,7 +13,7 @@
  * RECONSTRUIDO da politica (despacho 1 dia util, coleta 2 dias uteis), como
  * na LDR do TikTok — dito na descricao da secao e no rodape do popup.
  */
-import { CalendarClock, ChevronLeft, ChevronRight, Clock, Hourglass } from "lucide-react";
+import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, Clock, Hourglass } from "lucide-react";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
@@ -23,10 +23,10 @@ import TikTokColetaPerdida, { BotaoCsvCompleto, baixarCsv } from "@/components/e
 import { EstadoSecao } from "@/components/expedicao/LayoutExpedicao";
 import type { ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
-import Heroi from "@/components/ui/Heroi";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import InfoDica from "@/components/ui/InfoDica";
 import ConsolidadoEtapas from "./ConsolidadoEtapas";
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { formatarHoras } from "@/lib/expedicao-contract";
@@ -66,10 +66,10 @@ function pct(n: number, base: number): string {
 // ---------------------------------------------------------------------------
 /** IDENTIDADE-GERENCIAL: o popup herda o ladrilho e a cor do cartao que o abriu. */
 const VISUAL_DA_LISTA: Partial<Record<ListaAbertos, { icone: typeof Clock; identidade: IdentidadeKpi }>> = {
-  due_today: { icone: Clock, identidade: "prazo" },
-  due_next_day: { icone: CalendarClock, identidade: "prazo" },
+  due_today: { icone: Clock, identidade: "pedidos" },
+  due_next_day: { icone: CalendarClock, identidade: "gmv" },
   due_soon: { icone: Clock, identidade: "prazo" },
-  over_48h: { icone: Hourglass, identidade: "pedidos" },
+  over_48h: { icone: Hourglass, identidade: "prazo" },
 };
 
 function PopupAbertos({
@@ -335,7 +335,6 @@ function BarraDasEtapas({ coleta, envio }: { coleta: number; envio: number }) {
   const texto = `${formatarInteiro(coleta)} aguardando coleta · ${formatarInteiro(envio)} aguardando envio`;
   return (
     <div data-testid="exp-tiktok-etapas">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-faint">Vencidos por etapa</p>
       <div className="flex h-3.5 overflow-hidden rounded-full bg-raised" role="img" aria-label={texto}>
         <div className="tc-barra bg-crit" style={{ width: larg(coleta) }} />
         <div className="tc-barra bg-crit/45" style={{ width: larg(envio) }} />
@@ -354,49 +353,26 @@ function BarraDasEtapas({ coleta, envio }: { coleta: number; envio: number }) {
   );
 }
 
-const ACAO =
-  "inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
-
-/** Heroi: vencidos sobre os abertos de AGORA (o cabecalho ja' diz o frescor). */
-export function HeroiTikTok({ abertos }: { abertos: AbertosTikTok }) {
-  const d = prontos(abertos);
-  const t = d?.totals ?? null;
+/**
+ * ALVO-GRADE: o antigo meio do heroi, agora o painel ao lado de "O que exige
+ * atenção": os vencidos de AGORA por etapa (aguardando coleta x envio).
+ */
+export function PainelEtapasTikTok({ abertos }: { abertos: AbertosTikTok }) {
+  const t = prontos(abertos)?.totals ?? null;
   return (
-    <div data-testid="exp-tiktok-abertos">
-      <Heroi
-        rotulo="Vencidos"
-        ajuda={<InfoDica texto={DICA_ABERTOS} />}
-        carregando={abertos.carga.tipo === "carregando"}
-        erro={
-          t ? undefined : (
-            <>
-              Não foi possível carregar os pedidos em aberto do TikTok.{" "}
-              <button type="button" onClick={abertos.carregar} className="min-h-11 font-semibold underline underline-offset-4">
-                Tentar de novo
-              </button>
-            </>
-          )
-        }
-        valor={t ? pct(t.overdue, t.open) : "—"}
-        tom={t && t.overdue > 0 ? "critico" : "neutro"}
-        contexto={t ? `${formatarInteiro(t.overdue)} pedidos de ${formatarInteiro(t.open)} em aberto` : undefined}
-        meio={t ? <BarraDasEtapas coleta={t.overdue_collection} envio={t.overdue_shipment} /> : undefined}
-        selo={t ? (t.overdue > 0 ? { texto: "Com atraso", tom: "critico" } : { texto: "Em dia", tom: "ok" }) : undefined}
-        acao={
-          t ? (
-            <button type="button" aria-haspopup="dialog" onClick={() => abertos.abrir("overdue", t.overdue)} className={ACAO}>
-              Ver pedidos →
-            </button>
-          ) : undefined
-        }
-      />
+    <div data-testid="exp-tiktok-abertos" className="contents">
+      <Panel titulo="Vencidos por etapa">
+        {t ? <BarraDasEtapas coleta={t.overdue_collection} envio={t.overdue_shipment} /> : <EstadoAbertos abertos={abertos} />}
+      </Panel>
     </div>
   );
 }
 
 /**
- * Os tres cartoes dos abertos para a faixa (o quarto, a LDR da janela, e' do
- * painel). Sem a carga, "—" com o motivo no `title`: ausencia nunca vira 0.
+ * Os QUATRO cartoes dos abertos (ALVO-GRADE): Vencidos (o antigo heroi), vence
+ * hoje, vence no proximo dia util e acima de 48 h. Sem serie nem periodo
+ * anterior para os abertos: sem linha de tendencia; a barra mostra a fracao
+ * medida. Sem a carga, "N/D" com o motivo: ausencia nunca vira 0.
  */
 export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
   const d = prontos(abertos);
@@ -409,29 +385,39 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
     n: number | undefined,
     icone: typeof Clock,
     alerta: boolean,
-    // CARDS-KPIBAND: cor de identidade (a mesma da Shopee/ML). Sem serie nem
-    // periodo anterior para os abertos: sem sparkline e sem delta.
-    identidade: IdentidadeKpi,
-    extra = "",
-  ) => (
-    <KpiTile
-      key={lista}
-      variante="gerencial"
-      icone={icone}
-      identidade={identidade}
-      rotulo={rotulo}
-      valor={t && n !== undefined ? pct(n, t.open) : "—"}
-      comparacao={t && n !== undefined ? `${formatarInteiro(n)} pedidos${extra}` : undefined}
-      contexto={t ? undefined : motivo}
-      tom={!t ? "ausente" : alerta && (n ?? 0) > 0 ? "atencao" : "neutro"}
-      onAbrir={t && n ? () => abertos.abrir(lista, n) : undefined}
-    />
-  );
+    // Cor de identidade (a mesma da Shopee/ML); estado so' na pilula.
+    cor: string,
+  ) => {
+    const medido = t && n !== undefined;
+    return (
+      <CartaoIndicador
+        key={lista}
+        icone={icone}
+        cor={cor}
+        rotulo={rotulo}
+        valor={medido ? pct(n, t.open) : null}
+        pilula={
+          !medido
+            ? null
+            : lista === "overdue"
+              ? n > 0
+                ? { texto: "Com atraso", tom: "crit" }
+                : { texto: "Em dia", tom: "ok" }
+              : { texto: `${formatarInteiro(n)} pedidos`, tom: alerta && n > 0 ? "warn" : "neutro" }
+        }
+        progresso={medido && t.open > 0 ? n / t.open : null}
+        legenda={!medido ? motivo : lista === "overdue" ? `${formatarInteiro(n)} de ${formatarInteiro(t.open)} em aberto` : undefined}
+        ajuda={lista === "overdue" ? <InfoDica texto={DICA_ABERTOS} emControle={Boolean(medido && n)} /> : undefined}
+        onAbrir={medido && n ? () => abertos.abrir(lista, n) : undefined}
+      />
+    );
+  };
   return (
     <>
-      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true, "prazo")}
-      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, "prazo", " · próximo dia útil")}
-      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true, "pedidos")}
+      {cartao("overdue", "Vencidos", t?.overdue, AlertTriangle, true, "rgb(var(--tc-crit))")}
+      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true, "rgb(var(--tc-kpi-pedidos))")}
+      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, "rgb(var(--tc-kpi-gmv))")}
+      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true, "rgb(var(--tc-kpi-prazo))")}
     </>
   );
 }
@@ -495,6 +481,7 @@ export function BacklogPorMarcaTikTok({
             semTendencia
             semBarra
             ajudas={DICAS_DA_TABELA}
+            corBacklog="rgb(var(--tc-canal-tiktok))"
             ajudaPace={<InfoDica texto={textoDoPace("tiktok", pace)} />}
             fila={d.brands.map((b) => {
               const perto = b.due_today + b.due_next_day;
