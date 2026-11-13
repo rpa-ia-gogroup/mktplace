@@ -208,7 +208,7 @@ test("tela: risco do vendedor com a divisao; aviso de FBS sem ela; FBS em bloco 
   assert.match(CLIENTE, /montarRiscoAtual\(totaisRisco,/);
   assert.match(CLIENTE, /montarFilaPorConta\(totaisRisco, contasRisco,/);
   assert.match(CLIENTE, /faixasDePrazo\(totaisRisco\)/);
-  assert.match(CLIENTE, /filtros\.channel === "shopee" && !divisao && recorte\.totais \?/);
+  assert.match(CLIENTE, /const incluiFbs = filtros\.channel === "shopee" && !divisao && Boolean\(recorte\.totais\);/);
   assert.match(CLIENTE, /\{divisao \? <BlocoFbs divisao=\{divisao\} \/> : null\}/);
   assert.match(AVISO_FILA_COM_FBS, /Não leia estes números como atraso do vendedor/);
 });

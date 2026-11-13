@@ -1,6 +1,6 @@
 import { CircleDollarSign, Percent, ShieldCheck, TrendingUp } from "lucide-react";
 
-import KpiTile from "@/components/ui/KpiTile";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import { AvisoMargem, ClassificacaoChip, MargemSuspensaChip } from "@/components/dre/DreChips";
 import type { ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
 import {
@@ -95,36 +95,33 @@ export default function DreResumo({
   );
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <KpiTile
-        variante="gerencial"
-        identidade="gmv"
+    <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-gmv))"
         icone={CircleDollarSign}
         rotulo="Receita"
         valor={receita.valor !== null ? fmtReais(receita.valor) : STATUS_CHIP[receita.status]?.rotulo ?? "Sem valor"}
-        tom={receita.valor === null ? "ausente" : "neutro"}
-        comparacao={
+        ausente={receita.valor === null}
+        legenda={
           receita.status === "parcial" ? `Parcial: ${receita.motivo ?? "cobertura incompleta"}` : `Competência ${competencia}`
         }
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="roas"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-roas))"
         icone={TrendingUp}
         rotulo={estimada ? estimada.rotulo : ROTULO_MARGEM}
         valor={estimada ? estimada.valor : textoMargem(total)}
-        tom={sem ? "ausente" : "neutro"}
-        comparacao={leituraMargem}
+        ausente={sem}
+        legenda={leituraMargem}
         onAbrir={onAbrir ? () => onAbrir("margem") : undefined}
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="ticket"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-ticket))"
         icone={Percent}
         rotulo="% da receita"
         valor={estimada ? estimada.pct : textoMargemPct(total)}
-        tom={sem ? "ausente" : "neutro"}
-        comparacao={
+        ausente={sem}
+        legenda={
           estimada
             ? "Margem estimada ÷ receita"
             : suspensa
@@ -134,14 +131,13 @@ export default function DreResumo({
                 : "Margem conhecida ÷ receita"
         }
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="atendimento"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-atendimento))"
         icone={ShieldCheck}
         onAbrir={onAbrir ? () => onAbrir("classificacao") : undefined}
         rotulo="Classificação"
         valor={
-          <span className="flex flex-wrap items-center gap-2 text-base">
+          <span className="flex flex-wrap items-center gap-2 text-base font-semibold">
             <ClassificacaoChip
               classificacao={total.classificacao}
               completude={completude}
@@ -155,7 +151,7 @@ export default function DreResumo({
             )}
           </span>
         }
-        comparacao={
+        legenda={
           completude === null
             ? bloqueio
             : faltam.length

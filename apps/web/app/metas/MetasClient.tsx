@@ -26,8 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Copy, Save, Target, Undo2 } from "lucide-react";
 
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
 import Note from "@/components/ui/Note";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import MetasGrade from "@/components/metas/MetasGrade";
@@ -238,17 +237,14 @@ export default function MetasClient() {
   const vazio = pronta !== null && Object.keys(pronta.salvo).length === 0 && !sujo;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Metas"
-        icon={Target}
-        meta={
-          <span className="inline-flex min-h-8 items-center rounded-lg border border-line bg-surface px-2.5 text-xs text-ink-muted">
-            {ultima ? `Última alteração em ${ultima}` : pronta ? "Nenhuma meta salva neste mês" : "Carregando…"}
-          </span>
-        }
-      />
-
+    <Aba
+      titulo="Metas"
+      selo={
+        <span className="inline-flex min-h-8 items-center rounded-lg border border-line bg-surface px-2.5 text-xs text-ink-muted">
+          {ultima ? `Última alteração em ${ultima}` : pronta ? "Nenhuma meta salva neste mês" : "Carregando…"}
+        </span>
+      }
+    >
       <nav aria-label="Mês das metas" className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -312,7 +308,7 @@ export default function MetasClient() {
 
           <MetaPorDia mes={mes} valores={analise.efetivos} previa={nAlteradas > 0} />
 
-          <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-canvas/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-20 -mx-5 flex flex-wrap items-center justify-between gap-3 border-t border-line bg-canvas/95 px-5 py-3 backdrop-blur">
             <p className="text-sm text-ink-muted" aria-live="polite">
               {nInvalidas > 0 ? (
                 <span className="font-semibold text-crit-ink">
@@ -354,7 +350,7 @@ export default function MetasClient() {
           </div>
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 

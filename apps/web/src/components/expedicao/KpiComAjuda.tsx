@@ -9,6 +9,7 @@
  */
 import type { ComponentProps } from "react";
 
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import KpiTile from "@/components/ui/KpiTile";
 import type { ChaveMetrica } from "@/lib/expedicao-definicoes";
 import { TEXTO_INDISPONIVEL, partesDoPercentualComBase } from "@/lib/expedicao-formato";
@@ -28,6 +29,21 @@ export function KpiComAjuda({
 }
 
 export default KpiComAjuda;
+
+/** ALVO-GRADE: o cartao da faixa (`CartaoIndicador`) com o "ⓘ" do catalogo da Expedicao. */
+export function CartaoComAjuda({
+  ajuda,
+  extras,
+  ...props
+}: Omit<ComponentProps<typeof CartaoIndicador>, "ajuda"> & { ajuda: ChaveMetrica | null; extras?: readonly string[] }) {
+  return (
+    <CartaoIndicador
+      {...props}
+      // Cartao-botao: o "ⓘ" nao pode ser focavel dentro dele.
+      ajuda={ajuda ? <AjudaMetrica chave={ajuda} extras={extras} emControle={Boolean(props.onAbrir)} /> : undefined}
+    />
+  );
+}
 
 /**
  * QA T-0010 (I2) — taxa no formato unico "3,35% · 199 de 5.940", com a taxa

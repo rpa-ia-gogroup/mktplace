@@ -32,12 +32,14 @@ export default function CartaoIndicador({
   icone: Icone,
   cor,
   valor,
+  valores,
   pilula,
   progresso,
   legenda,
   serie,
   rodape,
   tendencia,
+  ausente = false,
   ajuda,
   onAbrir,
 }: {
@@ -45,8 +47,10 @@ export default function CartaoIndicador({
   icone: LucideIcon;
   /** Cor de identidade do indicador (CSS). */
   cor: string;
-  /** Valor ja' formatado; `null` = indisponivel (a legenda diz o motivo). */
-  valor: string | null;
+  /** Valor ja' formatado (texto anima na troca; um no' entra como esta'); `null` = indisponivel (a legenda diz o motivo). */
+  valor: ReactNode | null;
+  /** Indicador que NUNCA se soma (ACOS por canal): um numero por canal no lugar do numero unico. */
+  valores?: { rotulo: string; valor: string | null }[] | null;
   pilula?: { texto: ReactNode; tom: TomPilula } | null;
   /** 0..1 (passa de 1 quando supera a meta; a barra enche e para). */
   progresso?: number | null;
@@ -57,6 +61,8 @@ export default function CartaoIndicador({
   tendencia?: string | null;
   /** Sem serie real: o que ocupa o lugar da linha (ex.: o indicador aberto por canal). Nunca um grafico inventado. */
   rodape?: ReactNode;
+  /** O valor e' um texto de ausencia ("Sem valor", "—"): sai em tinta apagada, nunca com peso de numero. */
+  ausente?: boolean;
   /** `InfoDica emControle` ao lado do rotulo. */
   ajuda?: ReactNode;
   onAbrir?: () => void;
@@ -81,9 +87,22 @@ export default function CartaoIndicador({
         {ajuda}
         {onAbrir && <span className="sr-only"> (abrir detalhe)</span>}
       </span>
-      <span className={`mt-2 block text-[28px] font-bold leading-tight tracking-tight tabular-nums ${valor ? "text-ink" : "text-ink-faint"}`}>
-        {valor ? <NumeroAnimado texto={valor} /> : "N/D"}
-      </span>
+      {valores?.length ? (
+        <span className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 tabular-nums">
+          {valores.map((v) => (
+            <span key={v.rotulo} className="inline-flex items-baseline gap-1.5">
+              <span className="text-xs font-medium text-ink-muted">{v.rotulo}</span>
+              <span className={`text-[22px] font-bold leading-tight tracking-tight ${v.valor ? "text-ink" : "text-ink-faint"}`}>
+                {v.valor ? <NumeroAnimado texto={v.valor} /> : "—"}
+              </span>
+            </span>
+          ))}
+        </span>
+      ) : (
+        <span className={`mt-2 block text-[28px] font-bold leading-tight tracking-tight tabular-nums ${valor && !ausente ? "text-ink" : "text-ink-faint"}`}>
+          {valor == null || valor === "" ? "N/D" : typeof valor === "string" ? <NumeroAnimado texto={valor} /> : valor}
+        </span>
+      )}
       <span className="mt-1.5 flex min-h-[22px] flex-wrap items-center gap-2 text-xs text-ink-muted">
         {pilula && (
           <span className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold tabular-nums whitespace-nowrap ${PILULA[pilula.tom]}`}>

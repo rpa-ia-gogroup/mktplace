@@ -460,7 +460,7 @@ test("a divergencia nao e' rotulada como cobertura, share ou margem", () => {
 
 test("colunas ambiguas da tabela TikTok foram renomeadas", () => {
   assert.ok(PAGE.includes("GMV comercial"), "coluna de GMV deve dizer comercial");
-  assert.ok(PAGE.includes("Share da marca no GMV comercial"));
+  assert.ok(PAGE.includes("Participação no GMV comercial"));
   assert.ok(PAGE.includes("Mix de conteúdo"));
   assert.ok(PAGE.includes("Vídeo % da base"));
 });

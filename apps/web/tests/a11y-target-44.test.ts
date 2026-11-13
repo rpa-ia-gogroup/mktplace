@@ -134,7 +134,7 @@ test("A4: a API pública e a semântica do SortableHeader estão intactas", () =
   assert.match(s, /sort\.direction === "asc" \? "ascending" : "descending"/, "mapeamento de direção alterado");
   assert.match(s, /scope="col"/, "scope=col perdido");
   assert.match(s, /uppercase tracking-wider p-0/, "layout do <th> alterado");
-  assert.match(s, /align === "right" \? "justify-end flex-row-reverse" : "justify-start"/, "alinhamento alterado");
+  assert.match(s, /align === "right" \? "flex-row-reverse justify-start" : "justify-start"/, "alinhamento alterado");
 });
 
 // ---------------------------------------------------------------------------

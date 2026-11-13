@@ -29,7 +29,8 @@ test("Canais: nenhum formato em ingles na pagina nem no 'Canais lado a lado'", (
   }
   const pag = ler("app/canais/page.tsx");
   assert.ok(pag.includes("format={fmtVezes}") && pag.includes("format={fmtPctSimples}"), "ROAS em 'x' com 1 casa e % da casa");
-  assert.ok(pag.includes("fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto}"), "o topo recebe os formatadores da casa");
+  // GMV e pedidos sairam do "lado a lado" (estao nos cartoes); a faixa usa os formatadores da casa.
+  assert.ok(ler("src/components/canais/FaixaCanais.tsx").includes("fmtBrlCurto(total)"), "a faixa usa os formatadores da casa");
 });
 
 test("Canais: ausencia continua '—', nunca 0 (fmtPct local)", () => {
