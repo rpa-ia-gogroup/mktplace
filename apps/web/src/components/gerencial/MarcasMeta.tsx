@@ -143,7 +143,7 @@ export default function MarcasMeta({
           </div>
         </div>
         {algumaMeta && (
-          <span className="mr-auto flex items-center gap-1.5 text-xs text-ink-muted">
+          <span className="mr-auto hidden items-center gap-1.5 text-xs text-ink-muted min-[480px]:flex">
             <span aria-hidden="true" className="h-3 w-0.5 rounded-sm bg-ink" />
             meta
           </span>
@@ -192,7 +192,7 @@ export default function MarcasMeta({
                   <span className="truncate text-sm font-semibold text-ink transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0">
                     {b.label}
                   </span>
-                  <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
+                  <span className="relative hidden h-2.5 rounded-full bg-raised min-[480px]:block" aria-hidden="true">
                     <span
                       className="tc-barra absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent/55 to-accent"
                       style={{ width: `${(valor(b) / escala) * 100}%` }}
@@ -295,7 +295,7 @@ export default function MarcasMeta({
 const FULL_DICA = "Full = ML Full + Shopee FBS, pela proporção medida até ontem; TikTok entra em sem Full.";
 
 const LINHA =
-  "group grid min-h-11 w-full grid-cols-[minmax(84px,1.1fr)_minmax(0,2fr)_auto] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "group grid min-h-11 w-full grid-cols-[minmax(0,1fr)_auto] min-[480px]:grid-cols-[minmax(84px,1.1fr)_minmax(0,2fr)_auto] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /** A linha da marca: com a divisao Full medida, abre o dialogo; sem ela, vai para a pagina da marca. */
 function Linha({ abrir, href, children }: { abrir: (() => void) | null; href: string; children: React.ReactNode }) {

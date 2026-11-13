@@ -87,7 +87,7 @@ export default function Aba<T extends string = string>({
         {selo ? <div className="flex flex-wrap items-center gap-1.5 pb-1">{selo}</div> : null}
       </header>
       {visoes && visoes.length > 1 ? (
-        <div role="tablist" aria-label={`Visões de ${titulo}`} className="flex gap-1 overflow-x-auto border-b border-line">
+        <div role="tablist" aria-label={`Visões de ${titulo}`} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
           {visoes.map((v) => {
             const ativa = v.id === visao;
             return (
@@ -97,7 +97,7 @@ export default function Aba<T extends string = string>({
                 role="tab"
                 aria-selected={ativa}
                 onClick={() => onVisao?.(v.id)}
-                className={`-mb-px inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                   ativa ? "border-accent font-semibold text-accent" : "border-transparent text-ink-muted hover:text-ink"
                 }`}
               >

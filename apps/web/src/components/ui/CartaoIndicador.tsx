@@ -12,8 +12,11 @@ import NumeroAnimado from "./NumeroAnimado";
  * numero, uma linha de apoio (pilula + barra de progresso + legenda curta) e a
  * linha de tendencia com area, de ponta a ponta. A cor de identidade (`cor`)
  * pinta o degrade do fundo, a borda, a caixinha, a barra e a linha; bom/ruim
- * fica so' na pilula. Sem serie real o espaco da linha fica reservado e vazio:
- * tendencia nunca e' inventada.
+ * fica so' na pilula. Tendencia nunca e' inventada: sem serie real o cartao
+ * so' reserva o espaco da linha quando OUTRO cartao da mesma faixa tem linha ou
+ * rodape (para alinhar); faixa sem nenhum apoio nao fica com cartoes ocos. A
+ * regra e' CSS (`.tc-cartao-reserva`) e vale para cartoes IRMAOS, filhos
+ * diretos do mesmo container.
  */
 export type TomPilula = "ok" | "crit" | "warn" | "neutro";
 
@@ -96,7 +99,7 @@ export default function CartaoIndicador({
       </span>
       {pontos && tendencia ? <span className="sr-only">{tendencia}</span> : null}
       {pontos ? (
-        <svg viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true" className="-mx-4 mt-2 block h-11 w-[calc(100%+2rem)]">
+        <svg viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true" className="tc-cartao-apoio -mx-4 mt-2 block h-11 w-[calc(100%+2rem)]">
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor="var(--h)" stopOpacity={0.32} />
@@ -107,9 +110,9 @@ export default function CartaoIndicador({
           <path d={linha} className="tc-cartao-linha" fill="none" stroke="var(--h)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
       ) : rodape ? (
-        <span className="mt-2 block min-h-11 pb-3 text-xs text-ink-muted">{rodape}</span>
+        <span className="tc-cartao-apoio mt-2 block min-h-11 text-xs text-ink-muted">{rodape}</span>
       ) : (
-        <span aria-hidden="true" className="mt-2 block h-11" />
+        <span aria-hidden="true" className="tc-cartao-reserva mt-2 h-11" />
       )}
     </>
   );

@@ -451,7 +451,9 @@ Rules: always **four** cards in the strip, same anatomy; identity colours come f
 `pedidos` amber, `ticket` indigo, `ads` magenta, `roas` green, `prazo` blue,
 `atendimento` teal), never a hex literal, so the dark theme follows (state
 lives in the pill, never in the card colour); no
-trend line without a real series; absence is "—" or "N/D", never zero; cleaning
+trend line without a real series (the card only reserves the line's height when a
+sibling card in the same strip has a line or a `rodape`, so keep the cards as
+direct children of the strip's grid); absence is "—" or "N/D", never zero; cleaning
 means less **text**, never less visual richness.
 
 ### Tab skeleton (UI-FUNDACAO F1, 12/11/2026)
