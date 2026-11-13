@@ -13,6 +13,15 @@ import pytest
 from pipelines.ingestion.gold_regional import write_conn as wc
 
 
+@pytest.fixture(autouse=True)
+def _sem_segredo_gold_no_env(monkeypatch):
+    """T-0109: `load_write_secret` consulta o env antes do arquivo — limpa a
+    flag de origem e as 2 chaves para os testes não dependerem do shell."""
+    monkeypatch.delenv("GOLD_WRITE_SECRET_SOURCE", raising=False)
+    monkeypatch.delenv("DATAMART_GOLD_WRITE_URL", raising=False)
+    monkeypatch.delenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", raising=False)
+
+
 # --- load_write_secret --------------------------------------------------------
 
 def _fake_git_ok(args, cwd):
@@ -92,6 +101,136 @@ def test_load_write_secret_sucesso(tmp_path, monkeypatch):
     values = wc.load_write_secret(secret_path, tmp_path)
     assert set(values.keys()) == wc.EXPECTED_SECRET_KEYS
     assert values["DATAMART_GOLD_WRITE_URL"] == "postgresql://writer:S3nh4@host/db"
+
+
+# --- load_write_secret via variáveis de ambiente (T-0109 / R193) ---------------
+
+_FAKE_ENV_URL = "postgresql://writer_env:S3nh4Env@host-env/db"
+_FILE_URL = "postgresql://writer:S3nh4@host/db"
+
+
+def _git_proibido(args, cwd):
+    raise AssertionError("caminho de env não pode consultar o git/arquivo")
+
+
+def _dotenv_proibido(*a, **k):
+    raise AssertionError("caminho de env não pode ler o arquivo de secret")
+
+
+def _env_completo(monkeypatch, flag="1"):
+    monkeypatch.setenv("GOLD_WRITE_SECRET_SOURCE", "env")
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", flag)
+
+
+def _arquivo_valido(tmp_path):
+    secret_path = tmp_path / ".env.gold-write.local"
+    secret_path.write_text(
+        f"DATAMART_GOLD_WRITE_URL={_FILE_URL}\n"
+        "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD=1\n"
+    )
+    return secret_path
+
+
+def _assert_sem_url(exc_info):
+    for texto in (str(exc_info.value), repr(exc_info.value)):
+        assert _FAKE_ENV_URL not in texto
+        assert "S3nh4" not in texto
+
+
+# (a) variáveis presentes SEM a flag: vale o arquivo; as variáveis são ignoradas
+
+def test_load_write_secret_vars_sem_flag_usa_arquivo(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", "1")
+    monkeypatch.setattr(wc, "_run_git", _fake_git_ok)
+    values = wc.load_write_secret(_arquivo_valido(tmp_path), tmp_path)
+    assert values["DATAMART_GOLD_WRITE_URL"] == _FILE_URL
+
+
+def test_load_write_secret_vars_sem_flag_e_sem_arquivo_recusa(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", "1")
+    with pytest.raises(wc.SecretLoadError, match="não encontrado") as exc_info:
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    _assert_sem_url(exc_info)
+
+
+def test_load_write_secret_vars_parciais_sem_flag_seguem_o_arquivo(tmp_path, monkeypatch):
+    # sem a flag, nem uma variável solta (ex.: vinda do .env principal) interfere
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setattr(wc, "_run_git", _fake_git_ok)
+    values = wc.load_write_secret(_arquivo_valido(tmp_path), tmp_path)
+    assert values["DATAMART_GOLD_WRITE_URL"] == _FILE_URL
+
+
+# (b) flag + variáveis completas: usa as variáveis sem tocar no arquivo
+
+def test_load_write_secret_flag_env_completo_usa_env_sem_tocar_arquivo(tmp_path, monkeypatch):
+    _env_completo(monkeypatch)
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    monkeypatch.setattr(wc, "dotenv_values", _dotenv_proibido)
+    # arquivo válido existe e mesmo assim não é lido
+    values = wc.load_write_secret(_arquivo_valido(tmp_path), tmp_path)
+    assert values == {"DATAMART_GOLD_WRITE_URL": _FAKE_ENV_URL, "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD": "1"}
+
+
+# (c) flag + variáveis parciais: recusa, sem cair para o arquivo
+
+@pytest.mark.parametrize("presente", ["DATAMART_GOLD_WRITE_URL", "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", None])
+def test_load_write_secret_flag_env_parcial_recusa_sem_cair_no_arquivo(tmp_path, monkeypatch, presente):
+    monkeypatch.setenv("GOLD_WRITE_SECRET_SOURCE", "env")
+    if presente is not None:
+        monkeypatch.setenv(presente, _FAKE_ENV_URL if presente == "DATAMART_GOLD_WRITE_URL" else "1")
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    monkeypatch.setattr(wc, "dotenv_values", _dotenv_proibido)
+    with pytest.raises(wc.SecretLoadError, match="incompleto") as exc_info:
+        wc.load_write_secret(_arquivo_valido(tmp_path), tmp_path)
+    _assert_sem_url(exc_info)
+
+
+def test_load_write_secret_flag_env_url_vazia_conta_como_ausente(tmp_path, monkeypatch):
+    _env_completo(monkeypatch)
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", "")
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    with pytest.raises(wc.SecretLoadError, match="incompleto"):
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+
+
+# (d) flag com valor diferente de "env": recusa
+
+@pytest.mark.parametrize("origem", ["file", "ENV", "env ", "", "1"])
+def test_load_write_secret_flag_com_valor_invalido_recusa(tmp_path, monkeypatch, origem):
+    _env_completo(monkeypatch)
+    monkeypatch.setenv("GOLD_WRITE_SECRET_SOURCE", origem)
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    monkeypatch.setattr(wc, "dotenv_values", _dotenv_proibido)
+    with pytest.raises(wc.SecretLoadError, match="GOLD_WRITE_SECRET_SOURCE") as exc_info:
+        wc.load_write_secret(_arquivo_valido(tmp_path), tmp_path)
+    _assert_sem_url(exc_info)
+
+
+@pytest.mark.parametrize("flag", ["0", "true", "yes", " 1", "1 "])
+def test_load_write_secret_flag_env_consentimento_errado_recusa(tmp_path, monkeypatch, flag):
+    _env_completo(monkeypatch, flag=flag)
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    with pytest.raises(wc.SecretLoadError, match="I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD") as exc_info:
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    _assert_sem_url(exc_info)
+
+
+def test_load_write_secret_sem_env_segue_caminho_do_arquivo(tmp_path):
+    with pytest.raises(wc.SecretLoadError, match="não encontrado"):
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+
+
+def test_load_write_secret_flag_env_nao_escreve_em_os_environ(tmp_path, monkeypatch):
+    import os
+
+    _env_completo(monkeypatch)
+    antes = dict(os.environ)
+    wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    assert dict(os.environ) == antes
 
 
 # --- validate_write_guardrails -------------------------------------------------
@@ -466,12 +605,138 @@ def test_run_preflight_bloqueia_se_tabela_nao_existe_antes_da_carga(monkeypatch)
 
 
 def test_run_preflight_ok_quando_tabela_existe_e_carga_esperada(monkeypatch):
-    responses = [r for r in _MAIN_HAPPY_RESPONSES if r[0] != "INFORMATION_SCHEMA.TABLES"]
-    responses.append(("INFORMATION_SCHEMA.TABLES", "all", [("marketplace_region_daily",)]))
-    write_url = _install_fake_connect(monkeypatch, main_responses=responses)
+    write_url = _install_fake_connect(monkeypatch, main_responses=_incremental_responses())
     report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
     assert report.ok is True
     assert report.blocking_reasons == []
+    assert report.safe_summary["privilegios_incrementais_faltando"] == []
+
+
+# --- T-0109 (R193): privilégios mínimos da carga incremental -------------------
+
+_PRIV_LABELS = [label for label, _, _ in wc.INCREMENTAL_PRIVILEGE_CHECKS]
+
+
+def _priv_row(**overrides):
+    """Linha de SQL_INCREMENTAL_PRIVILEGES com tudo concedido; `overrides`
+    troca o valor de um rótulo (False = negado, None = objeto ausente)."""
+    values = {label: True for label in _PRIV_LABELS}
+    values.update(overrides)
+    unknown = set(overrides) - set(_PRIV_LABELS)
+    assert not unknown, unknown
+    return tuple(values[label] for label in _PRIV_LABELS)
+
+
+def _incremental_responses(can_create=True, can_use=True, priv_row=None, tables=("marketplace_region_daily",)):
+    # GOLD_INCR_PRIV vem PRIMEIRO: a consulta de privilégios também contém
+    # HAS_SCHEMA_PRIVILEGE, e o ScriptedCursor casa a primeira substring.
+    responses = [("GOLD_INCR_PRIV", "one", priv_row if priv_row is not None else _priv_row())]
+    for key, kind, value in _MAIN_HAPPY_RESPONSES:
+        if key == "HAS_SCHEMA_PRIVILEGE":
+            value = (can_create, can_use)
+        elif key == "INFORMATION_SCHEMA.TABLES":
+            value = [(t,) for t in tables]
+        responses.append((key, kind, value))
+    return responses
+
+
+def test_run_preflight_tabela_existente_sem_create_passa(monkeypatch):
+    write_url = _install_fake_connect(monkeypatch, main_responses=_incremental_responses(can_create=False))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is True, report.blocking_reasons
+
+
+def test_run_preflight_tabela_existente_sem_insert_recusa(monkeypatch):
+    row = _priv_row(**{"INSERT em gold.marketplace_region_daily": False})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert any("INSERT em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+
+
+def test_run_preflight_tabela_ausente_sem_create_recusa(monkeypatch):
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, tables=()))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=False)
+    assert report.ok is False
+    assert any("CREATE" in r for r in report.blocking_reasons)
+    assert report.safe_summary["privilegios_incrementais_faltando"] is None
+
+
+def test_run_preflight_tabela_existente_sem_usage_em_gold_recusa(monkeypatch):
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=True, can_use=False))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert any("USAGE no schema gold" in r for r in report.blocking_reasons)
+
+
+@pytest.mark.parametrize("label", [
+    "USAGE no schema raw",
+    "SELECT em raw.ml_orders",
+    "SELECT em raw.ml_shipments",
+    "SELECT em raw.ml_shipment_costs",
+    "SELECT em gold.marketplace_region_daily",
+    "TEMP no banco",
+    "USAGE na sequence de gold.marketplace_region_daily",
+    "USAGE no schema silver (fonte Shopee)",
+    "SELECT em silver.stg_shopee_order_item_snapshots",
+])
+def test_run_preflight_tabela_existente_privilegio_negado_recusa(monkeypatch, label):
+    row = _priv_row(**{label: False})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert report.safe_summary["privilegios_incrementais_faltando"] == [label]
+
+
+@pytest.mark.parametrize("label", [
+    "USAGE no schema raw",
+    "SELECT em raw.ml_orders",
+    "SELECT em gold.marketplace_region_daily",
+    "INSERT em gold.marketplace_region_daily",
+])
+def test_run_preflight_objeto_obrigatorio_ausente_recusa(monkeypatch, label):
+    row = _priv_row(**{label: None})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert label in report.safe_summary["privilegios_incrementais_faltando"]
+
+
+def test_run_preflight_objetos_opcionais_ausentes_passam(monkeypatch):
+    # sem sequence, sem schema silver e sem a fonte Shopee (arquivada)
+    row = _priv_row(**{
+        "USAGE na sequence de gold.marketplace_region_daily": None,
+        "USAGE no schema silver (fonte Shopee)": None,
+        "SELECT em silver.stg_shopee_order_item_snapshots": None,
+    })
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is True, report.blocking_reasons
+
+
+def test_run_preflight_tabela_existente_mantem_checagens_de_identidade_e_role(monkeypatch):
+    responses = [r for r in _incremental_responses(can_create=False) if r[0] != "FROM PG_ROLES"]
+    responses.append(("FROM PG_ROLES", "one", (True, False, False, False, False)))
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=responses,
+        write_identity=("datamart", 5432, "sysid-A"), read_identity=("datamart", 5432, "sysid-B"))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert "rolsuper=true" in report.blocking_reasons
+    assert any("cluster físico" in r for r in report.blocking_reasons)
+
+
+def test_sql_privilegios_incrementais_nunca_exige_update_delete_truncate():
+    sql = wc.SQL_INCREMENTAL_PRIVILEGES.upper()
+    for privilegio in ("'UPDATE'", "'DELETE'", "'TRUNCATE'", "'CREATE'"):
+        assert privilegio not in sql
+    assert "ROLSUPER" not in sql
 
 
 def test_run_preflight_nunca_expoe_usuario_ou_senha_no_summary(monkeypatch):
