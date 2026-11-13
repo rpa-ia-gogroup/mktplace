@@ -15,11 +15,11 @@
 import type { Curva } from "./full-visao-geral.ts";
 
 export type LinhaCurva = "aa_a" | "b" | "c" | "sem";
-export const LINHAS_CURVA: { chave: LinhaCurva; rotulo: string; aberta: boolean }[] = [
-  { chave: "aa_a", rotulo: "AA/A", aberta: true },
-  { chave: "b", rotulo: "B", aberta: false },
-  { chave: "c", rotulo: "C", aberta: false },
-  { chave: "sem", rotulo: "Sem curva", aberta: false },
+export const LINHAS_CURVA: { chave: LinhaCurva; rotulo: string }[] = [
+  { chave: "aa_a", rotulo: "AA/A" },
+  { chave: "b", rotulo: "B" },
+  { chave: "c", rotulo: "C" },
+  { chave: "sem", rotulo: "Sem curva" },
 ];
 
 export type ClasseGrade = "ruptura" | "baixo" | "excesso" | null;

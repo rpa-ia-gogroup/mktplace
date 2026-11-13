@@ -149,7 +149,8 @@ test("o componente nao coalesce ausencia para zero e declara os quatro estados",
   assert.ok(!CLIENT_SRC.includes("?? 0"));
   assert.ok(!CLIENT_SRC.includes("|| 0"));
   assert.ok(CLIENT_SRC.includes("fmtOpcional(i.disponivel)"));
-  assert.ok(CLIENT_SRC.includes("fmtOpcional(m.disponivel_full)"));
+  // A tabela por marca saiu (13/11): marca sem fotografia vira nota no cabecalho da grade.
+  assert.ok(CLIENT_SRC.includes('estadoExibicaoMarcaML(m) === "sem_fotografia"'));
   assert.ok(CLIENT_SRC.includes("Carregando estoque"));
   assert.ok(CLIENT_SRC.includes('tipo="erro"'));
   assert.ok(CLIENT_SRC.includes("<RetryButton"));
@@ -273,8 +274,9 @@ test("QA3: tabelas usam TableScrollHint e tem regiao focavel com nome", () => {
     CLIENT_SRC,
     /import\s+TableScrollHint\s+from\s+["']@\/components\/TableScrollHint["'];/,
   );
-  assert.equal((CLIENT_SRC.match(/<TableScrollHint>/g) ?? []).length, 2);
-  assert.equal((CLIENT_SRC.match(/<RegiaoRolavel rotulo=/g) ?? []).length, 2);
+  // A tabela por marca saiu (13/11); a grade curva x marca tem o proprio hint.
+  assert.equal((CLIENT_SRC.match(/<TableScrollHint>/g) ?? []).length, 1);
+  assert.equal((CLIENT_SRC.match(/<RegiaoRolavel rotulo=/g) ?? []).length, 1);
   assert.ok(!CLIENT_SRC.includes("overflow-x-auto"), "sem rolagem crua sem dica");
   const regiao = CLIENT_SRC.split("function RegiaoRolavel")[1]?.split("\n}\n")[0] ?? "";
   assert.ok(regiao.includes("tabIndex={0}"));
