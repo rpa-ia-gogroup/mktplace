@@ -57,6 +57,7 @@ import {
   type AlvoTravados,
   type TipoLista,
 } from "@/lib/expedicao-travados";
+import PainelAtencao from "@/components/expedicao/PainelAtencao";
 import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
@@ -387,7 +388,14 @@ function CelulaKpi({
         icone={ICONE_DA_MEDIDA[kpi.chave] ?? Inbox}
         cor={COR_DA_MEDIDA[kpi.chave] ?? "rgb(var(--tc-kpi-gmv))"}
         valor={ausente ? null : numero(kpi.valor ?? 0)}
-        pilula={!ausente && kpi.alerta ? { texto: "Atenção", tom: "warn" } : null}
+        // A mesma pilula da visao do gestor; indicador sem regra de estado fica sem pilula.
+        pilula={
+          !ausente && kpi.chave === "overdue"
+            ? (kpi.valor ?? 0) > 0
+              ? { texto: "Com atraso", tom: "crit" }
+              : { texto: "Em dia", tom: "ok" }
+            : null
+        }
         progresso={!ausente && base && kpi.chave !== "backlog" && kpi.chave !== "marcas_alerta" ? (kpi.valor ?? 0) / base : null}
         // So' o numero na tela; a nota fica para o leitor de tela e a definicao, no "ⓘ".
         legenda={ausente ? (kpi.valorTexto ?? kpi.nota) : kpi.nota ? <span className="sr-only">{kpi.nota}</span> : undefined}
@@ -493,12 +501,9 @@ function BarraDeRisco({
  */
 function TituloComFbs({ titulo, incluiFbs }: { titulo: string; incluiFbs: boolean }) {
   if (!incluiFbs) return <>{titulo}</>;
-  return (
-    <span title="Fila publicada por conta: inclui pedidos FBS.">
-      {titulo}
-      <span className="sr-only"> (inclui pedidos FBS)</span>
-    </span>
-  );
+  // ALVO-GRADE: a base fica ESCRITA (como no cartao "Perto de vencer · com FBS"):
+  // os cartoes sao da fila do vendedor, e esta tabela e' a fila publicada.
+  return <span title="Fila publicada por conta: inclui pedidos FBS.">{titulo} · com FBS</span>;
 }
 
 function ItemLegenda({ cor, children }: { cor: string; children: React.ReactNode }) {
@@ -1092,7 +1097,7 @@ export default function ExpedicaoClient({
   );
 
   const faixaPrincipal = (
-    <FaixaKpis rotulo="Indicadores principais">
+    <FaixaKpis rotulo="Indicadores principais" semLinha>
       {principais.map((k) => (
         <CelulaKpi
           key={k.chave}
@@ -1249,10 +1254,7 @@ export default function ExpedicaoClient({
               : { texto: "Dentro do limiar", tom: "ok" }
       }
       progresso={serieHeroi.serie ? null : fracao(valorHeroi, backlogRisco)}
-      // Com linha de tendencia, o "x de y" fica na linha de apoio; sem serie,
-      // ele ocupa o lugar da linha e a barra fica inteira na linha de apoio.
-      legenda={serieHeroi.serie ? legendaDestaque : undefined}
-      rodape={serieHeroi.serie ? undefined : legendaDestaque}
+      legenda={legendaDestaque}
       serie={serieHeroi.serie ?? null}
       onAbrir={abrirHeroi}
     />
@@ -1302,7 +1304,10 @@ export default function ExpedicaoClient({
   // Sempre quatro: com prazo, Vencidos + os tres; sem prazo publicado (ML),
   // a fila inteira abre a faixa e o pedido mais antigo a fecha.
   const faixa = (
-    <FaixaKpis rotulo="Indicadores da fila">
+    <FaixaKpis
+      rotulo="Indicadores da fila"
+      semLinha={![chaveDestaque, ...chavesDaFaixa].some((c) => serieDoCard(c).serie)}
+    >
       {!temPrazo ? (
         <CartaoComAjuda
           ajuda={chaveDoKpiDaFila(filtros.channel, "backlog")}
@@ -1355,9 +1360,8 @@ export default function ExpedicaoClient({
     ...porConta.filter((i) => i.severidade !== "critico"),
   ].slice(0, MAX_ITENS_DA_FILA);
   const filaDeAtencao = (
-    <FilaAtencao
+    <PainelAtencao
       itens={itensDaFila}
-      titulo="O que exige atenção"
       vazio={
         recorte.variasContas && !divisao
           ? "Leitura por conta, sem total."
@@ -2000,7 +2004,13 @@ export default function ExpedicaoClient({
         ) : (
           <>
             {faixaPrincipal}
-            {/* [detalhe] IDENTIDADE-GERENCIAL: secundarios sob demanda. */}
+            <div className="grid gap-3 lg:grid-cols-3">
+              {painelMaisCriticos}
+              {painelContas(timeline.length > 0 ? "lg:col-span-2" : "lg:col-span-3")}
+            </div>
+            {painelFila}
+            {painelFonte}
+            {/* [detalhe] IDENTIDADE-GERENCIAL: secundarios sob demanda, no fim da pagina. */}
             <MaisDetalhes resumo="indicadores secundários">
               <FaixaKpis rotulo="Indicadores secundários" secundaria>
                 {secundarios.map((k) => (
@@ -2008,12 +2018,6 @@ export default function ExpedicaoClient({
                 ))}
               </FaixaKpis>
             </MaisDetalhes>
-            <div className="grid gap-3 lg:grid-cols-3">
-              {painelMaisCriticos}
-              {painelContas(timeline.length > 0 ? "lg:col-span-2" : "lg:col-span-3")}
-            </div>
-            {painelFila}
-            {painelFonte}
           </>
         ))}
     </LayoutExpedicao>

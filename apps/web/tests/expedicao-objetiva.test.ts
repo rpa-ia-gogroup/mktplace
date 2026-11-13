@@ -223,8 +223,8 @@ test("tela: 'desatualizada' uma vez (cabecalho) e no ⓘ do heroi; 'inclui FBS' 
   assert.match(CABECALHO, /<SeloAtualizado em=\{f\.publicadaEm\} atrasado=\{Boolean\(f\.publicadaEm && f\.desatualizada\)\}/);
   assert.match(CLIENTE, /incluiFbs \? AVISO_FILA_COM_FBS : null/);
   assert.match(CLIENTE, /\{incluiFbs \? <span data-testid="exp-aviso-fbs"> · com FBS<\/span> : null\}/);
-  // Nas tabelas da fila publicada, vira title + sr-only do titulo.
-  assert.match(CLIENTE, /<span className="sr-only"> \(inclui pedidos FBS\)<\/span>/);
+  // Nas tabelas da fila publicada, a base fica ESCRITA no titulo ("· com FBS").
+  assert.match(CLIENTE, /\{titulo\} · com FBS<\/span>/);
   assert.match(CLIENTE, /<TituloComFbs titulo="Backlog por marca"/);
   assert.match(CABECALHO, /<InfoDica texto=\{definicao\} \/>/);
 });

@@ -24,6 +24,7 @@
  * ("Concentracao" e "Evolucao"). As linhas vem da fotografia — a conta sem
  * ponto no periodo continua na tabela, so' sem tendencia.
  */
+import TableScrollHint from "@/components/TableScrollHint";
 import CelulaBarra from "@/components/ui/CelulaBarra";
 import { useState, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 
@@ -263,7 +264,7 @@ function SoTendencia({ resposta }: { resposta: RespostaTendencia }) {
           <span className="font-medium text-ink">{cobertura.desde}</span> {cobertura.exibindo}
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <TableScrollHint>
         <table className={CLASSE_TABELA}>
           <caption className="sr-only">
             Evolução do backlog por marca — uma linha por conta, contas nunca somadas
@@ -319,7 +320,7 @@ function SoTendencia({ resposta }: { resposta: RespostaTendencia }) {
             })}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </div>
   );
 }
@@ -377,7 +378,7 @@ function TabelaUnica({
           <InfoDica texto={NOTA_DO_EIXO} />
         </p>
       ) : null}
-      <div className="overflow-x-auto">
+      <TableScrollHint>
         <table className={CLASSE_TABELA}>
           <caption className="sr-only">
             Backlog por marca — a fila de agora e a tendência do período, uma linha por conta, contas nunca somadas
@@ -621,7 +622,7 @@ function TabelaUnica({
             })}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </div>
   );
 }

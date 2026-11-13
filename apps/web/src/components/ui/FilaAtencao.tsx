@@ -41,6 +41,7 @@ export default function FilaAtencao({
   carregando = false,
   erro,
   onTentar,
+  semMoldura = false,
 }: {
   titulo?: ReactNode;
   itens: ItemAtencao[];
@@ -50,11 +51,12 @@ export default function FilaAtencao({
   /** Mensagem de erro do bloco: a fila falha sozinha. */
   erro?: ReactNode;
   onTentar?: () => void;
+  /** ALVO-GRADE: so' a lista, para ir DENTRO de um `Panel` (que ja' traz moldura e titulo). */
+  semMoldura?: boolean;
 }) {
   const id = useId();
-  return (
-    <section aria-labelledby={id} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-4">
-      <h2 id={id} className="text-sm font-semibold text-ink-muted">{titulo}</h2>
+  const corpo = (
+    <>
       {carregando ? (
         <div className="flex flex-col gap-2 animate-pulse motion-reduce:animate-none" role="status" aria-busy="true">
           <span className="sr-only">Carregando…</span>
@@ -107,6 +109,13 @@ export default function FilaAtencao({
           })}
         </ul>
       )}
+    </>
+  );
+  if (semMoldura) return corpo;
+  return (
+    <section aria-labelledby={id} className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-4">
+      <h2 id={id} className="text-sm font-semibold text-ink-muted">{titulo}</h2>
+      {corpo}
     </section>
   );
 }

@@ -82,6 +82,7 @@ import LayoutExpedicao, {
 } from "@/components/expedicao/LayoutExpedicao";
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
+import PainelAtencao from "@/components/expedicao/PainelAtencao";
 import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
@@ -493,7 +494,7 @@ export default function TikTokDispatchPanel({
 
   // ALVO-GRADE: sempre quatro cartoes (os abertos de agora). A LDR da janela
   // fica em "Mais detalhes" (Prazo) e no "LDR · últimos 7 dias".
-  const faixa = <FaixaKpis rotulo="Pedidos em aberto">{cartoesDosAbertos(abertos)}</FaixaKpis>;
+  const faixa = <FaixaKpis rotulo="Pedidos em aberto" semLinha>{cartoesDosAbertos(abertos)}</FaixaKpis>;
 
   // Alertas da API, sem reescrita, como itens da fila; "onde agir" primeiro.
   const ondeAgir = ondeAgirTikTok(abertos);
@@ -502,7 +503,7 @@ export default function TikTokDispatchPanel({
     ...alertasNaFila(atencao),
     ...itensOficiais,
   ];
-  const fila = <FilaAtencao itens={itensFila} titulo="O que exige atenção" vazio="Nenhum alerta publicado para este recorte." />;
+  const fila = <PainelAtencao itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;
 
   // "Prazo": a janela da LDR, que so' o TikTok sustenta. Coleta e despacho
   // continuam sendo eventos separados, escolhidos no cabecalho. No gestor a
@@ -565,9 +566,7 @@ export default function TikTokDispatchPanel({
   // 6. EVOLUCAO — quando comecou. Sem nenhum vencimento fechado o grafico
   // seria um retangulo sem barra: a tela diz por que nao ha o que desenhar.
   const painelEvolucao = ldr ? (
-    <Panel
-      titulo="Evolução por dia de vencimento"
-    >
+    <Panel titulo="Evolução por dia de vencimento" className="h-full">
       {temDiaMedido ? (
         <Grafico
           dias={ldr.daily}

@@ -396,7 +396,7 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
   }
   assert.ok(!gestor.includes("painelContas("), "o gestor tem UMA tabela de marcas");
   assert.match(CLIENTE, /fila=\{linhasDaFila\}/);
-  assert.match(CLIENTE, /const filaDeAtencao = \(\s*<FilaAtencao\s+itens=\{itensDaFila\}/);
+  assert.match(CLIENTE, /const filaDeAtencao = \(\s*<PainelAtencao\s+itens=\{itensDaFila\}/);
   // marca de varias contas: a lista vazia diz POR QUE esta' vazia
   assert.match(CLIENTE, /Leitura por conta, sem total./);
   assert.ok(!gestor.includes("{painelFila}"), "a fila paginada nao e' visao do gestor");
@@ -410,7 +410,7 @@ test("TikTok: LDR no gestor, fluxo por pagamento so' no detalhe", () => {
   for (const s of ["faixa={faixa}", "<PainelEtapasTikTok", "atencao={fila}", "evolucao={painelEvolucao}", "concentracao={painelLojas(", "maisDetalhes=", "{secaoPrazo(true)}"]) {
     assert.ok(gestor.includes(s), `gestor sem ${s}`);
   }
-  assert.match(TIKTOK, /const fila = <FilaAtencao itens=\{itensFila\}/);
+  assert.match(TIKTOK, /const fila = <PainelAtencao itens=\{itensFila\}/);
   // LDR e fluxo por pagamento nao dividem a primeira dobra.
   assert.ok(!gestor.includes("painelFluxo("));
   assert.ok(!gestor.includes("{painelCoortes}"));
@@ -432,7 +432,7 @@ test("o TikTok nao empilha mais banners antes do primeiro numero", () => {
   assert.doesNotMatch(codigo, /alerts\.map/, "um banner por alerta");
   assert.doesNotMatch(codigo, /AVISO_PRAZO_RECONSTRUIDO/, "aviso solto fora da barra");
   assert.match(TIKTOK, /<BarraDeQualidade barra=\{barra\} \/>/);
-  assert.match(TIKTOK, /<FilaAtencao itens=\{itensFila\}/);
+  assert.match(TIKTOK, /<PainelAtencao itens=\{itensFila\}/);
 });
 
 test("serie sem vencimento fechado troca o grafico por uma linha", () => {

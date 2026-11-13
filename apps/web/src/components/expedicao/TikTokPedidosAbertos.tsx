@@ -406,9 +406,7 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
               : { texto: `${formatarInteiro(n)} pedidos`, tom: alerta && n > 0 ? "warn" : "neutro" }
         }
         progresso={medido && t.open > 0 ? n / t.open : null}
-        legenda={!medido ? motivo : undefined}
-        // Sem serie, o "x de y" ocupa o lugar da linha: a barra fica inteira na linha de apoio.
-        rodape={medido && lista === "overdue" ? `${formatarInteiro(n)} de ${formatarInteiro(t.open)} em aberto` : undefined}
+        legenda={!medido ? motivo : lista === "overdue" ? `${formatarInteiro(n)} de ${formatarInteiro(t.open)} em aberto` : undefined}
         ajuda={lista === "overdue" ? <InfoDica texto={DICA_ABERTOS} emControle={Boolean(medido && n)} /> : undefined}
         onAbrir={medido && n ? () => abertos.abrir(lista, n) : undefined}
       />
