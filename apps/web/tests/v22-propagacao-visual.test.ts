@@ -40,6 +40,9 @@ const ROTAS = [
   ["brand", "app/brand/[brand]/page.tsx"],
 ] as const;
 
+/** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro"]);
+
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
 
@@ -50,6 +53,10 @@ const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pe
 test("P1. as dez rotas usam o container compartilhado, e nenhuma mantem max-w-7xl", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
+    if (NO_ESQUELETO_ABA.has(nome)) {
+      assert.match(src, /<Aba[<\s]/, `${nome} usa o esqueleto Aba`);
+      continue;
+    }
     assert.match(src, /<PageContainer>/, `${nome} deve usar PageContainer`);
     assert.match(src, /<\/PageContainer>/, `${nome} deve fechar PageContainer`);
     assert.doesNotMatch(src, /max-w-7xl/, `${nome} nao pode mais fixar max-w-7xl`);
@@ -73,13 +80,13 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 8, consumidores.join(","));
+  assert.equal(consumidores.length, 8 - NO_ESQUELETO_ABA.size, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
-    const passaFiltros = /<PageHeader[\s\S]*?filters=\{/.test(src);
+    const passaFiltros = NO_ESQUELETO_ABA.has(nome) ? /<Aba[<\s][\s\S]*?filtros=\{/.test(src) : /<PageHeader[\s\S]*?filters=\{/.test(src);
     if (COM_FILTROS_GLOBAIS.includes(nome) && nome !== "brand") {
       assert.ok(passaFiltros, `${nome} herda filtros globais e deve passar filters=`);
     } else if (nome !== "brand") {
@@ -206,7 +213,8 @@ const FETCHERS_POR_ROTA: Record<string, string[]> = {
     "fetchProdutosShopeeSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
   ],
   regioes: ["fetchRegioesSummary", "fetchRegioesByUf", "fetchRegioesByBrand", "fetchRegioesTrend"],
-  financeiro: ["fetchFinanceiro"],
+  // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
+  financeiro: ["fetchFinanceiro", "fetchTrend"],
   qualidade: ["fetchQuality"],
   pedidos: ["fetchPedidos"],
   inteligencia: ["fetchInteligencia"],
