@@ -23,7 +23,7 @@ import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import CartaoKpiCanal, { VISUAL_DO_KPI_CANAL } from "@/components/canais/CartaoKpiCanal";
 import KpiCanalDrilldownContent from "@/components/canais/KpiCanalDrilldownContent";
 import { KPI_CANAL, tituloDoDetalhe, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
-import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import Freshness from "@/components/ui/Freshness";
 import Note from "@/components/ui/Note";
 import Segmented from "@/components/ui/Segmented";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -239,7 +239,7 @@ const ABA_DA_ANCORA: Record<string, CanalId> = {
 };
 
 function CanaisPageInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_anterior" });
+  const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "mes_anterior" });
   const [base] = useBaseVendas();
   const [eco, setEco] = useState<EcoBase | undefined>(undefined);
   const searchParams = useSearchParams();
@@ -566,13 +566,12 @@ function CanaisPageInner() {
         icon={Store}
         meta={
           <>
-            <PeriodChip label={periodLabel} />
             <Freshness live={dataIsFresh ? isLive : null} refreshedAt={dataIsFresh ? refreshedAt : null} loading={loading} />
           </>
         }
         filters={
           <>
-            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} />
+            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} padrao={padrao} />
             <SeletorBase semRealizados={dataIsFresh && eco?.base !== "realizados"} />
           </>
         }

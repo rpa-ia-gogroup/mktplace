@@ -21,8 +21,9 @@ interface Props {
   /**
    * UX-TORRE-B2B-1 — `menu` move os presets para dentro de um gatilho que
    * mostra o preset ativo. Os BOTOES sao os mesmos (mesmo `aria-pressed`,
-   * mesmo alvo de 44px); datas personalizadas e comparacao continuam na
-   * barra, porque sao interacoes continuas e nao uma escolha unica.
+   * mesmo alvo de 44px). FILTROS-PADRAO: datas personalizadas e a comparacao
+   * moram DENTRO do painel (padrao Shopify/Plausible) — a barra fica numa
+   * linha so' e o gatilho diz "vs anterior" quando a comparacao esta' ligada.
    */
   variante?: "faixa" | "menu";
 }
@@ -67,12 +68,10 @@ export default function DateRangeFilter({
     onChange({ ...next, periodo: undefined });
   }
 
-  const presetAtivo = showCustom
-    ? "Personalizado"
-    : `${DATE_PRESET_OPTIONS.find((o) => o.value === activePreset)?.label ?? "Personalizado"} · ${intervaloCurto(dateFrom, dateTo)}`;
+  const presetAtivo = `${DATE_PRESET_OPTIONS.find((o) => o.value === activePreset)?.label ?? "Personalizado"} · ${intervaloCurto(dateFrom, dateTo)}`;
 
   // `fechar` so' existe na variante menu: escolher um preset encerra o painel.
-  // "Personalizado" tambem fecha — os campos de data aparecem na propria barra.
+  // "Personalizado" NAO fecha: os campos de data aparecem no proprio painel.
   const presets = (fechar?: () => void) => (
         <div
           role="group"
@@ -99,7 +98,7 @@ export default function DateRangeFilter({
                 aria-pressed={active}
                 onClick={() => {
                   selectPreset(opt.value);
-                  fechar?.();
+                  if (opt.value !== "personalizado") fechar?.();
                 }}
                 // 44x44px no runtime. `shrink-0` impede que o flex comprima o
                 // botao abaixo do alvo: a faixa transborda e o `overflow-x-auto`
@@ -119,45 +118,27 @@ export default function DateRangeFilter({
         </div>
   );
 
-  return (
-    <div className="flex flex-col gap-2 min-w-0 max-w-full">
-      <div className="flex items-center gap-2 min-w-0 flex-wrap">
-        {menu ? (
-          <Popover
-            rotulo="Período"
-            valor={presetAtivo}
-            icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
-            largura="w-52"
-          >
-            {(fechar) => presets(fechar)}
-          </Popover>
-        ) : (
-          <>
-            <span className="text-xs text-ink-faint font-medium shrink-0">Período</span>
-            {presets()}
-          </>
-        )}
-        {/*
-          O alvo aqui e' o LABEL, nao a caixinha: clicar em qualquer ponto do
-          rotulo alterna o controle, entao `min-h-11` no label da uma area
-          interativa real de 44px de altura. Aumentar o `<input>` a 44px
-          desenharia uma caixa de selecao gigante sem ganho de alcance — e o
-          que nao se faz e' o inverso, crescer so' o visual e deixar a area
-          menor. `px-2` garante largura util junto ao texto.
-        */}
-        {!hideCompare && (
-          <label className="inline-flex items-center gap-2 min-h-11 px-2 text-xs text-ink-muted font-medium ml-1 select-none cursor-pointer">
-            <input
-              type="checkbox"
-              checked={compare}
-              onChange={(e) => onCompareChange(e.target.checked)}
-              className="w-4 h-4 shrink-0 rounded accent-[rgb(var(--tc-accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            />
-            Comparar com período anterior
-          </label>
-        )}
-      </div>
-      {showCustom && (
+  /*
+   * O alvo aqui e' o LABEL, nao a caixinha: clicar em qualquer ponto do
+   * rotulo alterna o controle, entao `min-h-11` no label da uma area
+   * interativa real de 44px de altura. Aumentar o `<input>` a 44px
+   * desenharia uma caixa de selecao gigante sem ganho de alcance — e o
+   * que nao se faz e' o inverso, crescer so' o visual e deixar a area
+   * menor. `px-2` garante largura util junto ao texto.
+  */
+  const comparacao = !hideCompare && (
+    <label className="inline-flex items-center gap-2 min-h-11 px-2 text-xs text-ink-muted font-medium select-none cursor-pointer">
+      <input
+        type="checkbox"
+        checked={compare}
+        onChange={(e) => onCompareChange(e.target.checked)}
+        className="w-4 h-4 shrink-0 rounded accent-[rgb(var(--tc-accent))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      />
+      Comparar com período anterior
+    </label>
+  );
+
+  const datas = showCustom && (
         <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap min-w-0">
             {/* Nos campos de data o alvo e' o proprio `<input>`, que abre o
@@ -191,7 +172,36 @@ export default function DateRangeFilter({
             </p>
           )}
         </div>
-      )}
+  );
+
+  if (menu) {
+    return (
+      <Popover
+        rotulo="Período"
+        valor={presetAtivo}
+        sufixo={!hideCompare && compare ? "vs anterior" : undefined}
+        icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
+        largura="w-60"
+      >
+        {(fechar) => (
+          <div className="flex flex-col gap-1">
+            {presets(fechar)}
+            {datas && <div className="border-t border-line px-1 pt-2">{datas}</div>}
+            {comparacao && <div className="border-t border-line pt-1">{comparacao}</div>}
+          </div>
+        )}
+      </Popover>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 min-w-0 max-w-full">
+      <div className="flex items-center gap-2 min-w-0 flex-wrap">
+        <span className="text-xs text-ink-faint font-medium shrink-0">Período</span>
+        {presets()}
+        {comparacao}
+      </div>
+      {datas}
     </div>
   );
 }

@@ -22,7 +22,8 @@ import { CalendarDays, Check } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
 import Popover from "@/components/ui/Popover";
-import { CANAIS_CX, JANELAS_DIAS, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
+import { CLASSE_CONTAGEM, CLASSE_LIMPAR } from "@/components/layout/GlobalFilterControls";
+import { CANAIS_CX, JANELAS_DIAS, JANELA_PADRAO, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
 
 /** Mesmas classes dos botoes do `BrandFilter`/`DateRangeFilter` no menu. */
@@ -38,6 +39,8 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
   const id = useId();
 
   const ir = (novo: Filtros, c: CanalCx = canal) => iniciar(() => router.push(hrefCx(novo, c), { scroll: false }));
+  // FILTROS-PADRAO: fora do padrao da aba (Shopee, todas as marcas, janela padrao).
+  const fora = [canal !== "shopee", f.marca != null, f.dias !== JANELA_PADRAO].filter(Boolean).length;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="cx-filtros" aria-busy={aplicando}>
@@ -50,7 +53,15 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
         className="inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 text-left text-sm sm:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-ink">Filtros</span>
+          <span className="flex items-center text-xs font-semibold text-ink">
+            Filtros
+            {fora > 0 && (
+              <span className={CLASSE_CONTAGEM}>
+                {fora}
+                <span className="sr-only"> fora do padrão</span>
+              </span>
+            )}
+          </span>
           <span className="block truncate text-xs text-ink-muted">{resumoFiltrosCx(f, brandLabel, canal)}</span>
         </span>
         <svg
@@ -67,7 +78,7 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
 
       <div
         id={id}
-        className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-start gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
+        className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
       >
         {/* Canal: o trilho do MarketplaceFilter, com os canais que a CX le' */}
         <div role="group" aria-label="Canal" className="flex w-fit min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-raised p-0.5">
@@ -125,6 +136,12 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
             </div>
           )}
         </Popover>
+
+        {fora > 0 && (
+          <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO }, "shopee")} className={CLASSE_LIMPAR}>
+            Limpar
+          </button>
+        )}
 
         {aplicando && (
           <span role="status" className="inline-flex min-h-11 shrink-0 items-center text-xs text-ink-faint animate-pulse">

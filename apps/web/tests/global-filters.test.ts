@@ -480,3 +480,14 @@ test("intervaloCurto: datas no gatilho", () => {
   assert.equal(intervaloCurto("2026-11-09", "2026-11-15"), "09–15/11");
   assert.equal(intervaloCurto("2026-12-28", "2027-01-03"), "28/12–03/01");
 });
+
+// FILTROS-PADRAO — "Limpar" e contagem do "Filtros" no celular.
+test("filtrosForaDoPadrao: so' canal, marca e periodo contam; comparacao nao", async () => {
+  const { filtrosForaDoPadrao } = await import("../src/lib/filters/summary.ts");
+  const padrao = { channels: ["tiktok", "ml", "shopee"] as Marketplace[], brands: [], dateFrom: "2026-10-01", dateTo: "2026-10-31", compare: false };
+  assert.deepEqual(filtrosForaDoPadrao({ ...padrao, compare: true, channels: ["shopee", "ml", "tiktok"] }, padrao), []);
+  assert.deepEqual(
+    filtrosForaDoPadrao({ ...padrao, channels: ["shopee"], brands: ["kokeshi"], dateTo: "2026-10-30" }, padrao),
+    ["canal", "marca", "periodo"],
+  );
+});

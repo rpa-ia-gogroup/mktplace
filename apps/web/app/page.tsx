@@ -157,7 +157,7 @@ function GerencialComGrandes() {
   // GERENCIAL-METAS-1: abre no mes corrente, porque e' nele que a meta ainda
   // pode ser decidida (ritmo, projecao e quanto falta por dia). O mes fechado
   // continua a um clique no seletor de periodo.
-  const [filtersRaw, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
+  const [filtersRaw, setFilters, padrao] = useGlobalFilters(HOME_FILTER_DEFAULTS);
   const [base] = useBaseVendas();
   // Marcas grandes (Data Mart) e menores (Bling) vem no mesmo filtro; o resto da pagina so' ve as grandes
   // (`filters.brands` vazio = todas as grandes) e as menores entram por `menores`, sem meta.
@@ -724,7 +724,7 @@ function GerencialComGrandes() {
         live={headerLive}
         loading={sources.anyLoading}
       >
-        <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} />
+        <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />
         <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
       </GerencialHeader>
 
@@ -1132,8 +1132,8 @@ function GerencialComGrandes() {
 
 /** So' marcas menores no filtro: a Gerencial inteira sai do Bling, sem chamar nenhuma fonte do Data Mart. */
 function GerencialInner() {
-  const [filters, setFilters] = useGlobalFilters(HOME_FILTER_DEFAULTS);
-  if (escopoDeMarcas(filters.brands).soMenores) return <GerencialMarcasMenores filters={filters} onChange={setFilters} />;
+  const [filters, setFilters, padrao] = useGlobalFilters(HOME_FILTER_DEFAULTS);
+  if (escopoDeMarcas(filters.brands).soMenores) return <GerencialMarcasMenores filters={filters} onChange={setFilters} padrao={padrao} />;
   return <GerencialComGrandes />;
 }
 

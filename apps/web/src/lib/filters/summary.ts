@@ -38,6 +38,19 @@ export function resumoMarcas(brands: readonly string[]): string {
   return [...brands].sort().map(brandLabel).join(", ");
 }
 
+/**
+ * FILTROS-PADRAO — quais filtros sairam do padrao da aba (o que `computeDefaultFilters`
+ * daria para URL vazia). Comparacao fica de fora: e' leitura, nao escopo.
+ */
+export function filtrosForaDoPadrao(filters: GlobalFilters, padrao: GlobalFilters): ("canal" | "marca" | "periodo")[] {
+  const mesmo = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x) => b.includes(x));
+  const fora: ("canal" | "marca" | "periodo")[] = [];
+  if (!mesmo(filters.channels, padrao.channels)) fora.push("canal");
+  if (!mesmo(filters.brands, padrao.brands)) fora.push("marca");
+  if (filters.dateFrom !== padrao.dateFrom || filters.dateTo !== padrao.dateTo) fora.push("periodo");
+  return fora;
+}
+
 export function resumoDosFiltros(filters: GlobalFilters, opcoes: OpcoesResumo = {}): string {
   const partes = [
     resumoCanais(filters.channels),

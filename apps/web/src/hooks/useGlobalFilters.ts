@@ -55,7 +55,7 @@ function filtersEqual(a: GlobalFilters, b: GlobalFilters): boolean {
  */
 export function useGlobalFilters(
   options: UseGlobalFiltersOptions = {},
-): [GlobalFilters, (partial: Partial<GlobalFilters>) => void] {
+): [GlobalFilters, (partial: Partial<GlobalFilters>) => void, GlobalFilters] {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -107,5 +107,6 @@ export function useGlobalFilters(
     [filters, pathname, router, searchParams],
   );
 
-  return [filters, setFilters];
+  // FILTROS-PADRAO: o padrao da aba, para o "Limpar" da barra.
+  return [filters, setFilters, computeDefaultFilters(options)];
 }

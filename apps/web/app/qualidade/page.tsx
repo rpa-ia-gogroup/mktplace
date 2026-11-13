@@ -17,7 +17,7 @@ import QualidadeDrilldownContent from "@/components/qualidade/QualidadeDrilldown
 import { fmtDias, tituloDoDetalhe, type ChaveQualidade } from "@/lib/qualidade-cartoes";
 import { fmtPctBr, fmtPctSimples } from "@/lib/formatters";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import Freshness from "@/components/ui/Freshness";
 import { ShieldCheck } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -63,7 +63,7 @@ function cancelBg(v: number | null): string {
 }
 
 function QualityPageInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_anterior", defaultCompare: true });
+  const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "mes_anterior", defaultCompare: true });
   const filter = filters.channels; // alias — preserva as referencias existentes abaixo
   const [kpis, setKpis] = useState<QualityKpis | null>(null);
   const [brands, setBrands] = useState<QualityBrandRow[]>([]);
@@ -225,7 +225,6 @@ function QualityPageInner() {
         icon={ShieldCheck}
         meta={
           <>
-            <PeriodChip label={periodLabel} />
             {/* Live/mock so' com dado fresco, nunca o da requisicao anterior. */}
             <Freshness
               live={dataIsFresh ? displayIsLive : null}
@@ -234,7 +233,7 @@ function QualityPageInner() {
             />
           </>
         }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} loading={isLoadingState} />}
+        filters={<GlobalFilterControls filters={filters} onChange={setFilters} loading={isLoadingState} padrao={padrao} />}
       />
 
         {dataIsFresh && (() => {

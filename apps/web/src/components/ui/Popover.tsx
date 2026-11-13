@@ -21,6 +21,7 @@ export default function Popover({
   rotulo,
   valor,
   ativo = false,
+  sufixo,
   icone,
   children,
   largura = "w-64",
@@ -32,6 +33,8 @@ export default function Popover({
   valor: ReactNode;
   /** Filtro restringindo o escopo (diferente do padrao): realce discreto. */
   ativo?: boolean;
+  /** Complemento discreto do valor, fora do truncamento ("vs anterior"). */
+  sufixo?: ReactNode;
   icone?: ReactNode;
   children: (fechar: () => void) => ReactNode;
   largura?: string;
@@ -93,6 +96,7 @@ export default function Popover({
         <span className={`max-w-[11rem] truncate font-semibold ${ativo ? "text-accent-ink" : "text-ink"}`}>
           {valor}
         </span>
+        {sufixo ? <span className="whitespace-nowrap text-xs text-ink-faint">{sufixo}</span> : null}
         <ChevronDown
           aria-hidden="true"
           className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${aberto ? "rotate-180" : ""}`}

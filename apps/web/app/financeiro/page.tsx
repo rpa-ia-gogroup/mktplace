@@ -33,7 +33,7 @@ import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
-import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import Freshness from "@/components/ui/Freshness";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import InfoDica from "@/components/ui/InfoDica";
@@ -137,7 +137,7 @@ const LINK_MARCA =
   "hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded";
 
 function FinanceiroPageInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_anterior" });
+  const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "mes_anterior" });
   const searchParams = useSearchParams();
   const filter = filters.channels; // alias — preserva as referencias existentes abaixo
   const [kpis, setKpis] = useState<FinanceiroKpis | null>(null);
@@ -405,7 +405,6 @@ function FinanceiroPageInner() {
         icon={Wallet}
         meta={
           <>
-            <PeriodChip label={periodLabel} />
             {/* Selo so' com dado fresco — nunca o estado da requisicao ANTERIOR
                 durante a transicao de filtro. */}
             <Freshness
@@ -415,7 +414,7 @@ function FinanceiroPageInner() {
             />
           </>
         }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />}
+        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
       />
 
       {dataIsFresh && (() => {

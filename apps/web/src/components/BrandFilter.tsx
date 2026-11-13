@@ -31,11 +31,11 @@ const BASE_BTN =
 const ACTIVE_BTN = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const INACTIVE_BTN = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
-/** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada. */
-function resumo(value: string[]): string {
+/** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada ("Marca: 3"). */
+export function resumoMarcaMenu(value: readonly string[]): string {
   if (value.length === 0 || value.length === FILTER_BRAND_OPTIONS.length) return "Todas";
   if (value.length === 1) return brandLabel(value[0]);
-  return `${value.length} marcas`;
+  return String(value.length);
 }
 
 export default function BrandFilter({ value, onChange, variante = "faixa" }: Props) {
@@ -45,7 +45,9 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
   // na faixa, centralizado como os demais segmentos.
   const alinhamento = menu ? "w-full justify-between" : "justify-center";
 
-  const botoes = (
+  // `fechar` so' existe no menu: ali cada marca ganha o "só esta" (FILTROS-PADRAO),
+  // que troca a selecao por ela e fecha. Aparece no hover/foco; no toque, sempre.
+  const botoes = (fechar?: () => void) => (
     <>
       <button
         type="button"
@@ -58,17 +60,34 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
       </button>
       {FILTER_BRAND_OPTIONS.map((opt) => {
         const active = value.includes(opt.value);
-        return (
+        const botao = (
           <button
             key={opt.value}
             type="button"
             aria-pressed={active}
             onClick={() => onChange(toggleMultiSelect(value, opt.value))}
-            className={`${BASE_BTN} ${alinhamento} ${active ? ACTIVE_BTN : INACTIVE_BTN}`}
+            className={`${BASE_BTN} ${menu ? "min-w-0 flex-1 justify-between" : alinhamento} ${active ? ACTIVE_BTN : INACTIVE_BTN}`}
           >
             {opt.label}
             {menu && active && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
           </button>
+        );
+        if (!fechar) return botao;
+        return (
+          <div key={opt.value} className="group flex items-center gap-0.5">
+            {botao}
+            <button
+              type="button"
+              aria-label={`Só ${opt.label}`}
+              onClick={() => {
+                onChange([opt.value]);
+                fechar();
+              }}
+              className="inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-medium text-ink-muted hover:bg-surface/70 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+            >
+              só esta
+            </button>
+          </div>
         );
       })}
     </>
@@ -78,14 +97,14 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
     return (
       <Popover
         rotulo="Marca"
-        valor={resumo(value)}
+        valor={resumoMarcaMenu(value)}
         ativo={!allActive}
         icone={<Tag aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
-        largura="w-56"
+        largura="w-60"
       >
-        {() => (
+        {(fechar) => (
           <div role="group" aria-label="Filtro de marcas" className="flex flex-col gap-0.5">
-            {botoes}
+            {botoes(fechar)}
           </div>
         )}
       </Popover>
@@ -98,7 +117,7 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
       aria-label="Filtro de marcas"
       className="flex gap-0.5 bg-raised border border-line rounded-lg p-0.5 w-fit overflow-x-auto min-w-0 max-w-full"
     >
-      {botoes}
+      {botoes()}
     </div>
   );
 }

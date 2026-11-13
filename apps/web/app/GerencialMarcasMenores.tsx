@@ -41,9 +41,11 @@ const NOTA_FONTE =
 export default function GerencialMarcasMenores({
   filters,
   onChange,
+  padrao,
 }: {
   filters: GlobalFilters;
   onChange: (v: Partial<GlobalFilters>) => void;
+  padrao?: GlobalFilters;
 }) {
   const escopo = escopoDeMarcas(filters.brands);
   const router = useRouter();
@@ -118,7 +120,7 @@ export default function GerencialMarcasMenores({
   return (
     <div className="flex w-full flex-col gap-3 px-4 py-4">
       <GerencialHeader periodLabel={periodLabel} refreshedAt={null} live={dados?.disponivel ? true : null} loading={carregando}>
-        <GlobalFilterControls filters={filters} onChange={onChange} loading={carregando} />
+        <GlobalFilterControls filters={filters} onChange={onChange} loading={carregando} padrao={padrao} />
       </GerencialHeader>
       {carregando ? (
         <EsqueletoMarcasMenores />
