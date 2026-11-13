@@ -137,7 +137,7 @@ function tomTaxa(v: number): "neutro" | "warn" | "crit" {
 }
 
 /** Classes das celulas: densidade do benchmark com o piso de 13px de dado. */
-const TD = "px-4 py-2.5 text-right tabular-nums";
+const TD = "px-4 py-2.5 text-right tabular-nums whitespace-nowrap";
 const TD_MARCA = "px-4 py-2.5 font-semibold text-ink whitespace-nowrap";
 const TR = "hover:bg-raised/70 transition-colors";
 const LINK_MARCA =
