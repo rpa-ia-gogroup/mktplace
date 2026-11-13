@@ -30,22 +30,23 @@ function sliceBetween(src: string, startMarker: string, endMarker: string): stri
 }
 
 test("cabecalho: showShopeeOnly e' verificado ANTES de renderizar o LiveStatusBadge (nunca 'API offline' para cobertura ausente)", () => {
-  const header = sliceBetween(SRC, "        status={", "        filters={");
+  // ALVO-GRADE: o `selo` da `Aba` substitui o `status` do PageHeader; SeloAtualizado no lugar do LiveStatusBadge.
+  const header = sliceBetween(SRC, "        selo={", "        filtros={");
   const shopeeOnlyIdx = header.indexOf("showShopeeOnly");
-  const liveBadgeIdx = header.indexOf("<LiveStatusBadge");
+  const liveBadgeIdx = header.indexOf("<SeloAtualizado");
   assert.notEqual(shopeeOnlyIdx, -1, "cabecalho deve checar showShopeeOnly");
-  assert.notEqual(liveBadgeIdx, -1, "cabecalho deve continuar usando LiveStatusBadge para os demais casos");
+  assert.notEqual(liveBadgeIdx, -1, "cabecalho deve continuar usando SeloAtualizado para os demais casos");
   assert.ok(shopeeOnlyIdx < liveBadgeIdx, "a checagem de showShopeeOnly deve vir ANTES do LiveStatusBadge no ternario (senao ele so seria alcancado quando showShopeeOnly for falso)");
 });
 
 test("cabecalho: Shopee isolada mostra indicador neutro, nunca o LiveStatusBadge com estado offline", () => {
-  const header = sliceBetween(SRC, "        status={", "        filters={");
+  const header = sliceBetween(SRC, "        selo={", "        filtros={");
   const branchStart = header.indexOf("dataIsFresh && showShopeeOnly");
   assert.notEqual(branchStart, -1, "deve existir um branch dedicado para dataIsFresh && showShopeeOnly");
-  const branchEnd = header.indexOf(") : dataIsFresh ? (", branchStart);
-  assert.notEqual(branchEnd, -1, "branch de showShopeeOnly deve ser seguido do branch geral dataIsFresh");
+  const branchEnd = header.indexOf(") : (", branchStart);
+  assert.notEqual(branchEnd, -1, "branch de showShopeeOnly deve ser seguido do selo geral");
   const shopeeOnlyBranch = header.slice(branchStart, branchEnd);
-  assert.doesNotMatch(shopeeOnlyBranch, /<LiveStatusBadge/, "branch de Shopee isolada nao deve renderizar LiveStatusBadge");
+  assert.doesNotMatch(shopeeOnlyBranch, /<SeloAtualizado/, "branch de Shopee isolada nao deve renderizar o selo de rede");
   assert.doesNotMatch(shopeeOnlyBranch, /offline/i, "branch de Shopee isolada nao deve mencionar 'offline' — nao e' uma falha de API");
   assert.match(shopeeOnlyBranch, /sem cobertura/i, "branch de Shopee isolada deve comunicar falta de cobertura, nao falha de rede");
 });
@@ -75,13 +76,13 @@ test("Shopee isolada continua sem chamar fetchPedidos (branch de skip permanece 
 });
 
 test("selecao mista (Shopee + TikTok/ML) preserva o comportamento existente: LiveStatusBadge e aria-live de sucesso/loading normais", () => {
-  const header = sliceBetween(SRC, "        status={", "        filters={");
+  const header = sliceBetween(SRC, "        selo={", "        filtros={");
   // O branch dedicado a Shopee isolada usa `dataIsFresh && showShopeeOnly`
   // — quando a selecao e mista, `showShopeeOnly` e' falso e o fluxo cai no
   // branch geral (`dataIsFresh ? <LiveStatusBadge ... /> : ...`), que segue
   // inalterado.
   assert.match(header, /dataIsFresh && showShopeeOnly \? \(/);
-  assert.match(header, /\) : dataIsFresh \? \(\s*<LiveStatusBadge live=\{displayIsLive\} offlineLabel="Sem dados · API offline" \/>/);
+  assert.match(header, /\) : \(\s*<SeloAtualizado aoVivo=\{dataIsFresh \? displayIsLive : null\}/);
 
   const liveRegion = sliceBetween(SRC, '<span className="sr-only" aria-live="polite" aria-atomic="true">', "</span>");
   assert.match(liveRegion, /"Dados de pedidos carregados\."/, "selecao mista com sucesso deve continuar anunciando 'Dados de pedidos carregados.'");

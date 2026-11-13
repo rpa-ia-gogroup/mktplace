@@ -140,7 +140,7 @@ test("pagina /produtos: marca menor nao chama o Data Mart e a rota nao cai na gu
 test("pagina /produtos: leitura parcial em cor de aviso (marca e 'Todas'), ordenacao e falha no bloco das menores", () => {
   const pagina = readFileSync(new URL("../app/produtos/page.tsx", import.meta.url), "utf8");
   assert.ok((pagina.match(/text-warn-ink" role="status">\{progressoBling\}/g) ?? []).length === 2, "aviso nas duas abas");
-  assert.match(pagina, /\{progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-warn-ink"/);
+  assert.match(pagina, /\{progressoTodas && <p className="px-4 pb-2 text-xs font-semibold text-warn-ink"/);
   assert.match(pagina, /sort=\{menoresSort\.sort\}/);
   assert.doesNotMatch(pagina, /onSort=\{\(\) => \{\}\}/, "seta de ordenacao inerte");
   assert.match(pagina, /Demais marcas indisponíveis agora \(Bling\)/);

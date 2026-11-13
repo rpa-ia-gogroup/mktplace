@@ -13,7 +13,7 @@ import { BookOpenCheck, CircleDollarSign, FileSpreadsheet, Percent, Scale, Table
 
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import Panel from "@/components/ui/Panel";
 import StateBlock from "@/components/ui/StateBlock";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -101,46 +101,42 @@ export function SemCenario({ disp }: { disp: Exclude<Disponibilidade, { tipo: "o
 export function ResumoEstimado({ cenario }: { cenario: CenarioPremissas }) {
   const nc = cenario.estado === "nao_calculavel" || cenario.margem_contribuicao_estimada === null;
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <KpiTile
-        variante="gerencial"
-        identidade="gmv"
+    <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-gmv))"
         icone={CircleDollarSign}
         rotulo="Receita base"
         valor={cenario.receita_base !== null ? fmtReais(cenario.receita_base) : "Sem valor"}
-        tom={cenario.receita_base === null ? "ausente" : "neutro"}
-        comparacao="Receita realizada; a mesma da visão Conhecida"
+        ausente={cenario.receita_base === null}
+        legenda="Receita realizada; a mesma da visão Conhecida"
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="roas"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-roas))"
         icone={TrendingUp}
         rotulo={ROTULO_MARGEM_ESTIMADA}
         valor={cenarioSuspenso(cenario).suspensa ? margemEstimadaTexto(cenario) : textoMargemEstimada(cenario)}
-        tom={nc ? "ausente" : "neutro"}
-        comparacao={
+        ausente={nc}
+        legenda={
           <span className="flex flex-wrap items-center gap-1.5">
             <EstadoCenarioChip cenario={cenario} />
             {nc && cenario.motivos[0] && <span>{cenario.motivos[0]}</span>}
           </span>
         }
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="ticket"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-ticket))"
         icone={Percent}
         rotulo="% da receita (estimada)"
         valor={margemEstimadaPctTexto(cenario)}
-        tom={nc ? "ausente" : "neutro"}
-        comparacao={nc ? "Depende da margem estimada" : "Margem estimada ÷ receita base"}
+        ausente={nc}
+        legenda={nc ? "Depende da margem estimada" : "Margem estimada ÷ receita base"}
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="prazo"
+      <CartaoIndicador
+        cor="rgb(var(--tc-kpi-prazo))"
         icone={BookOpenCheck}
         rotulo="Premissas"
-        valor={<span className="text-base">{cenario.fonte_premissas.rotulo}</span>}
-        comparacao={
+        valor={<span className="text-base font-semibold">{cenario.fonte_premissas.rotulo}</span>}
+        legenda={
           cenario.fonte_premissas.data_fonte
             ? `Fonte enviada em ${fmtInstanteBrt(cenario.fonte_premissas.data_fonte)}`
             : "Data da fonte não informada"

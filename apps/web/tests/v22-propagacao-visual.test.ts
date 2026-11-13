@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["brand"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos", "pedidos", "operacoes"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -80,16 +80,17 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 8, consumidores.join(","));
+  assert.equal(consumidores.length, 8 - NO_ESQUELETO_ABA.size, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
-    const passaFiltros = /<PageHeader[\s\S]*?filters=\{/.test(src);
+    const passaFiltros = NO_ESQUELETO_ABA.has(nome) ? /<Aba[<\s][\s\S]*?filtros=\{/.test(src) : /<PageHeader[\s\S]*?filters=\{/.test(src);
     if (COM_FILTROS_GLOBAIS.includes(nome) && nome !== "brand") {
       assert.ok(passaFiltros, `${nome} herda filtros globais e deve passar filters=`);
-    } else if (nome !== "brand") {
+    } else if (nome !== "brand" && !NO_ESQUELETO_ABA.has(nome)) {
+      // na Aba, `filtros` pode ser filtro proprio da pagina (ex.: status em /produtos), nao barra global vazia
       assert.ok(!passaFiltros, `${nome} nao herda filtros globais: barra vazia seria afordancia falsa`);
     }
   }
@@ -207,13 +208,15 @@ test("P8. zero tipografia NOVA abaixo de 12px nos arquivos compartilhados criado
  * que se quer — a propagacao visual nao pode introduzir chamada nova.
  */
 const FETCHERS_POR_ROTA: Record<string, string[]> = {
-  canais: ["fetchCanais"],
+  // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
+  canais: ["fetchCanais", "fetchTrend"],
   produtos: [
     "fetchProdutosML", "fetchProdutosMLSummary", "fetchProdutosShopee",
     "fetchProdutosShopeeSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
   ],
   regioes: ["fetchRegioesSummary", "fetchRegioesByUf", "fetchRegioesByBrand", "fetchRegioesTrend"],
-  financeiro: ["fetchFinanceiro"],
+  // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
+  financeiro: ["fetchFinanceiro", "fetchTrend"],
   qualidade: ["fetchQuality"],
   pedidos: ["fetchPedidos"],
   inteligencia: ["fetchInteligencia"],
@@ -330,8 +333,9 @@ test("P16. Qualidade nao cria ranking competitivo de cancelamento entre canais",
 test("P17. Pedidos: Shopee isolada e' ausencia de cobertura, nao API offline", () => {
   const src = read("app/pedidos/page.tsx");
   assert.match(src, /Shopee sem cobertura nesta visão/);
-  const statusBlock = src.slice(src.indexOf("        status={"), src.indexOf("        filters={"));
-  assert.ok(statusBlock.indexOf("showShopeeOnly") < statusBlock.indexOf("<LiveStatusBadge"),
+  // ALVO-GRADE: o selo da `Aba` faz o papel do antigo `status` do cabecalho.
+  const statusBlock = src.slice(src.indexOf("        selo={"), src.indexOf("        filtros={"));
+  assert.ok(statusBlock.indexOf("showShopeeOnly") >= 0 && statusBlock.indexOf("showShopeeOnly") < statusBlock.indexOf("<SeloAtualizado"),
     "a cobertura ausente e' checada antes do badge de rede");
 });
 
@@ -427,6 +431,6 @@ test("P25. Produtos TikTok continua no valor de produto, sem rateio de frete", (
   assert.doesNotMatch(src, /rateio|shipping|frete/i, "nenhuma regra de frete por produto");
   assert.doesNotMatch(src, /estimated_margin/, "campo fora das tabelas atuais");
   // e nenhum ranking consolidado entre marketplaces
-  assert.match(src, /ProductMarketplaceTabs/, "cada marketplace na sua aba");
+  assert.match(src, /visoes=\{TABS\.map/, "cada marketplace na sua aba (abas da moldura)");
   assert.doesNotMatch(src, /rankingConsolidado|allChannelsRanking/i);
 });

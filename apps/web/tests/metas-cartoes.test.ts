@@ -36,7 +36,9 @@ test("pagina: faixa gerencial antes da grade, rodape sem o destaque antigo", () 
   const T = ler("src/components/metas/MetasTotais.tsx");
   const C = ler("app/metas/MetasClient.tsx");
   const G = ler("src/components/metas/MetasGrade.tsx");
-  assert.ok(T.includes('variante="gerencial"') && T.includes('identidade="gmv"') && T.includes("CHANNEL_DOT"));
+  // ALVO-GRADE: cartao unico; o global na identidade do GMV e cada canal na cor do proprio canal.
+  assert.ok(T.includes("<CartaoIndicador") && T.includes("--tc-kpi-gmv") && T.includes("--tc-canal-shopee"));
+  assert.ok(T.includes("ausente={c.ausente}"), "sem meta nao sai com peso de numero");
   assert.ok(C.indexOf("<MetasTotais") > 0 && C.indexOf("<MetasTotais") < C.indexOf("<MetasGrade"));
   assert.ok(C.includes("totais(analise.efetivos)"), "o cartao acompanha o rascunho, como o rodape");
   assert.ok(!G.includes("text-lg font-bold text-accent"), "o destaque da Meta global saiu do rodape");

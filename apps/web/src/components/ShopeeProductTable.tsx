@@ -2,7 +2,11 @@ import type { ProdutoShopeeRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
+
+/** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
+const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
@@ -58,8 +62,8 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
           <td className="px-4 py-3 text-[11px] text-ink-muted tabular-nums whitespace-nowrap">
             {p.sku_ref ?? <span className="text-ink-faint">—</span>}
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrl(p.gmv)}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrlCurto(p.gmv)}</td>
           <td className="px-4 py-3 text-center">
             {p.pareto_bucket && (
               <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${PARETO_COLOR[p.pareto_bucket] ?? "bg-raised text-ink-muted"}`}>
@@ -67,17 +71,17 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
               </span>
             )}
           </td>
-          <td className="px-4 py-3 text-right tabular-nums text-ink-muted whitespace-nowrap">{p.units_sold != null ? fmtNumber(p.units_sold) : <span className="text-ink-faint">—</span>}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-ink-muted whitespace-nowrap">{p.orders != null ? fmtNumber(p.orders) : <span className="text-ink-faint">—</span>}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-ink-muted whitespace-nowrap">{p.units_sold != null ? fmtNumCurto(p.units_sold) : <span className="text-ink-faint">—</span>}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-ink-muted whitespace-nowrap">{p.orders != null ? fmtNumCurto(p.orders) : <span className="text-ink-faint">—</span>}</td>
           <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
             {p.cancel_rate_pct != null ? (
               <span className={p.cancel_rate_pct < 2 ? "text-ok-ink" : p.cancel_rate_pct < 5 ? "text-warn-ink font-semibold" : "text-crit-ink font-semibold"}>
-                {p.cancel_rate_pct.toFixed(1)}%
+                {dec(p.cancel_rate_pct, 1)}%
               </span>
             ) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right tabular-nums text-ink-muted whitespace-nowrap">
-            {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-ink-faint">—</span>}
+            {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
           </td>
         </tr>
       )}
