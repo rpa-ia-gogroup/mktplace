@@ -80,7 +80,7 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 8 - NO_ESQUELETO_ABA.size, consumidores.join(","));
+  assert.equal(consumidores.length, 8 - [...NO_ESQUELETO_ABA].filter((n) => n !== "brand").length, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
