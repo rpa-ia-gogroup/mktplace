@@ -232,12 +232,21 @@ export default function MarcasMeta({
                   </span>
                 </Linha>
                 {/* Full x sem Full direto na linha (pedido da Nathalia 13/11), na mesma escala da barra da meta. */}
-                {d && soma(d.full) + soma(d.semFull) > 0 && (
-                  <div className="flex flex-col gap-1 px-2 pb-1.5 min-[480px]:pl-[calc(0.5rem+min(30%,9rem))]">
-                    <BarraFull rotulo="Full" partes={d.full} canais={canaisDaBarra(b)} escala={escala} />
-                    <BarraFull rotulo="Sem Full" partes={d.semFull} canais={canaisDaBarra(b)} escala={escala} />
-                  </div>
-                )}
+                {d && soma(d.full) + soma(d.semFull) > 0 && (() => {
+                  const base = soma(d.full) + soma(d.semFull);
+                  const pctFull = Math.round((soma(d.full) / base) * 100);
+                  return (
+                    <div className="flex flex-col gap-1 px-2 pb-1.5 min-[480px]:pl-[calc(0.5rem+min(30%,9rem))]">
+                      <BarraFull rotulo="Full" pct={pctFull} partes={d.full} canais={canaisDaBarra(b)} escala={escala} />
+                      <BarraFull rotulo="Sem Full" pct={100 - pctFull} partes={d.semFull} canais={canaisDaBarra(b)} escala={escala} />
+                      {/* Sem medida de envio: fora do %, dito em vez de somar menos que o GMV calado. */}
+                      {soma(d.semDado) > 0 && (
+                        <BarraFull rotulo="Sem dado de envio" partes={d.semDado} canais={canaisDaBarra(b)} escala={escala}
+                          dica="A modalidade de envio dos pedidos deste canal não foi medida no período; fica fora do % Full." />
+                      )}
+                    </div>
+                  );
+                })()}
               </li>
             );
           })}
@@ -309,7 +318,7 @@ function Linha({ abrir, href, children }: { abrir: (() => void) | null; href: st
   return abrir ? (
     <button type="button" aria-haspopup="dialog" onClick={abrir} className={LINHA}>
       {children}
-      <span className="sr-only"> (abrir Full e sem Full)</span>
+      <span className="sr-only"> (ver por canal)</span>
     </button>
   ) : (
     <Link href={href} className={LINHA}>
@@ -337,19 +346,22 @@ function soDoCanal(b: BrandRow, c: Marketplace): BrandRow {
 function BarraFull({
   rotulo,
   dica,
+  pct,
   partes,
   canais,
   escala,
 }: {
   rotulo: string;
   dica?: string;
+  /** % sobre Full + Sem Full da marca, antes do valor. */
+  pct?: number;
   partes: Partial<Record<Marketplace, number>>;
   canais: Marketplace[];
   escala: number;
 }) {
   const total = Object.values(partes).reduce((a, v) => a + (v ?? 0), 0);
   return (
-    <span className="grid grid-cols-[72px_minmax(48px,1fr)_auto] items-center gap-2 text-xs text-ink-muted" title={dica}>
+    <span className="grid grid-cols-[minmax(72px,auto)_minmax(48px,1fr)_auto] items-center gap-2 text-xs text-ink-muted" title={dica}>
       <span className="whitespace-nowrap">{rotulo}</span>
       <span className="relative h-2 rounded-full bg-raised" aria-hidden="true">
         <span
@@ -362,7 +374,10 @@ function BarraFull({
           })}
         </span>
       </span>
-      <span className="whitespace-nowrap text-right tabular-nums">{fmtCompacto(total)}</span>
+      <span className="whitespace-nowrap text-right tabular-nums">
+        {pct != null && <b className="font-semibold text-ink">{pct}% · </b>}
+        {fmtCompacto(total)}
+      </span>
     </span>
   );
 }
