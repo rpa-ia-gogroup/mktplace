@@ -620,3 +620,27 @@ contas das marcas pedidas (mapa `ACCOUNT_BRAND` no serviço). Antes, `brands=api
 
 O `/performance/executive-summary` mantém o contrato (`health.gmv`/`orders`/`avg_ticket` numéricos): ausência
 continua virando `status = critical` com risco `missing_data`.
+
+## Taxa/repasse TikTok em maturação e cobertura do Ads Shopee (T-0115)
+
+Fonte: `total_settlement` e `total_fees` vêm da `gold.tiktok_brand_daily` (Data Mart), via
+`marts.fact_marketplace_daily_performance`. Regras em `apps/api/app/services/performance_service.py`.
+
+**1. Maturação do repasse TikTok** (`/financeiro`, por marca no período)
+- Repasse abaixo de `_TIKTOK_REPASSE_MADURO_MIN_PCT` = 30% do GMV → marca "maturando": taxa e repasse viram `null`
+  (`tiktok_repasse_status = "maturando"`), a marca sai do numerador e do denominador do agregado e entra em
+  `marcas_maturando` (subconjunto de `marcas_sem_dado`) de `tiktok_fee_cobertura` e `tiktok_settlement_cobertura`.
+- Repasse maduro, mas taxa abaixo de `_TIKTOK_TAXA_PLAUSIVEL_MIN_PCT` = 1% do GMV → só a taxa vira `null`.
+- Por quê: num mês maduro o repasse fica em torno de 67% do GMV; a comissão de plataforma sozinha, em torno de 6%.
+- `/canais`: TikTok maturando sai com `marketplace_cost_available=false` e `marketplace_cost_pct=null`, fica fora da
+  mediana e do p75 e o sinal vira `sem_dado` — não dispara "custo alto".
+- Limitação conhecida: período antigo com muitos reembolsos (repasse < 30%) também sai como "maturando".
+- Causa conhecida do repasse ausente em nov/26: a `gold.tiktok_brand_daily` congela o `total_settlement` no dia em
+  que calcula a linha. A correção é na gold (time de Dados).
+
+**2. Cobertura do Ads Shopee**
+- `shopee_ads_cobertura` (`{status, marcas_com_dado, marcas_total, marcas_sem_dado}`): no `/financeiro` (em `kpis`)
+  e no `/overview` (só em `current`, só com Shopee no filtro) — marcas com Ads e marcas sem.
+- O ROAS consolidado da Shopee é calculado só sobre as marcas com Ads.
+- `/canais`: Shopee sem Ads sai com `ads_missing_reason`.
+- A web mostra "parcial (k de n marcas)".
