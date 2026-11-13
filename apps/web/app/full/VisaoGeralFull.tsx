@@ -15,28 +15,27 @@
  */
 
 import Link from "next/link";
-import { Boxes, PackageX, TrendingDown, TriangleAlert, Warehouse } from "lucide-react";
+import { Boxes, PackageX, TrendingDown } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
-import Chip from "@/components/ui/Chip";
-import Heroi from "@/components/ui/Heroi";
+import Aba from "@/components/layout/Aba";
+import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import InfoDica from "@/components/ui/InfoDica";
-import DeltaBadge from "@/components/ui/DeltaBadge";
-import KpiTile from "@/components/ui/KpiTile";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import { AvisoTopo } from "@/components/full/CategoriasEstoque";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
+import { fmtDelta } from "@/lib/formatters";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
 import ChipCurva from "@/components/full/ChipCurva";
 import SeloCanal from "@/components/full/SeloCanal";
-import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { fetchCurvaAbc, fetchEstoqueFull, fetchImpactoRuptura, fetchMLFullEstoque } from "@/lib/api-client";
 import { fmtDecimal, fmtInt } from "@/lib/estoque-full";
-import { doCanal, noCanal } from "@/lib/canal-preposicao";
+import { noCanal } from "@/lib/canal-preposicao";
 import { hrefAba } from "@/lib/full-abas";
 import {
   NOME_CANAL,
@@ -68,7 +67,6 @@ import {
   celulaImpacto,
   contarCanais,
   filtrarCanal,
-  filtroDoBloco,
   filtrosNaUrl,
   fotosHeroi,
   lerFiltrosUrl,
@@ -76,7 +74,6 @@ import {
   DICA_IMPACTO_FILA,
   NOME_CANAL_LONGO,
   SELO_CANAL,
-  type BlocoCanal,
   type FiltroCanal,
   type ItemRuptura,
   heroiCurva,
@@ -146,10 +143,10 @@ function Escondido({ texto, detalhe, className }: { texto: string; detalhe?: str
 }
 
 /** So' o %; "x de y" no title + sr-only. */
-function Fracao({ parte, base, motivo }: { parte: number | null; base: number | null; motivo?: string }) {
+function Fracao({ parte, base, motivo, critico = false }: { parte: number | null; base: number | null; motivo?: string; critico?: boolean }) {
   const f = fracao(parte, base);
   if (!f) return <Ausente motivo={motivo ?? (base === 0 ? "sem itens no Full" : undefined)} />;
-  return <Escondido texto={f.texto} detalhe={f.detalhe} className="font-semibold text-ink" />;
+  return <Escondido texto={f.texto} detalhe={f.detalhe} className={`font-semibold ${critico ? "text-crit-ink" : "text-ink"}`} />;
 }
 
 /** Segunda linha da celula de marca: so' o R$/dia; % do Full da marca e "sem preço" no title + sr-only. */
@@ -173,67 +170,6 @@ function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedor
  * velha ou marca faltando); o frescor em dia fica no title e no ⓘ do heroi.
  * O bloco e' botao: leva a fila filtrada naquele canal (e AA/A).
  */
-function BlocoCanalHeroi({ c, bloco, aoClicar, recarregar }: { c: ResumoCanal; bloco?: BlocoCanal; aoClicar: () => void; recarregar: () => void }) {
-  const nome = NOME_CANAL_LONGO[c.canal];
-  const cabeca = (
-    <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SELO_CANAL[c.canal].ponto}`} />
-      {nome}
-    </span>
-  );
-  if (c.status !== "ok") {
-    return (
-      <div className="flex flex-col gap-1 rounded-lg border border-line bg-raised/40 p-3">
-        {cabeca}
-        <Chip tom="ausente">sem dado agora</Chip>
-        {c.motivo && <span className="text-xs text-ink-muted">{c.motivo}</span>}
-        {c.status === "erro" && <div><RetryButton onClick={recarregar} /></div>}
-      </div>
-    );
-  }
-  const aviso = avisoCanal(c);
-  const f = fracao(c.ruptura, c.base);
-  const falado = bloco
-    ? `${bloco.n} AA/A${bloco.apoio || bloco.detalhe ? `, ${bloco.apoio ?? bloco.detalhe}` : ""}`
-    : `${f?.texto ?? "—"} sem estoque`;
-  return (
-    <button
-      type="button"
-      onClick={aoClicar}
-      title={[c.frescor, bloco?.detalhe].filter(Boolean).join(' · ')}
-      aria-label={`Ver rupturas ${doCanal(c.canal, nome)}: ${falado}${aviso ? `. ${aviso}` : ""}`}
-      className="card-hover group flex min-h-11 w-full flex-col gap-1 rounded-lg border border-line bg-raised/40 p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      {cabeca}
-      {bloco ? (
-        <span className="flex items-baseline gap-1">
-          <span className={`text-2xl font-bold tabular-nums ${bloco.n > 0 ? "text-crit-ink" : "text-ink"}`}>{fmtInt(bloco.n)}</span>
-          <span className="text-sm text-ink-muted">AA/A</span>
-        </span>
-      ) : (
-        <span className="flex items-baseline gap-1">
-          <span className="text-2xl font-bold tabular-nums text-ink">{f?.texto ?? "—"}</span>
-          <span className="text-sm text-ink-muted">sem estoque</span>
-        </span>
-      )}
-      {bloco?.apoio && (
-        <span className={`flex items-center gap-1 text-xs ${bloco.poucaCobertura ? "text-ink-faint" : "text-ink-muted"}`}>
-          {bloco.apoio}
-          {bloco.poucaCobertura && (
-            <InfoDica emControle texto={`A curva da planilha cobre poucos itens ${doCanal(c.canal, NOME_CANAL[c.canal])}: os demais não entram no ${fmtInt(bloco.n)}.`} />
-          )}
-        </span>
-      )}
-      {aviso && (
-        <span className="flex items-center gap-1 text-xs text-warn-ink">
-          <TriangleAlert aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-warn" />
-          {aviso}
-        </span>
-      )}
-    </button>
-  );
-}
-
 /** Celula de impacto da fila: R$ potencial; Shopee com estoque do vendedor = "R$ 0" medido e explicado. */
 function CelulaImpacto({ t }: { t: ItemRuptura }) {
   const c = celulaImpacto(t);
@@ -339,7 +275,7 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
           )}
         </td>
         <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">
-          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />}
+          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={l.vendedorCobre ? "sem perda" : fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} className={l.vendedorCobre ? "text-ink-faint" : undefined} />}
         </td>
         <td className="py-2.5 pl-2 text-right tabular-nums text-ink-muted">{fmtInt(l.rupturas)}</td>
       </tr>
@@ -405,16 +341,15 @@ export default function VisaoGeralFull() {
     return () => ctrl.abort();
   }, [tentativa]);
 
-  return (
-    <PageContainer>
-      <PageHeader title="Visão geral do Full" icon={Warehouse} />
-      {canais === null ? (
+  const abas = useVisoesFull();
+  if (canais === null) {
+    return (
+      <Aba {...abas} selo={<SeloAtualizado em={null} carregando />}>
         <StateBlock tipo="carregando" titulo="Carregando o estoque Full do ML e da Shopee" />
-      ) : (
-        <Conteudo canais={canais} impacto={impacto} antes={antes} abc={abc} recarregar={recarregar} />
-      )}
-    </PageContainer>
-  );
+      </Aba>
+    );
+  }
+  return <Conteudo abas={abas} canais={canais} impacto={impacto} antes={antes} abc={abc} recarregar={recarregar} />;
 }
 
 /** API-4: a 2a chamada (impacto com a foto anterior) e os estoques NAQUELES dias. */
@@ -442,19 +377,14 @@ async function buscarAnterior(signal: AbortSignal): Promise<FotoAnterior | null>
   return { impacto, shopee, ml: mlResumo };
 }
 
-/** Pilula + "antes X% · foto de dd/mm". Risco subindo e' ruim: lower_is_better, em p.p. */
-function Pilula({ a }: { a: Antes | null }) {
-  return a ? <DeltaBadge pct={a.pp} tone="lower_is_better" unidade="pp" /> : null;
-}
-
 const OPCOES_FILTRO: { valor: FiltroCurva; texto: string }[] = [
   { valor: "todas", texto: "Todas" }, { valor: "aa_a", texto: "AA/A" }, { valor: "b", texto: "B" },
   { valor: "c", texto: "C" }, { valor: "sem", texto: "Sem curva" },
 ];
 
-function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; abc: CurvaAbc | null; recarregar: () => void }) {
-  // O unico detalhe da pagina e' o impacto por curva (os cartoes de impacto filtram a fila).
-  const [curvaAberta, setCurvaAberta] = useState(false);
+function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: ReturnType<typeof useVisoesFull>; canais: ResumoCanal[]; impacto: ImpactoRuptura | null; antes: FotoAnterior | null; abc: CurvaAbc | null; recarregar: () => void }) {
+  // Painel "Sem estoque por curva": o canal do proprio painel (R$ nunca somado entre canais).
+  const [canalCurva, setCanalCurva] = useState<FiltroCanal>("todos");
   // FULL-CARINHO: filtros da fila na URL (?canal=ml&curva=aa_a): compartilhar e o "voltar" funcionam.
   const busca = useSearchParams();
   const router = useRouter();
@@ -507,129 +437,211 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
   const algumaIncompleta = ok.some((c) => !c.rupturasCompletas);
   const falhou = canais.some((c) => c.status === "erro");
 
+  // A foto MAIS ANTIGA dos canais medidos: o selo nunca parece mais novo que o dado. Foto velha = "Desatualizado" escrito.
+  const horas = oks(canais).map((c) => c.atualizadoEm).filter((h): h is string => !!h).sort();
+  const selo = (
+    <SeloAtualizado
+      em={horas[0] ?? null}
+      atrasado={oks(canais).some((c) => c.frescorVelho)}
+      detalhe={[fotosHeroi(canais), ...oks(canais).map((c) => `${NOME_CANAL[c.canal]}: ${c.frescor}`)].filter(Boolean).join(" · ")}
+    />
+  );
   if (!ok.length || !heroi) {
     return (
+      <Aba {...abas} selo={selo}>
       <StateBlock
         tipo={falhou ? "erro" : "indisponivel"}
         titulo="Estoque Full sem dado agora"
         descricao={canais.map((c) => `${NOME_CANAL[c.canal]}: ${c.status === "ok" ? "" : c.motivo}`).join(" · ")}
         acao={falhou ? <RetryButton onClick={recarregar} /> : undefined}
       />
+      </Aba>
     );
   }
 
+  const pilulaPp = (x: Antes | null) => (x ? { texto: fmtDelta(x.pp, "pp"), tom: (x.pp > 0 ? "crit" : x.pp < 0 ? "ok" : "neutro") as TomPilula } : null);
+  const baseOk = ok.reduce((n, c) => n + c.base, 0);
+  const rupturaOk = ok.reduce((n, c) => n + c.ruptura, 0);
+  const maxVenda = Math.max(0, ...lista.map((t) => t.mediaDiaria));
+  // So' o que pede acao: com perda medida (sem "sem perda"), do maior impacto potencial/dia para o menor.
+  const topo = doCanalEscolhido
+    .filter((t) => typeof t.perdaDia === "number" && t.perdaDia > 0 && !celulaImpacto(t).zeroMedido)
+    .sort((a, b) => (b.perdaDia as number) - (a.perdaDia as number))
+    .slice(0, 5);
+  const paramVenda = kpiParamVenda(shopee);
+  const antesPv = antesParamVenda(shopee, antes?.shopee ?? null);
   return (
-    <>
-      {/* 1. Heroi: quantos produtos-chave (AA/A) estao sem estoque; uma linha por canal com a foto */}
-      <Heroi
-        rotulo="Produtos-chave (AA/A) sem estoque no Full"
-        ajuda={<InfoDica texto={DICA_RUPTURA} nota={[curvaH?.parcial ? DICA_HEROI_PARCIAL : null, fotosHeroi(canais), NOTA_VENDEDOR].filter(Boolean).join(" ")} />}
-        valor={curvaH ? <Escondido texto={curvaH.valor} detalhe={curvaH.titulo} /> : "—"}
-        tom={curvaH?.critico ? "critico" : "neutro"}
-        contexto={curvaH?.contexto ? <Escondido texto={curvaH.contexto} detalhe={curvaH.titulo} /> : undefined}
-        acao={comCurva && (
-          <button type="button" onClick={() => setCurvaAberta(true)} aria-haspopup="dialog"
-            className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-            Ver por curva →
-          </button>
-        )}
-        meio={
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {canais.map((c) => (
-              <BlocoCanalHeroi
-                key={c.canal}
-                c={c}
-                bloco={curvaH?.blocos[c.canal]}
-                recarregar={recarregar}
-                aoClicar={() => {
-                  const f = curvaH?.blocos[c.canal] ? filtroDoBloco(c.canal) : { canal: c.canal as FiltroCanal, curva: "todas" as FiltroCurva };
-                  aplicar(f.canal, f.curva, true);
-                }}
-              />
+    <Aba
+      {...abas}
+      selo={selo}
+      filtros={
+        <div className="flex min-w-0 flex-col gap-1 self-center">
+          {/* Canal sem foto ou com aviso: UMA linha cada, na linha dos filtros (era o meio do heroi). */}
+          {canais.map((c) =>
+            c.status !== "ok" ? (
+              <div key={c.canal} className="flex flex-wrap items-center gap-2">
+                <AvisoTopo texto={`${NOME_CANAL_LONGO[c.canal]} sem dado agora`} ajuda={c.motivo} />
+                {c.status === "erro" && <RetryButton onClick={recarregar} />}
+              </div>
+            ) : avisoCanal(c) ? (
+              <AvisoTopo key={c.canal} texto={`${NOME_CANAL_LONGO[c.canal]}: ${avisoCanal(c)}`} />
+            ) : null,
+          )}
+        </div>
+      }
+      direita={
+        // 390: a trilha rola sozinha (a opcao escolhida e' centralizada pelo efeito de [data-trilha]).
+        <div data-trilha className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
+        <Segmented
+          rotulo="Canal"
+          opcoes={(["todos", ...CANAIS] as FiltroCanal[]).map((c) => ({
+            valor: c,
+            texto: `${c === "todos" ? "Todos" : NOME_CANAL_LONGO[c]} · ${fmtInt(contagemCanal[c])}`,
+            icone: c === "todos" ? undefined : <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${SELO_CANAL[c].ponto}`} />,
+          }))}
+          valor={filtroCanal}
+          aoEscolher={(c) => aplicar(c, filtroAtivo)}
+          className="whitespace-nowrap"
+        />
+        </div>
+      }
+      faixa={
+        <>
+          <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+            <CartaoIndicador
+              rotulo="Produtos-chave sem estoque"
+              icone={PackageX}
+              cor="rgb(var(--tc-kpi-ads))"
+              valor={!curvaH || curvaH.valor === "—" ? null : curvaH.valor}
+              pilula={curvaH?.critico ? { texto: "AA/A", tom: "crit" } : null}
+              legenda={
+                curvaH && Object.keys(curvaH.blocos).length
+                  ? CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]} ${fmtInt(curvaH.blocos[c]!.n)}`).join(" · ")
+                  : curvaH?.contexto || undefined
+              }
+              // Por canal: % do impacto potencial ou a cobertura curta da curva (o que o heroi antigo mostrava).
+              tendencia={curvaH && Object.keys(curvaH.blocos).length
+                ? CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]}: ${curvaH.blocos[c]!.apoio ?? curvaH.blocos[c]!.detalhe ?? "—"}`).join(" · ")
+                : curvaH?.titulo}
+              ajuda={<InfoDica emControle texto={DICA_RUPTURA} nota={[
+                curvaH?.titulo && curvaH.valor !== "—" ? `${curvaH.valor} AA/A ${curvaH.titulo}.` : null,
+                ...CANAIS.filter((c) => curvaH?.blocos[c]?.poucaCobertura).map((c) => `A curva da planilha cobre poucos itens ${noCanal(c, NOME_CANAL[c])}: os demais não entram no ${fmtInt(curvaH!.blocos[c]!.n)}.`),
+                curvaH?.parcial ? DICA_HEROI_PARCIAL : null, fotosHeroi(canais), NOTA_VENDEDOR,
+              ].filter(Boolean).join(" ")} />}
+              // O numero soma os canais: a fila abre com TODOS (bate com o cartao) e o filtro de canal deixa escolher.
+              // Sem curva, abre a fila inteira (o clique nunca some).
+              onAbrir={() => aplicar("todos", comCurva ? "aa_a" : "todas", true)}
+            />
+            <CartaoIndicador
+              rotulo="Sem estoque com demanda"
+              icone={Boxes}
+              cor="rgb(var(--tc-kpi-pedidos))"
+              valor={heroi.valor}
+              pilula={pilulaPp(aHeroi)}
+              progresso={baseOk > 0 ? rupturaOk / baseOk : null}
+              legenda={heroi.detalhe}
+              tendencia={[aHeroi?.texto, motivoHeroi].filter(Boolean).join(" · ") || null}
+              ajuda={<InfoDica emControle texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
+              onAbrir={() => aplicar(filtroCanal, "todas", true)}
+            />
+            {CANAIS.map((canal) => {
+              const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
+              const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
+              const motivo = antes && !a ? semComparacao(canal, antes.impacto) : null;
+              const ci = impactosOk(impacto).find((x) => x.canal === canal);
+              const p = canal === "shopee" && semVendedor === 0 ? 0 : ci ? pctDestaque(canal, ci) : null;
+              return (
+                <CartaoIndicador
+                  key={canal}
+                  rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
+                  icone={TrendingDown}
+                  cor="rgb(var(--tc-kpi-gmv))"
+                  valor={k.valor === "—" ? null : k.valor}
+                  pilula={pilulaPp(a)}
+                  // Barra so' quando o numero e' a fracao (%); R$/dia sozinho fica sem barra.
+                  progresso={k.valor.endsWith("%") ? p : null}
+                  legenda={k.comparacao}
+                  tendencia={[k.detalhe, a?.texto, motivo].filter(Boolean).join(" · ") || null}
+                  ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
+                  onAbrir={() => aplicar(canal, "todas", true)}
+                />
+              );
+            })}
+          </div>
+        </>
+      }
+    >
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel
+          titulo="Sem estoque por curva"
+          ajuda={comCurva ? dicaCurva(abc, impacto) : undefined}
+          acao={
+            <Segmented
+              rotulo="Canal da curva"
+              opcoes={(["todos", ...CANAIS] as FiltroCanal[]).map((c) => ({ valor: c, texto: c === "todos" ? "Todos" : NOME_CANAL[c] }))}
+              valor={canalCurva}
+              aoEscolher={setCanalCurva}
+            />
+          }
+        >
+          {/* Um quadro por canal: R$ nunca somado entre canais. */}
+          <div className="flex flex-col gap-4">
+            {CANAIS.filter((c) => canalCurva === "todos" || c === canalCurva).map((c) => (
+              <div key={c} className="flex flex-col gap-1">
+                {canalCurva === "todos" && (
+                  <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SELO_CANAL[c].ponto}`} />
+                    {NOME_CANAL_LONGO[c]}
+                  </span>
+                )}
+                <DetalheCurva canal={c} impacto={impacto} abc={abc} />
+              </div>
             ))}
           </div>
-        }
-      />
-
-      {/* 2. Faixa de KPIs: quanto custa (por canal, R$ nunca somado) e quem para a venda */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile
-          variante="gerencial"
-          identidade="pedidos"
-          icone={Boxes}
-          rotulo="Sem estoque com demanda"
-          ajuda={<InfoDica texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
-          valor={<Escondido texto={heroi.valor} detalhe={["do sortimento no Full", heroi.detalhe].filter(Boolean).join(" · ")} />}
-          tom={heroi.critico ? "critico" : "neutro"}
-          comparacao={motivoHeroi ? <Escondido texto="sem comparação" detalhe={motivoHeroi} /> : undefined}
-          delta={aHeroi && <Pilula a={aHeroi} />}
-          antes={aHeroi?.texto}
-        />
-        {CANAIS.map((canal) => {
-          const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
-          const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
-          const motivo = antes && !a ? semComparacao(canal, antes.impacto) : null;
-          return (
-            <div key={canal} className="relative h-full">
-              <KpiTile
-                variante="gerencial"
-                identidade="gmv"
-                icone={TrendingDown}
-                rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
-                ajuda={<InfoDica emControle texto={dicaImpacto(canal, impacto)} />}
-                valor={k.valor}
-                comparacao={<Escondido texto={k.comparacao} detalhe={[k.detalhe, motivo].filter(Boolean).join(" · ") || null} />}
-                delta={a && <Pilula a={a} />}
-                antes={a?.texto}
-                onAbrir={() => aplicar(canal, "todas", true)}
-                folgaRodape
-                acaoFalada={`ver as rupturas ${doCanal(canal, NOME_CANAL_LONGO[canal])} na fila`}
-              />
-            </div>
-          );
-        })}
-        {(() => {
-          const k = kpiParamVenda(shopee);
-          const a = antesParamVenda(shopee, antes?.shopee ?? null);
-          const motivo = antes && !a
-            ? semComparacao("shopee", antes.impacto) ?? (antes.shopee?.status === "ok" ? null : "sem comparação: sem o estoque da Shopee na foto anterior")
-            : null;
-          return (
-            <KpiTile
-              variante="gerencial"
-              identidade="pedidos"
-              icone={PackageX}
-              rotulo="Param a venda · Shopee"
-              ajuda={<InfoDica texto={NOTA_VENDEDOR} />}
-              valor={<Escondido texto={k.valor} detalhe={k.detalhe} />}
-              comparacao={<Escondido texto={k.comparacao} detalhe={motivo} />}
-              delta={a && <Pilula a={a} />}
-              antes={a?.texto}
-            />
-          );
-        })()}
+        </Panel>
+        <Panel
+          titulo="O que exige atenção"
+          ajuda={DICA_ORDEM_FILA}
+          acao={
+            <a
+              href="#fila-full"
+              onClick={(e) => { e.preventDefault(); document.getElementById("fila-full")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+              className="inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
+            >
+              Ver todos →
+            </a>
+          }
+        >
+          {topo.length === 0 ? (
+            <StateBlock tipo="vazio" titulo="Nenhuma ruptura com perda no Full" compacto />
+          ) : (
+            <ul className="divide-y divide-line">
+              {topo.map((t, i) => (
+                <li key={`${t.canal}-${i}`} className="flex items-start justify-between gap-3 py-2.5">
+                  <span className="flex min-w-0 flex-col gap-1">
+                    <span className="flex min-w-0 items-start gap-1.5">
+                      {comCurva && <ChipCurva curva={curvaDe(t, abc)} className="mt-0.5" />}
+                      <span className="line-clamp-2 text-sm font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
+                        {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
+                      <SeloCanal canal={t.canal} />
+                      <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
       </div>
-      <KpiDrilldownDialog
-        open={curvaAberta}
-        onClose={() => setCurvaAberta(false)}
-        title="Impacto potencial por curva ABC"
-        icone={TrendingDown}
-        identidade="gmv"
-      >
-        <div className="flex flex-col gap-3 [&>section:first-child]:border-t-0 [&>section:first-child]:pt-0">
-          {/* A metodologia (fonte, hora, cobertura, "sem curva") vive no ⓘ da 1a secao, nao em rodape. */}
-          {CANAIS.map((c, i) => (
-            <DrilldownSecao key={c} titulo={NOME_CANAL_LONGO[c]} acao={i === 0 && abc?.status === "ok" ? <InfoDica texto={dicaCurva(abc, impacto)} /> : undefined}>
-              <DetalheCurva canal={c} impacto={impacto} abc={abc} />
-            </DrilldownSecao>
-          ))}
-        </div>
-      </KpiDrilldownDialog>
 
-      {/* 3. O que exige atencao agora: 2 colunas (marca, canal e venda na linha 2 do produto) */}
-      <div id="fila-full" className="scroll-mt-20" />
+      {/* Tabela larga: a fila inteira, com o filtro de curva no proprio painel */}
       <Panel
-        titulo="O que exige atenção agora"
+        id="fila-full"
+        titulo="Produtos sem estoque no Full"
         descricao={descricaoTop(lista, comImpacto, algumaIncompleta, comCurva)}
         acao={
           <span className="flex flex-wrap gap-3 text-sm">
@@ -642,21 +654,8 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         }
         semPadding
       >
-        <div className="flex flex-col gap-2 px-3 pb-2 sm:px-4 lg:flex-row lg:flex-wrap lg:items-center">
-          <div data-trilha className="flex min-w-0 items-center gap-2 overflow-x-auto">
-            <Segmented
-              rotulo="Filtrar por canal"
-              opcoes={(["todos", ...CANAIS] as FiltroCanal[]).map((c) => ({
-                valor: c,
-                texto: `${c === "todos" ? "Todos" : NOME_CANAL_LONGO[c]} · ${fmtInt(contagemCanal[c])}`,
-                icone: c === "todos" ? undefined : <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${SELO_CANAL[c].ponto}`} />,
-              }))}
-              valor={filtroCanal}
-              aoEscolher={(c) => aplicar(c, filtroAtivo)}
-              className="shrink-0 whitespace-nowrap"
-            />
-          </div>
-          {comCurva && (
+        {comCurva && (
+          <div className="flex flex-wrap items-center gap-2 px-3 pb-2 sm:px-4">
             <div data-trilha className="flex min-w-0 items-center gap-2 overflow-x-auto">
               <Segmented
                 rotulo="Filtrar por curva ABC"
@@ -665,16 +664,15 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                 aoEscolher={(cv) => aplicar(filtroCanal, cv)}
                 className="shrink-0 whitespace-nowrap"
               />
-              <InfoDica texto={DICA_ORDEM_FILA} nota={dicaCurva(abc, impacto)} className="shrink-0" />
             </div>
-          )}
-          {comFiltro && (
-            <button type="button" onClick={() => aplicar("todos", "todas")}
-              className="inline-flex min-h-11 items-center self-start text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:self-auto">
-              Limpar filtros
-            </button>
-          )}
-        </div>
+            {comFiltro && (
+              <button type="button" onClick={() => aplicar("todos", "todas")}
+                className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                Limpar filtros
+              </button>
+            )}
+          </div>
+        )}
         {lista.length === 0 ? (
           <StateBlock tipo="vazio" titulo={comFiltro ? "Nenhuma ruptura com estes filtros" : "Nenhuma ruptura no Full"} compacto />
         ) : (
@@ -687,7 +685,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                   <th scope="col" className="w-24 px-2 py-2 text-center">Curva</th>
                   <th scope="col" className="px-3 py-2 text-left">Produto</th>
                   <th scope="col" className="w-36 px-3 py-2 text-left">Canal</th>
-                  <th scope="col" className="w-24 px-3 py-2 text-right">Venda/dia</th>
+                  <th scope="col" className="w-36 px-3 py-2 text-right">Venda/dia</th>
                   <th scope="col" className="w-56 px-3 py-2 text-left">Estoque</th>
                   <th scope="col" className="w-60 whitespace-nowrap px-4 py-2 text-right">
                     <span className="inline-flex items-center justify-end gap-1">Impacto potencial/dia <InfoDica texto={DICA_IMPACTO_FILA} /></span>
@@ -717,7 +715,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                           <span className="block text-xs font-semibold uppercase tracking-wide text-ink-muted">{tituloMarca(t.marca)}</span>
                         </th>
                         <td className="px-3 py-3 align-top"><SeloCanal canal={t.canal} /></td>
-                        <td className="px-3 py-3 text-right align-top tabular-nums text-ink-muted">{fmtDecimal(t.mediaDiaria)}</td>
+                        <td className="px-3 py-3 align-top"><CelulaBarra valor={fmtDecimal(t.mediaDiaria)} peso={maxVenda > 0 ? t.mediaDiaria / maxVenda : 0} cor={`rgb(var(--tc-canal-${t.canal}))`} /></td>
                         <td className="px-3 py-3 align-top tabular-nums"><CelulaEstoque t={t} /></td>
                         <td className="px-4 py-3 text-right align-top text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></td>
                       </tr>
@@ -783,7 +781,7 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
               const ehPior = l === pior;
               const ft = colunas.length > 1 && colunas.every((c) => l.celulas[c]?.ruptura != null) ? fracao(l.ruptura, l.base) : null;
               return (
-                <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
+                <tr key={l.marca} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
                   <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
                     <Escondido texto={tituloMarca(l.marca)} detalhe={ft ? `Total: ${ft.texto} (${ft.detalhe})` : null} />
                     {/* A linha vermelha nao pode ser o unico sinal: leitor de tela ouve "pior". */}
@@ -793,8 +791,9 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
                     const cel: MarcaCanal | undefined = l.celulas[canal];
                     return (
                       <td key={canal} className="px-3 py-2 sm:px-4 text-right tabular-nums">
-                        {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} /> : <Ausente motivo="marca fora deste canal" />}
-                        {cel && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
+                        {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} critico={ehPior} /> : <Ausente motivo="marca fora deste canal" />}
+                        {/* Sem a fracao, o "—" de cima ja' diz a ausencia: nada de segundo "—". */}
+                        {cel && fracao(cel.ruptura, cel.base) && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
                       </td>
                     );
                   })}
@@ -837,6 +836,17 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
             ))}
             <tr>
               <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
+                <span className="inline-flex items-center gap-1.5">Param a venda <InfoDica texto={NOTA_VENDEDOR} /></span>
+              </th>
+              <td className="px-3 py-2 sm:px-4 text-right tabular-nums"><Ausente motivo="não se aplica ao ML" /></td>
+              <td className="px-3 py-2 sm:px-4 text-right tabular-nums">
+                <Escondido texto={paramVenda.valor} detalhe={[paramVenda.comparacao, paramVenda.detalhe].filter(Boolean).join(" · ")} />
+                {antesPv && <span className="block text-xs text-ink-muted">{antesPv.texto}</span>}
+              </td>
+              <td className="px-3 py-2 sm:px-4 text-right tabular-nums"><Ausente motivo="só a Shopee" /></td>
+            </tr>
+            <tr>
+              <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
                 <span className="inline-flex items-center gap-1.5">Itens no Full <InfoDica texto="ML: inventários Full lidos. Shopee: itens sem os kits não conciliados." /></span>
               </th>
               {[...canais.map((c) => (c.status === "ok" ? c : null)), tot].map((d, i) => (
@@ -860,6 +870,6 @@ function Conteudo({ canais, impacto, antes, abc, recarregar }: { canais: ResumoC
         </table>
         </div>
       </MaisDetalhes>
-    </>
+    </Aba>
   );
 }

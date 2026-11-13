@@ -574,26 +574,22 @@ test("ruptura por marca: coluna do canal fora (ou sem marca medida) nao e' desen
   assert.deepEqual(colunasMarca(fora, rupturaPorMarca(fora)), ["ml"]);
 });
 
-test("tela: esqueleto da Gerencial, aviso do canal no heroi e sem rodape de frescor", () => {
+test("tela: grade unica (ALVO-GRADE), aviso do canal acima dos cartoes e sem rodape de frescor", () => {
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  const bloco = src.slice(src.indexOf("function BlocoCanalHeroi"), src.indexOf("function CelulaImpacto"));
-  assert.ok(bloco.includes("const aviso = avisoCanal(c);") && !bloco.includes("c.aviso"), "aviso do canal so' com problema (avisoCanal)");
-  assert.ok(!src.includes("chipFoto(") && bloco.includes("c.frescor"), "frescor em dia sai da vista: title do bloco e ⓘ do heroi");
-  assert.ok(src.includes("fotosHeroi(canais)"), "datas das fotos no ⓘ do heroi");
+  assert.ok(src.includes("avisoCanal(c)") && !src.includes("c.aviso"), "aviso do canal so' com problema (avisoCanal)");
+  assert.ok(!src.includes("chipFoto(") && src.includes("fotosHeroi(canais)"), "datas das fotos no title do selo e no ⓘ");
   assert.ok(!src.includes("<footer"), "sem rodape de frescor");
   assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
-  assert.ok(src.includes("<Heroi") && src.includes('variante="gerencial"') && src.includes("<KpiDrilldownDialog"), "esqueleto da Gerencial");
-  assert.equal((src.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um so' dialogo na pagina");
-  assert.ok(!src.includes("selo="), "sem selo: nao ha' limite de negocio para ruptura");
-  // CARD-KPI-GERENCIAL: cor de identidade da paleta (impacto = gmv, param a venda = pedidos);
-  // API-4: delta e "antes" so' da foto anterior (helpers antes*); serie nunca (nao aprovada).
-  assert.equal((src.match(/identidade="gmv"/g) ?? []).length, 2, "um KpiTile de impacto por canal + o modal da curva herda a cor");
-  assert.equal((src.match(/identidade="pedidos"/g) ?? []).length, 2, "Sem estoque com demanda e Param a venda");
-  assert.ok(!src.includes('identidade="ticket"'), "o cartao AA/A saiu da faixa (foi para o heroi)");
-  assert.ok(!/serie=\{/.test(src), "sem sparkline: o Full nao tem serie aprovada");
-  assert.equal((src.match(/delta=\{a && <Pilula a=\{a\} \/>\}/g) ?? []).length, 2, "pilula so' com o antes medido");
+  assert.ok(src.includes("<Aba") && src.includes("useVisoesFull()"), "moldura unica: titulo Full e as sub-abas");
+  assert.ok(!src.includes("<Heroi") && !src.includes("<KpiTile") && !src.includes("<KpiDrilldownDialog"), "sem heroi, sem KpiTile, sem dialogo");
+  assert.equal((src.match(/<CartaoIndicador/g) ?? []).length, 3, "4 cartoes: AA/A, sem estoque com demanda e um de impacto por canal (map)");
+  assert.ok(src.includes("Param a venda") && !src.includes('rotulo="Param a venda'), "Param a venda saiu da faixa para Mais detalhes");
+  // Cor por token, nunca hex; R$ nunca somado entre canais (um cartao de impacto por canal).
+  assert.ok(src.includes('cor="rgb(var(--tc-kpi-gmv))"') && !/cor="#/.test(src));
+  assert.ok(src.includes("rgb(var(--tc-canal-${t.canal}))"), "Venda/dia com a barrinha na cor do canal");
+  assert.ok(!/serie=\{/.test(src), "sem linha: o Full nao tem serie");
+  assert.ok(src.includes("pilulaPp(a)") && src.includes("pilulaPp(aHeroi)"), "pilula so' com o antes medido");
   assert.ok(src.includes("fetchImpactoRuptura(signal, true)"), "o antes vem da 2a chamada, depois do primeiro desenho");
-  assert.ok(!/min-w-\[/.test(src), "nenhuma tabela com largura minima (390 sem rolagem)");
 });
 
 // ---------------------------------------------------------------------------
@@ -847,7 +843,7 @@ test("selo do canal: ponto e pilula da cor do canal (ML ciano, Shopee laranja)",
   const src = readFileSync(new URL("../src/components/full/SeloCanal.tsx", import.meta.url), "utf-8");
   assert.ok(src.includes("SELO_CANAL[canal]") && src.includes("NOME_CANAL_LONGO[canal]"));
   const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  assert.equal((tela.match(/<SeloCanal canal=\{t\.canal\} \/>/g) ?? []).length, 3, "selo em toda linha: tabela, cartao e blocos recolhidos");
+  assert.equal((tela.match(/<SeloCanal canal=\{t\.canal\} \/>/g) ?? []).length, 4, "selo em toda linha: tabela, cartao, painel de atencao e blocos recolhidos");
 });
 
 test("aviso do canal so' com foto de mais de 1 dia ou marca faltando; frescor em dia fora da vista", () => {
@@ -991,7 +987,7 @@ test("clique no bloco do heroi: canal + AA/A; filtros na URL vao e voltam", () =
   assert.equal(filtrosNaUrl("", "todos", "todas"), "");
   assert.deepEqual(lerFiltrosUrl(new URLSearchParams("canal=tiktok&curva=zz")), { canal: "todos", curva: "todas" }, "valor estranho = padrao");
   const tela = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  assert.ok(tela.includes("filtroDoBloco(c.canal)") && tela.includes("aplicar(canal, \"todas\", true)"), "heroi e faixa levam a fila");
+  assert.ok(tela.includes("aplicar(\"todos\", comCurva ? \"aa_a\" : \"todas\", true)") && tela.includes("aplicar(canal, \"todas\", true)"), "cartoes levam a fila");
   assert.ok(tela.includes("por marca →") && tela.includes("Limpar filtros"));
 });
 

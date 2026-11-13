@@ -106,11 +106,6 @@ test("Aba: titulo grande sem icone | selo, abas sob o titulo, barra sticky, e a 
 // ---------------------------------------------------------------------------
 const AINDA_FORA_DO_ESQUELETO = new Set([
   "/brand/[brand]",
-  "/estoque-full",
-  "/estoque-ml-full",
-  "/full",
-  "/full-ml",
-  "/full-shopee",
   "/inteligencia",
   "/monitoramento-preco",
   "/monitoramento-preco/revendedores",

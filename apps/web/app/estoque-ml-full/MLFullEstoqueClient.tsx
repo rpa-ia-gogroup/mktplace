@@ -37,8 +37,9 @@ import {
   AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
 import TableScrollHint from "@/components/TableScrollHint";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
@@ -384,6 +385,7 @@ interface ErroML {
 }
 
 export default function MLFullEstoqueClient() {
+  const abas = useVisoesFull();
   const [filtros, setFiltros] = useState<FiltrosML>(FILTROS_ML_VAZIOS);
   const [payload, setPayload] = useState<MLFullEstoqueResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -513,6 +515,7 @@ export default function MLFullEstoqueClient() {
       })();
   const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria;
 
+  const fotoEmUso = payload && !isIndisponivelML(payload) ? payload.frescor.ref_date : "";
   const filtrosUI = (
     <div className="flex flex-col gap-3 w-full">
       <div className="flex flex-wrap items-center gap-2">
@@ -544,13 +547,14 @@ export default function MLFullEstoqueClient() {
             type="date"
             max={hoje}
             ref={dataRef}
-            value={dataDigitada}
+            // Sem data escolhida, o campo mostra a foto em uso (nao "dd/mm/aaaa"); so' vira filtro se a pessoa mudar.
+            value={dataDigitada || fotoEmUso}
             onChange={(e) => digitarData(e.target.value)}
-            onBlur={(e) => confirmarData(e.target.value)}
+            onBlur={(e) => { if (dataDigitada || e.target.value !== fotoEmUso) confirmarData(e.target.value); }}
             onKeyDown={(e) => {
-              if (e.key === "Enter") confirmarData(e.currentTarget.value);
+              if (e.key === "Enter" && (dataDigitada || e.currentTarget.value !== fotoEmUso)) confirmarData(e.currentTarget.value);
             }}
-            className="rounded-lg border border-line px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -586,19 +590,16 @@ export default function MLFullEstoqueClient() {
     payload !== null && !isIndisponivelML(payload) && payload.indicadores.total_parcial;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Estoque Full Mercado Livre"
-        scopeLine={
-          payload && !isIndisponivelML(payload) ? (
-            <span className="inline-flex items-center gap-1">
-              {escopo}
-              <InfoDica texto={diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))} />
-            </span>
-          ) : escopo
-        }
-        filters={filtrosUI}
-      />
+    <Aba
+      {...abas}
+      selo={
+        <>
+          <SeloAtualizado em={payload && !isIndisponivelML(payload) ? payload.frescor.published_at : null} carregando={carregando} detalhe={escopo} />
+          {payload && !isIndisponivelML(payload) && <InfoDica texto={diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))} />}
+        </>
+      }
+      filtros={filtrosUI}
+    >
 
       {carregando && (
         <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -659,6 +660,7 @@ export default function MLFullEstoqueClient() {
           {/* O aviso acima e' o UNICO; nos cards so' title + leitor de tela. */}
           <FaixaCategorias
             cards={cardsML(payload)}
+            faixa={["exigem-acao", "ruptura", "baixo", "excesso"]}
             ativa={chaveCategoria}
             aoEscolher={escolherCategoria}
             parcial={!!parcial}
@@ -695,7 +697,7 @@ export default function MLFullEstoqueClient() {
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-1">
                 {comCurva && (
                   <div className="flex flex-col gap-0.5">
-                    <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full), exigeAcaoML)}</p>
+                    <p className="text-sm font-medium text-ink">{/* Panorama: sem o filtro de curva. */}{resumoAcao(payload.inventarios.filter((i) => i.eh_full && !i.situacao), exigeAcaoML)}</p>
                   </div>
                 )}
                 {categoria && (
@@ -717,7 +719,7 @@ export default function MLFullEstoqueClient() {
           )}
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 
