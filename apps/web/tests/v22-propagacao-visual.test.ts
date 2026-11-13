@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -89,7 +89,8 @@ test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
     const passaFiltros = NO_ESQUELETO_ABA.has(nome) ? /<Aba[<\s][\s\S]*?filtros=\{/.test(src) : /<PageHeader[\s\S]*?filters=\{/.test(src);
     if (COM_FILTROS_GLOBAIS.includes(nome) && nome !== "brand") {
       assert.ok(passaFiltros, `${nome} herda filtros globais e deve passar filters=`);
-    } else if (nome !== "brand") {
+    } else if (nome !== "brand" && !NO_ESQUELETO_ABA.has(nome)) {
+      // na Aba, `filtros` pode ser filtro proprio da pagina (ex.: status em /produtos), nao barra global vazia
       assert.ok(!passaFiltros, `${nome} nao herda filtros globais: barra vazia seria afordancia falsa`);
     }
   }
@@ -429,6 +430,6 @@ test("P25. Produtos TikTok continua no valor de produto, sem rateio de frete", (
   assert.doesNotMatch(src, /rateio|shipping|frete/i, "nenhuma regra de frete por produto");
   assert.doesNotMatch(src, /estimated_margin/, "campo fora das tabelas atuais");
   // e nenhum ranking consolidado entre marketplaces
-  assert.match(src, /ProductMarketplaceTabs/, "cada marketplace na sua aba");
+  assert.match(src, /visoes=\{TABS\.map/, "cada marketplace na sua aba (abas da moldura)");
   assert.doesNotMatch(src, /rankingConsolidado|allChannelsRanking/i);
 });

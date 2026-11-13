@@ -9,15 +9,15 @@ import {
   type ProdutosMLSummary, type ProdutosChannelSummary,
 } from "@/lib/api-client";
 import { scopeUnavailableReason } from "@/lib/scope-quality-display";
-import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
-import PeriodSelector from "@/components/PeriodSelector";
-import ProductMarketplaceTabs from "@/components/ProductMarketplaceTabs";
-import ProductFilterBar, { ProductSelect } from "@/components/ProductFilterBar";
+import Aba from "@/components/layout/Aba";
+import Panel from "@/components/ui/Panel";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import { AvisoTopo } from "@/components/full/CategoriasEstoque";
+import Segmented from "@/components/ui/Segmented";
+import { ProductSelect } from "@/components/ProductFilterBar";
 import ProductParetoSummary from "@/components/ProductParetoSummary";
 import ScopeQualityBanner from "@/components/ScopeQualityBanner";
-import ProductCount from "@/components/ProductCount";
 import InfoDica from "@/components/ui/InfoDica";
 import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { MARCAS_MENORES_KEYS, MARCAS_MENORES_OPTIONS } from "@/lib/filters/brands";
@@ -62,14 +62,14 @@ const ML_BRANDS = [
   { value: "barbours", label: "BARBOURS" },
   { value: "kokeshi", label: "KOKESHI" },
   { value: "lescent", label: "LESCENT" },
-  { value: "rituaria", label: "RITUARIA" },
+  { value: "rituaria", label: "RITUÁRIA" },
 ];
 const TK_SH_BRANDS = [
-  { value: "apice", label: "APICE" },
+  { value: "apice", label: "ÁPICE" },
   { value: "barbours", label: "BARBOURS" },
   { value: "kokeshi", label: "KOKESHI" },
   { value: "lescent", label: "LESCENT" },
-  { value: "rituaria", label: "RITUARIA" },
+  { value: "rituaria", label: "RITUÁRIA" },
   // Marcas menores: dado do Bling, mesmo layout das outras (so' TikTok e Shopee; no ML elas nao vendem).
   ...MARCAS_MENORES_OPTIONS,
 ];
@@ -79,7 +79,7 @@ function paretoLinha(partes: (string | null | undefined)[]): string {
   return partes.filter(Boolean).join(" · ");
 }
 function semGmv(excluded: number | undefined): string | null {
-  return excluded ? `${excluded} sem GMV fora dos buckets` : null;
+  return excluded ? `${excluded} produtos sem venda no período (fora das curvas)` : null;
 }
 function precoMedio(avg: number | null | undefined): string | null {
   return avg == null ? null : `Preço médio ${fmtBrlExato(avg)}`;
@@ -90,15 +90,6 @@ const DICA_BLING_TODAS =
   "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 const DICA_BLING =
   "Demais marcas: dado do Bling (conta da Rituária), pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). O A/B/C/D é feito só entre os produtos desta marca neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
-
-function fmtRefreshedAt(iso: string | null): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return "";
-  }
-}
 
 import {
   brandParamForEndpoint, buildProdutosQuery, parseProdutosUrl, type ParetoBucket,
@@ -494,245 +485,201 @@ function ProdutosPageInner() {
   const tkPageNumber = Math.floor(tkOffset / PAGE_SIZE) + 1;
   const shPageNumber = Math.floor(shOffset / PAGE_SIZE) + 1;
 
-  return (
-    <PageContainer>
-      {/* Esta pagina NAO herda filtros globais (decisao do contrato de filtros):
-          escopo e periodo sao proprios de cada aba, e por isso o cabecalho nao
-          ganha barra sticky — barra vazia seria afordancia falsa. */}
-      <PageHeader
-        title="Produtos"
-        // Badge de fonte da aba ativa — nunca reflete o live/mock da requisicao
-        // ANTERIOR: enquanto a tabela OU o resumo Pareto da aba atual ainda
-        // estao buscando, mostra um estado neutro em vez do `isLive` antigo.
-        status={
-          activeLoading ? (
-            <span className="text-xs text-ink-muted bg-raised border border-line rounded-lg px-3 py-1.5 font-medium">
-              Atualizando dados...
-            </span>
-          ) : (
-            <LiveStatusBadge live={isLive} />
-          )
-        }
-      />
-
-      <ProductMarketplaceTabs tabs={TABS} active={tab} onChange={handleTabChange} />
-
-      {/* Dados parciais (FINDING 3): so aparece quando exatamente UM dos dois
-          (tabela, resumo Pareto) da aba ativa esta disponivel e o outro foi
-          resolvido como indisponivel para a identidade atual — nunca durante
-          loading, nunca quando os dois falham (o estado de erro/offline de
-          cada componente ja cobre esse caso). */}
-      {activePartialWarning && (
-        <div className="bg-warn-soft border border-warn/30 rounded-2xl px-4 py-2.5">
-          <p className="text-xs text-warn-ink">{activePartialWarning}</p>
+  // ALVO-GRADE: um esqueleto so' para os tres canais. Filtros, faixa A/B/C/D e
+  // tabela mudam com a aba; a regra de cada canal (ML sem competencia mensal,
+  // Shopee com selo de maturacao ANTES dos cartoes, marcas menores do Bling) fica igual.
+  const marcaSelect = (
+    <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
+      <option value="">Todas as marcas</option>
+      {brandOptionsForTab.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+    </ProductSelect>
+  );
+  const filtros = (
+    <div className="flex flex-wrap items-center gap-2">
+      {marcaSelect}
+      {tab === "ml" ? (
+        <>
+          <ProductSelect value={mlStatus} onChange={(e) => setMlStatus(e.target.value as ProductStatus)} aria-label="Status">
+            <option value="">Todos os status</option>
+            <option value="sells+advertised">Vende + anunciado</option>
+            <option value="sells_organic_only">Vende orgânico</option>
+            <option value="ad_spend_no_sales">Gasta ads, sem venda</option>
+            <option value="inactive">Inativo</option>
+          </ProductSelect>
+          <ProductSelect value={mlVelocity} onChange={(e) => setMlVelocity(e.target.value as VelocityFilter)} aria-label="Velocidade">
+            <option value="">Toda velocidade</option>
+            <option value="high">Alta velocidade</option>
+            <option value="medium">Média velocidade</option>
+            <option value="low">Baixa velocidade</option>
+            <option value="zero">Sem vendas</option>
+          </ProductSelect>
+          <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de ação">
+            <option value="">Todos os sinais</option>
+            <option value="ACAO: aumentar investimento (ROAS > 15x)">Aumentar investimento</option>
+            <option value="ACAO: considerar pausar ads (ROAS &lt; 3x)">Considerar pausar ads</option>
+            <option value="ALERTA: taxa cancelamento alta (> 10%)">Cancelamento alto</option>
+            <option value="OPORTUNIDADE: produto vende organico, considerar ads">Oportunidade orgânica</option>
+            <option value="REVIEW: spend sem vendas no período de orders">Investe sem vender</option>
+            <option value="ATENCAO: grande variacao de preco">Variação de preço</option>
+          </ProductSelect>
+        </>
+      ) : (
+        // 390: a trilha rola sozinha; a pagina nao ganha rolagem lateral.
+        <div className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
+          <Segmented rotulo="Período" opcoes={monthOptions.map((m) => ({ valor: m.value, texto: m.label }))} valor={period} aoEscolher={setPeriod} className="whitespace-nowrap" />
         </div>
       )}
+    </div>
+  );
+  // Selo: a hora publicada no resumo do canal ativo (nunca a de uma identidade antiga); sem hora, o estado da fonte.
+  const refreshed = (tab === "ml" ? mlDisplaySummary : tab === "tiktok" ? tkDisplaySummary : shDisplaySummary)?.refreshed_at ?? null;
+  const selo = (
+    <SeloAtualizado
+      em={activeLoading ? null : refreshed}
+      carregando={activeLoading}
+      aoVivo={activeLoading ? null : isLive}
+      detalhe={!activeLoading && !refreshed ? "A fonte deste canal não publica a hora da atualização" : undefined}
+    />
+  );
 
-        {/* ML view */}
+  const faixa =
+    tab === "ml" ? (
+      <ProductParetoSummary
+        buckets={mlDisplaySummary?.buckets ?? null}
+        loading={mlSummaryAvail === "loading"}
+        activeBucket={mlBucket}
+        onSelectBucket={setMlBucket}
+        scopeNote={
+          mlDisplaySummary
+            ? paretoLinha([
+                semGmv(mlDisplaySummary.excluded_zero_gmv_count),
+                precoMedio(mlDisplaySummary.avg_price_weighted),
+              ])
+            : undefined
+        }
+        dica={`Sem competência mensal na fonte: ranking acumulado atual. ${DICA_PARETO} ${marginUnavailableNote("ml")}`}
+      />
+    ) : tab === "tiktok" ? (
+      <>
+        {progressoBling && <p className="px-1 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
+        <ProductParetoSummary
+          buckets={tkDisplaySummary?.buckets ?? null}
+          loading={tkSummaryAvail === "loading"}
+          activeBucket={tkBucket}
+          onSelectBucket={setTkBucket}
+          scopeNote={paretoLinha([
+            semGmv(tkDisplaySummary?.excluded_zero_gmv_count),
+            precoMedio(tkDisplaySummary?.avg_price_weighted),
+          ])}
+          dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("tiktok")}`}
+        />
+      </>
+    ) : (
+      <>
+        {/* Gate SH-API-2D: o selo vem ANTES dos cards A/B/C/D de proposito.
+            Quem le a tela de cima para baixo tem de saber que a competencia
+            esta em maturacao antes de olhar o Pareto, nao depois de ja ter
+            tirado conclusao dos numeros. */}
+        <ScopeQualityBanner
+          quality={shDisplaySummary?.quality}
+          loading={shSummaryAvail === "loading"}
+          naGrade
+        />
+        {progressoBling && <p className="px-1 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
+        <ProductParetoSummary
+          buckets={shDisplaySummary?.buckets ?? null}
+          loading={shSummaryAvail === "loading"}
+          activeBucket={shBucket}
+          onSelectBucket={setShBucket}
+          unavailableReason={shUnavailable}
+          scopeNote={paretoLinha([
+            shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
+            precoMedio(shDisplaySummary?.avg_price_weighted),
+          ])}
+          dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
+        />
+      </>
+    );
+
+  const escopo =
+    tab === "ml"
+      ? formatProdutosScope({
+          channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel: null,
+          total: mlDisplayData?.total ?? null, offset: mlOffset, limit: PAGE_SIZE,
+        })
+      : tab === "tiktok"
+        ? formatProdutosScope({
+            channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
+            total: tkDisplayData?.total ?? null, offset: tkOffset, limit: PAGE_SIZE,
+          })
+        : formatProdutosScope({
+            channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
+            total: shUnavailable ? null : shDisplayData?.total ?? null, offset: shOffset, limit: PAGE_SIZE,
+          });
+
+  const exportar =
+    tab === "ml" ? (
+      <ProductExportButton rows={mlDisplayData?.items ?? null} loading={mlTableAvail !== "available"} columns={ML_EXPORT_COLUMNS} toRecord={mlRowToExportRecord} scope={{ channel: "ml", brand, period: null, pageNumber: mlPageNumber }} />
+    ) : tab === "tiktok" ? (
+      <ProductExportButton rows={tkDisplayData?.items ?? null} loading={tkTableAvail !== "available"} columns={TIKTOK_EXPORT_COLUMNS} toRecord={tiktokRowToExportRecord} scope={{ channel: "tiktok", brand, period, pageNumber: tkPageNumber }} />
+    ) : (
+      <ProductExportButton rows={shDisplayData?.items ?? null} loading={shTableAvail !== "available"} columns={SHOPEE_EXPORT_COLUMNS} toRecord={shopeeRowToExportRecord} scope={{ channel: "shopee", brand, period, pageNumber: shPageNumber }} />
+    );
+
+  return (
+    <Aba
+      titulo="Produtos"
+      selo={selo}
+      visoes={TABS.map((t) => ({ id: t.value, rotulo: t.label, ponto: `bg-canal-${t.value}` }))}
+      visao={tab}
+      onVisao={handleTabChange}
+      filtros={filtros}
+      faixa={
+        <>
+          {/* Dados parciais (FINDING 3): so' quando exatamente UM dos dois (tabela, resumo) da aba falhou. */}
+          {activePartialWarning && <AvisoTopo texto={activePartialWarning} />}
+          {faixa}
+        </>
+      }
+    >
+      <Panel titulo={`Produtos · ${activeChannelLabel}`} descricao={escopo} acao={exportar} semPadding>
         {tab === "ml" && (
-          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
-            <ProductFilterBar>
-              <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
-                <option value="">Todas as marcas</option>
-                {ML_BRANDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-              </ProductSelect>
-              <ProductSelect value={mlStatus} onChange={(e) => setMlStatus(e.target.value as ProductStatus)} aria-label="Status">
-                <option value="">Todos os status</option>
-                <option value="sells+advertised">Vende + anunciado</option>
-                <option value="sells_organic_only">Vende organico</option>
-                <option value="ad_spend_no_sales">Gasta ads, sem venda</option>
-                <option value="inactive">Inativo</option>
-              </ProductSelect>
-              <ProductSelect value={mlVelocity} onChange={(e) => setMlVelocity(e.target.value as VelocityFilter)} aria-label="Velocidade">
-                <option value="">Toda velocidade</option>
-                <option value="high">Alta velocidade</option>
-                <option value="medium">Media velocidade</option>
-                <option value="low">Baixa velocidade</option>
-                <option value="zero">Sem vendas</option>
-              </ProductSelect>
-              <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de acao">
-                <option value="">Todos os sinais</option>
-                <option value="ACAO: aumentar investimento (ROAS > 15x)">Aumentar investimento</option>
-                <option value="ACAO: considerar pausar ads (ROAS &lt; 3x)">Considerar pausar ads</option>
-                <option value="ALERTA: taxa cancelamento alta (> 10%)">Cancelamento alto</option>
-                <option value="OPORTUNIDADE: produto vende organico, considerar ads">Oportunidade organica</option>
-                <option value="REVIEW: spend sem vendas no período de orders">Review spend</option>
-                <option value="ATENCAO: grande variacao de preco">Variacao de preco</option>
-              </ProductSelect>
-              <ProductCount total={mlDisplayData?.total ?? null} />
-            </ProductFilterBar>
-
-            <p className="px-6 pt-3 text-[11px] text-ink-faint">
-              {formatProdutosScope({
-                channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel: null,
-                total: mlDisplayData?.total ?? null, offset: mlOffset, limit: PAGE_SIZE,
-              })}
-            </p>
-
-            <ProductParetoSummary
-              buckets={mlDisplaySummary?.buckets ?? null}
-              loading={mlSummaryAvail === "loading"}
-              activeBucket={mlBucket}
-              onSelectBucket={setMlBucket}
-              scopeNote={
-                mlDisplaySummary
-                  ? paretoLinha([
-                      mlDisplaySummary.refreshed_at ? `Atualizado em ${fmtRefreshedAt(mlDisplaySummary.refreshed_at)}` : null,
-                      semGmv(mlDisplaySummary.excluded_zero_gmv_count),
-                      precoMedio(mlDisplaySummary.avg_price_weighted),
-                    ])
-                  : undefined
-              }
-              dica={`Sem competência mensal na fonte: ranking acumulado atual. ${DICA_PARETO} ${marginUnavailableNote("ml")}`}
-            />
-
-            <div className="flex items-center px-6 py-2 border-b border-line">
-              <ProductExportButton
-                rows={mlDisplayData?.items ?? null}
-                loading={mlTableAvail !== "available"}
-                columns={ML_EXPORT_COLUMNS}
-                toRecord={mlRowToExportRecord}
-                scope={{ channel: "ml", brand, period: null, pageNumber: mlPageNumber }}
-              />
-            </div>
-
-            <MercadoLivreProductTable
-              items={mlDisplayData}
-              loading={mlTableAvail === "loading"}
-              sort={mlSort.sort}
-              onSort={mlSort.toggleSort}
-              pagination={{ limit: PAGE_SIZE, offset: mlOffset, onChange: setMlOffset }}
-            />
-          </div>
+          <MercadoLivreProductTable
+            items={mlDisplayData}
+            loading={mlTableAvail === "loading"}
+            sort={mlSort.sort}
+            onSort={mlSort.toggleSort}
+            pagination={{ limit: PAGE_SIZE, offset: mlOffset, onChange: setMlOffset }}
+          />
         )}
-
-        {/* TikTok view */}
         {tab === "tiktok" && (
-          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
-            <ProductFilterBar>
-              <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
-                <option value="">Todas as marcas</option>
-                {TK_SH_BRANDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-              </ProductSelect>
-              <PeriodSelector value={period} onChange={setPeriod} months={monthOptions} />
-              <ProductCount total={tkDisplayData?.total ?? null} />
-            </ProductFilterBar>
-
-            <p className="px-6 pt-3 text-[11px] text-ink-faint">
-              {formatProdutosScope({
-                channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
-                total: tkDisplayData?.total ?? null, offset: tkOffset, limit: PAGE_SIZE,
-              })}
-            </p>
-
-            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
-            <ProductParetoSummary
-              buckets={tkDisplaySummary?.buckets ?? null}
-              loading={tkSummaryAvail === "loading"}
-              activeBucket={tkBucket}
-              onSelectBucket={setTkBucket}
-              scopeNote={paretoLinha([
-                semGmv(tkDisplaySummary?.excluded_zero_gmv_count),
-                precoMedio(tkDisplaySummary?.avg_price_weighted),
-              ])}
-              dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("tiktok")}`}
-            />
-
-            <div className="flex items-center px-6 py-2 border-b border-line">
-              <ProductExportButton
-                rows={tkDisplayData?.items ?? null}
-                loading={tkTableAvail !== "available"}
-                columns={TIKTOK_EXPORT_COLUMNS}
-                toRecord={tiktokRowToExportRecord}
-                scope={{ channel: "tiktok", brand, period, pageNumber: tkPageNumber }}
-              />
-            </div>
-
-            <TikTokProductTable
-              items={tkDisplayData}
-              loading={tkTableAvail === "loading"}
-              sort={tkSort.sort}
-              onSort={tkSort.toggleSort}
-              pagination={{ limit: PAGE_SIZE, offset: tkOffset, onChange: setTkOffset }}
-            />
-          </div>
+          <TikTokProductTable
+            items={tkDisplayData}
+            loading={tkTableAvail === "loading"}
+            sort={tkSort.sort}
+            onSort={tkSort.toggleSort}
+            pagination={{ limit: PAGE_SIZE, offset: tkOffset, onChange: setTkOffset }}
+          />
         )}
-
-        {/* Shopee view */}
         {tab === "shopee" && (
-          <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
-            <ProductFilterBar>
-              <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
-                <option value="">Todas as marcas</option>
-                {TK_SH_BRANDS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-              </ProductSelect>
-              <PeriodSelector value={period} onChange={setPeriod} months={monthOptions} />
-              {/* Ausencia nao vira "0 produtos": sem valor confiavel, o contador some. */}
-              <ProductCount total={shUnavailable ? null : shDisplayData?.total ?? null} />
-            </ProductFilterBar>
-
-            <p className="px-6 pt-3 text-[11px] text-ink-faint">
-              {formatProdutosScope({
-                channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
-                total: shUnavailable ? null : shDisplayData?.total ?? null, offset: shOffset, limit: PAGE_SIZE,
-              })}
-            </p>
-
-            {/* Gate SH-API-2D: o selo vem ANTES dos cards A/B/C/D de proposito.
-                Quem le a tela de cima para baixo tem de saber que a competencia
-                esta em maturacao antes de olhar o Pareto, nao depois de ja ter
-                tirado conclusao dos numeros. */}
-            <ScopeQualityBanner
-              quality={shDisplaySummary?.quality}
-              loading={shSummaryAvail === "loading"}
-            />
-
-            {progressoBling && <p className="px-6 pt-2 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
-            <ProductParetoSummary
-              buckets={shDisplaySummary?.buckets ?? null}
-              loading={shSummaryAvail === "loading"}
-              activeBucket={shBucket}
-              onSelectBucket={setShBucket}
-              unavailableReason={shUnavailable}
-              scopeNote={paretoLinha([
-                shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
-                precoMedio(shDisplaySummary?.avg_price_weighted),
-              ])}
-              dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
-            />
-
-            <div className="flex items-center px-6 py-2 border-b border-line">
-              <ProductExportButton
-                rows={shDisplayData?.items ?? null}
-                loading={shTableAvail !== "available"}
-                columns={SHOPEE_EXPORT_COLUMNS}
-                toRecord={shopeeRowToExportRecord}
-                scope={{ channel: "shopee", brand, period, pageNumber: shPageNumber }}
-              />
-            </div>
-
-            <ShopeeProductTable
-              items={shDisplayData}
-              loading={shTableAvail === "loading"}
-              sort={shSort.sort}
-              onSort={shSort.toggleSort}
-              pagination={{ limit: PAGE_SIZE, offset: shOffset, onChange: setShOffset }}
-            />
-          </div>
+          <ShopeeProductTable
+            items={shDisplayData}
+            loading={shTableAvail === "loading"}
+            sort={shSort.sort}
+            onSort={shSort.toggleSort}
+            pagination={{ limit: PAGE_SIZE, offset: shOffset, onChange: setShOffset }}
+          />
         )}
+      </Panel>
 
       {/* "Todas as marcas": as menores (Bling) entram aqui, no MESMO layout, abaixo do ranking do Data Mart.
           Nao entram no ranking nem no A/B/C/D de cima: aquele e' calculado e paginado no servidor. */}
       {brand === "" && canalBling != null && blingTodas.produtos !== undefined && (blingTodas.produtos === null || !blingTodas.produtos.disponivel) && (
-        <p className="rounded-2xl border border-dashed border-line-strong bg-raised px-4 py-3 text-xs text-ink-muted">Demais marcas indisponíveis agora (Bling).</p>
+        <AvisoTopo texto="Demais marcas indisponíveis agora (Bling)." />
       )}
       {brand === "" && canalBling != null && linhasTodasMenores.length > 0 && (
-        <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
-          <div className="flex items-center gap-2 px-6 pt-4 pb-2">
-            <h2 className="text-sm font-semibold text-ink">Demais marcas · {activeChannelLabel}</h2>
-            <InfoDica texto={DICA_BLING_TODAS} />
-          </div>
-          {progressoTodas && <p className="px-6 pb-2 text-xs font-semibold text-warn-ink" role="status">{progressoTodas}</p>}
+        <Panel titulo={`Demais marcas · ${activeChannelLabel}`} ajuda={DICA_BLING_TODAS} semPadding>
+          {progressoTodas && <p className="px-4 pb-2 text-xs font-semibold text-warn-ink" role="status">{progressoTodas}</p>}
           {canalBling === "tiktok" ? (
             <TikTokProductTable
               items={listaTikTok(linhasTodasMenores, { refMonth: refMes, sortColumn: menoresSort.sort.column, sortDirection: menoresSort.sort.direction, offset: menoresOffset, limit: PAGE_SIZE })}
@@ -750,9 +697,9 @@ function ProdutosPageInner() {
               pagination={{ limit: PAGE_SIZE, offset: menoresOffset, onChange: setMenoresOffset }}
             />
           )}
-        </div>
+        </Panel>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 

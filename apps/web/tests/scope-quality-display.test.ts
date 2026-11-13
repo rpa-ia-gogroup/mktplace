@@ -80,7 +80,8 @@ test("a data geral mostra a publicacao mais antiga e quem e", () => {
 test("a tela troca os cards e o contador pela ausencia, sem recalcular nada", () => {
   const page = readSource("app", "produtos", "page.tsx");
   assert.match(page, /unavailableReason=\{shUnavailable\}/);
-  assert.match(page, /ProductCount total=\{shUnavailable \? null :/);
+  // ALVO-GRADE: o contador do canto saiu (repetia o subtitulo da tabela); a ausencia segue no escopo abaixo.
+  assert.doesNotMatch(page, /<ProductCount/);
   // nem "0–0 de 0 produtos" no escopo, nem "63 produtos sem GMV" na nota
   assert.match(page, /total: shUnavailable \? null : shDisplayData\?\.total/);
   assert.match(page, /shUnavailable \? null : semGmv\(/);
