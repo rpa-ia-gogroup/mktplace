@@ -1450,13 +1450,15 @@ test("V24-3. a correcao nao introduziu fetch, estado, modal ou filtro novo", () 
   assert.doesNotMatch(code, /Como estamos, onde investigar/);
   assert.doesNotMatch(code, /<PeriodChip/);
   assert.match(src, /<span className="sr-only"> · \{periodLabel\}<\/span>/);
-  assert.match(src, /<Freshness live=\{live\} refreshedAt=\{live != null \? refreshedAt : null\} loading=\{loading\} \/>/);
-  const selo = read("src/components/ui/Freshness.tsx");
-  assert.match(selo, /Atualizado em \{quando\}/);
-  assert.match(selo, /fmtRefreshedAt\(refreshedAt\)/);
+  // UI-FUNDACAO (F1): o selo unico "Atualizado HH:MM" no lugar do Freshness; o
+  // refreshed_at continua saindo SO' da resposta compativel com o filtro atual.
+  assert.match(src, /<SeloAtualizado aoVivo=\{live\} em=\{live != null \? refreshedAt : null\} carregando=\{loading\} \/>/);
+  const selo = read("src/components/ui/SeloAtualizado.tsx");
+  assert.match(selo, /Atualizado <span/);
+  assert.match(selo, /rotuloAtualizado\(em\)/);
   assert.match(selo, /Demonstração · API offline/);
   assert.match(selo, /Atualizando…/);
-  assert.match(selo, /if \(live == null\)/, "sem resposta fresca, nunca afirma ao vivo");
+  assert.match(selo, /aoVivo \? <span/, "so' afirma ao vivo com aoVivo verdadeiro");
   // o `<h1>` da Gerencial permanece: promover/rebaixar aqui mexeria na divida U6-04.
   // UI-DENSIDADE-1: escala `text-lg` (linha unica com os filtros).
   assert.match(code, /<h1 className="flex shrink-0 items-center gap-2 text-lg font-bold text-ink">/);

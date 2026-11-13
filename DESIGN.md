@@ -278,8 +278,7 @@ The primitives live in `apps/web/src/components/ui/`, plus `layout/` and
 | Brand selector / period selector, `menu` variant | `BrandFilter.tsx`, `DateRangeFilter.tsx` + `ui/Popover.tsx` | toolbar (menu); other routes (faixa) |
 | Tab skeleton (icon + title, freshness, sticky filter bar that shrinks on scroll, main strip, attention, panels) | `layout/Aba.tsx` | new routes; the rest migrate in F2/F3 |
 | Freshness ("Atualizado HH:MM") | `ui/SeloAtualizado.tsx` (replaces `ui/Freshness.tsx` tab by tab) | via `Aba` |
-| Loading skeleton in the content's shape (cards, table, chart, list) | `ui/Esqueleto.tsx` | via `Aba` |
-| Table pieces (classes, `—` for empty, total row) | `ui/Tabela.tsx` + `ui/SortHeader.tsx` | via `Aba` |
+| Sortable column header | `ui/SortHeader.tsx` | sortable tables |
 | Freshness + period chip (legacy) | `ui/Freshness.tsx` | Gerencial, Canais, Financeiro |
 | KPI card | `ui/KpiTile.tsx`, `ui/StatCard.tsx`, `gerencial/KpiBand.tsx` | Expedição, Canais, Financeiro, Gerencial |
 | Panel (title, subtitle, actions, footer, icon) | `ui/Panel.tsx` | Expedição, Canais, Financeiro, Gerencial |
@@ -407,8 +406,6 @@ Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
   dot is green; demo mode stays written out; no time means "—". Past the
   source's SLA (each tab decides) it reads "Desatualizado · HH:MM" in warning
   tone — written, never colour only.
-- Loading uses `Esqueleto` in the shape of the content, never a spinner in an
-  empty box. Empty, error and unavailable use `StateBlock`.
 - A route outside the skeleton fails `tests/ui-fundacao.test.ts` unless it is
   on the exception list there. The list only shrinks.
 
@@ -440,10 +437,7 @@ Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
 - Numbers are right-aligned and tabular.
 - Sorting: ▲/▼ in accent only on the active column; the others keep a faded ↕
   (40%) that turns full on hover or focus, so touch users still see it sorts.
-- Empty is "—" (`ouVazio`), never 0 and never a blank cell.
-- The total row is the `<tfoot>` (`LinhaTotal`), with a 2px top border. Sum
-  only what adds up: GMV and orders do; potential impact in R$ across channels
-  never does (that total cell is "—").
+- The total row sits on `raised` with a 2px top border.
 - Wide tables scroll inside the panel, with a visible hint.
 
 ### Charts

@@ -16,8 +16,6 @@ register("./helpers/tsx-loader.mjs", import.meta.url);
 const { createElement: h } = await import("react");
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { default: SeloAtualizado } = await import("../src/components/ui/SeloAtualizado.tsx");
-const { default: Esqueleto } = await import("../src/components/ui/Esqueleto.tsx");
-const { LinhaTotal, ouVazio, VAZIO } = await import("../src/components/ui/Tabela.tsx");
 const { default: Panel } = await import("../src/components/ui/Panel.tsx");
 const { default: Aba } = await import("../src/components/layout/Aba.tsx");
 const { LayoutDashboard } = await import("lucide-react");
@@ -43,27 +41,6 @@ test("SeloAtualizado: 'Atualizado HH:MM', demonstracao escrita e ausencia como '
   const velho = renderToStaticMarkup(h(SeloAtualizado, { em: new Date().toISOString(), aoVivo: true, atrasado: true }));
   assert.match(velho, /Desatualizado · <span[^>]*>\d{2}:\d{2}<\/span>/, "atrasado e' escrito, nao so' cor");
   assert.match(velho, /bg-warn-soft/);
-});
-
-test("Esqueleto: no formato do conteudo e anunciado como carregando", () => {
-  for (const forma of ["cartoes", "tabela", "grafico", "lista"] as const) {
-    const html = renderToStaticMarkup(h(Esqueleto, { forma }));
-    assert.match(html, /role="status"/, forma);
-    assert.match(html, /aria-busy="true"/, forma);
-    assert.match(html, /Carregando…/, forma);
-  }
-  const cartoes = renderToStaticMarkup(h(Esqueleto, { forma: "cartoes", quantidade: 3 }));
-  assert.equal((cartoes.match(/rounded-xl/g) ?? []).length, 3);
-});
-
-test("Tabela: vazio e' '—' (nunca 0) e o total fica no tfoot", () => {
-  const n = (v: number) => v.toLocaleString("pt-BR");
-  assert.equal(ouVazio(null, n), VAZIO);
-  assert.equal(ouVazio(undefined, n), VAZIO);
-  assert.equal(ouVazio(Number.NaN, n), VAZIO);
-  assert.equal(ouVazio(0, n), "0");
-  const html = renderToStaticMarkup(h("table", null, h(LinhaTotal, { celulas: ["10", VAZIO] })));
-  assert.match(html, /<tfoot><tr[^>]*><th scope="row"[^>]*>Total<\/th><td[^>]*>10<\/td><td[^>]*>—<\/td><\/tr><\/tfoot>/);
 });
 
 test("Painel: um unico 'ⓘ' colado ao titulo e a acao a' direita", () => {
