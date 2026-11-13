@@ -60,7 +60,8 @@ function useAbasRolaveis(ativa: unknown) {
     if (!el) return;
     const medir = () =>
       setMais({ esq: el.scrollLeft > 1, dir: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
-    const alvo = el.querySelector<HTMLElement>('[aria-selected="true"]');
+    // Ativa: aba (`aria-selected`) ou atalho de secao (`aria-current`, modo `ancoras` do #438).
+    const alvo = el.querySelector<HTMLElement>('[aria-selected="true"], [aria-current]');
     // So' o scroll horizontal da lista: scrollIntoView mexeria na pagina inteira.
     if (alvo && (alvo.offsetLeft < el.scrollLeft || alvo.offsetLeft + alvo.offsetWidth > el.scrollLeft + el.clientWidth)) {
       el.scrollLeft = alvo.offsetLeft - (el.clientWidth - alvo.offsetWidth) / 2;

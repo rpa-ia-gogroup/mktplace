@@ -55,7 +55,7 @@ test("tela: cartao de travados com % e abre a lista; popup montado uma vez", () 
   assert.match(CLIENTE, /stalled: "travados"/);
   assert.match(CLIENTE, /const cartoesDaFaixa = chavesDaFaixa[\s\S]*?\.map\(cartaoDaFaixa\);/);
   assert.match(CLIENTE, /const pct = !ausente && base != null \? percentualDaFila\(v \?\? 0, base\) : null;/);
-  assert.match(CLIENTE, /valor=\{k\.valorTexto \?\? \(ausente \? "—" : \(pct \?\? numero\(v \?\? 0\)\)\)\}/);
+  assert.match(CLIENTE, /valor=\{ausente \? null : \(pct \?\? numero\(v \?\? 0\)\)\}/);
   assert.match(CLIENTE, /`\$\{numero\(v \?\? 0\)\} \$\{v === 1 \? "pedido" : "pedidos"\}`/);
   assert.match(CLIENTE, /onAbrir=\{abrirLista\(k, LISTA_DO_KPI\[k\.chave\]\)\}/);
   assert.equal((CLIENTE.match(/<TravadosDialog\b/g) ?? []).length, 1);
@@ -92,7 +92,6 @@ test("menos texto: Prazo so' com LDR (em Mais detalhes); jornada so' com coorte;
   assert.match(CLIENTE, /\{ldrNaSecao \? \(\s*<SecaoGerencial titulo="Prazo">/);
   assert.equal((CLIENTE.match(/<SecaoGerencial titulo="Prazo"/g) ?? []).length, 1);
   assert.match(CLIENTE, /<JornadaPedidos [^>]*compacta \/>/);
-  assert.match(CLIENTE, /conteudo="Lista de pedidos, mais críticos e fonte por conta\."/);
   const JORNADA = fonte("src/components/expedicao/JornadaPedidos.tsx");
   assert.match(JORNADA, /if \(!comFila && !comCoorte\) return null;/);
 });

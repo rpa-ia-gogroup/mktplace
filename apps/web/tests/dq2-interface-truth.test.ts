@@ -67,16 +67,17 @@ test("aria-live comunica indisponibilidade quando TikTok está no escopo, não s
 
 test("wiring: página de Qualidade renderiza os cards e a nota só com TikTok no escopo", () => {
   const src = read("app/qualidade/page.tsx");
-  // Os cartoes N/D do TikTok vivem no grupo de cartoes (padrao da Gerencial); a pagina so' o renderiza com o canal no escopo.
-  assert.match(src, /showTiktok && <GrupoQualidade canal="tiktok"/);
-  assert.match(read("src/components/qualidade/QualidadeCartoes.tsx"), /canal === "tiktok" &&\s*TIKTOK_UNAVAILABLE_QUALITY_METRICS\.map/);
-  // A limitacao segue declarada junto da tabela: linha curta + ⓘ com o texto inteiro.
+  // ALVO-GRADE: a faixa tem sempre quatro cartoes (ML e Shopee); o TikTok nao ganha cartao de
+  // cancelamento nem de devolucao, nem como "N/D" — a limitacao fica escrita em "Mais detalhes".
+  const cartoes = read("src/components/qualidade/QualidadeCartoes.tsx");
+  assert.match(cartoes, /CARTOES_DA_FAIXA: ChaveQualidade\[\] = \["ml_cancelamento", "ml_nao_entregue", "sh_cancelamento", "sh_devolucao"\]/);
+  assert.doesNotMatch(cartoes, /tiktok_cancel|tiktok_return/);
+  // A limitacao segue declarada na tela, so' com o TikTok no escopo: linha curta + ⓘ com o texto inteiro.
   assert.match(src, /showTiktok && \(\s*<p[^>]*>\s*TikTok: só entrega · cancelamento e devolução N\/D\s*<InfoDica texto=\{TIKTOK_QUALITY_UNAVAILABLE_NOTE\} \/>/);
   assert.match(src, /qualityLoadedAnnouncement\(showTiktok\)/);
   // ML e Shopee seguem lendo os valores reais da API (sem regressão)
   // (os cartoes leem `displayKpis` pela definicao em lib/qualidade-cartoes, a mesma do detalhe por marca)
-  assert.match(src, /<GrupoQualidade canal="ml" kpis=\{displayKpis\}/);
-  assert.match(src, /<GrupoQualidade canal="shopee" kpis=\{displayKpis\}/);
+  assert.match(src, /<FaixaQualidade kpis=\{displayKpis\} marcas=\{displayBrands\}/);
   const defs = read("src/lib/qualidade-cartoes.ts");
   assert.match(defs, /valor: \(f\) => f\.ml_cancel_rate_pct/);
   assert.match(defs, /valor: \(f\) => f\.shopee_cancel_rate_pct/);

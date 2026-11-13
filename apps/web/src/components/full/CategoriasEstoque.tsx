@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * CARDS-CLICAVEIS (spec do Prumo) — faixa de cards das abas de estoque do
+ * CARDS-CLICAVEIS (spec do Prumo) + ALVO-GRADE — 4 cartoes (os de acao) e as
+ * demais categorias como chips do mesmo filtro, nas abas de estoque do
  * /full, chip "Mostrando: … ×" e a categoria na URL (?categoria=). O clique no
  * card aplica a categoria na tabela da propria aba; clicar de novo ou no ×
  * limpa. Voltar do navegador desfaz.
@@ -12,7 +13,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { forwardRef, useCallback, useEffect, useRef, type ReactNode, type RefObject } from "react";
 
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import type { Tom } from "@/components/ui/tone";
 import { categoriaDaUrl, urlComCategoria } from "@/lib/estoque-categorias";
 
@@ -29,32 +31,59 @@ export interface CardCategoria {
 const SR_PARCIAL = "parcial: veja o aviso no topo";
 
 export function FaixaCategorias({
-  cards, ativa, aoEscolher, parcial = false,
-}: { cards: CardCategoria[]; ativa: string | null; aoEscolher: (chave: string) => void; parcial?: boolean }) {
+  cards, faixa, ativa, aoEscolher, parcial = false,
+}: {
+  cards: CardCategoria[];
+  /** ALVO-GRADE: as 4 chaves que viram cartao (as de acao); as demais viram chips do mesmo filtro. */
+  faixa: readonly [string, string, string, string];
+  ativa: string | null;
+  aoEscolher: (chave: string) => void;
+  parcial?: boolean;
+}) {
+  const grandes = faixa.map((k) => cards.find((c) => c.chave === k)).filter((c): c is CardCategoria => !!c);
+  const chips = cards.filter((c) => !faixa.includes(c.chave));
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4">
-      {cards.map((c) => (
-        <KpiTile
-          key={c.chave}
-          variante="gerencial"
-          identidade={c.identidade}
-          icone={c.icone}
-          rotulo={c.rotulo}
-          valor={c.valor}
-          tom={c.tom ?? "neutro"}
-          // O parcial e' UM aviso no topo da aba; no card, so' title e leitor de tela.
-          contexto={parcial ? `${c.rotulo}: ${SR_PARCIAL}` : undefined}
-          comparacao={
-            <>
-              {c.comparacao}
-              {parcial && <span className="sr-only">; {SR_PARCIAL}</span>}
-            </>
-          }
-          onAbrir={() => aoEscolher(c.chave)}
-          ativo={ativa === c.chave}
-        />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+        {grandes.map((c) => (
+          <CartaoIndicador
+            key={c.chave}
+            rotulo={c.rotulo}
+            icone={c.icone}
+            cor={`rgb(var(--tc-kpi-${c.identidade}))`}
+            valor={c.valor}
+            pilula={ativa === c.chave ? { texto: "Filtrando", tom: "neutro" } : c.tom === "critico" ? { texto: "Agir", tom: "crit" } : null}
+            // O parcial e' UM aviso no topo da aba; no cartao, so' o leitor de tela.
+            legenda={<>{c.comparacao}{parcial && <span className="sr-only">; {SR_PARCIAL}</span>}</>}
+            onAbrir={() => aoEscolher(c.chave)}
+          />
+        ))}
+      </div>
+      {chips.length > 0 && (
+        <div role="group" aria-label="Outras categorias (filtram a tabela)" className="flex flex-wrap gap-2">
+          {chips.map((c) => {
+            const on = ativa === c.chave;
+            return (
+              <button
+                key={c.chave}
+                type="button"
+                aria-pressed={on}
+                onClick={() => aoEscolher(c.chave)}
+                title={typeof c.comparacao === "string" ? c.comparacao : undefined}
+                className={`inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-9 ${
+                  on ? "border-accent bg-accent-soft font-semibold text-accent-ink" : "border-line bg-surface text-ink-muted hover:border-line-strong hover:text-ink"
+                }`}
+              >
+                <c.icone aria-hidden="true" className="h-3.5 w-3.5 shrink-0" style={{ color: `rgb(var(--tc-kpi-${c.identidade}))` }} />
+                {c.rotulo}
+                <span className="tabular-nums font-semibold text-ink">{c.valor}</span>
+                {parcial && <span className="sr-only">; {SR_PARCIAL}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </>
   );
 }
 

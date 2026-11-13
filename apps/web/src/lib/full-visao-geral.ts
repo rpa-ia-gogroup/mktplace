@@ -96,6 +96,8 @@ export interface ResumoOk {
   /** Marcas (ML) ou contas (Shopee) sem foto no dia: vao para o chip da foto ("sem RITUÁRIA"). */
   semFoto: string[];
   refDate: string;
+  /** Hora da foto publicada (ISO): ML `published_at`, Shopee `ingested_at`. `null` = nao publicada. */
+  atualizadoEm: string | null;
   diasFoto: number | null;
   frescor: string;
   frescorVelho: boolean;
@@ -172,6 +174,7 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
     aviso: faltam.length ? `Sem fotografia para: ${faltam.map(tituloMarca).join(", ")}` : null,
     semFoto: faltam.map(tituloMarca),
     refDate: r.frescor.ref_date,
+    atualizadoEm: r.frescor.ingested_at,
     diasFoto: r.frescor.dias_desde_a_fotografia,
     frescor: frescorLabel(r.frescor),
     frescorVelho: fotografiaEstaVelha(r.frescor),
@@ -222,6 +225,7 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
     aviso: i.total_parcial ? `Total parcial: ${i.motivos_total_parcial.join("; ")}` : null,
     semFoto: r.marcas.filter((m) => m.estado === null).map((m) => tituloMarca(m.brand)),
     refDate: r.frescor.ref_date,
+    atualizadoEm: r.frescor.published_at,
     diasFoto: r.frescor.dias_desde_a_fotografia,
     frescor: frescorLabelML(r.frescor),
     frescorVelho: fotografiaVelhaML(r.frescor),

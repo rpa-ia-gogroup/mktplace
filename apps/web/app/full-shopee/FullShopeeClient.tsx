@@ -33,7 +33,8 @@ import KpiTile from "@/components/ui/KpiTile";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock from "@/components/ui/StateBlock";
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchShopeeFbs, ShopeeFbsError } from "@/lib/api-client";
 import { brandLabel } from "@/lib/filters/brands";
@@ -94,6 +95,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 }
 
 function FullShopeeInner() {
+  const abas = useVisoesFull();
   const hoje = useMemo(hojeIsoBrt, []);
   // B2-02: a janela vem da URL (`date_from`/`date_to`); sem ela, ou invalida, 30 dias.
   const busca = useSearchParams();
@@ -242,11 +244,7 @@ function FullShopeeInner() {
   );
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Full Shopee"
-        filters={filtros}
-      />
+    <Aba {...abas} filtros={filtros}>
 
       {/* ---- Frescor e escopo: sempre visiveis, nunca "tempo real" ---- */}
       <section aria-labelledby="sh-frescor" className="flex flex-col gap-2">
@@ -437,7 +435,7 @@ function FullShopeeInner() {
           />
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 

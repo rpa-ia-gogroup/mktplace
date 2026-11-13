@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   fetchCanais,
+  fetchTrend,
   type CanaisKpis,
   type CanaisBrandRow,
   type CanaisChannelRow,
@@ -18,12 +19,15 @@ import { useBaseVendas } from "@/hooks/useBaseVendas";
 import { notaBase, type EcoBase } from "@/lib/base-vendas";
 import SeletorBase from "@/components/SeletorBase";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
-import { Store } from "lucide-react";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import CartaoKpiCanal, { VISUAL_DO_KPI_CANAL } from "@/components/canais/CartaoKpiCanal";
 import KpiCanalDrilldownContent from "@/components/canais/KpiCanalDrilldownContent";
 import { KPI_CANAL, tituloDoDetalhe, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
-import Freshness from "@/components/ui/Freshness";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import Panel from "@/components/ui/Panel";
+import CelulaBarra from "@/components/ui/CelulaBarra";
+import FaixaCanais, { GRADE_CANAIS } from "@/components/canais/FaixaCanais";
+import { serieQueConfere } from "@/lib/serie-que-confere";
 import Note from "@/components/ui/Note";
 import Segmented from "@/components/ui/Segmented";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -37,8 +41,7 @@ import { noCanal } from "@/lib/canal-preposicao";
 import { SkeletonTableRows } from "@/components/Skeleton";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import InfoDica from "@/components/ui/InfoDica";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
 import { detectPreset } from "@/lib/filters/presets";
@@ -156,7 +159,7 @@ const MIX_SERIE = {
 
 /** Origem dominante: destaque NEUTRO (relevo + peso), igual para as tres —
  * ser dominante nao e' bom nem ruim. */
-const DOMINANT_STYLE = "text-ink bg-raised ring-1 ring-inset ring-line-strong font-bold";
+const DOMINANT_STYLE = "text-ink font-bold";
 const CHANNEL_STYLE = {
   video: DOMINANT_STYLE,
   live: DOMINANT_STYLE,
@@ -166,16 +169,16 @@ const DIM_STYLE = "text-ink-faint";
 
 function convRateStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 4) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 2) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 4) return "text-ok-ink font-semibold";
+  if (v >= 2) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
 function repeatRateStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 15) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 8) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 15) return "text-ok-ink font-semibold";
+  if (v >= 8) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
 /** Faixas de cor das colunas e a ressalva de "Compradores" (soma diaria), no ⓘ
@@ -186,38 +189,46 @@ const LEGENDA_COMPRADORES =
 
 function newBuyerPctStyle(v: number | null): string {
   if (v == null) return DIM_STYLE;
-  if (v >= 85) return "text-ok-ink bg-ok-soft font-semibold";
-  if (v >= 70) return "text-warn-ink bg-warn-soft font-semibold";
-  return "text-crit-ink bg-crit-soft font-semibold";
+  if (v >= 85) return "text-ok-ink font-semibold";
+  if (v >= 70) return "text-warn-ink font-semibold";
+  return "text-crit-ink font-semibold";
 }
 
-/** Anchors internos compactos (Task 3) — sempre reais (`href="#id"`), nunca
- * um estado paralelo de navegacao. So aparecem para canais atualmente
- * selecionados/visiveis. */
-function InternalNav({
-  showTiktok, showMl, showShopee, onEscolherAba,
-}: {
-  showTiktok: boolean; showMl: boolean; showShopee: boolean;
-  /** O link de canal escolhe a aba direto: se a aba foi trocada a mao, a
-   * ancora pode ja' ser a atual e o `hashchange` nao dispararia. */
-  onEscolherAba: (aba: CanalId) => void;
-}) {
-  // UX-TORRE-B2B-1: alvo de 44px explicito e a ordem nova da pagina. As
-  // ancoras de canal continuam: elas escolhem a aba do "Detalhe por canal".
-  const linkClass = "inline-flex min-h-11 items-center px-2.5 rounded-lg text-xs font-semibold text-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
-  return (
-    <nav aria-label="Navegação interna da página" className="flex flex-wrap items-center gap-1 -mx-2.5">
-      <a href="#comparativo-canais" className={linkClass}>Lado a lado</a>
-      <a href="#comparativo" className={linkClass}>Marca × canal</a>
-      <a href="#afiliados" className={linkClass}>Afiliados</a>
-      <a href="#descontos-tiktok" className={linkClass}>Descontos TikTok</a>
-      <span aria-hidden="true" className="mx-1 h-4 w-px bg-line-strong" />
-      {showTiktok && <a href="#tiktok-shop" onClick={() => onEscolherAba("tiktok")} className={linkClass}>TikTok Shop</a>}
-      {showMl && <a href="#mercado-livre" onClick={() => onEscolherAba("ml")} className={linkClass}>Mercado Livre</a>}
-      {showShopee && <a href="#shopee" onClick={() => onEscolherAba("shopee")} className={linkClass}>Shopee</a>}
-    </nav>
-  );
-}
+type Visao = "lado" | "marca" | "afiliados" | "descontos" | "canal";
+
+/** As sub-visoes da aba, na ordem da navegacao interna de antes. */
+const VISOES: VisaoDaAba<Visao>[] = [
+  { id: "lado", rotulo: "Lado a lado" },
+  { id: "marca", rotulo: "Marca × canal" },
+  { id: "afiliados", rotulo: "Afiliados" },
+  { id: "descontos", rotulo: "Descontos TikTok" },
+  { id: "canal", rotulo: "Por canal" },
+];
+
+/** As ancoras de sempre escolhem a aba; nenhum link antigo quebra. */
+const VISAO_DA_ANCORA: Record<string, Visao> = {
+  "#comparativo-canais": "lado",
+  "#comparativo": "marca",
+  "#afiliados": "afiliados",
+  "#descontos-tiktok": "descontos",
+  "#tiktok-shop": "canal",
+  "#mercado-livre": "canal",
+  "#shopee": "canal",
+};
+const ANCORA_DA_VISAO: Record<Visao, string> = {
+  lado: "",
+  marca: "#comparativo",
+  afiliados: "#afiliados",
+  descontos: "#descontos-tiktok",
+  canal: "#detalhe-canal",
+};
+
+const PONTO_CANAL: Record<CanalId, string> = { tiktok: "bg-canal-tiktok", ml: "bg-canal-ml", shopee: "bg-canal-shopee" };
+const COR_CANAL: Record<string, string> = {
+  tiktok: "rgb(var(--tc-canal-tiktok))",
+  ml: "rgb(var(--tc-canal-ml))",
+  shopee: "rgb(var(--tc-canal-shopee))",
+};
 
 /**
  * Espelho do contrato de aplicabilidade por canal do backend
@@ -263,6 +274,9 @@ function CanaisPageInner() {
   // atual para decidir se o estado em memoria reflete de fato os filtros
   // exibidos agora (mesmo padrao da Gerencial, Gate U2 Finding 2).
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  // GMV por dia do MESMO recorte, para a linha do cartao da soma (uma chamada so': o Data Mart e' em fila).
+  const [serie, setSerie] = useState<{ key: string; pontos: number[] } | null>(null);
+  const [visao, setVisao] = useState<Visao>("lado");
 
   const requestKey = useMemo(
     () => `${buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey)}|${base}`,
@@ -279,6 +293,10 @@ function CanaisPageInner() {
     setDetailRow(null);
     const key = `${buildRequestKey(filters.channels, filters.brands, filters.dateFrom, filters.dateTo, filters.compare, retryKey)}|${base}`;
     const opts = { brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare, base };
+    // Falhou ou veio vazia: o cartao fica sem linha, nunca com linha inventada.
+    fetchTrend(filters.channels, opts, "day")
+      .then((t) => { if (!ignore) setSerie(t.live ? { key, pontos: t.data.map((p) => p.gmv) } : null); })
+      .catch(() => { if (!ignore) setSerie(null); });
     fetchCanais(filters.channels, undefined, opts)
       .then((r) => {
         if (ignore) return;
@@ -538,7 +556,10 @@ function CanaisPageInner() {
   // carregar e ao clicar na navegacao interna.
   useEffect(() => {
     const aplicar = () => {
-      const ancora = window.location.hash;
+      // `mergeFilteredHref` cola a query depois da ancora ("#afiliados?channels=..."): vale so' a ancora.
+      const ancora = window.location.hash.split("?")[0];
+      const v = VISAO_DA_ANCORA[ancora];
+      if (v) setVisao(v);
       const aba = ABA_DA_ANCORA[ancora];
       if (!aba) return;
       setAba(aba);
@@ -550,36 +571,45 @@ function CanaisPageInner() {
     window.addEventListener("hashchange", aplicar);
     return () => window.removeEventListener("hashchange", aplicar);
   }, []);
-  // Link interno de canal: escolhe a aba e rola ate ela depois que monta.
-  const escolherAbaPorLink = (aba: CanalId) => {
-    setAba(aba);
-    const ancora = Object.keys(ABA_DA_ANCORA).find((k) => ABA_DA_ANCORA[k] === aba);
-    if (ancora) window.setTimeout(() => document.getElementById(ancora.slice(1))?.scrollIntoView({ block: "start" }), 0);
+  const escolherVisao = (v: Visao) => {
+    setVisao(v);
+    // A aba fica no link (as ancoras antigas continuam valendo), sem rolar a pagina.
+    window.history.replaceState(null, "", ANCORA_DA_VISAO[v] || window.location.pathname + window.location.search);
   };
   // Aba escolhida fora do filtro atual cai na primeira disponivel.
   const abaAtiva: CanalId = abasDetalhe.includes(abaEscolhida) ? abaEscolhida : abasDetalhe[0] ?? "tiktok";
 
+  // So' o GMV soma entre canais. A linha so' aparece se a serie confere com a soma do cartao.
+  const comGmv = colunasCanal.filter((c) => c.gmv != null);
+  const gmvTotal = comGmv.length > 0 ? comGmv.reduce((s, c) => s + (c.gmv ?? 0), 0) : null;
+  const serieGmv = dataIsFresh && serie?.key === requestKey ? serieQueConfere(serie.pontos, gmvTotal) : null;
+  // Custo do marketplace: a mediana das marcas de cada canal, a mesma do "lado a lado".
+  const custos = colunasCanal.map((c) => ({
+    c,
+    m: formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, fmtPctSimples),
+    v: c.aplicavel.custo && c.disponivel.custo ? c.mediana?.marketplace_cost_pct_median ?? null : null,
+  }));
+  const maiorCusto = Math.max(0, ...custos.map((x) => x.v ?? 0));
+  const maiorGmvMatriz = Math.max(0, ...displayChannelRows.map((r) => r.gmv ?? 0));
+  const temFaixa = !error && !isEmpty && colunasCanal.length > 0 && (!dataIsFresh || isLive);
+
   return (
-    <PageContainer>
-      <PageHeader
-        title="Canais"
-        icon={Store}
-        meta={
-          <>
-            <Freshness live={dataIsFresh ? isLive : null} refreshedAt={dataIsFresh ? refreshedAt : null} loading={loading} />
-          </>
-        }
-        filters={
-          <>
-            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} padrao={padrao} />
-            <SeletorBase semRealizados={dataIsFresh && eco?.base !== "realizados"} />
-          </>
-        }
-      />
-
-      {/* Navegacao interna compacta */}
-      <InternalNav showTiktok={showTiktok} showMl={showMl} showShopee={showShopee} onEscolherAba={escolherAbaPorLink} />
-
+    <Aba<Visao>
+      titulo="Canais"
+      selo={<SeloAtualizado em={dataIsFresh ? refreshedAt : null} aoVivo={dataIsFresh ? isLive : null} carregando={loading} />}
+      visoes={VISOES}
+      visao={visao}
+      onVisao={escolherVisao}
+      filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={loading} padrao={padrao} />}
+      direita={<SeletorBase semRealizados={dataIsFresh && eco?.base !== "realizados"} />}
+      faixa={
+        !temFaixa ? null : !dataIsFresh ? (
+          <FaixaCarregando cartoes={4} className={GRADE_CANAIS} />
+        ) : (
+          <FaixaCanais colunas={colunasCanal} serieTotal={serieGmv} notaVendas={notaBase(eco, filters.channels)} />
+        )
+      }
+    >
       {dataIsFresh && (() => {
         const isCustomPeriod = detectPreset(filters.dateFrom, filters.dateTo) !== "mes_anterior";
         const note = mockLimitationNote(isLive, filters.brands, isCustomPeriod);
@@ -607,14 +637,91 @@ function CanaisPageInner() {
         />
       )}
 
+      {visao === "lado" && temFaixa && (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {/* ── Participacao no GMV: composicao (identidade do canal, nunca estado) ── */}
+          <Panel titulo="Participação no GMV" ajuda="Fatia de cada canal no GMV e nos pedidos, entre os canais selecionados com dado. Barra de pedidos maior que a de GMV = ticket menor.">
+            {!dataIsFresh ? (
+              <div className="h-[150px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
+            ) : gmvTotal == null ? (
+              <p className="py-6 text-center text-sm text-ink-faint">Sem GMV no período.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {/* GMV e pedidos lado a lado: a diferenca entre as duas barras e' o mix de ticket por canal. */}
+                {([
+                  ["GMV", (c: ColunaCanal) => c.gmv],
+                  ["Pedidos", (c: ColunaCanal) => c.pedidos],
+                ] as const).map(([rotulo, f]) => {
+                  const soma = colunasCanal.reduce((s, c) => s + (f(c) ?? 0), 0);
+                  const pct = (c: ColunaCanal) => (f(c) != null && soma > 0 ? fmtPctSimples((f(c)! / soma) * 100) : "sem dado");
+                  return (
+                    <div key={rotulo} className="flex flex-col gap-1.5">
+                      <span className="flex items-baseline justify-between gap-3 text-xs">
+                        <span className="font-medium text-ink-muted">{rotulo}</span>
+                        <span aria-hidden="true" className="tabular-nums text-ink-muted">{colunasCanal.map(pct).join(" · ")}</span>
+                      </span>
+                      <div
+                        role="img"
+                        aria-label={`${rotulo}: ${colunasCanal.map((c) => `${c.rotulo} ${pct(c)}`).join(", ")}`}
+                        className="tc-barra flex h-3 gap-0.5 overflow-hidden rounded-full"
+                      >
+                        {colunasCanal.map((c) => (
+                          <span key={c.canal} className={`h-full ${PONTO_CANAL[c.canal]}`} style={{ flexGrow: f(c) ?? 0 }} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Panel>
+
+          {/* ── Custo do marketplace sobre o GMV: mediana das marcas de cada canal ── */}
+          <Panel
+            titulo="Custo do marketplace sobre o GMV"
+            ajuda="Mediana das marcas de cada canal; p75 ao lado. Sem desconto nem afiliados. N/A = não se aplica · Sem dado = deveria existir, mas falta."
+          >
+            {!dataIsFresh ? (
+              <div className="h-[150px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
+            ) : (
+              <ul className="flex flex-col gap-3">
+                {custos.map(({ c, m, v }) => (
+                  <li key={c.canal} className="grid grid-cols-[minmax(0,7.5rem)_1fr_auto] items-center gap-3 text-sm">
+                    <span className="truncate font-medium text-ink">{c.rotulo}</span>
+                    <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-raised">
+                      {v != null && maiorCusto > 0 && (
+                        <span className={`tc-barra block h-full rounded-full ${PONTO_CANAL[c.canal]}`} style={{ width: `${(v / maiorCusto) * 100}%` }} />
+                      )}
+                    </span>
+                    <span className="flex items-baseline justify-end gap-2 tabular-nums">
+                      {v != null && c.mediana?.marketplace_cost_pct_p75 != null && (
+                        <span className="text-xs text-ink-faint">p75 {fmtPctSimples(c.mediana.marketplace_cost_pct_p75)}</span>
+                      )}
+                      <span className={m.tone === "value" ? "font-semibold text-ink" : "text-xs text-ink-faint"}>{m.text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
+      )}
+
+      {visao === "lado" && (
+        <>
       {/* ── Canais lado a lado (UX-TORRE-B2B-1) ── */}
       {/* Em modo demonstracao (API offline) o mock nao modela linhas marca x
           canal — a matriz abaixo ja' declara isso; aqui o painel nem aparece,
           em vez de mostrar colunas vazias. */}
       {!error && !isEmpty && colunasCanal.length > 0 && (!dataIsFresh || isLive) && (
-        <ChannelOverview colunas={colunasCanal} fmtBrl={fmtBrlCurto} fmtNumber={fmtNumCurto} carregando={!dataIsFresh} notaVendas={notaBase(eco, filters.channels)} />
+        <ChannelOverview colunas={colunasCanal} carregando={!dataIsFresh} />
       )}
 
+        </>
+      )}
+
+      {visao === "marca" && (
+        <>
       {/* ── Comparativo entre Canais: Ads, Custo e Frete (Gate 2) ── */}
       <div id="comparativo" className="scroll-mt-24 bg-surface border border-line rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-line">
@@ -652,15 +759,15 @@ function CanaisPageInner() {
                   </td>
                 </tr>
               ) : (
-                channelMatrixSort.sortedRows.map((row, i) => (
-                  <tr key={`${row.brand}-${row.channel}`} className={`hover:bg-accent-soft/50 transition-colors ${i % 2 === 0 ? "" : "bg-raised/30"}`}>
+                channelMatrixSort.sortedRows.map((row) => (
+                  <tr key={`${row.brand}-${row.channel}`} className="hover:bg-accent-soft/50 transition-colors">
                     <td className="px-4 py-2.5 font-semibold text-ink-muted whitespace-nowrap">{row.label}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${CHANNEL_BADGE_TONE[row.channel] ?? ""}`}>
                         {row.channel_label}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium whitespace-nowrap">{fmtBrlCurto(row.gmv)}</td>
+                    <td className="px-4 py-2.5 text-right tabular-nums whitespace-nowrap"><CelulaBarra valor={fmtBrlCurto(row.gmv)} peso={maiorGmvMatriz > 0 ? row.gmv / maiorGmvMatriz : 0} cor={COR_CANAL[row.channel] ?? "rgb(var(--tc-accent))"} /></td>
                     <td className="px-4 py-2.5 text-right tabular-nums text-ink-faint">{fmtNumCurto(row.orders)}</td>
                     <td className="px-4 py-2.5 text-right tabular-nums">
                       <ChannelMetricCell value={row.ads_gmv_pct} applicable={row.ads_applicable} available={row.ads_available} format={fmtPctSimples} />
@@ -715,6 +822,11 @@ function CanaisPageInner() {
         </TableScrollHint>
       </div>
 
+        </>
+      )}
+
+      {visao === "afiliados" && (
+        <>
       {/* ── Impacto de afiliados no resultado (UE3, contrato §23) ──
           Bloco SEPARADO da matriz acima de proposito: o grao e' competencia
           mensal x marca, nao dia, e os tres lancamentos nao se somam — nao
@@ -732,6 +844,11 @@ function CanaisPageInner() {
         />
       </div>
 
+        </>
+      )}
+
+      {visao === "descontos" && (
+        <>
       {/* ── Descontos e subsidios do pedido — TikTok Shop (UE8-I3, §28) ──
           Bloco SEPARADO do de afiliados: outra fonte, outro grao (dia x marca)
           e outro frescor. Os dois componentes tem financiadores diferentes e
@@ -749,6 +866,11 @@ function CanaisPageInner() {
         />
       </div>
 
+        </>
+      )}
+
+      {visao === "canal" && (
+        <>
       {/* ── Detalhe por canal (UX-TORRE-B2B-1) ──
           Os tres blocos por canal eram empilhados (~2.600px no desktop). Agora
           uma aba por canal SELECIONADO; o conteudo de cada aba e' o mesmo de
@@ -779,9 +901,9 @@ function CanaisPageInner() {
             <InfoDica texto="% da base de conteúdo (vídeo + live + card/vitrine). Não representa participação nas vendas totais." />
           </h2>
           {!dataIsFresh ? (
-            <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />
+            <FaixaCarregando cartoes={4} className={GRADE_CANAIS} />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={GRADE_CANAIS}>
               {CHAVES_TIKTOK.map((chave) => (
                 <CartaoKpiCanal key={chave} chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
               ))}
@@ -824,16 +946,11 @@ function CanaisPageInner() {
       {/* ── Tabela: Mix do GMV de conteudo do TikTok por marca ── */}
       {showTiktok && (
         <div className="bg-surface border border-line rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-line flex items-start justify-between">
+          <div className="px-6 py-4 border-b border-line">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold text-ink-muted">
               Mix do GMV de conteúdo por marca
-              <InfoDica texto="Conversão só nos dias com dado de visitantes (limite da API TikTok)." />
+              <InfoDica texto="Barra do mix, da esquerda para a direita: vídeo, live, card. Conversão só nos dias com dado de visitantes (limite da API TikTok)." />
             </h2>
-            <div className="flex items-center gap-3 text-xs font-semibold text-ink-faint uppercase tracking-widest shrink-0">
-              <span className="flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${MIX_SERIE.video} inline-block`} /> Video</span>
-              <span className="flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${MIX_SERIE.live} inline-block`} /> Live</span>
-              <span className="flex items-center gap-1"><span className={`w-2 h-2 rounded-full ${MIX_SERIE.card} inline-block`} /> Card</span>
-            </div>
           </div>
           <TableScrollHint>
             <table
@@ -845,7 +962,7 @@ function CanaisPageInner() {
                   <SortHeader rotulo="Marca" coluna="brand" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} alinhamento="left" />
                   <SortHeader rotulo="GMV comercial" coluna="gmv" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <th className="px-4 py-3 text-right text-xs font-semibold text-ink-muted uppercase tracking-wider">
-                    Share da marca no GMV comercial
+                    Participação no GMV comercial
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-ink-muted uppercase tracking-wider">
                     Mix de conteúdo
@@ -854,7 +971,7 @@ function CanaisPageInner() {
                   <SortHeader rotulo="Live % da base" coluna="live_pct" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <SortHeader rotulo="Card % da base" coluna="card_pct" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                   <SortHeader rotulo="Visitantes" coluna="visitors" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
-                  <SortHeader rotulo="Conversao" coluna="conversion" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
+                  <SortHeader rotulo="Conversão" coluna="conversion" sort={tkSort.sort} aoOrdenar={tkSort.toggleSort} />
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -862,14 +979,14 @@ function CanaisPageInner() {
                   <SkeletonTableRows rows={4} cols={9} />
                 ) : (
                   <>
-                    {tkSort.sortedRows.map((b, i) => {
+                    {tkSort.sortedRows.map((b) => {
                       // Mix vem do backend; `dom` e' null quando nao ha base
                       // valida — nunca rotula "Video" sobre ausencia de dado.
                       const mix = contentMixFromApi(b);
                       const dom = dominantContentOrigin(mix);
                       const partPct = tkGmvTotal > 0 ? ((b.tiktok_gmv ?? 0) / tkGmvTotal) * 100 : null;
                       return (
-                        <tr key={b.brand} className={`hover:bg-accent-soft/50 transition-colors ${i % 2 === 0 ? "" : "bg-raised/30"}`}>
+                        <tr key={b.brand} className="hover:bg-accent-soft/50 transition-colors">
                           <td className="px-4 py-2.5 font-semibold whitespace-nowrap">
                             <Link
                               href={buildHref(`/brand/${b.brand}?brands=${b.brand}&channels=tiktok`)}
@@ -878,7 +995,7 @@ function CanaisPageInner() {
                               {b.label}
                             </Link>
                           </td>
-                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium">{fmtBrlCurto(b.tiktok_gmv!)}</td>
+                          <td className="px-4 py-2.5 text-right tabular-nums text-ink-muted font-medium whitespace-nowrap">{fmtBrlCurto(b.tiktok_gmv!)}</td>
                           <td className="px-4 py-2.5 text-right tabular-nums">
                             <span className="text-ink-faint text-xs">{formatContentPctBr(partPct)}</span>
                           </td>
@@ -931,7 +1048,7 @@ function CanaisPageInner() {
                     {tkBrands.length > 0 && (
                       <tr className="bg-raised border-t border-line">
                         <td className="px-6 py-3 text-xs font-bold text-ink-muted uppercase tracking-wider">Total</td>
-                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm">{fmtBrlCurto(tkGmvTotal)}</td>
+                        <td className="px-4 py-3 text-right tabular-nums font-bold text-ink text-sm whitespace-nowrap">{fmtBrlCurto(tkGmvTotal)}</td>
                         <td className="px-4 py-3 text-right tabular-nums"><span className="text-ink-faint text-xs">100%</span></td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1">
@@ -977,14 +1094,11 @@ function CanaisPageInner() {
         <section id="mercado-livre" aria-labelledby="mercado-livre-heading" className="scroll-mt-24 flex flex-col gap-3" aria-busy={!dataIsFresh}>
           <h2 id="mercado-livre-heading" className="text-sm font-semibold text-ink-muted">Mercado Livre</h2>
           {!dataIsFresh ? (
-            <FaixaCarregando cartoes={3} className="grid grid-cols-2 md:grid-cols-3 gap-3" />
+            <FaixaCarregando cartoes={3} className={GRADE_CANAIS} />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {CHAVES_ML.map((chave, i) => (
-                // 3 cartoes em 2 colunas: o ultimo ocupa a linha inteira no mobile.
-                <div key={chave} className={i === CHAVES_ML.length - 1 ? "col-span-2 md:col-span-1" : undefined}>
-                  <CartaoKpiCanal chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
-                </div>
+            <div className={GRADE_CANAIS}>
+              {CHAVES_ML.map((chave) => (
+                <CartaoKpiCanal key={chave} chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
               ))}
             </div>
           )}
@@ -1020,12 +1134,12 @@ function CanaisPageInner() {
                   <SkeletonTableRows rows={3} cols={9} />
                 ) : (
                   <>
-                    {mlSort.sortedRows.map((b, i) => {
+                    {mlSort.sortedRows.map((b) => {
                       const partPct = mlGmvTotal > 0 ? ((b.ml_gmv ?? 0) / mlGmvTotal) * 100 : 0;
                       const newPct = b.ml_new_buyer_pct ??
                         (b.ml_unique_buyers && b.ml_new_buyers ? (b.ml_new_buyers / b.ml_unique_buyers) * 100 : null);
                       return (
-                        <tr key={b.brand} className={`hover:bg-accent-soft/50 transition-colors ${i % 2 === 0 ? "" : "bg-raised/30"}`}>
+                        <tr key={b.brand} className="hover:bg-accent-soft/50 transition-colors">
                           <td className="px-4 py-2.5 font-semibold whitespace-nowrap">
                             <Link
                               href={buildHref(`/brand/${b.brand}?brands=${b.brand}&channels=ml`)}
@@ -1097,14 +1211,11 @@ function CanaisPageInner() {
         <section id="shopee" aria-labelledby="shopee-heading" className="scroll-mt-24 flex flex-col gap-3" aria-busy={!dataIsFresh}>
           <h2 id="shopee-heading" className="text-sm font-semibold text-ink-muted">Shopee</h2>
           {!dataIsFresh ? (
-            <FaixaCarregando cartoes={5} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3" />
+            <FaixaCarregando cartoes={5} className={GRADE_CANAIS} />
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-              {CHAVES_SHOPEE.map((chave, i) => (
-                // 5 cartoes: o ultimo fecha a linha no mobile (2 colunas) e no tablet (3 colunas).
-                <div key={chave} className={i === CHAVES_SHOPEE.length - 1 ? "col-span-2 lg:col-span-1" : undefined}>
-                  <CartaoKpiCanal chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
-                </div>
+            <div className={GRADE_CANAIS}>
+              {CHAVES_SHOPEE.map((chave) => (
+                <CartaoKpiCanal key={chave} chave={chave} kpis={displayKpis} onAbrir={abrirKpi} />
               ))}
             </div>
           )}
@@ -1150,12 +1261,12 @@ function CanaisPageInner() {
                   <SkeletonTableRows rows={3} cols={11} />
                 ) : (
                   <>
-                    {shSort.sortedRows.map((b, i) => {
+                    {shSort.sortedRows.map((b) => {
                       const partPct = shGmvTotal > 0 ? ((b.shopee_gmv ?? 0) / shGmvTotal) * 100 : 0;
                       const newPct = b.shopee_new_buyer_pct ??
                         (b.shopee_unique_buyers && b.shopee_new_buyers ? (b.shopee_new_buyers / b.shopee_unique_buyers) * 100 : null);
                       return (
-                        <tr key={b.brand} className={`hover:bg-accent-soft/50 transition-colors ${i % 2 === 0 ? "" : "bg-raised/30"}`}>
+                        <tr key={b.brand} className="hover:bg-accent-soft/50 transition-colors">
                           <td className="px-4 py-2.5 font-semibold whitespace-nowrap">
                             <Link
                               href={buildHref(`/brand/${b.brand}?brands=${b.brand}&channels=shopee`)}
@@ -1238,6 +1349,9 @@ function CanaisPageInner() {
         </section>
       )}
 
+        </>
+      )}
+
       <KpiDrilldownDialog
         open={dataIsFresh && (detailRow != null || kpiAberto != null)}
         onClose={() => {
@@ -1270,7 +1384,7 @@ function CanaisPageInner() {
           />
         )}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
 

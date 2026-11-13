@@ -406,7 +406,8 @@ test("pedidos do motivo: carregar nunca lanca", async () => {
 
 test("pareto: cada motivo abre a lista de pedidos (botao com aria-expanded)", () => {
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(tela, /aria-expanded=\{aberto\?\.chave === i\.chave\}/);
+  assert.match(tela, /aria-expanded=\{aberta === i\.chave\}/);
+  assert.match(tela, /aoAbrir=\{\(i\) => setAberto\(aberto\?\.chave === i\.chave \? null : i\)\}/);
   assert.match(tela, /carregarPedidosMotivo\(filtros, tipo, item\.codigo, torreFetch as typeof fetch\)/);
   const v = montarPareto(comConversas(30), rotulo);
   assert.ok(v.itens.every((i) => i.codigo && i.chave.endsWith(i.codigo)));
@@ -793,17 +794,27 @@ test("pareto: linha de total da tabela por marca", () => {
   );
 });
 
-test("tela CX no padrao Gerencial: heroi, faixa, fila, 7/12 | 5/12 e Mais detalhes", () => {
+test("tela CX na grade unica (ALVO-GRADE): Aba com canais em abas, 4 cartoes, 2 paineis, tabela e Mais detalhes", () => {
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  for (const peca of ["<Heroi", "<Faixa ", "<FilaAtencao", "lg:col-span-7", "lg:col-span-5", "<MaisDetalhes", "<KpiDrilldownDialog", "variante=\"gerencial\""]) {
+  for (const peca of ["<Aba", "<CartaoIndicador", "<PainelAtencao", "<FilaAtencao semMoldura", "grid grid-cols-1 gap-3 lg:grid-cols-2", "<ProblemasPorMarca", "<MaisDetalhes", "<KpiDrilldownDialog"]) {
     assert.ok(tela.includes(peca), peca);
   }
-  assert.ok(tela.lastIndexOf("<Heroi") < tela.indexOf("<Faixa ") && tela.indexOf("<Faixa ") < tela.indexOf("<FilaAtencao"), "ordem da spec");
-  assert.match(tela, /<PageHeader[\s\S]*icon=\{MessageCircle\}/);
+  const corpo = tela.slice(tela.indexOf("function Corpo"));
+  const ordem = ["<CartaoIndicador", "<Pareto v=", "<PainelAtencao", "<ProblemasPorMarca", "<AtendimentoPorLoja", "<MaisDetalhes"].map((x) => corpo.indexOf(x));
+  assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "ordem do alvo");
+  assert.equal(corpo.slice(0, corpo.indexOf("// Painel")).split("<CartaoIndicador").length - 1, 4, "sempre quatro cartoes");
+  // os canais sao as abas sob o titulo; a URL continua a do filtro (hrefCx)
+  assert.match(tela, /<Aba\s+titulo="CX"/);
+  assert.match(tela, /const VISOES_CX = CANAIS_CX\.map/);
+  assert.match(tela, /router\.push\(hrefCx\(filtros, c\)/);
+  assert.doesNotMatch(tela, /<Heroi|<KpiTile|<PageHeader/, "sem o visual antigo");
+  // tendencia so' com serie real: a Devolucao (sem serie na API) nao recebe `serie`
+  const devolucao = corpo.slice(corpo.indexOf('rotulo="Devolução"'), corpo.indexOf("rotulo={ROTULO_INDICADOR.reembolso}"));
+  assert.doesNotMatch(devolucao, /serie=/);
   assert.doesNotMatch(tela, /subtitle=/, "subtitulo virou chip");
   // revisao do Prumo: sem cartao sem numero na faixa; um nome so' para a taxa; Pareto com 2 numeros por motivo
   assert.doesNotMatch(tela, /rotulo="Reenvio"/);
-  assert.ok(tela.includes("grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"));
+  assert.ok(tela.includes("grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4"));
   assert.ok(tela.includes(">{ROTULO_INDICADOR.resposta}</ThAjuda>") && !tela.includes("% respondido</ThAjuda>"));
   assert.doesNotMatch(tela, /· acum\. \{i\.acumulado\}/);
   assert.ok(tela.includes('<span className="sr-only"> · acumulado {i.acumulado}</span>'));
@@ -845,9 +856,15 @@ test("meta: sinais matematicos em todo texto de meta da CX e da Gerencial", () =
 // ---------------------------------------------------------------------------
 test("cards com cor de identidade: faixa da /cx, CX do site e card CX da Gerencial", () => {
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(tela, /tile\("contactRate", "atendimento"/);
-  assert.match(tela, /tile\("cancelamento", "ads", Ban, r\.cancelamento, null, rodapeComparacao\(r, "cancelamento"\)\)/);
-  assert.match(tela, /tile\("reembolso", "gmv"/);
+  // ALVO-GRADE: as quatro cores do alvo, pelos tokens do tema (nunca hex); a comparacao segue a regra do card da Gerencial
+  assert.match(tela, /resposta: "rgb\(var\(--tc-kpi-gmv\)\)"/);
+  assert.match(tela, /cancelamento: "rgb\(var\(--tc-kpi-ads\)\)"/);
+  assert.match(tela, /devolucao: "rgb\(var\(--tc-kpi-pedidos\)\)"/);
+  assert.match(tela, /reembolso: "rgb\(var\(--tc-kpi-prazo\)\)"/);
+  assert.match(tela, /cancelamento: rodapeComparacao\(r, "cancelamento"\)/);
+  // o Contact rate saiu da faixa (sempre quatro cartoes): o total do periodo fica na coluna da tabela
+  assert.doesNotMatch(tela, /rotulo=\{ROTULO_INDICADOR\.contactRate\}/);
+  assert.match(tela, /contactRate=\{r\.contactRate\}/);
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /resposta: \{ identidade: "ticket"/, "na Gerencial a resposta e' kpi-ticket (nao repete o contact rate)");
   assert.match(resumo, /identidade="ads"\s+icone=\{Repeat2\}\s+rotulo="Reenvio"\s+tom="ausente"/);
@@ -931,7 +948,11 @@ test("cancelamento: com sem_anterior da API, regra geral (linha neutra, sem a pi
   const resumo = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
   assert.match(resumo, /r\.semAnterior\.cancelamento \? \{\} : deltaCancelamento\(r\)/);
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  assert.match(tela, /!r\.comparacao\.resposta\?\.delta && r\.totais\.resposta != null && r\.semAnterior\.resposta/, "so' sem pilula e com valor");
+  // so' sem pilula e com valor: a regra mora no rodapeComparacao; o cartao so' a desenha
+  assert.match(tela, /resposta: rodapeComparacao\(r, "resposta"\)/);
+  // na face do cartao fica a fila do chat; "comparação a partir de dd/mm" vai para o ⓘ
+  assert.match(tela, /ajuda\("resposta", r\.semAnterior\.resposta\?\.texto\)/);
+  assert.match(resumo, /const sem = r\.totais\[i\] == null \? undefined : r\.semAnterior\[i\];/);
   const p = comConversas(30);
   const [apice, rit] = p.atendimento.marcas;
   const r = resumoCxGerencial({ ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, pedidos_anterior: 1000, cancelamentos_anterior: 10 }, rit] },
@@ -968,7 +989,7 @@ test("Gerencial: card Reembolso com o % no numero e o R$ embaixo, como na /cx", 
 
 test("Shopee: card Devolução na faixa (entre Cancelamento e Reembolso), com detalhe por marca e sem legenda solta", () => {
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
-  const ordem = ['tile("cancelamento"', 'rotulo="Devolução"', 'tile("reembolso"'].map((x) => tela.indexOf(x));
+  const ordem = ["cor={COR_CX.cancelamento}", 'rotulo="Devolução"', "cor={COR_CX.reembolso}"].map((x) => tela.indexOf(x));
   assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "Cancelamento, Devolução, Reembolso");
   assert.match(tela, /pareto\.total\.devolucoesPct/);
   assert.match(tela, /<DetalheDevolucao/);
