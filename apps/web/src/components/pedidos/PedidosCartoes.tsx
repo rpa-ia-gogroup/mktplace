@@ -2,21 +2,22 @@
 
 import { CircleDollarSign, PackageCheck, PackageX, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
 
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
+import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import InfoDica from "@/components/ui/InfoDica";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
-import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { TITULO_DETALHE, tomDoCancelamento, type ChaveDetalhe, type Dados, type Series } from "@/lib/pedidos-cartoes";
 
 /**
- * Cartoes de Pedidos no padrao da Gerencial (`KpiTile` gerencial). Identidades
- * (so' as 7 existentes): pedidos -> `pedidos`, GMV -> `gmv`, ticket -> `ticket`,
- * cancelamento -> `atendimento`, entregues -> `prazo`. O canal e' um ponto no
- * titulo do grupo, nunca cor de cartao. Sem periodo anterior nesta fonte, entao
- * sem pilula nem "antes"; o mini grafico usa a serie diaria real.
+ * ALVO-GRADE (12/11/2026) — a faixa de Pedidos: SEMPRE quatro `CartaoIndicador`.
+ * Visao geral: pedidos, GMV, ticket e cancelamento. Aba de canal: pedidos, GMV,
+ * cancelados e entregues. A cor do cartao e' a da identidade (pedidos -> `pedidos`,
+ * GMV -> `gmv`, ticket -> `ticket`, cancelamento -> `atendimento`, entregues ->
+ * `prazo`); bom/ruim fica so' na pilula. Sem periodo anterior nesta fonte: sem
+ * variacao; a linha usa a serie diaria real.
  */
-const AUSENTE = "Sem dado no período";
-const GRADE = "grid grid-cols-2 md:grid-cols-4 gap-3";
+const AUSENTE = "sem dado no período";
+export const GRADE_PEDIDOS = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
 
 /** Icone e cor de identidade do detalhe de cada cartao (o modal herda os do cartao que o abriu). */
 export const VISUAL_DETALHE: Record<ChaveDetalhe, { icone: LucideIcon; identidade: IdentidadeKpi }> = {
@@ -32,53 +33,58 @@ export const VISUAL_DETALHE: Record<ChaveDetalhe, { icone: LucideIcon; identidad
   ml_gmv: { icone: CircleDollarSign, identidade: "gmv" },
 };
 
-interface Props {
-  dados: Dados;
-  series: Series;
-  onAbrir: (chave: ChaveDetalhe) => void;
+/** Faixa da taxa de cancelamento (regra existente: 2% e 5%) escrita na pilula; sem taxa, sem pilula. */
+const PILULA_CANCELAMENTO: Record<"bom" | "atencao" | "critico", { texto: string; tom: TomPilula }> = {
+  bom: { texto: "Abaixo de 2%", tom: "ok" },
+  atencao: { texto: "Entre 2% e 5%", tom: "warn" },
+  critico: { texto: "Acima de 5%", tom: "crit" },
+};
+function pilulaDoCancelamento(taxa: number | null) {
+  const t = tomDoCancelamento(taxa);
+  return t === "ausente" ? null : PILULA_CANCELAMENTO[t];
 }
 
-function Tile({
-  rotulo, icone, identidade, valor, comparacao, serie, tom, ajuda, onAbrir,
+function Cartao({
+  rotulo, icone, identidade, valor, legenda, serie, pilula, ajuda, onAbrir,
 }: {
-  rotulo: string; icone: LucideIcon; identidade: IdentidadeKpi; valor: string | null; comparacao?: string;
-  serie?: number[]; tom?: "neutro" | "bom" | "atencao" | "critico" | "ausente"; ajuda?: React.ReactNode; onAbrir?: () => void;
+  rotulo: string; icone: LucideIcon; identidade: IdentidadeKpi; valor: string | null; legenda?: string;
+  serie?: number[]; pilula?: { texto: string; tom: TomPilula } | null; ajuda?: React.ReactNode; onAbrir?: () => void;
 }) {
+  // ausencia nunca vira zero: "N/D" no numero e o motivo escrito na legenda
   const ausente = valor == null;
   return (
-    <KpiTile
-      variante="gerencial"
-      identidade={identidade}
-      icone={icone}
+    <CartaoIndicador
       rotulo={rotulo}
-      ajuda={ajuda}
-      valor={valor ?? "—"}
-      comparacao={ausente ? AUSENTE : comparacao}
-      tom={ausente ? "ausente" : tom ?? "neutro"}
+      icone={icone}
+      cor={`rgb(var(--tc-kpi-${identidade}))`}
+      valor={valor}
+      legenda={ausente ? AUSENTE : legenda}
+      pilula={ausente ? null : pilula}
       serie={ausente ? undefined : serie}
+      ajuda={ajuda}
       onAbrir={ausente ? undefined : onAbrir}
     />
   );
 }
 
-/** Os 4 totais da faixa: pedidos, GMV, ticket e cancelamento. */
-export function FaixaTotais({ dados, series, onAbrir }: Props) {
+/** Os 4 totais da Visao geral: pedidos, GMV, ticket e cancelamento. */
+export function FaixaTotais({ dados, series, onAbrir }: { dados: Dados; series: Series; onAbrir: (chave: ChaveDetalhe) => void }) {
   const k = dados.kpis;
   const canceladosTotal = (dados.tk?.canceled ?? 0) + (dados.ml?.canceled ?? 0);
   const taxa = k?.cancel_rate_pct ?? null;
   return (
-    <div className={GRADE}>
+    <div className={GRADE_PEDIDOS}>
       {/* B1-04: liquido (`dados` ja' vem de `paraPedidosLiquidos`); os cancelados ficam a parte, nunca somados. */}
-      <Tile
+      <Cartao
         rotulo={TITULO_DETALHE.total_pedidos}
         icone={ShoppingBag}
         identidade="pedidos"
         valor={k ? fmtNumCurto(k.total_orders) : null}
-        comparacao={k ? `${fmtNumCurto(canceladosTotal)} cancelados à parte` : undefined}
+        legenda={k ? `${fmtNumCurto(canceladosTotal)} cancelados à parte` : undefined}
         serie={series.pedidos}
         onAbrir={() => onAbrir("total_pedidos")}
       />
-      <Tile
+      <Cartao
         rotulo="GMV total"
         icone={CircleDollarSign}
         identidade="gmv"
@@ -87,14 +93,14 @@ export function FaixaTotais({ dados, series, onAbrir }: Props) {
         ajuda={<InfoDica emControle texto="Só TikTok Shop + Mercado Livre" />}
         onAbrir={() => onAbrir("total_gmv")}
       />
-      <Tile rotulo="Ticket médio" icone={Receipt} identidade="ticket" valor={k ? fmtBrlCurto(k.avg_ticket) : null} serie={series.ticket} onAbrir={() => onAbrir("ticket")} />
-      <Tile
+      <Cartao rotulo="Ticket médio" icone={Receipt} identidade="ticket" valor={k ? fmtBrlCurto(k.avg_ticket) : null} serie={series.ticket} onAbrir={() => onAbrir("ticket")} />
+      <Cartao
         rotulo="Taxa de cancelamento"
         icone={PackageX}
         identidade="atendimento"
         valor={taxa != null ? fmtPctSimples(taxa) : null}
-        comparacao={k ? `${fmtNumCurto(canceladosTotal)} cancelados` : undefined}
-        tom={tomDoCancelamento(taxa)}
+        legenda={k ? `${fmtNumCurto(canceladosTotal)} cancelados` : undefined}
+        pilula={pilulaDoCancelamento(taxa)}
         serie={series.cancelamento}
         onAbrir={() => onAbrir("cancelamento")}
       />
@@ -102,12 +108,10 @@ export function FaixaTotais({ dados, series, onAbrir }: Props) {
   );
 }
 
-/** Um canal: pedidos, GMV, cancelados e entregues. So' "Entregues" nao abre detalhe (nao ha dado por marca). */
+/** Aba de um canal: pedidos, GMV, cancelados e entregues. So' "Entregues" nao abre detalhe (nao ha dado por marca). */
 export function GrupoCanal({
-  canal, titulo, dados, serieOrders, serieCancelados, chaveOrders, chaveGmv, chaveCancelados, onAbrir,
+  dados, serieOrders, serieCancelados, chaveOrders, chaveGmv, chaveCancelados, onAbrir,
 }: {
-  canal: "tiktok" | "ml";
-  titulo: string;
   dados: NonNullable<Dados["tk"]>;
   serieOrders: number[];
   serieCancelados: number[];
@@ -118,26 +122,20 @@ export function GrupoCanal({
 }) {
   const taxa = dados.cancel_rate_pct;
   return (
-    <section aria-label={titulo} className="flex flex-col gap-3">
-      <h3 className="flex items-center gap-1.5 text-sm font-semibold text-ink-muted">
-        <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${CHANNEL_DOT[canal]}`} />
-        {titulo}
-      </h3>
-      <div className={GRADE}>
-        <Tile rotulo="Pedidos" icone={ShoppingBag} identidade="pedidos" valor={fmtNumCurto(dados.orders)} serie={serieOrders} onAbrir={() => onAbrir(chaveOrders)} />
-        <Tile rotulo="GMV" icone={CircleDollarSign} identidade="gmv" valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)} />
-        <Tile
-          rotulo="Cancelados"
-          icone={PackageX}
-          identidade="atendimento"
-          valor={fmtNumCurto(dados.canceled)}
-          comparacao={taxa != null ? `${fmtPctSimples(taxa)} dos pedidos` : undefined}
-          tom={tomDoCancelamento(taxa)}
-          serie={serieCancelados}
-          onAbrir={() => onAbrir(chaveCancelados)}
-        />
-        {dados.delivered != null && <Tile rotulo="Entregues" icone={PackageCheck} identidade="prazo" valor={fmtNumCurto(dados.delivered)} />}
-      </div>
-    </section>
+    <div className={GRADE_PEDIDOS}>
+      <Cartao rotulo="Pedidos" icone={ShoppingBag} identidade="pedidos" valor={fmtNumCurto(dados.orders)} serie={serieOrders} onAbrir={() => onAbrir(chaveOrders)} />
+      <Cartao rotulo="GMV" icone={CircleDollarSign} identidade="gmv" valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)} />
+      <Cartao
+        rotulo="Cancelados"
+        icone={PackageX}
+        identidade="atendimento"
+        valor={fmtNumCurto(dados.canceled)}
+        legenda={taxa != null ? `${fmtPctSimples(taxa)} dos pedidos` : undefined}
+        pilula={pilulaDoCancelamento(taxa)}
+        serie={serieCancelados}
+        onAbrir={() => onAbrir(chaveCancelados)}
+      />
+      <Cartao rotulo="Entregues" icone={PackageCheck} identidade="prazo" valor={dados.delivered != null ? fmtNumCurto(dados.delivered) : null} />
+    </div>
   );
 }

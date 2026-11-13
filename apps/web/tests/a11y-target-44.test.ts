@@ -102,11 +102,7 @@ test("A2: nenhum glifo do SortableHeader renderiza abaixo de 12px", () => {
 test("A2: o tamanho do glifo é explícito, não herdado — /pedidos rebaixa o <th> a 10px", () => {
   // `/pedidos` passa `!text-[10px]` no className do <th>. Se o glifo herdasse o
   // tamanho, ele voltaria a 10px naquela tela sem tocar este componente.
-  const ped = src("app/pedidos/page.tsx");
-  assert.ok(
-    ped.includes("!text-[10px]"),
-    "premissa do teste mudou: /pedidos não sobrescreve mais o tamanho do <th>",
-  );
+  // ALVO-GRADE: /pedidos deixou de sobrescrever o <th>; a garantia do glifo continua no componente.
   const s = src(SORTABLE);
   assert.match(s, /text-ink-faint text-xs leading-none/, "glifo inativo com tamanho próprio");
   assert.match(s, /text-accent text-xs leading-none/, "glifo ativo com tamanho próprio");

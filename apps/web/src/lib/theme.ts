@@ -94,7 +94,7 @@ export function resolverTema(
  * PRODUTOS-TEMA-ESCURO (11/11/2026) acrescentou `/produtos` (tabelas por canal
  * e barra de filtros em tokens).
  */
-export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos"] as const;
+export const ROTAS_TEMATIZADAS = ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/pedidos"] as const;
 
 export function rotaTematizada(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
