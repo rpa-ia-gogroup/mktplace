@@ -32,7 +32,8 @@ const OPCAO =
 const OPCAO_ATIVA = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const OPCAO_INATIVA = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
-export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) {
+/** `intervalo`: "13/10–11/11", a janela de dias fechados que a API devolveu (ausente enquanto carrega). */
+export default function FiltrosCx({ f, canal, intervalo }: { f: Filtros; canal: CanalCx; intervalo?: string }) {
   const router = useRouter();
   const [aplicando, iniciar] = useTransition();
   const [aberto, setAberto] = useState(false);
@@ -89,6 +90,8 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
         <Popover
           rotulo="Período"
           valor={`Últimos ${f.dias} dias`}
+          // o intervalo real dos dias fechados, fora do truncamento do valor
+          sufixo={intervalo}
           icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
           largura="w-52"
         >

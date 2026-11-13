@@ -15,7 +15,6 @@ import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
 
 import CxConteudo from "./CxConteudo";
 import CxMercadoLivre from "./CxMercadoLivre";
-import FiltrosCx from "./FiltrosCx";
 
 export const dynamic = "force-dynamic";
 
@@ -25,8 +24,6 @@ export default async function CxPage({ searchParams }: { searchParams: SearchPar
   const params = await searchParams;
   const filtros = lerFiltrosCx(params, ALL_BRAND_KEYS);
   const canal = lerCanalCx(params);
-  // key: o elemento nasce no servidor e entra na lista de filhos da barra da `Aba` (sem ela, o React avisa)
-  const barra = <FiltrosCx key="filtros" f={filtros} canal={canal} />;
   // o respiro e a ordem dos blocos sao da `Aba` (ALVO-GRADE), montada por cada canal
-  return canal === "ml" ? <CxMercadoLivre filtros={filtros} barra={barra} /> : <CxConteudo filtros={filtros} barra={barra} />;
+  return canal === "ml" ? <CxMercadoLivre filtros={filtros} /> : <CxConteudo filtros={filtros} />;
 }

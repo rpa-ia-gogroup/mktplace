@@ -88,6 +88,7 @@ import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import AvaliacoesProduto from "./AvaliacoesProduto";
+import FiltrosCxBarra from "./FiltrosCx";
 
 // ---------------------------------------------------------------------------
 // Moldura da aba (ALVO-GRADE): titulo + selo, os canais como ABAS, filtros, faixa
@@ -108,7 +109,11 @@ export const COR_CX = {
 
 export const GRADE_FAIXA = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
 
-export function AbaCx({ canal, filtros, barra, selo, faixa, children }: { canal: CanalCx; filtros: FiltrosCx; barra: ReactNode; selo?: ReactNode; faixa?: ReactNode; children?: ReactNode }) {
+/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados). */
+export const intervaloDaJanela = (j: { inicio: string; fim: string }): string =>
+  `${j.inicio.slice(8, 10)}/${j.inicio.slice(5, 7)}–${j.fim.slice(8, 10)}/${j.fim.slice(5, 7)}`;
+
+export function AbaCx({ canal, filtros, intervalo, selo, faixa, children }: { canal: CanalCx; filtros: FiltrosCx; intervalo?: string; selo?: ReactNode; faixa?: ReactNode; children?: ReactNode }) {
   const router = useRouter();
   return (
     <Aba
@@ -117,7 +122,7 @@ export function AbaCx({ canal, filtros, barra, selo, faixa, children }: { canal:
       visoes={VISOES_CX}
       visao={canal}
       onVisao={(c) => c !== canal && router.push(hrefCx(filtros, c), { scroll: false })}
-      filtros={barra}
+      filtros={<FiltrosCxBarra f={filtros} canal={canal} intervalo={intervalo} />}
       faixa={faixa}
     >
       {children}
@@ -160,7 +165,7 @@ export function pilulaCartao(c: { delta: number | null; unidade: "pp" | "pct" | 
   if (c?.delta == null) return null;
   const estavel = Math.abs(c.delta) < 0.05;
   return {
-    texto: fmtDelta(estavel ? 0 : c.delta, c.unidade),
+    texto: `${fmtDelta(estavel ? 0 : c.delta, c.unidade)} vs anterior`,
     tom: estavel || c.tone === "neutral" ? "neutro" : (c.delta >= 0) !== (c.tone === "lower_is_better") ? "ok" : "crit",
   };
 }
@@ -169,10 +174,14 @@ export function pilulaCartao(c: { delta: number | null; unidade: "pp" | "pct" | 
 export const pilulaSelo = (s: { texto: string; tom: "ok" | "critico" } | null): { texto: string; tom: TomPilula } | null =>
   s ? { texto: s.texto, tom: s.tom === "ok" ? "ok" : "crit" } : null;
 
+/** O selo da meta como legenda (quando a pilula e' a variacao): fora da meta continua em vermelho e escrito. */
+export const legendaSelo = (s: { texto: string; tom: "ok" | "critico" } | null): ReactNode =>
+  s ? <span className={s.tom === "ok" ? undefined : "font-semibold text-crit-ink"}>{s.texto}</span> : null;
+
 /** "—" (ausencia) vira `null`: o cartao escreve "N/D", nunca zero. */
 export const valorCartao = (v: string | null | undefined): string | null => (v && v !== "—" ? v : null);
 
-export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
+export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
   const [repetindo, setRepetindo] = useState(false);
@@ -197,7 +206,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
 
   if (!resultado) {
     return (
-      <AbaCx canal="shopee" filtros={filtros} barra={barra} selo={<SeloAtualizado em={null} carregando />} faixa={<FaixaCarregando />}>
+      <AbaCx canal="shopee" filtros={filtros} selo={<SeloAtualizado em={null} carregando />} faixa={<FaixaCarregando />}>
         <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX"} />
         {avaliacoes}
       </AbaCx>
@@ -205,13 +214,13 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
   }
   if (!resultado.ok) {
     return (
-      <AbaCx canal="shopee" filtros={filtros} barra={barra}>
+      <AbaCx canal="shopee" filtros={filtros}>
         <StateBlock tipo="erro" titulo="Não foi possível carregar a aba CX" descricao={resultado.motivo} acao={<TentarNovamente onClick={() => carregar()} />} />
         {avaliacoes}
       </AbaCx>
     );
   }
-  return <Corpo dados={resultado.dados} filtros={filtros} barra={barra} avaliacoes={avaliacoes} />;
+  return <Corpo dados={resultado.dados} filtros={filtros} avaliacoes={avaliacoes} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -219,7 +228,7 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
 // ---------------------------------------------------------------------------
 type Dialogo = { marca: string } | { indicador: IndicadorCx } | { devolucao: true };
 
-function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse; filtros: FiltrosCx; barra: ReactNode; avaliacoes: ReactNode }) {
+function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtros: FiltrosCx; avaliacoes: ReactNode }) {
   const v = montarAtendimentoCx(dados, brandLabel);
   const r = resumoCxGerencial(dados, brandLabel);
   const status = montarStatusMarcas(dados, brandLabel);
@@ -254,6 +263,15 @@ function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse;
     reembolso: rodape.reembolso.delta ? pilulaCartao(r.comparacao.reembolso) : null,
   };
   const selo = pilulaSelo(heroi.selo);
+  // Devolucao por marca, da maior taxa para a menor: ocupa o lugar da linha (a API nao traz serie de devolucoes)
+  const pesoDevolucao = pesosDaColuna(pareto.linhas.map((l) => l.devolucoesPct));
+  const devolucaoPorMarca = pareto.linhas
+    .map((l, k) => ({ l, peso: pesoDevolucao[k] }))
+    .filter((x): x is { l: (typeof pareto.linhas)[number]; peso: number } => x.peso != null)
+    .sort((a, b) => b.peso - a.peso)
+    .slice(0, 3)
+    .map((x) => `${x.l.marca} ${x.l.devolucoesPct}`)
+    .join(" · ");
   const erroAtendimento = v.estado === "erro" ? (v.motivo ?? "Atendimento indisponível nesta carga.") : null;
   const ajuda = (i: IndicadorCx, extra?: string | null) => <InfoDica emControle texto={[...notasDoTile(r, i, dias), extra].filter(Boolean).join(" ")} />;
   const semDevolucao = pareto.total.devolucoesPct === "—";
@@ -263,7 +281,7 @@ function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse;
     <AbaCx
       canal="shopee"
       filtros={filtros}
-      barra={barra}
+      intervalo={intervaloDaJanela(dados.janela)}
       selo={
         <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
           {/* dado velho e aviso de coleta ficam ESCRITOS ao lado do selo, nunca so' no title */}
@@ -279,16 +297,17 @@ function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse;
       faixa={
         <section aria-label="Indicadores do período">
           <div className={GRADE_FAIXA} data-testid="cx-faixa">
-            {/* 1. Resposta do chat: o selo da meta oficial e' a pilula; com selo, a variacao vai para a legenda */}
+            {/* 1. Resposta do chat: a variacao e' a pilula (sem ela, o selo da meta oficial); a fila do chat ocupa o rodape */}
             <CartaoIndicador
               rotulo={ROTULO_INDICADOR.resposta}
               icone={MessageCircle}
               cor={COR_CX.resposta}
               valor={valorCartao(r.resposta)}
-              pilula={selo ?? pilulas.resposta}
-              legenda={erroAtendimento ?? (selo && pilulas.resposta ? `${pilulas.resposta.texto} vs anterior` : rodape.resposta.antes)}
+              pilula={pilulas.resposta ?? selo}
+              legenda={erroAtendimento ?? (pilulas.resposta ? legendaSelo(heroi.selo) : rodape.resposta.serie ? heroi.contexto : null)}
               serie={rodape.resposta.serie}
-              ajuda={ajuda("resposta", heroi.contexto)}
+              rodape={heroi.contexto}
+              ajuda={ajuda("resposta", r.semAnterior.resposta?.texto)}
               onAbrir={() => setDialogo({ indicador: "resposta" })}
             />
             <CartaoIndicador
@@ -308,14 +327,12 @@ function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse;
               icone={PackageX}
               cor={COR_CX.devolucao}
               valor={valorCartao(pareto.total.devolucoesPct)}
-              pilula={pareto.total.devolucoes === "—" ? null : { texto: `${pareto.total.devolucoes} devoluções`, tom: "neutro" }}
               legenda={
                 pareto.total.devolucoes === "—"
                   ? "Sem leitura de devoluções"
-                  : parcial
-                    ? `${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas`
-                    : null
+                  : `${pareto.total.devolucoes} devoluções${parcial ? ` · ${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas` : ""}`
               }
+              rodape={devolucaoPorMarca || undefined}
               ajuda={<InfoDica emControle={!semDevolucao} texto={AJUDA_DEVOLUCAO} />}
               onAbrir={semDevolucao ? undefined : () => setDialogo({ devolucao: true })}
             />
@@ -390,7 +407,7 @@ function Corpo({ dados, filtros, barra, avaliacoes }: { dados: CxShopeeResponse;
 }
 
 // ---------------------------------------------------------------------------
-// Painel "O que exige atenção": Saude da Conta por marca + a fila; "Ver todos" abre a lista inteira
+// Painel "O que exige atenção": a fila + Saude da Conta por marca; "Ver todos" abre a lista inteira
 // ---------------------------------------------------------------------------
 const ATENCAO_NO_PAINEL = 6;
 
@@ -416,8 +433,9 @@ export function PainelAtencao({ ajuda, saude, itens, vazio, erro }: { ajuda: str
       }
     >
       <div className="flex flex-col gap-3" data-testid="cx-atencao">
-        {saude}
+        {/* os alertas primeiro; a Saude da Conta (quase sempre verde) vem depois */}
         <FilaAtencao semMoldura itens={itens.slice(0, ATENCAO_NO_PAINEL)} vazio={vazio} erro={erro} />
+        {saude}
       </div>
       <KpiDrilldownDialog open={todos} onClose={() => setTodos(false)} title="O que exige atenção">
         {/* abrir um item fecha a lista: um dialogo por vez */}
@@ -684,9 +702,8 @@ export function PainelPareto<I extends ItemBarra>({
                     <span className="min-w-0 break-words text-ink">
                       {i.rotulo}
                       {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">({semNome})</span>}
-                      {/* em "Todos" o tipo fica escrito (nao so' na cor); a natureza vai para o title */}
-                      {ativo === "todos" && tipos.length > 1 && <span className="ml-1.5 text-xs text-ink-faint">{i.tipo}</span>}
-                      <span className="sr-only"> · {i.natureza}</span>
+                      {/* tipo e responsavel (Comprador / Vendedor / Logistica) escritos: e' a parte acionavel; filtrado por tipo, so' o responsavel */}
+                      <span className="ml-1.5 text-xs text-ink-faint">{ativo === "todos" ? `${i.tipo} · ${i.natureza}` : i.natureza}</span>
                     </span>
                     <span className="shrink-0 tabular-nums text-ink-muted">
                       <span className="font-semibold text-ink">{i.pct}</span> <span className="text-xs">· {i.quantidade}</span>
@@ -698,7 +715,7 @@ export function PainelPareto<I extends ItemBarra>({
                   </div>
                 </>
               );
-              const dica = [`${i.tipo} · ${i.natureza}`, i.acumulado && `acumulado ${i.acumulado}`, aoAbrir && "ver os pedidos deste motivo"].filter(Boolean).join(" · ");
+              const dica = [i.acumulado && `Acumulado ${i.acumulado}`, aoAbrir && "ver os pedidos deste motivo"].filter(Boolean).join(" · ") || undefined;
               return (
                 <li key={i.chave} title={dica}>
                   {aoAbrir ? (

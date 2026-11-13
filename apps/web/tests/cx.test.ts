@@ -950,7 +950,8 @@ test("cancelamento: com sem_anterior da API, regra geral (linha neutra, sem a pi
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
   // so' sem pilula e com valor: a regra mora no rodapeComparacao; o cartao so' a desenha
   assert.match(tela, /resposta: rodapeComparacao\(r, "resposta"\)/);
-  assert.match(tela, /rodape\.resposta\.antes/);
+  // na face do cartao fica a fila do chat; "comparação a partir de dd/mm" vai para o ⓘ
+  assert.match(tela, /ajuda\("resposta", r\.semAnterior\.resposta\?\.texto\)/);
   assert.match(resumo, /const sem = r\.totais\[i\] == null \? undefined : r\.semAnterior\[i\];/);
   const p = comConversas(30);
   const [apice, rit] = p.atendimento.marcas;

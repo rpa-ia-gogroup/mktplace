@@ -62,6 +62,8 @@ import {
   DetalheMarca,
   FaixaCarregando,
   GRADE_FAIXA,
+  intervaloDaJanela,
+  legendaSelo,
   Notas,
   PainelAtencao,
   PainelPareto,
@@ -80,7 +82,7 @@ import {
   pilulaSelo,
 } from "./CxConteudo";
 
-export default function CxMercadoLivre({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
+export default function CxMercadoLivre({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoMl | null>(null);
   const [repetindo, setRepetindo] = useState(false);
@@ -101,14 +103,14 @@ export default function CxMercadoLivre({ filtros, barra }: { filtros: FiltrosCx;
 
   if (!resultado) {
     return (
-      <AbaCx canal="ml" filtros={filtros} barra={barra} selo={<SeloAtualizado em={null} carregando />} faixa={<FaixaCarregando />}>
+      <AbaCx canal="ml" filtros={filtros} selo={<SeloAtualizado em={null} carregando />} faixa={<FaixaCarregando />}>
         <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX do Mercado Livre"} />
       </AbaCx>
     );
   }
   if (!resultado.ok) {
     return (
-      <AbaCx canal="ml" filtros={filtros} barra={barra}>
+      <AbaCx canal="ml" filtros={filtros}>
         <StateBlock tipo="erro" titulo="Não foi possível carregar a aba CX" descricao={resultado.motivo} acao={<TentarNovamente onClick={() => carregar()} />} />
       </AbaCx>
     );
@@ -127,15 +129,15 @@ export default function CxMercadoLivre({ filtros, barra }: { filtros: FiltrosCx;
   );
   if (dados.cobertura.marcas.length === 0) {
     return (
-      <AbaCx canal="ml" filtros={filtros} barra={barra} selo={selo}>
+      <AbaCx canal="ml" filtros={filtros} intervalo={intervaloDaJanela(dados.janela)} selo={selo}>
         <StateBlock tipo="indisponivel" titulo="Sem conta no Mercado Livre" descricao={dados.cobertura.fora.map((f) => `${brandLabel(f.marca)}: ${f.motivo}`).join(" ")} />
       </AbaCx>
     );
   }
-  return <Corpo dados={dados} filtros={filtros} barra={barra} selo={selo} />;
+  return <Corpo dados={dados} filtros={filtros} selo={selo} />;
 }
 
-function Corpo({ dados, filtros, barra, selo }: { dados: CxMlResponse; filtros: FiltrosCx; barra: ReactNode; selo: ReactNode }) {
+function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: FiltrosCx; selo: ReactNode }) {
   const { dias } = filtros;
   const agora = Date.parse(dados.gerado_em);
   const r = resumoMl(dados);
@@ -160,18 +162,18 @@ function Corpo({ dados, filtros, barra, selo }: { dados: CxMlResponse; filtros: 
     <AbaCx
       canal="ml"
       filtros={filtros}
-      barra={barra}
+      intervalo={intervaloDaJanela(dados.janela)}
       selo={selo}
       faixa={
         <Faixa
           r={r}
           dias={dias}
           selo={heroi.selo}
+          fila={heroi.contexto}
           erro={semDiario ? (dados.motivo_indisponivel ?? "Fonte indisponível nesta carga.") : null}
           ajudaResposta={[
             AJUDA_ML.resposta,
-            comp?.delta != null ? AJUDA_ML.comparacaoAlta(dias) : sem?.detalhe,
-            heroi.contexto,
+            comp?.delta != null ? AJUDA_ML.comparacaoAlta(dias) : sem ? [sem.texto, sem.detalhe].filter(Boolean).join(" · ") : undefined,
             fora ? `${fora}: sem conta no Mercado Livre, fica fora dos números.` : undefined,
           ]
             .filter(Boolean)
@@ -267,6 +269,7 @@ function Faixa({
   r,
   dias,
   selo,
+  fila,
   erro,
   ajudaResposta,
   abrir,
@@ -274,6 +277,8 @@ function Faixa({
   r: ResumoMl;
   dias: number;
   selo: { texto: string; tom: "ok" | "critico" } | null;
+  /** "25 perguntas aguardando · 24 há mais de 24 h · tempo de resposta 1 d 17 h" */
+  fila: string | null;
   erro: string | null;
   ajudaResposta: string;
   abrir: (i: IndicadorTaxa) => void;
@@ -307,20 +312,19 @@ function Faixa({
     // cobertura parcial aparece no card, nunca so' no ⓘ
     return `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}${lidas < total ? ` · ${lidas} de ${total} marcas` : ""}`;
   };
-  const pilulaMeta = pilulaSelo(selo);
   const pilulaResposta = pilulaCartao(r.respostaComparacao);
-  const semResposta = pilulaResposta == null && r.resposta != null ? r.semAnterior.resposta : undefined;
   return (
     <section aria-label="Indicadores do período">
       <div className={GRADE_FAIXA} data-testid="cx-faixa">
-        {/* o selo da reputacao e' a pilula; com selo, a variacao vai para a legenda. A API nao traz serie da resposta: sem linha */}
+        {/* a variacao e' a pilula (sem ela, o selo da reputacao). A API nao traz serie da resposta: a fila de perguntas ocupa o rodape */}
         <CartaoIndicador
           rotulo={ROTULO_ML.resposta}
           icone={MessageCircle}
           cor={COR_CX.resposta}
           valor={r.resposta == null ? null : pctCx(r.resposta)}
-          pilula={pilulaMeta ?? pilulaResposta}
-          legenda={erro ?? (pilulaResposta ? `${pilulaMeta ? `${pilulaResposta.texto} ` : ""}vs anterior` : semResposta ? <LinhaSemComparacao {...semResposta} /> : null)}
+          pilula={pilulaResposta ?? pilulaSelo(selo)}
+          legenda={erro ?? (pilulaResposta ? legendaSelo(selo) : null)}
+          rodape={fila}
           ajuda={<InfoDica texto={ajudaResposta} />}
         />
         {taxa("cancelamento", COR_CX.cancelamento, Ban, n("cancelamento", "pedido cancelado", "pedidos cancelados"))}
