@@ -890,3 +890,21 @@ a.rounded-xl.border.bg-surface:focus-visible {
     animation: none;
   }
 }
+
+/* Entrada do grafico de barras: cada barra cresce da base UMA vez, quando nasce no DOM
+   (chegada de dado nao reinicia, porque o no' da barra e' o mesmo). */
+.tc-grafico-entra .recharts-bar-rectangle path {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: tc-cresce 700ms var(--mov-ease) both;
+}
+@keyframes tc-cresce {
+  from {
+    transform: scaleY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-grafico-entra .recharts-bar-rectangle path {
+    animation: none;
+  }
+}
