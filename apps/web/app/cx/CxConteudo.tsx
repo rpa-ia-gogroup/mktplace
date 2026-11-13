@@ -304,9 +304,9 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
               cor={COR_CX.resposta}
               valor={valorCartao(r.resposta)}
               pilula={pilulas.resposta ?? selo}
-              legenda={erroAtendimento ?? (pilulas.resposta ? legendaSelo(heroi.selo) : rodape.resposta.serie ? heroi.contexto : null)}
+              // a fila do chat (N aguardando, M ha mais de 24 h) fica SEMPRE na legenda (regra da Operacao)
+              legenda={erroAtendimento ?? ([pilulas.resposta ? legendaSelo(heroi.selo) : null, heroi.contexto].filter(Boolean).join(" · ") || null)}
               serie={rodape.resposta.serie}
-              rodape={heroi.contexto}
               ajuda={ajuda("resposta", r.semAnterior.resposta?.texto)}
               onAbrir={() => setDialogo({ indicador: "resposta" })}
             />
@@ -372,7 +372,7 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
 
       <ProblemasPorMarca v={pareto} />
 
-      <AtendimentoPorLoja v={v} metaResposta={r.respostaMeta} metaNota={montarAvaliacaoLoja(dados, brandLabel)?.meta ?? null} contactRate={r.contactRate} />
+      <AtendimentoPorLoja v={v} metaResposta={r.respostaMeta} metaNota={montarAvaliacaoLoja(dados, brandLabel)?.meta ?? null} contactRate={r.contactRate} contactRateDelta={dias > 30 ? null : (rodapeComparacao(r, "contactRate").delta ?? null)} contactRateAjuda={notasDoTile(r, "contactRate", dias).join(" ")} />
 
       {avaliacoes}
 
@@ -832,7 +832,7 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
 // ---------------------------------------------------------------------------
 // 5. Atendimento por loja: pior nota primeiro
 // ---------------------------------------------------------------------------
-function AtendimentoPorLoja({ v, metaResposta, metaNota, contactRate }: { v: VisaoAtendimentoCx; metaResposta: string | null; metaNota: string | null; contactRate: string }) {
+function AtendimentoPorLoja({ v, metaResposta, metaNota, contactRate, contactRateDelta, contactRateAjuda }: { v: VisaoAtendimentoCx; metaResposta: string | null; metaNota: string | null; contactRate: string; contactRateDelta: ReactNode; contactRateAjuda: string }) {
   // A antiga "(pior)" da avaliacao virou a ordem: nota mais baixa primeiro, sem nota no fim.
   const linhas = [...v.linhas].sort((a, b) => (a.notaNum ?? Infinity) - (b.notaNum ?? Infinity));
   return (
@@ -882,7 +882,14 @@ function AtendimentoPorLoja({ v, metaResposta, metaNota, contactRate }: { v: Vis
                 <td className={TD}>{v.totais.naoLidas}</td>
                 <td className={TD} colSpan={3} />
                 {/* o Contact rate saiu da faixa (4 cartoes): o total do periodo fica aqui, na propria coluna */}
-                <td className={`${TD} ${contactRate === "—" ? "text-ink-faint" : "font-semibold text-ink"}`}>{contactRate}</td>
+                {/* "Sem dado de chat, fora da conta: X" (semChat) e a comparacao ficam no ⓘ; a variacao ao lado do numero */}
+                <td className={`${TD} ${contactRate === "—" ? "text-ink-faint" : "font-semibold text-ink"}`} data-testid="cx-contact-rate-total">
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    {contactRate}
+                    {contactRateDelta}
+                    <InfoDica texto={contactRateAjuda} />
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>

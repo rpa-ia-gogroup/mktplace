@@ -13,7 +13,7 @@
  * A metodologia mora nos ⓘ. Busca pelo navegador (`torreFetch`), como a Shopee.
  */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessagesSquare, PackageX, Undo2 } from "lucide-react";
+import { Ban, MessageCircle, PackageX, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
@@ -152,7 +152,7 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
   const comp = r.respostaComparacao;
   const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
   // Cartao de taxa aberto no detalhe por marca (um dialogo por vez: o da marca fica fechado enquanto este abre).
-  const [taxaAberta, setTaxaAberta] = useState<IndicadorTaxa | null>(null);
+  const [taxaAberta, setTaxaAberta] = useState<TaxaDoCartao | null>(null);
   const aberta = status.find((x) => x.chave === marcaAberta) ?? null;
   // a marca fora (Apice) nao e' problema: so' no ⓘ do heroi
   const fora = dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ");
@@ -224,11 +224,10 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
 }
 
 /** Cor e icone de cada taxa: o detalhe herda os do cartao que o abriu. */
-const VISUAL_TAXA: Record<IndicadorTaxa, { identidade: IdentidadeKpi; icone: typeof Ban }> = {
-  reclamacao: { identidade: "atendimento", icone: MessagesSquare },
+/** As taxas que tem cartao na faixa (Reclamacao e Mediacoes ficam so' na tabela por marca). */
+type TaxaDoCartao = "cancelamento" | "devolucao" | "reembolso";
+const VISUAL_TAXA: Record<TaxaDoCartao, { identidade: IdentidadeKpi; icone: typeof Ban }> = {
   cancelamento: { identidade: "ads", icone: Ban },
-  // sem cartao na faixa hoje; so' completa o tipo
-  mediacao: { identidade: "prazo", icone: Ban },
   devolucao: { identidade: "pedidos", icone: PackageX },
   // azul, como o cartao (COR_CX.reembolso)
   reembolso: { identidade: "prazo", icone: Undo2 },
@@ -237,7 +236,7 @@ const VISUAL_TAXA: Record<IndicadorTaxa, { identidade: IdentidadeKpi; icone: typ
 const ROTULO_CURTO: Record<IndicadorTaxa, string> = { reclamacao: "Reclam.", cancelamento: "Cancel.", mediacao: "Mediações", devolucao: "Devol.", reembolso: "Reemb." };
 
 /** Detalhe de um cartao de taxa: o valor exato e a taxa de cada marca (so' dados que a resposta ja' traz). */
-function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: IndicadorTaxa; r: ResumoMl; linhas: ReturnType<typeof montarProblemasMl>["linhas"]; periodo: string; geradoEm: string }) {
+function DetalheTaxa({ i, r, linhas, periodo, geradoEm }: { i: TaxaDoCartao; r: ResumoMl; linhas: ReturnType<typeof montarProblemasMl>["linhas"]; periodo: string; geradoEm: string }) {
   const n = r.contagem[i];
   const valor = i === "reembolso" && r.valorReembolsado != null ? ` · ${reais(r.valorReembolsado)} reembolsados` : "";
   return (
@@ -280,9 +279,9 @@ function Faixa({
   fila: string | null;
   erro: string | null;
   ajudaResposta: string;
-  abrir: (i: IndicadorTaxa) => void;
+  abrir: (i: TaxaDoCartao) => void;
 }) {
-  const taxa = (i: IndicadorTaxa, cor: string, icone: typeof Ban, contagem: string | null) => {
+  const taxa = (i: TaxaDoCartao, cor: string, icone: typeof Ban, contagem: string | null) => {
     const c = r.comparacao[i];
     const sem = c?.delta == null && r.taxa[i] != null ? r.semAnterior[i] : undefined;
     return (
