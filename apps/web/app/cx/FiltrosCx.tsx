@@ -139,8 +139,8 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
 
         {fora > 0 && (
           <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO }, "shopee")} aria-label="Limpar filtros (volta ao padrão da aba)" className={CLASSE_LIMPAR}>
-            <X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
-            Limpar
+            <X aria-hidden="true" className="h-3.5 w-3.5 min-[1760px]:mr-1" />
+            <span className="sr-only min-[1760px]:not-sr-only">Limpar</span>
           </button>
         )}
 

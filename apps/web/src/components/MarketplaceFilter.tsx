@@ -11,10 +11,12 @@ import {
   type MarketplaceSelection,
 } from "@/lib/marketplace-filter";
 
-const CHANNEL_OPTIONS: { value: Marketplace; label: string; ponto: string }[] = [
-  { value: "tiktok", label: "TikTok Shop", ponto: "bg-canal-tiktok" },
-  { value: "ml", label: "Mercado Livre", ponto: "bg-canal-ml" },
-  { value: "shopee", label: "Shopee", ponto: "bg-canal-shopee" },
+// FILTROS-UMA-LINHA: abaixo de 2xl (1536px, sidebar aberta) o nome curto, para a
+// barra caber numa linha; o nome inteiro continua para o leitor de tela.
+const CHANNEL_OPTIONS: { value: Marketplace; label: string; curto: string; ponto: string }[] = [
+  { value: "tiktok", label: "TikTok Shop", curto: "TikTok", ponto: "bg-canal-tiktok" },
+  { value: "ml", label: "Mercado Livre", curto: "ML", ponto: "bg-canal-ml" },
+  { value: "shopee", label: "Shopee", curto: "Shopee", ponto: "bg-canal-shopee" },
 ];
 
 interface Props {
@@ -38,7 +40,7 @@ interface Props {
  * rotas ainda nao migradas, onde a barreira de tema devolve o valor claro.
  */
 const BASE_BTN =
-  "inline-flex shrink-0 items-center justify-center min-h-11 min-w-11 px-3 rounded-md text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent";
+  "inline-flex shrink-0 items-center justify-center min-h-11 min-w-11 px-2.5 2xl:px-3 rounded-md text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent";
 const ACTIVE_BTN = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const INACTIVE_BTN = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
@@ -89,7 +91,14 @@ export default function MarketplaceFilter({ value, onChange }: Props) {
             {/* UX-TORRE-B2B-1: a cor de IDENTIDADE do canal, a mesma dos
                 graficos e da matriz — o filtro ensina a legenda. */}
             <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${opt.ponto}`} />
-            {opt.label}
+            {opt.curto === opt.label ? (
+              opt.label
+            ) : (
+              <>
+                <span aria-hidden="true" className="2xl:hidden">{opt.curto}</span>
+                <span className="sr-only 2xl:not-sr-only">{opt.label}</span>
+              </>
+            )}
           </button>
         );
       })}

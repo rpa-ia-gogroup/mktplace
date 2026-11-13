@@ -188,3 +188,14 @@ test("identidade de canal tem token proprio, com o hex de antes no tema claro", 
   const paleta = fonte("src/lib/chart-theme.ts");
   assert.match(paleta, /canais: \{ tiktok: "#8b5cf6", ml: "#06b6d4", shopee: "#f97316" \}/);
 });
+
+// FILTROS-UMA-LINHA (12/11/2026): medido com a sidebar aberta (240px) em 1366 e 1519.
+test("barra numa linha: Gerencial com a barra sempre abaixo do titulo e canal curto abaixo de 2xl", () => {
+  const cab = semComentarios(fonte("src/components/gerencial/GerencialHeader.tsx"));
+  assert.match(cab, /order-last flex min-w-0 basis-full/);
+  assert.doesNotMatch(cab, /order-none/, "a barra nao sobe para a linha do titulo em largura nenhuma");
+  const mf = fonte("src/components/MarketplaceFilter.tsx");
+  assert.match(mf, /curto: "TikTok"/);
+  assert.match(mf, /curto: "ML"/);
+  assert.match(mf, /sr-only 2xl:not-sr-only/, "o nome inteiro segue para o leitor de tela");
+});

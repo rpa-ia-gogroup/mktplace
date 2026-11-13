@@ -98,6 +98,7 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
     return (
       <Popover
         rotulo="Marca"
+        rotuloSoNoLargo
         valor={resumoMarcaMenu(value)}
         ativo={!allActive}
         icone={<Tag aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
