@@ -406,7 +406,9 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
               : { texto: `${formatarInteiro(n)} pedidos`, tom: alerta && n > 0 ? "warn" : "neutro" }
         }
         progresso={medido && t.open > 0 ? n / t.open : null}
-        legenda={!medido ? motivo : lista === "overdue" ? `${formatarInteiro(n)} de ${formatarInteiro(t.open)} em aberto` : undefined}
+        legenda={!medido ? motivo : undefined}
+        // Sem serie, o "x de y" ocupa o lugar da linha: a barra fica inteira na linha de apoio.
+        rodape={medido && lista === "overdue" ? `${formatarInteiro(n)} de ${formatarInteiro(t.open)} em aberto` : undefined}
         ajuda={lista === "overdue" ? <InfoDica texto={DICA_ABERTOS} emControle={Boolean(medido && n)} /> : undefined}
         onAbrir={medido && n ? () => abertos.abrir(lista, n) : undefined}
       />
@@ -414,10 +416,10 @@ export function cartoesDosAbertos(abertos: AbertosTikTok): ReactNode {
   };
   return (
     <>
-      {cartao("overdue", "Vencidos", t?.overdue, AlertTriangle, true, "#ef4444")}
-      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true, "#f59e0b")}
-      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, "#8b5cf6")}
-      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true, "#3b82f6")}
+      {cartao("overdue", "Vencidos", t?.overdue, AlertTriangle, true, "rgb(var(--tc-crit))")}
+      {cartao("due_today", "Vence hoje", t?.due_today, Clock, true, "rgb(var(--tc-kpi-pedidos))")}
+      {cartao("due_next_day", `Vence ${proximo}`, t?.due_next_day, CalendarClock, false, "rgb(var(--tc-kpi-gmv))")}
+      {cartao("over_48h", "Acima de 48 h", t?.over_48h, Hourglass, true, "rgb(var(--tc-kpi-prazo))")}
     </>
   );
 }
@@ -481,6 +483,7 @@ export function BacklogPorMarcaTikTok({
             semTendencia
             semBarra
             ajudas={DICAS_DA_TABELA}
+            corBacklog="rgb(var(--tc-canal-tiktok))"
             ajudaPace={<InfoDica texto={textoDoPace("tiktok", pace)} />}
             fila={d.brands.map((b) => {
               const perto = b.due_today + b.due_next_day;

@@ -502,7 +502,7 @@ export default function TikTokDispatchPanel({
     ...alertasNaFila(atencao),
     ...itensOficiais,
   ];
-  const fila = <FilaAtencao titulo="O que exige atenção" itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;
+  const fila = <FilaAtencao itens={itensFila} titulo="O que exige atenção" vazio="Nenhum alerta publicado para este recorte." />;
 
   // "Prazo": a janela da LDR, que so' o TikTok sustenta. Coleta e despacho
   // continuam sendo eventos separados, escolhidos no cabecalho. No gestor a

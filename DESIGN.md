@@ -310,6 +310,22 @@ The primitives live in `apps/web/src/components/ui/`, plus `layout/` and
 
 ### Expedição — the Gerencial skeleton (IDENTIDADE-GERENCIAL, 08/11/2026)
 
+> **ALVO-GRADE (12/11/2026) replaces the first fold below.** The tab is built on
+> `Aba`: title "Expedição" + `SeloAtualizado`; the three channels are the tabs
+> under the title (`ExpedicaoShell` draws the frame, each panel fills it);
+> Marca · Período on one row with the depth selector on the right. The hero
+> became the **first of four** `CartaoIndicador` (Shopee/ML with deadline:
+> Vencidos · Perto de vencer · Acima de 48 h · Travados; ML without deadline:
+> Pedidos em fila · Acima de 48 h · Travados · Pedido mais antigo; TikTok:
+> Vencidos · Vence hoje · Vence dd/mm · Acima de 48 h). Trend line only from the
+> hourly queue series (`serieDaFila`); without it the card shows the measured
+> fraction as a progress bar. Below: "Fila por situação de prazo" (the old hero
+> middle) | "O que exige atenção" side by side, then "Backlog por marca" full
+> width with the channel-coloured bar under the backlog and its own
+> Agora | Últimos 7 dias selector. The "Abrir detalhe operacional" invitation is
+> gone (the depth selector does it). The TikTok "LDR da janela" card lives in
+> "Mais detalhes".
+
 The manager view follows the Gerencial: one question per fold, numbers
 first, depth in "Mais detalhes". Same order on the three channels; each shows
 only what its source sustains (`CorpoGestor` owns the order).

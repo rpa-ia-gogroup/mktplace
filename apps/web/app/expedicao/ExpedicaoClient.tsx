@@ -277,12 +277,12 @@ const IDENTIDADE_DA_MEDIDA: Partial<Record<string, IdentidadeKpi>> = {
 };
 /** ALVO-GRADE: cor de identidade de cada cartao da faixa (estado fica so' na pilula). */
 const COR_DA_MEDIDA: Partial<Record<string, string>> = {
-  overdue: "#ef4444",
-  due_soon: "#f59e0b",
-  due24h: "#f59e0b",
-  over48h: "#3b82f6",
-  stalled: "#ec4899",
-  backlog: "#8b5cf6",
+  overdue: "rgb(var(--tc-crit))",
+  due_soon: "rgb(var(--tc-kpi-pedidos))",
+  due24h: "rgb(var(--tc-kpi-pedidos))",
+  over48h: "rgb(var(--tc-kpi-prazo))",
+  stalled: "rgb(var(--tc-kpi-ads))",
+  backlog: "rgb(var(--tc-kpi-gmv))",
 };
 const MEDIDA_DA_SERIE: Partial<Record<string, MedidaDoCard>> = {
   overdue: "overdue_count",
@@ -369,10 +369,13 @@ function CelulaKpi({
   kpi,
   destaque,
   canal,
+  base = null,
 }: {
   kpi: Kpi;
   destaque: boolean;
   canal: Canal;
+  /** Backlog total: a barra do cartao mostra a fatia da fila (so' com os dois medidos). */
+  base?: number | null;
 }) {
   const ausente = kpi.valorTexto !== undefined || kpi.valor === null;
   // ALVO-GRADE: os 4 principais do detalhe sao o mesmo cartao da faixa do gestor.
@@ -382,9 +385,10 @@ function CelulaKpi({
         ajuda={chaveDoKpiDaFila(canal, kpi.chave)}
         rotulo={ROTULO_CURTO[kpi.chave] ?? kpi.rotulo}
         icone={ICONE_DA_MEDIDA[kpi.chave] ?? Inbox}
-        cor={COR_DA_MEDIDA[kpi.chave] ?? "#8b5cf6"}
+        cor={COR_DA_MEDIDA[kpi.chave] ?? "rgb(var(--tc-kpi-gmv))"}
         valor={ausente ? null : numero(kpi.valor ?? 0)}
         pilula={!ausente && kpi.alerta ? { texto: "Atenção", tom: "warn" } : null}
+        progresso={!ausente && base && kpi.chave !== "backlog" && kpi.chave !== "marcas_alerta" ? (kpi.valor ?? 0) / base : null}
         // So' o numero na tela; a nota fica para o leitor de tela e a definicao, no "ⓘ".
         legenda={ausente ? (kpi.valorTexto ?? kpi.nota) : kpi.nota ? <span className="sr-only">{kpi.nota}</span> : undefined}
       />
@@ -870,7 +874,7 @@ export default function ExpedicaoClient({
     temBarraDePrazo && faixasPrazo && totaisRisco ? (
       <>
         <div
-          className="flex h-3 w-full overflow-hidden rounded bg-raised"
+          className="tc-barra flex h-3.5 w-full overflow-hidden rounded-full bg-raised"
           role="img"
           aria-label={faixasPrazo.map((f) => `${f.rotulo}: ${numero(f.valor)}`).join(", ")}
         >
@@ -882,14 +886,17 @@ export default function ExpedicaoClient({
             />
           ))}
         </div>
-        <ul className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {/* ALVO-GRADE: o numero em cima, grande; a faixa (cor + nome) embaixo. */}
+        <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {faixasPrazo.map((f) => (
-            <li key={f.chave} className="flex items-center gap-1.5">
-              <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-sm ${COR_SEGMENTO[f.chave]}`} />
-              <span className="text-xs text-ink-muted">{f.rotulo}</span>
-              {/* EXPEDICAO-VENCE-AMANHA: o que cada faixa trata, no hover. */}
-              <Ajuda chave={AJUDA_DA_FAIXA[filtros.channel][f.chave]} />
-              <span className="ml-auto text-sm font-semibold tabular-nums text-ink">{numero(f.valor)}</span>
+            <li key={f.chave} className="min-w-0">
+              <span className="block text-xl font-bold tabular-nums text-ink">{numero(f.valor)}</span>
+              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-ink-muted">
+                <span aria-hidden="true" className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${COR_SEGMENTO[f.chave]}`} />
+                <span className="min-w-0">{f.rotulo}</span>
+                {/* EXPEDICAO-VENCE-AMANHA: o que cada faixa trata, no hover. */}
+                <Ajuda chave={AJUDA_DA_FAIXA[filtros.channel][f.chave]} />
+              </span>
             </li>
           ))}
         </ul>
@@ -1087,7 +1094,13 @@ export default function ExpedicaoClient({
   const faixaPrincipal = (
     <FaixaKpis rotulo="Indicadores principais">
       {principais.map((k) => (
-        <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} destaque />
+        <CelulaKpi
+          key={k.chave}
+          kpi={k}
+          canal={filtros.channel}
+          destaque
+          base={principais.find((p) => p.chave === "backlog")?.valor ?? null}
+        />
       ))}
     </FaixaKpis>
   );
@@ -1203,13 +1216,25 @@ export default function ExpedicaoClient({
     </Panel>
   ) : undefined;
 
+  const legendaDestaque =
+        avisoRecorte ??
+        (valorHeroi === null ? (
+          "Medida não publicada nesta fotografia."
+        ) : backlogRisco === null || pctHeroi === null ? (
+          "Fila vazia nesta fotografia."
+        ) : (
+          <span title={[deltaDoCard(serieHeroi), antesDoCard(serieHeroi)].filter(Boolean).join(" · ") || undefined}>
+            {numero(valorHeroi)} de {numero(backlogRisco)} na fila
+            {incluiFbs ? <span data-testid="exp-aviso-fbs"> · com FBS</span> : null}
+          </span>
+        ));
   // ALVO-GRADE: o heroi virou o 1o cartao da faixa, com a mesma anatomia dos outros.
   const cartaoDestaque = (
     <CartaoIndicador
       key="destaque"
       rotulo={temPrazo ? "Vencidos" : "Acima de 48 h"}
       icone={temPrazo ? AlertTriangle : Hourglass}
-      cor={COR_DA_MEDIDA[chaveDestaque] ?? "#ef4444"}
+      cor={COR_DA_MEDIDA[chaveDestaque] ?? "rgb(var(--tc-crit))"}
       ajuda={ajudaHeroi}
       valor={valorHeroi === null ? null : pctHeroi}
       pilula={
@@ -1224,19 +1249,10 @@ export default function ExpedicaoClient({
               : { texto: "Dentro do limiar", tom: "ok" }
       }
       progresso={serieHeroi.serie ? null : fracao(valorHeroi, backlogRisco)}
-      legenda={
-        avisoRecorte ??
-        (valorHeroi === null ? (
-          "Medida não publicada nesta fotografia."
-        ) : backlogRisco === null || pctHeroi === null ? (
-          "Fila vazia nesta fotografia."
-        ) : (
-          <span title={[deltaDoCard(serieHeroi), antesDoCard(serieHeroi)].filter(Boolean).join(" · ") || undefined}>
-            {numero(valorHeroi)} de {numero(backlogRisco)} na fila
-            {incluiFbs ? <span data-testid="exp-aviso-fbs"> · com FBS</span> : null}
-          </span>
-        ))
-      }
+      // Com linha de tendencia, o "x de y" fica na linha de apoio; sem serie,
+      // ele ocupa o lugar da linha e a barra fica inteira na linha de apoio.
+      legenda={serieHeroi.serie ? legendaDestaque : undefined}
+      rodape={serieHeroi.serie ? undefined : legendaDestaque}
       serie={serieHeroi.serie ?? null}
       onAbrir={abrirHeroi}
     />
@@ -1254,7 +1270,7 @@ export default function ExpedicaoClient({
       <CartaoComAjuda
         key={k.chave}
         icone={ICONE_DA_MEDIDA[k.chave] ?? Inbox}
-        cor={COR_DA_MEDIDA[k.chave] ?? "#8b5cf6"}
+        cor={COR_DA_MEDIDA[k.chave] ?? "rgb(var(--tc-kpi-gmv))"}
         ajuda={chaveDoKpiDaFila(filtros.channel, k.chave)}
         // Com a divisao, "perto de vencer" e' da fila publicada (com FBS): a
         // base fica escrita, porque a do 1o cartao e' so' a do vendedor.
@@ -1278,7 +1294,8 @@ export default function ExpedicaoClient({
       />
     );
   };
-  const cartoesDaFaixa = (temPrazo ? ["due_soon", "over48h", "stalled"] : ["stalled"])
+  const chavesDaFaixa = temPrazo ? ["due_soon", "over48h", "stalled"] : ["stalled"];
+  const cartoesDaFaixa = chavesDaFaixa
     .map((c) => risco.find((k) => k.chave === c))
     .filter((k): k is Kpi => k !== undefined)
     .map(cartaoDaFaixa);
@@ -1291,7 +1308,7 @@ export default function ExpedicaoClient({
           ajuda={chaveDoKpiDaFila(filtros.channel, "backlog")}
           rotulo="Pedidos em fila"
           icone={Inbox}
-          cor="#8b5cf6"
+          cor="rgb(var(--tc-kpi-gmv))"
           valor={backlogRisco === null ? null : numero(backlogRisco)}
           legenda={backlogRisco === null ? (avisoRecorte ?? "Medida não publicada nesta fotografia.") : undefined}
         />
@@ -1303,7 +1320,7 @@ export default function ExpedicaoClient({
           ajuda={AJUDA_CANAL_SEM_PRAZO.maisAntigo}
           rotulo="Pedido mais antigo"
           icone={Timer}
-          cor="#10b981"
+          cor="rgb(var(--tc-kpi-roas))"
           valor={envelhecimento?.maisAntigo ? formatarHoras(envelhecimento.maisAntigo.horas) : null}
           pilula={envelhecimento?.maisAntigo ? { texto: brandLabel(envelhecimento.maisAntigo.marca), tom: "neutro" } : null}
           legenda={envelhecimento?.maisAntigo ? undefined : "não informado pela fonte"}
@@ -1339,8 +1356,8 @@ export default function ExpedicaoClient({
   ].slice(0, MAX_ITENS_DA_FILA);
   const filaDeAtencao = (
     <FilaAtencao
-      titulo="O que exige atenção"
       itens={itensDaFila}
+      titulo="O que exige atenção"
       vazio={
         recorte.variasContas && !divisao
           ? "Leitura por conta, sem total."
@@ -1492,6 +1509,7 @@ export default function ExpedicaoClient({
         fila={linhasDaFila}
         ajudaPace={mostrarPace ? <InfoDica texto={textoDoPace(filtros.channel, pace)} /> : undefined}
         rotuloBarra={temPrazo ? "Prazo" : "Distribuição"}
+        corBacklog={filtros.channel === "shopee" ? "rgb(var(--tc-canal-shopee))" : "rgb(var(--tc-canal-ml))"}
         ajudas={{
           vencidos: ajudaDaFila("overdue"),
           pertoDeVencer: ajudaDaFila("due_soon"),
