@@ -497,7 +497,7 @@ test("o seletor de canal continua navegavel e com alvo de toque", () => {
   // ALVO-GRADE: os canais viraram as ABAS da moldura (`Aba`), desenhada pela casca.
   const ABA = readFileSync(join(RAIZ, "src/components/layout/Aba.tsx"), "utf8");
   assert.match(CASCA, /<Aba\b[\s\S]*?visoes=\{visoes\}\s*visao=\{canal\}\s*onVisao=\{trocarCanal\}/);
-  assert.match(ABA, /role="tablist" aria-label=\{`Visões de \$\{titulo\}`\}/);
+  assert.match(ABA, /role=\{ancoras \? "navigation" : "tablist"\} aria-label=\{ancoras \? `Seções de \$\{titulo\}` : `Visões de \$\{titulo\}`\}/);
   assert.match(ABA, /role="tab"\s*aria-selected=\{ativa\}/);
   assert.match(ABA, /min-h-11/);
 });

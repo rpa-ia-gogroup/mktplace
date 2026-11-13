@@ -201,7 +201,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
   // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS, "/inteligencia"], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/qualidade", "/pedidos", "/regioes"]);
+  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/qualidade", "/pedidos", "/regioes", "/inteligencia"]);
 });
 
 // ---------------------------------------------------------------------------
