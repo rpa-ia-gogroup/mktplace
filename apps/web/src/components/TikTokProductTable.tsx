@@ -2,7 +2,11 @@ import type { ProdutoTikTokRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
+
+/** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
+const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
 
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
@@ -55,7 +59,7 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
           <SortableHeader label="Pedidos" column="orders" sort={sort} onSort={onSort} align="right" />
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">Pareto</th>
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Canal</th>
-          <SortableHeader label="Prob.%" column="problem_rate" sort={sort} onSort={onSort} align="right" />
+          <SortableHeader label="Taxa de problemas" column="problem_rate" sort={sort} onSort={onSort} align="right" />
           <SortableHeader label="Rating" column="rating_avg" sort={sort} onSort={onSort} align="right" />
         </tr>
       }
@@ -65,15 +69,15 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
             <p className="text-ink font-medium truncate leading-tight">{p.product_name}</p>
             <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.product_id}</p>
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrl(p.gmv)}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrlCurto(p.gmv)}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-ink-muted">
-            {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-ink-faint">—</span>}
+            {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink-muted">{p.orders != null ? `${fmtNumber(p.orders)} ped.` : <span className="text-ink-faint">—</span>}</p>
+            <p className="tabular-nums text-ink-muted">{p.orders != null ? `${fmtNumCurto(p.orders)} ped.` : <span className="text-ink-faint">—</span>}</p>
             {p.items_sold != null && p.items_sold !== p.orders && (
-              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.items_sold)} unid.</p>
+              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.items_sold)} unid.</p>
             )}
           </td>
           <td className="px-4 py-3 text-center">
@@ -88,9 +92,9 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
               <AttributionBar v={p.pct_gmv_video} l={p.pct_gmv_live} c={p.pct_gmv_card} />
               <p className="text-[10px] text-ink-muted tabular-nums">
                 {[
-                  p.pct_gmv_video != null && `V ${p.pct_gmv_video.toFixed(0)}%`,
-                  p.pct_gmv_live != null && `L ${p.pct_gmv_live.toFixed(0)}%`,
-                  p.pct_gmv_card != null && `C ${p.pct_gmv_card.toFixed(0)}%`,
+                  p.pct_gmv_video != null && `V ${dec(p.pct_gmv_video, 0)}%`,
+                  p.pct_gmv_live != null && `L ${dec(p.pct_gmv_live, 0)}%`,
+                  p.pct_gmv_card != null && `C ${dec(p.pct_gmv_card, 0)}%`,
                 ].filter(Boolean).join(" · ")}
               </p>
             </div>
@@ -98,16 +102,16 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
           <td className="px-4 py-3 text-right tabular-nums">
             {p.problem_rate != null ? (
               <span className={p.problem_rate < 2 ? "text-ok-ink" : p.problem_rate < 5 ? "text-warn-ink" : "text-crit-ink font-semibold"}>
-                {p.problem_rate.toFixed(1)}%
+                {dec(p.problem_rate, 1)}%
               </span>
             ) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
             {p.rating_avg != null ? (
               <>
-                <p className="tabular-nums text-ink-muted">{p.rating_avg.toFixed(1)}</p>
+                <p className="tabular-nums text-ink-muted">{dec(p.rating_avg, 1)}</p>
                 {p.total_ratings != null && (
-                  <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.total_ratings)} aval.</p>
+                  <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.total_ratings)} aval.</p>
                 )}
               </>
             ) : <span className="text-ink-faint">—</span>}

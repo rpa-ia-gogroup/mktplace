@@ -126,3 +126,13 @@ test("regressao: NAV_SECTIONS continua cobrindo todas as rotas do inventario do 
     assert.ok(hrefs.some((h) => h === href), `rota ausente: ${href}`);
   }
 });
+
+test("temHistoricoNaTorre: so' volta pelo historico quando a tela anterior e' da Torre", async () => {
+  const { temHistoricoNaTorre } = await import("../src/lib/filters/nav-links.ts");
+  const o = "https://torre.exemplo";
+  assert.equal(temHistoricoNaTorre(1, "", o), false, "link direto / aba nova");
+  assert.equal(temHistoricoNaTorre(3, "", o), true, "navegacao interna (referrer vazio)");
+  assert.equal(temHistoricoNaTorre(3, `${o}/canais?brands=kokeshi`, o), true);
+  assert.equal(temHistoricoNaTorre(3, "https://slack.com/x", o), false, "chegou de outro site");
+  assert.equal(temHistoricoNaTorre(3, "nao-e-url", o), false);
+});

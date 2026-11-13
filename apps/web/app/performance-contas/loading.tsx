@@ -8,15 +8,13 @@
  * Nenhum numero aqui (nem zero): so' o titulo da tela e o StateBlock
  * "carregando" (role="status" + aria-busy), o mesmo dos outros estados.
  */
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
 import StateBlock from "@/components/ui/StateBlock";
 
 export default function CarregandoPerformanceContas() {
   return (
-    <PageContainer>
-      <PageHeader title="Performance das contas" />
+    <Aba titulo="Performance das contas">
       <StateBlock tipo="carregando" titulo="Carregando a performance das contas…" />
-    </PageContainer>
+    </Aba>
   );
 }

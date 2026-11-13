@@ -1119,7 +1119,7 @@ test("T-0097: Marca 360 mostra o frescor de /brand-detail; sem refreshed_at vira
   assert.equal(rotuloFrescor(null), FRESCOR_INDISPONIVEL);
   assert.equal(rotuloFrescor(undefined), FRESCOR_INDISPONIVEL);
   const P = readFileSync(new URL("../app/brand/[brand]/page.tsx", import.meta.url), "utf-8").replace(/\r\n/g, "\n");
-  assert.ok(P.includes("rotuloFrescor((displayDetail as ComFrescor<BrandDetail>).refreshed_at)"),
-    "o rotulo le o refreshed_at da resposta mensal protegida (displayDetail)");
-  assert.ok(/\{displayDetail && \(\s*<p/.test(P), "sem resposta da chave atual, nenhum frescor de outra marca/mes");
+  // ALVO-GRADE: o selo "Atualizado" le o refreshed_at da resposta mensal protegida; sem ela, "Atualizado —".
+  assert.ok(P.includes("em={displayDetail ? (displayDetail as ComFrescor<BrandDetail>).refreshed_at ?? null : null}"),
+    "o selo le o refreshed_at da resposta mensal protegida (displayDetail); sem resposta da chave atual, nenhum frescor de outra marca/mes");
 });

@@ -236,12 +236,12 @@ export default function TikTokMonthlyPanel({
                                 {ch.label}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumber(ch.impressions)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums text-xs font-semibold text-slate-700">{pct(ch.ctr_pct, 2)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumber(ch.page_views)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums text-xs font-semibold text-slate-700">{pct(ch.cvr_pct, 2)}</td>
-                            <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-800">{fmtBrl(ch.gmv)}</td>
-                            <td className="px-4 py-3 text-right">
+                            <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-slate-600">{fmtNumber(ch.impressions)}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-xs font-semibold text-slate-700">{pct(ch.ctr_pct, 2)}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-slate-600">{fmtNumber(ch.page_views)}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-xs font-semibold text-slate-700">{pct(ch.cvr_pct, 2)}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums font-semibold text-slate-800">{fmtBrl(ch.gmv)}</td>
+                            <td className="px-4 py-3 text-right whitespace-nowrap">
                               <button
                                 type="button"
                                 onClick={() => onOpenChannel(ch)}
@@ -319,9 +319,9 @@ export default function TikTokMonthlyPanel({
                               <span className="text-slate-400 tabular-nums mr-2">{i + 1}.</span>
                               {c.creator}
                             </td>
-                            <td className="text-right px-4 py-3 text-sm font-bold text-slate-900 tabular-nums">{fmtBrl(c.gmv)}</td>
-                            <td className="text-right px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(c.videos)}</td>
-                            <td className="text-right px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(c.lives)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm font-bold text-slate-900 tabular-nums">{fmtBrl(c.gmv)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(c.videos)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(c.lives)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -365,13 +365,13 @@ export default function TikTokMonthlyPanel({
                               <span className="text-slate-400 tabular-nums mr-2">{i + 1}.</span>
                               <span className="font-medium">{p.product_name}</span>
                             </td>
-                            <td className="text-right px-4 py-3 text-sm font-bold text-slate-900 tabular-nums">{fmtBrl(p.gmv)}</td>
-                            <td className="text-right px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(p.orders)}</td>
-                            <td className="text-right px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(p.videos)}</td>
-                            <td className="text-right px-4 py-3 text-sm text-slate-600 tabular-nums">
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm font-bold text-slate-900 tabular-nums">{fmtBrl(p.gmv)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(p.orders)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-slate-600 tabular-nums">{fmtNumber(p.videos)}</td>
+                            <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-slate-600 tabular-nums">
                               {p.gpm == null ? <span className="text-slate-400" title="sem dado">Sem dado</span> : `R$ ${decBr(p.gpm, 2)}`}
                             </td>
-                            <td className="text-right px-4 py-3">
+                            <td className="text-right whitespace-nowrap px-4 py-3">
                               <button
                                 type="button"
                                 onClick={() => onOpenProduct(p)}
@@ -419,9 +419,6 @@ function BlocoMensal({ titulo, competencia, id, dica, children }: {
           <h3 className="text-sm font-semibold text-slate-700">{titulo}</h3>
           {dica && <InfoDica texto={dica} />}
         </div>
-        <span className="text-xs font-semibold text-violet-700 bg-violet-100 rounded-full px-2.5 py-0.5">
-          competência {competencia}
-        </span>
       </div>
       {children}
     </div>
