@@ -45,6 +45,8 @@ import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
+import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
+import { montarGrade, type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -96,6 +98,11 @@ const CHAVES_CATEGORIA = CATEGORIAS_SHOPEE.map((c) => c.chave);
 
 /** Rotulo da marca igual ao do resto da Torre ("ÁPICE", "RITUÁRIA"). */
 const tituloMarca = brandLabel;
+
+/** Classe da grade curva x marca: as mesmas dos cartoes Ruptura, Estoque baixo e Excesso. */
+const CLASSE_GRADE_SHOPEE: Partial<Record<Classificacao, ClasseGrade>> = {
+  RUPTURA_CANDIDATA: "ruptura", BAIXO_CANDIDATO: "baixo", EXCESSO_CANDIDATO: "excesso",
+};
 
 function Aviso({
   tom,
@@ -426,6 +433,10 @@ export default function EstoqueFullClient() {
     CONTAS_ESPERADAS_API,
     cobertasFotografia,
   );
+  // Colunas da grade curva x marca: as contas presentes, no recorte de marca.
+  const marcasDaGrade = filtros.brands.length
+    ? contasFiltraveis.filter((m) => filtros.brands.includes(m))
+    : contasFiltraveis;
   const selecionadasSemFotografia =
     payload && !isIndisponivel(payload)
       ? contasAusentes(filtros.brands, payload.contas_cobertas)
@@ -607,6 +618,23 @@ export default function EstoqueFullClient() {
 
               {avisoCurvaIndisponivel(metaCurva) && (
                 <Aviso tom="info" role="status">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
+              )}
+
+              {comCurva && (
+                <GradeCurvaMarca
+                  grade={montarGrade(
+                    // Kit e' contexto (nao soma no disponivel operacional dos cartoes).
+                    payload.produtos.filter((p) => !p.situacao && !p.is_kit).map((p) => ({
+                      brand: p.brand, curva: p.curva, disponivel: p.full_stock_saleable,
+                      mediaDiaria: p.avg_daily_units_28d, classe: CLASSE_GRADE_SHOPEE[p.classificacao_torre] ?? null,
+                    })),
+                    marcasDaGrade,
+                  )}
+                  marcas={marcasDaGrade}
+                  rotuloMarca={tituloMarca}
+                  item="produtos"
+                  ressalva={payload.truncado ? "Lista truncada: grade parcial" : filtros.classificacoes.length > 0 ? "Só as classificações filtradas" : null}
+                />
               )}
 
               {payload.total_no_filtro === 0 || lista.length === 0 ? (

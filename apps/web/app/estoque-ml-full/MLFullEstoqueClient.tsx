@@ -41,6 +41,8 @@ import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
+import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
+import { montarGrade, type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -250,6 +252,11 @@ function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
     </div>
   );
 }
+
+/** Classe da grade curva x marca: as mesmas dos cartoes Ruptura, Estoque baixo e Excesso. */
+const CLASSE_GRADE_ML: Partial<Record<InventarioML["classificacao_torre"], ClasseGrade>> = {
+  RUPTURA_CANDIDATA: "ruptura", BAIXO_CANDIDATO: "baixo", EXCESSO_CANDIDATO: "excesso",
+};
 
 /** Ruptura + estoque baixo: o mesmo recorte do cartao "Exigem ação". */
 const exigeAcaoML = (i: InventarioML) =>
@@ -667,6 +674,22 @@ export default function MLFullEstoqueClient() {
           />
 
           <TabelaMarcas marcas={payload.marcas} />
+
+          {comCurva && (
+            <GradeCurvaMarca
+              grade={montarGrade(
+                payload.inventarios.filter((i) => i.eh_full && !i.situacao).map((i) => ({
+                  brand: i.brand, curva: i.curva, disponivel: i.disponivel,
+                  mediaDiaria: i.media_diaria_28d, classe: CLASSE_GRADE_ML[i.classificacao_torre] ?? null,
+                })),
+                payload.marcas.map((m) => m.brand),
+              )}
+              marcas={payload.marcas.map((m) => m.brand)}
+              rotuloMarca={tituloMarca}
+              item="inventários"
+              ressalva={payload.truncado ? "Lista truncada: grade parcial" : null}
+            />
+          )}
 
           {avisoCurvaIndisponivel(metaCurva) && (
             <Aviso tom="info">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
