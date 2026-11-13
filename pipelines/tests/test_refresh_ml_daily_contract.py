@@ -211,3 +211,99 @@ def test_main_sem_apply_e_dry_run(monkeypatch, mundo, capsys):
 def test_main_data_invalida_sai_dois(capsys):
     assert rf.main(["--date-from", "01/07/2026"]) == 2
     assert "data invalida" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------------------
+# 5. Leitura do destino com a API do SQLAlchemy 1.4 (imagem do Airflow)
+# ---------------------------------------------------------------------------
+
+class _Resultado14:
+    def __init__(self, linhas):
+        self._linhas = linhas
+
+    def mappings(self):
+        return self
+
+    def all(self):
+        return list(self._linhas)
+
+
+class _Transacao14:
+    def __init__(self, log):
+        self._log = log
+
+    def rollback(self):
+        self._log.append(("rollback",))
+
+
+class _Conexao14:
+    """Connection do 1.4 sem `future=True`: tem `begin()`, NAO tem `rollback`
+    nem `commit` (o atributo nao existe, como no Airflow)."""
+
+    def __init__(self, log, linhas):
+        self._log = log
+        self._linhas = linhas
+        self._trans = None
+
+    def begin(self):
+        assert self._trans is None, "begin() chamado duas vezes"
+        self._trans = _Transacao14(self._log)
+        self._log.append(("begin",))
+        return self._trans
+
+    def execute(self, stmt, params=None):
+        self._log.append(("execute", str(stmt), params))
+        return _Resultado14(self._linhas if str(stmt).startswith("SELECT") else [])
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._log.append(("close",))
+        return False
+
+
+class _Engine14:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def connect(self):
+        return self._conn
+
+
+def test_ler_destino_funciona_com_connection_do_sqlalchemy_14(monkeypatch):
+    log = []
+    d = date(2026, 9, 10)
+    linhas = [_linha_destino(d, 2, "1000.00", 10)]
+    conn = _Conexao14(log, linhas)
+    assert not hasattr(conn, "rollback") and not hasattr(conn, "commit")
+    monkeypatch.setattr(rf._common_db, "local_engine", lambda: _Engine14(conn))
+
+    out = rf.ler_destino(date(2026, 9, 1), date(2026, 9, 30))
+
+    assert out == linhas
+    passos = [p[0] for p in log]
+    assert passos == ["begin", "execute", "execute", "rollback", "close"]
+    # 1o statement dentro da transacao e' o READ ONLY; depois o SELECT
+    assert log[1][1] == "SET TRANSACTION READ ONLY"
+    assert log[2][1].startswith(f"SELECT {', '.join(rf.COLUNAS_DESTINO)} FROM {rf.TARGET_TABLE}")
+    assert log[2][2] == {"mkt": rf.ML_MARKETPLACE_ID,
+                         "df": date(2026, 9, 1), "dt": date(2026, 9, 30)}
+
+
+def test_ler_destino_reverte_a_transacao_mesmo_se_o_select_falha(monkeypatch):
+    log = []
+    conn = _Conexao14(log, [])
+
+    def execute_que_falha(stmt, params=None):
+        log.append(("execute", str(stmt), params))
+        if str(stmt).startswith("SELECT"):
+            raise RuntimeError("select caiu")
+        return _Resultado14([])
+
+    conn.execute = execute_que_falha
+    monkeypatch.setattr(rf._common_db, "local_engine", lambda: _Engine14(conn))
+
+    with pytest.raises(RuntimeError, match="select caiu"):
+        rf.ler_destino(date(2026, 9, 1), date(2026, 9, 30))
+    assert [p[0] for p in log] == ["begin", "execute", "execute", "rollback", "close"]
