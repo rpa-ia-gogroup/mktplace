@@ -620,7 +620,7 @@ export default function EstoqueFullClient() {
                 <Aviso tom="info" role="status">{avisoCurvaIndisponivel(metaCurva)}</Aviso>
               )}
 
-              {comCurva && (
+              {(
                 <GradeCurvaMarca
                   grade={montarGrade(
                     // Kit e' contexto (nao soma no disponivel operacional dos cartoes).
@@ -633,6 +633,7 @@ export default function EstoqueFullClient() {
                   marcas={marcasDaGrade}
                   rotuloMarca={tituloMarca}
                   item="produtos"
+                  comCurva={comCurva}
                   ressalva={payload.truncado ? "Lista truncada: grade parcial" : filtros.classificacoes.length > 0 ? "Só as classificações filtradas" : null}
                 />
               )}
