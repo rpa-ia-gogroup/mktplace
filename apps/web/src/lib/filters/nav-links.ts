@@ -84,3 +84,20 @@ export function mergeOptionalFilteredHref(
 ): string | null {
   return destinationHref == null ? null : mergeFilteredHref(destinationHref, currentSearch);
 }
+
+/**
+ * "Voltar" usa o historico so' quando a entrada anterior e' da propria Torre:
+ * aba nova ou link direto (historico de 1) e chegada de outro site caem no
+ * destino padrao. Referrer vazio com historico conta como navegacao interna
+ * (o app router nao atualiza o referrer entre telas).
+ * shortcut: URL digitada numa aba que ja' tinha outro site volta para esse site; se incomodar, marcar a navegacao interna em sessionStorage.
+ */
+export function temHistoricoNaTorre(historyLength: number, referrer: string, origin: string): boolean {
+  if (historyLength <= 1) return false;
+  if (!referrer) return true;
+  try {
+    return new URL(referrer).origin === origin;
+  } catch {
+    return false;
+  }
+}

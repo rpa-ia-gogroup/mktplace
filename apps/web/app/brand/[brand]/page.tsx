@@ -5,12 +5,12 @@ import { Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } f
 import Link from "next/link";
 import { ArrowDown } from "lucide-react";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { buildDemoSeries, DEMO_SERIES_LABEL, DEMO_SERIES_WARNING, type DailyRow } from "@/lib/brand/demo-series";
+import { buildDemoSeries, DEMO_SERIES_WARNING, type DailyRow } from "@/lib/brand/demo-series";
 import { fetchBrandDetail, type BrandDetail, type BrandDetailChannelRow, type BrandDetailProduto } from "@/lib/api-client";
 import { isMarketplaceSelected, serializeMarketplaceSelection } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { previousEquivalentRange } from "@/lib/filters/presets";
-import { mergeFilteredHref } from "@/lib/filters/nav-links";
+import { mergeFilteredHref, temHistoricoNaTorre } from "@/lib/filters/nav-links";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "@/lib/brand-daily-summary";
@@ -32,7 +32,8 @@ import {
 import { decBr, pctBr, roasBr } from "@/lib/inteligencia/format";
 import TableScrollHint from "@/components/TableScrollHint";
 import BrandArrivalBanner from "@/components/BrandArrivalBanner";
-import PageContainer from "@/components/layout/PageContainer";
+import Aba from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
@@ -43,7 +44,7 @@ import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import TikTokMonthlyPanel from "@/components/brand/TikTokMonthlyPanel";
 import { parseBrandArrivalContext, SECTION_PERIOD } from "@/lib/brand-arrival-context";
 import { computeRequestStatus } from "@/lib/request-freshness";
-import { rotuloFrescor, type ComFrescor } from "@/lib/frescor-carga";
+import type { ComFrescor } from "@/lib/frescor-carga";
 import {
   availabilityForBrand, brandDetailRequestKey, fmtCompetencia, monthlyViewState,
   monthOptions, parseRefMonth, periodRegimeRelation, REF_MONTH_QUERY_KEY,
@@ -69,9 +70,9 @@ const BRAND_META: Record<string, { label: string; color: string; initials: strin
 const BRAND_PILLS = [
   { slug: "barbours", label: "BARBOURS" },
   { slug: "kokeshi",  label: "KOKESHI"  },
-  { slug: "apice",    label: "APICE"    },
+  { slug: "apice",    label: "ÁPICE"    },
   { slug: "lescent",  label: "LESCENT"  },
-  { slug: "rituaria", label: "RITUARIA" },
+  { slug: "rituaria", label: "RITUÁRIA" },
 ];
 
 /** Identidade estavel da requisicao diaria/GLOBAL (tendencia + ultimos 7
@@ -219,7 +220,8 @@ function BrandPageInner() {
   // sobrescreve `brands=` atual, para nunca navegar para uma marca com a
   // querystring apontando para a marca anterior (Gate U3, Task 6).
   const buildHref = (href: string) => mergeFilteredHref(href, searchParams);
-  const backToCanais = mergeFilteredHref("/canais", searchParams);
+  // Sem historico (link direto, aba nova), "Voltar" cai na Gerencial com os filtros da URL.
+  const voltarPara = mergeFilteredHref("/", searchParams);
 
   // Contexto de chegada "quente" (Gate G3, estendido no V3-2 para a origem
   // `inteligencia`): validado contra a marca da rota e o canal filtrado.
@@ -469,52 +471,54 @@ function BrandPageInner() {
   });
 
   return (
-    <PageContainer>
-      {/* ══ 1. cabecalho e contexto de chegada ═══════════════════════════ */}
-      <div className="flex flex-col gap-2">
-        <Link
-          href={backToCanais}
-          className="inline-flex items-center min-h-11 text-xs font-semibold text-violet-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded w-fit"
-        >
-          ← Voltar para Canais
-        </Link>
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className={`w-9 h-9 rounded-xl ${meta.color} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-              {meta.initials}
-            </span>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900 leading-none">{meta.label}</h2>
-              <p className="text-xs text-slate-500">
-                Marca 360 · intervalo global {periodLabel} · competência TikTok {competenciaLabel}
-              </p>
-              {/* T-0097: frescor da competencia TikTok servida (`refreshed_at`
-                  de /brand-detail), so' com resposta da chave atual. Nunca a
-                  ultima data da serie diaria (o dia corrente e' parcial). */}
-              {displayDetail && (
-                <p
-                  className="text-xs text-slate-500 tabular-nums"
-                  title="Última carga das fontes do TikTok Shop na competência exibida"
-                >
-                  {rotuloFrescor((displayDetail as ComFrescor<BrandDetail>).refreshed_at)}
-                </p>
-              )}
-            </div>
+    <Aba
+      titulo={meta.label}
+      selo={
+        <>
+          {/* T-0097: frescor da competencia TikTok servida (`refreshed_at` de /brand-detail), so' com
+              resposta da chave atual; nunca a ultima data da serie diaria (o dia corrente e' parcial). */}
+          <SeloAtualizado
+            em={displayDetail ? (displayDetail as ComFrescor<BrandDetail>).refreshed_at ?? null : null}
+            aoVivo={dailyIsFresh ? isLive : null}
+            carregando={!dailyIsFresh}
+            detalhe="Última carga das fontes do TikTok Shop na competência exibida"
+          />
+          <InfoDica texto={`Marca 360 · intervalo global ${periodLabel} · competência TikTok ${competenciaLabel}`} />
+        </>
+      }
+      filtros={
+        <>
+          {/* No 390 o seletor de canal rola dentro da barra, sem cortar o ultimo canal. */}
+          <div className="min-w-0 max-w-full overflow-x-auto">
+            <MarketplaceFilter value={filter} onChange={(channels) => setFilters({ channels })} />
           </div>
-          {dailyIsFresh ? (
-            !isLive && (
-              <span className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 font-semibold">
-                {DEMO_SERIES_LABEL}
-              </span>
-            )
-          ) : (
-            <span className="text-xs text-slate-600 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
-              Atualizando dados...
-            </span>
-          )}
-        </div>
-      </div>
-
+          <DateRangeFilter
+            dateFrom={filters.dateFrom}
+            dateTo={filters.dateTo}
+            periodo={filters.periodo}
+            compare={filters.compare}
+            onChange={(v) => setFilters(v)}
+            variante="menu"
+            onCompareChange={(compare) => setFilters({ compare })}
+          />
+        </>
+      }
+      direita={
+        <Link
+          href={voltarPara}
+          onClick={(e) => {
+            // Volta para a tela de onde a pessoa veio (com os filtros que ela tinha la').
+            if (temHistoricoNaTorre(window.history.length, document.referrer, window.location.origin)) {
+              e.preventDefault();
+              router.back();
+            }
+          }}
+          className="inline-flex min-h-11 items-center rounded px-2 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          ← Voltar
+        </Link>
+      }
+    >
       {/* Navegacao entre marcas — path e brands= sempre apontam para a mesma
           marca de destino, e `ctx_*` nao viaja (nao esta em FILTER_QUERY_KEYS).
           A competencia mensal, sim, e preservada: e escolha do analista, nao
@@ -527,29 +531,16 @@ function BrandPageInner() {
               `/brand/${b.slug}?brands=${b.slug}${refMonthUrl ? `&${REF_MONTH_QUERY_KEY}=${refMonthUrl}` : ""}`,
             )}
             aria-current={b.slug === brand ? "page" : undefined}
-            className={`inline-flex items-center min-h-11 px-4 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
+            className={`inline-flex items-center min-h-11 px-4 rounded-full text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
               b.slug === brand
-                ? "bg-violet-600 text-white shadow-sm"
-                : "bg-white text-slate-600 border border-violet-200 hover:border-violet-400 hover:text-violet-700"
+                ? "bg-accent text-white shadow-sm"
+                : "bg-surface text-ink-muted border border-line hover:border-line-strong hover:text-ink"
             }`}
           >
             {b.label}
           </Link>
         ))}
       </nav>
-
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <MarketplaceFilter value={filter} onChange={(channels) => setFilters({ channels })} />
-        <DateRangeFilter
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          periodo={filters.periodo}
-          compare={filters.compare}
-          onChange={(v) => setFilters(v)}
-          variante="menu"
-          onCompareChange={(compare) => setFilters({ compare })}
-        />
-      </div>
 
       <BrandArrivalBanner ctx={arrivalCtx} periodLabel={periodLabel} buildHref={buildHref} />
 
@@ -560,7 +551,7 @@ function BrandPageInner() {
         aria-label={`Situação da marca no intervalo global ${periodLabel}`}
         aria-busy={!dailyIsFresh}
       >
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Situação da marca</SectionTitle>
+        <SectionTitle>Situação da marca</SectionTitle>
         {!dailyIsFresh ? (
           <FaixaCarregando cartoes={4} className="grid grid-cols-2 gap-3 md:grid-cols-4" />
         ) : (
@@ -584,7 +575,7 @@ function BrandPageInner() {
 
       {/* ══ 4. evolucao e mix de canais — INTERVALO GLOBAL ═══════════════ */}
       <section aria-label={`Evolução e mix de canais no intervalo global ${periodLabel}`} aria-busy={!dailyIsFresh}>
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Evolução e mix de canais</SectionTitle>
+        <SectionTitle>Evolução e mix de canais</SectionTitle>
         {!dailyIsFresh ? (
           <div className="h-64 rounded-2xl bg-slate-100 animate-pulse" aria-hidden="true" />
         ) : (
@@ -652,7 +643,7 @@ function BrandPageInner() {
       {/* ══ 5. o que mudou — so quando o dado existente sustenta ═════════ */}
       <section aria-label="O que mudou no intervalo global">
         <SectionTitle
-          badge={`intervalo global ${periodLabel} vs anterior`}
+          badge="vs período anterior"
           dica="GMV decomposto por canal contra o intervalo equivalente anterior. Sem variação % quando a base anterior não é positiva."
         >
           O que mudou
@@ -712,7 +703,7 @@ function BrandPageInner() {
 
       {/* ══ ultimos 7 dias — INTERVALO GLOBAL ═══════════════════════════ */}
       <section aria-label={`Últimos 7 dias do intervalo global ${periodLabel}`} aria-busy={!dailyIsFresh}>
-        <SectionTitle badge={`intervalo global ${periodLabel}`}>Últimos 7 dias</SectionTitle>
+        <SectionTitle>Últimos 7 dias</SectionTitle>
         {!ordersReliable && dailyIsFresh && (
           <p className="text-xs text-slate-500 -mt-2 mb-3">Pedidos e Ticket N/D nesta seleção.</p>
         )}
@@ -739,31 +730,31 @@ function BrandPageInner() {
                 ) : (
                   last7.map((r) => (
                     <tr key={r.date}>
-                      <td className="px-5 py-3 text-sm text-gray-700 font-medium">
+                      <td className="px-5 py-3 text-sm text-gray-700 font-medium whitespace-nowrap">
                         {new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                       </td>
                       {hasTiktok && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.tiktok_gmv != null ? fmtBrl(r.tiktok_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
                       {hasMl && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.ml_gmv != null ? fmtBrl(r.ml_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
                       {hasShopee && (
-                        <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                        <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                           {r.shopee_gmv != null ? fmtBrl(r.shopee_gmv) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
                         </td>
                       )}
-                      <td className="text-right px-4 py-3 font-bold text-gray-900 text-sm tabular-nums">
+                      <td className="text-right whitespace-nowrap px-4 py-3 font-bold text-gray-900 text-sm tabular-nums">
                         {fmtBrl(r.total_gmv)}
                       </td>
-                      <td className="text-right px-4 py-3 text-sm text-gray-600 tabular-nums">
+                      <td className="text-right whitespace-nowrap px-4 py-3 text-sm text-gray-600 tabular-nums">
                         {ordersReliable ? fmtNumber(r.orders) : <span className="text-slate-500 text-xs">N/D</span>}
                       </td>
-                      <td className="text-right px-5 py-3 text-sm text-gray-600 tabular-nums">
+                      <td className="text-right whitespace-nowrap px-5 py-3 text-sm text-gray-600 tabular-nums">
                         {!ordersReliable
                           ? <span className="text-slate-500 text-xs">N/D</span>
                           : r.avg_ticket != null ? fmtBrl(r.avg_ticket) : <span className="text-slate-400" title="sem dado">Sem dado</span>}
@@ -941,7 +932,7 @@ function BrandPageInner() {
           );
         })()}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
 
