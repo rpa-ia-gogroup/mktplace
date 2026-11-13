@@ -3,14 +3,14 @@
 /**
  * Filtros da aba CX (CX-FILTROS-PADRAO, 08/11/2026): a mesma barra das outras
  * abas, montada como o `GlobalFilterControls` (Gerencial, Canais, Financeiro):
- * canal segmentado com a cor de identidade, marca e periodo como gatilhos que
+ * marca e periodo como gatilhos que
  * mostram o valor atual e, abaixo de `sm`, tudo recolhido atras de "Filtros"
  * com o resumo do escopo.
  *
  * As pecas sao as do app: `BrandFilter` (variante `menu`) e o `Popover` que o
  * `DateRangeFilter` usa. O que so' a CX tem entra dentro do padrao:
- *   - canal: Shopee ou Mercado Livre (`canal=ml` na URL; o TikTok ainda nao
- *     tem CX), o mesmo trilho do `MarketplaceFilter`;
+ *   - canal: Shopee ou Mercado Livre sao as ABAS da pagina (ALVO-GRADE,
+ *     12/11/2026; `canal=ml` na URL), nao mais um controle desta barra;
  *   - marca: UMA (a URL e a API leem uma), via `marcaUnica`;
  *   - periodo: a janela de dias fechados (7, 30 ou 90), nao datas livres.
  *
@@ -23,7 +23,7 @@ import { CalendarDays, Check, X } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import Popover from "@/components/ui/Popover";
 import { CLASSE_CONTAGEM, CLASSE_LIMPAR } from "@/components/layout/GlobalFilterControls";
-import { CANAIS_CX, JANELAS_DIAS, JANELA_PADRAO, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
+import { JANELAS_DIAS, JANELA_PADRAO, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
 
 /** Mesmas classes dos botoes do `BrandFilter`/`DateRangeFilter` no menu. */
@@ -39,8 +39,8 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
   const id = useId();
 
   const ir = (novo: Filtros, c: CanalCx = canal) => iniciar(() => router.push(hrefCx(novo, c), { scroll: false }));
-  // FILTROS-PADRAO: fora do padrao da aba (Shopee, todas as marcas, janela padrao).
-  const fora = [canal !== "shopee", f.marca != null, f.dias !== JANELA_PADRAO].filter(Boolean).length;
+  // FILTROS-PADRAO: fora do padrao da aba (todas as marcas, janela padrao). O canal virou ABA (ALVO-GRADE): nao e' filtro.
+  const fora = [f.marca != null, f.dias !== JANELA_PADRAO].filter(Boolean).length;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5" data-testid="cx-filtros" aria-busy={aplicando}>
@@ -80,27 +80,6 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
         id={id}
         className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
       >
-        {/* Canal: o trilho do MarketplaceFilter, com os canais que a CX le' */}
-        <div role="group" aria-label="Canal" className="flex w-fit min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-raised p-0.5">
-          {CANAIS_CX.map((c) => {
-            const ativo = c.valor === canal;
-            return (
-              <button
-                key={c.valor}
-                type="button"
-                aria-pressed={ativo}
-                onClick={() => !ativo && ir(f, c.valor)}
-                className={`inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
-                  ativo ? OPCAO_ATIVA : OPCAO_INATIVA
-                }`}
-              >
-                <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${c.ponto}`} />
-                {c.rotulo}
-              </button>
-            );
-          })}
-        </div>
-
         <BrandFilter
           value={f.marca ? [f.marca] : []}
           onChange={(escolha) => ir({ ...f, marca: marcaUnica(escolha, f.marca) })}
@@ -138,7 +117,7 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
         </Popover>
 
         {fora > 0 && (
-          <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO }, "shopee")} aria-label="Limpar filtros (volta ao padrão da aba)" className={CLASSE_LIMPAR}>
+          <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO })} aria-label="Limpar filtros (volta ao padrão da aba)" className={CLASSE_LIMPAR}>
             <X aria-hidden="true" className="h-3.5 w-3.5 min-[1760px]:mr-1" />
             <span className="sr-only min-[1760px]:not-sr-only">Limpar</span>
           </button>
