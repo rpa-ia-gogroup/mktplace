@@ -477,7 +477,7 @@ export default function MonitoramentoPrecoPage() {
         // A ressalva de escopo (observacional, sem frete/cupom, sem vigencia)
         // fica num "ⓘ" so', na pilula: continua existindo, fora do caminho do olho.
         <>
-          <SeloAtualizado em={meta?.refreshed_at ?? null} carregando={meta == null} detalhe="Sync executado em" />
+          <SeloAtualizado em={meta?.refreshed_at ?? null} carregando={meta == null} atrasado={meta?.freshness_status === "stale"} detalhe="Sync executado em" />
           <span className="inline-flex items-center gap-1 text-xs font-semibold border border-warn/30 bg-warn-soft text-warn-ink rounded-full px-2 py-0.5">
             Modo observacional
             <InfoDica
