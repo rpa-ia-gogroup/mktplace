@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -207,7 +207,8 @@ test("P8. zero tipografia NOVA abaixo de 12px nos arquivos compartilhados criado
  * que se quer — a propagacao visual nao pode introduzir chamada nova.
  */
 const FETCHERS_POR_ROTA: Record<string, string[]> = {
-  canais: ["fetchCanais"],
+  // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
+  canais: ["fetchCanais", "fetchTrend"],
   produtos: [
     "fetchProdutosML", "fetchProdutosMLSummary", "fetchProdutosShopee",
     "fetchProdutosShopeeSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
