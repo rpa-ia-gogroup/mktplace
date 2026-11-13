@@ -106,5 +106,5 @@ export const DICA_SITUACAO: Record<ChaveSituacao, string> = {
   gmv: "Soma do GMV dos canais selecionados no intervalo global.",
   pedidos: "Pedidos do intervalo global nos canais selecionados.",
   ticket: "GMV dividido pelos pedidos do intervalo global.",
-  adspend: "Investimento em anúncios do intervalo global. O ROAS é o GMV dividido por este valor, aproximado.",
+  adspend: "Investimento em anúncios do intervalo global. O ROAS é o GMV dos canais com Ads dividido pelo Ads desses mesmos canais, aproximado.",
 };
