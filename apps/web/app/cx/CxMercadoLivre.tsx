@@ -21,7 +21,6 @@ import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import TableScrollHint from "@/components/TableScrollHint";
-import { LinhaSemComparacao } from "@/components/gerencial/CxResumo";
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
@@ -293,8 +292,8 @@ function Faixa({
         cor={cor}
         valor={r.taxa[i] == null ? null : pctCx(r.taxa[i])}
         pilula={pilulaCartao(c)}
-        // cobertura parcial e contagem ficam no cartao; sem periodo anterior, a linha neutra da API
-        legenda={contagem ?? (sem ? <LinhaSemComparacao {...sem} /> : null)}
+        // cobertura parcial e contagem ficam no cartao; sem periodo anterior, o motivo da API vai para o ⓘ
+        legenda={contagem}
         serie={c?.serie}
         ajuda={
           <InfoDica

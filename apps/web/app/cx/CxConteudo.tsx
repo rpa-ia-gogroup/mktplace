@@ -316,9 +316,10 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
               cor={COR_CX.cancelamento}
               valor={valorCartao(r.cancelamento)}
               pilula={pilulas.cancelamento}
-              legenda={rodape.cancelamento.antes}
+              // "comparação a partir de dd/mm" (sem periodo anterior) fica no ⓘ, como na Taxa de resposta
+              legenda={pilulas.cancelamento ? rodape.cancelamento.antes : null}
               serie={rodape.cancelamento.serie}
-              ajuda={ajuda("cancelamento")}
+              ajuda={ajuda("cancelamento", r.semAnterior.cancelamento?.texto)}
               onAbrir={() => setDialogo({ indicador: "cancelamento" })}
             />
             {/* devolucoes (sem as que o comprador cancelou) ÷ pedidos: a mesma conta da coluna Devol. da tabela por marca; a API nao traz serie nem periodo anterior */}
@@ -343,9 +344,9 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
               cor={COR_CX.reembolso}
               valor={valorCartao(r.reembolsoPct)}
               pilula={pilulas.reembolso}
-              legenda={r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : rodape.reembolso.delta ? null : rodape.reembolso.antes}
+              legenda={r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null}
               serie={rodape.reembolso.serie}
-              ajuda={ajuda("reembolso", typeof rodape.reembolso.antes === "string" ? rodape.reembolso.antes : null)}
+              ajuda={ajuda("reembolso", typeof rodape.reembolso.antes === "string" ? rodape.reembolso.antes : r.semAnterior.reembolso?.texto)}
               onAbrir={() => setDialogo({ indicador: "reembolso" })}
             />
           </div>
