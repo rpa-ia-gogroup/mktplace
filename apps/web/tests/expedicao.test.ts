@@ -692,7 +692,9 @@ test("a pagina nao cria um segundo h1: o shell e dono dele", () => {
   // EXPEDICAO-UX-UNIFICADA-1: o h2 do canal vive no cabecalho compartilhado
   // pelos tres canais, que a fila renderiza.
   const cabecalho = fonte("src/components/expedicao/CabecalhoExpedicao.tsx");
-  assert.match(tela, /<CabecalhoExpedicao\b/);
+  assert.match(tela, /cabecalho=\{cabecalhoExpedicao\(\{/);
   assert.equal((cabecalho.match(/<h1\b/g) ?? []).length, 0);
-  assert.ok((cabecalho.match(/<h2\b/g) ?? []).length >= 1);
+  // ALVO-GRADE: o h2 ("Expedição") e' da moldura `Aba`, que a casca desenha.
+  assert.match(fonte("app/expedicao/ExpedicaoShell.tsx"), /<Aba\b/);
+  assert.ok((fonte("src/components/layout/Aba.tsx").match(/<h2\b/g) ?? []).length >= 1);
 });

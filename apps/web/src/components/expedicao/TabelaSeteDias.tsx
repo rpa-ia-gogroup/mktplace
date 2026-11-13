@@ -14,6 +14,7 @@
  * uma conta (o Gerencial é por marca) ou medida que o canal não sustenta
  * (travados no Mercado Livre).
  */
+import TableScrollHint from "@/components/TableScrollHint";
 import InfoDica from "@/components/ui/InfoDica";
 import { formatarInteiro } from "@/lib/expedicao-formato";
 import { percentualDaFila } from "@/lib/expedicao-travados";
@@ -93,7 +94,7 @@ export default function TabelaSeteDias({ linhas, total, janela, comTravados }: P
           texto={`${janela ? `Pedidos feitos de ${janela}` : "Últimos 7 dias fechados"}: o mesmo total do Gerencial, com Full/FBS. Prazo vencido: os pedidos com prazo nesses dias despachados pelo vendedor, a mesma base do LDR. Vencidos, acima de 48 h e travados contam essa base, e o % é sobre ela.${comTravados ? "" : " Travados não é medido neste canal."}`}
         />
       </p>
-      <div className="overflow-x-auto">
+      <TableScrollHint>
         <table className="tc-tabela-linhas tc-tabela-num-pct w-full text-sm [&_td]:pr-4 [&_th]:pr-4 [&_thead_th]:align-bottom">
           <caption className="sr-only">Últimos 7 dias por marca: pedidos, prazo vencido, vencidos, acima de 48 h e travados</caption>
           <thead className="text-xs uppercase tracking-wide text-ink-faint">
@@ -113,7 +114,7 @@ export default function TabelaSeteDias({ linhas, total, janela, comTravados }: P
             {total ? <Linha l={total} comTravados={comTravados} total /> : null}
           </tbody>
         </table>
-      </div>
+      </TableScrollHint>
     </div>
   );
 }

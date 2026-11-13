@@ -312,7 +312,7 @@ test("o percurso alcanca os dialogos de drill-down, nao so' a primeira dobra", (
     "app/cx/CxConteudo.tsx",
     "src/components/KpiDrilldownDialog.tsx",
     "src/components/gerencial/CxDrilldown.tsx",
-    "src/components/ui/Heroi.tsx",
+    "src/components/ui/CartaoIndicador.tsx",
   ]) {
     assert.ok(cx.includes(esperado), `percurso da /cx nao alcancou ${esperado}`);
   }

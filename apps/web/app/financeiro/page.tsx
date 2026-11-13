@@ -19,9 +19,10 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BarChart3, CircleDollarSign, CircleSlash, Megaphone, Percent, Receipt, Wallet } from "lucide-react";
+import { CircleDollarSign, Megaphone, Percent, Receipt } from "lucide-react";
 import {
   fetchFinanceiro,
+  fetchTrend,
   type FinanceiroKpis,
   type FinanceiroBrandRow,
 } from "@/lib/api-client";
@@ -31,19 +32,18 @@ import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
-import Freshness from "@/components/ui/Freshness";
+import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import CelulaBarra from "@/components/ui/CelulaBarra";
+import Segmented from "@/components/ui/Segmented";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
-import InfoDica from "@/components/ui/InfoDica";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import FaixaGmvCanais, { GRADE_FINANCEIRO, type PainelCanal } from "@/components/financeiro/FinanceiroCartoes";
+import FaixaFinanceiro, { GRADE_FINANCEIRO, type PainelCanal } from "@/components/financeiro/FinanceiroCartoes";
+import { serieQueConfere } from "@/lib/serie-que-confere";
 import FinanceiroDrilldownContent from "@/components/financeiro/FinanceiroDrilldownContent";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
-import dynamic from "next/dynamic";
-import type { LinhaTaxa } from "@/components/financeiro/FeeByBrandChart";
 
 import { fmtBrlCurto, fmtPctSimples, fmtVezes } from "@/lib/formatters";
 import { fmtPeriodo, mockLimitationNote } from "@/lib/filters/format";
@@ -53,14 +53,26 @@ import SortHeader from "@/components/ui/SortHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { buildFinanceiroRequestKey } from "@/lib/financeiro-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
-import type { CanalDoGrafico } from "@/lib/chart-theme";
 
-// Recharts so' chega quando o grafico entra na tela: a primeira carga do
-// Financeiro fica com KPIs e tabelas, sem os ~110 kB da biblioteca.
-const FeeByBrandChart = dynamic(() => import("@/components/financeiro/FeeByBrandChart"), {
-  ssr: false,
-  loading: () => <div className="h-[220px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />,
-});
+type Canal = PainelCanal["canal"];
+type Visao = "geral" | Canal;
+
+const NOME: Record<Canal, string> = { tiktok: "TikTok Shop", ml: "Mercado Livre", shopee: "Shopee" };
+const PONTO: Record<Canal, string> = { tiktok: "bg-canal-tiktok", ml: "bg-canal-ml", shopee: "bg-canal-shopee" };
+const COR: Record<Canal, string> = {
+  tiktok: "rgb(var(--tc-canal-tiktok))",
+  ml: "rgb(var(--tc-canal-ml))",
+  shopee: "rgb(var(--tc-canal-shopee))",
+};
+/** Cada canal mede uma taxa propria: o rotulo diz qual, e elas nunca se somam. */
+const ROTULO_TAXA: Record<Canal, string> = {
+  tiktok: "TikTok · taxas e encargos",
+  ml: "Mercado Livre · tarifa",
+  shopee: "Shopee · taxas e encargos",
+};
+/** As ancoras de sempre (#tiktok, #mercado-livre, #shopee) escolhem a aba. */
+const ANCORA: Record<Canal, string> = { tiktok: "#tiktok", ml: "#mercado-livre", shopee: "#shopee" };
+const FAIXAS_TAXA = "Taxas e encargos / GMV: abaixo de 20% neutro · 20–30% atenção · acima de 30% crítico.";
 
 function fmtPct(v: number | null): string {
   return v == null ? "—" : fmtPctSimples(v);
@@ -119,18 +131,13 @@ function CostBar({ adPct, freteP }: { adPct: number | null; freteP: number | nul
   );
 }
 
-/** Legenda de faixa: ponto + rotulo, numa linha. Mesmos limiares de sempre. */
-function Faixa({ ponto, tinta, children }: { ponto: string; tinta: string; children: React.ReactNode }) {
-  return (
-    <span className={`flex items-center gap-1.5 text-xs ${tinta}`}>
-      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${ponto}`} />
-      {children}
-    </span>
-  );
+/** Tom da pilula de taxa no cartao: os MESMOS limiares de `feePctColor`. */
+function tomTaxa(v: number): "neutro" | "warn" | "crit" {
+  return v < 20 ? "neutro" : v < 30 ? "warn" : "crit";
 }
 
 /** Classes das celulas: densidade do benchmark com o piso de 13px de dado. */
-const TD = "px-4 py-2.5 text-right tabular-nums";
+const TD = "px-4 py-2.5 text-right tabular-nums whitespace-nowrap";
 const TD_MARCA = "px-4 py-2.5 font-semibold text-ink whitespace-nowrap";
 const TR = "hover:bg-raised/70 transition-colors";
 const LINK_MARCA =
@@ -153,6 +160,24 @@ function FinanceiroPageInner() {
   // chave atual para decidir se o estado em memoria reflete de fato os
   // filtros exibidos agora.
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  // GMV por dia do MESMO recorte, para a linha do cartao da soma (uma chamada so': o Data Mart e' em fila).
+  const [serie, setSerie] = useState<{ key: string; pontos: number[] } | null>(null);
+  const [visao, setVisao] = useState<Visao>("geral");
+  const [canalTaxa, setCanalTaxa] = useState<Canal>("tiktok");
+  useEffect(() => {
+    const aplicar = () => {
+      const canal = (Object.keys(ANCORA) as Canal[]).find((c) => ANCORA[c] === window.location.hash);
+      if (canal) setVisao(canal);
+    };
+    aplicar();
+    window.addEventListener("hashchange", aplicar);
+    return () => window.removeEventListener("hashchange", aplicar);
+  }, []);
+  const escolherVisao = (v: Visao) => {
+    setVisao(v);
+    // A aba fica no link (as ancoras antigas continuam valendo), sem rolar a pagina.
+    window.history.replaceState(null, "", v === "geral" ? window.location.pathname + window.location.search : ANCORA[v]);
+  };
 
   const requestKey = useMemo(
     () => buildFinanceiroRequestKey({ channels: filters.channels, brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare, retryKey }),
@@ -166,6 +191,10 @@ function FinanceiroPageInner() {
     setError(null);
     const key = buildFinanceiroRequestKey({ channels: filters.channels, brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare, retryKey });
     const opts = { brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, compare: filters.compare };
+    // Falhou ou veio vazia: o cartao fica sem linha, nunca com linha inventada.
+    fetchTrend(filters.channels, opts, "day")
+      .then((t) => { if (!ignore) setSerie(t.live ? { key, pontos: t.data.map((p) => p.gmv) } : null); })
+      .catch(() => { if (!ignore) setSerie(null); });
     fetchFinanceiro(filters.channels, undefined, opts)
       .then((result) => {
         if (ignore) return;
@@ -279,21 +308,38 @@ function FinanceiroPageInner() {
   };
   const shSort = useSortableTable(shBrands, shGetValue, shColumnTypes);
 
-  // Grafico de taxa por marca: so' os canais selecionados, so' valores que a
-  // API entrega por linha. Marca sem nenhum valor nos canais visiveis sai.
-  const canaisDoGrafico: CanalDoGrafico[] = [
+  const canais: Canal[] = [
     ...(showTiktok ? (["tiktok"] as const) : []),
     ...(showMl ? (["ml"] as const) : []),
     ...(showShopee ? (["shopee"] as const) : []),
   ];
-  const linhasTaxa: LinhaTaxa[] = displayBrands
+  // Taxa por marca: so' os canais selecionados e so' o que a API entrega por linha.
+  // Marca sem nenhum valor nos canais visiveis sai.
+  const linhasTaxa = displayBrands
     .map((b) => ({
+      brand: b.brand,
       marca: b.label,
       tiktok: showTiktok ? b.tiktok_avg_fee_pct : null,
       ml: showMl ? b.ml_avg_fee_pct ?? null : null,
       shopee: showShopee ? b.shopee_avg_fee_pct ?? null : null,
     }))
     .filter((l) => l.tiktok != null || l.ml != null || l.shopee != null);
+  const maior = (xs: (number | null | undefined)[]) => Math.max(0, ...xs.map((x) => x ?? 0));
+  // Uma escala so' para as barrinhas: 33% no TikTok e 16% no ML se comparam no olho.
+  const maiorTaxa = maior(linhasTaxa.flatMap((l) => canais.map((c) => l[c])));
+  // Canal sem taxa em NENHUMA marca sai do seletor e da tabela (o cartao dele ja' diz "sem dado de taxa"):
+  // uma coluna inteira de "—" nao informa nada.
+  const canaisComTaxa = dataIsFresh ? canais.filter((c) => linhasTaxa.some((l) => l[c] != null)) : canais;
+  const semTaxa = canais.filter((c) => !canaisComTaxa.includes(c)).map((c) => NOME[c]);
+  const canalDoRanking: Canal = canaisComTaxa.includes(canalTaxa) ? canalTaxa : canaisComTaxa[0] ?? "tiktok";
+  const ranking = linhasTaxa
+    .flatMap((l) => { const v = l[canalDoRanking]; return v != null ? [{ marca: l.marca, v }] : []; })
+    .sort((a, b) => b.v - a.v);
+  const maiorGmv = {
+    tiktok: maior(tkBrands.map((b) => b.tiktok_gmv)),
+    ml: maior(mlBrands.map((b) => b.ml_gmv)),
+    shopee: maior(shBrands.map((b) => b.shopee_gmv)),
+  };
 
   const k = displayKpis;
   // Marcas com venda no ML no recorte mas sem tarifa carregada.
@@ -304,6 +350,7 @@ function FinanceiroPageInner() {
   if (showTiktok) {
     paineis.push({
       canal: "tiktok", titulo: "TikTok Shop", ponto: "bg-canal-tiktok", gmv: k?.tiktok_gmv ?? null,
+      pilula: k?.tiktok_avg_fee_pct != null ? { texto: `taxas ${fmtPct(k.tiktok_avg_fee_pct)}`, tom: tomTaxa(k.tiktok_avg_fee_pct) } : null,
       linhas: [
         {
           rotulo: "Taxas e encargos",
@@ -328,6 +375,8 @@ function FinanceiroPageInner() {
   if (showMl) {
     paineis.push({
       canal: "ml", titulo: "Mercado Livre", ponto: "bg-canal-ml", gmv: k?.ml_gmv ?? null,
+      // A tarifa do ML nao tem faixa de negocio: pilula neutra.
+      pilula: k?.ml_avg_fee_pct != null ? { texto: `tarifa ${fmtPct(k.ml_avg_fee_pct)}`, tom: "neutro" } : null,
       // T-0085: o % consolidado ja' divide so' pelo GMV das marcas com tarifa; o aviso diz que o total e' parcial.
       // O ⓘ fica ao lado do GMV: diz DE QUAL numero fala (os custos), para nao ser lido como ressalva do GMV.
       aviso: mlSemTarifa > 0 ? `Custos: tarifa parcial, ${mlSemTarifa} ${mlSemTarifa === 1 ? "marca sem tarifa" : "marcas sem tarifa"}. Veja no detalhe.` : undefined,
@@ -369,6 +418,9 @@ function FinanceiroPageInner() {
   if (showShopee) {
     paineis.push({
       canal: "shopee", titulo: "Shopee", ponto: "bg-canal-shopee", gmv: k?.shopee_gmv ?? null,
+      pilula: k?.shopee_avg_fee_pct != null
+        ? { texto: `taxas ${fmtPct(k.shopee_avg_fee_pct)}`, tom: tomTaxa(k.shopee_avg_fee_pct) }
+        : { texto: "sem dado de taxa", tom: "neutro" },
       linhas: [
         {
           rotulo: "Taxas e encargos",
@@ -396,27 +448,43 @@ function FinanceiroPageInner() {
   }
   const painelAberto = paineis.find((x) => x.canal === detalhe) ?? null;
   const vazio = dataIsFresh && displayBrands.length === 0;
+  // So' o GMV soma entre canais; custos nunca.
+  const comGmv = paineis.filter((p) => p.gmv != null);
+  const receita = comGmv.length > 0 ? comGmv.reduce((s, p) => s + (p.gmv ?? 0), 0) : null;
+  const serieReceita = dataIsFresh && serie?.key === requestKey ? serieQueConfere(serie.pontos, receita) : null;
+  const visoes: VisaoDaAba<Visao>[] = [
+    { id: "geral", rotulo: "Visão geral" },
+    ...canais.map((c) => ({ id: c, rotulo: NOME[c], ponto: PONTO[c] })),
+  ];
+  const visaoAtiva: Visao = visao !== "geral" && canais.includes(visao) ? visao : "geral";
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Financeiro"
-        subtitle="Receita e custos conhecidos por canal."
-        icon={Wallet}
-        meta={
-          <>
-            {/* Selo so' com dado fresco — nunca o estado da requisicao ANTERIOR
-                durante a transicao de filtro. */}
-            <Freshness
-              live={dataIsFresh ? displayIsLive : null}
-              refreshedAt={displayRefreshedAt}
-              loading={isLoadingState}
-            />
-          </>
-        }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
-      />
-
+    <Aba<Visao>
+      titulo="Financeiro"
+      selo={
+        // Selo so' com dado fresco — nunca o estado da requisicao ANTERIOR
+        // durante a transicao de filtro.
+        <SeloAtualizado em={displayRefreshedAt} aoVivo={dataIsFresh ? displayIsLive : null} carregando={isLoadingState} />
+      }
+      visoes={visoes}
+      visao={visaoAtiva}
+      onVisao={escolherVisao}
+      filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
+      faixa={
+        isErrorState || vazio ? null : isLoadingState ? (
+          <FaixaCarregando cartoes={4} className={GRADE_FINANCEIRO} />
+        ) : (
+          <FaixaFinanceiro
+            paineis={paineis}
+            total={receita}
+            serieTotal={serieReceita}
+            canalDaAba={visaoAtiva === "geral" ? null : visaoAtiva}
+            foraDaConta={`Margem ainda não fechada. Fora da conta: CMV, impostos, devoluções${showTiktok ? ", frete e afiliados do TikTok" : ""}.`}
+            onAbrir={setDetalhe}
+          />
+        )
+      }
+    >
       {dataIsFresh && (() => {
         const isCustomPeriod = detectPreset(filters.dateFrom, filters.dateTo) !== "mes_anterior";
         const note = mockLimitationNote(displayIsLive, filters.brands, isCustomPeriod);
@@ -444,84 +512,120 @@ function FinanceiroPageInner() {
         />
       ) : (
       <>
-        {/* ── 1. Receita e componentes conhecidos, por canal ── */}
-        <section aria-labelledby="fin-canais" className="flex flex-col gap-3">
-          <h2 id="fin-canais" className="text-sm font-semibold text-ink-muted">Receita (GMV) por canal</h2>
-          {isLoadingState ? (
-            <FaixaCarregando cartoes={paineis.length || 1} className={GRADE_FINANCEIRO} />
-          ) : (
-            <FaixaGmvCanais paineis={paineis} onAbrir={setDetalhe} />
-          )}
-
-          {/* ── 2. Margem nao fechada: o que esta FORA desta tela ── */}
-          <Note tom="neutro">
-            <span className="flex items-start gap-2">
-              <CircleSlash aria-hidden="true" className="mt-px h-3.5 w-3.5 shrink-0" />
-              <span>
-                <strong className="font-semibold text-ink">Margem ainda não fechada.</strong>{" "}
-                Fora da conta: CMV, impostos, devoluções
-                {showTiktok && (
-                  <>
-                    , frete e afiliados do TikTok (
-                    <Link href={buildHref("/canais#afiliados")} className="font-semibold text-accent underline-offset-2 hover:underline">
-                      ver em Canais
-                    </Link>
-                    )
-                  </>
+        {visaoAtiva === "geral" && (
+          <>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {/* ── Taxa do marketplace por marca: um canal por vez, nunca somados ── */}
+              <Panel
+                titulo="Taxa do marketplace sobre o GMV"
+                ajuda={`Cada canal mede uma taxa própria, nunca somadas. ${canaisComTaxa.map((c) => ROTULO_TAXA[c]).join("; ")}.${semTaxa.length ? ` Sem taxa carregada no período: ${semTaxa.join(", ")}.` : ""}`}
+                acao={
+                  canaisComTaxa.length > 1 ? (
+                    <Segmented rotulo="Canal da taxa" valor={canalDoRanking} aoEscolher={setCanalTaxa} opcoes={canaisComTaxa.map((c) => ({ valor: c, texto: NOME[c] }))} />
+                  ) : undefined
+                }
+              >
+                {!dataIsFresh ? (
+                  <div className="h-[180px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
+                ) : ranking.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-ink-faint">Sem taxa carregada neste canal no período.</p>
+                ) : (
+                  <ul className="flex flex-col gap-3">
+                    {ranking.map((r) => (
+                      <li key={r.marca} className="grid grid-cols-[minmax(0,6.5rem)_1fr_3.5rem] items-center gap-3 text-sm">
+                        <span className="truncate font-medium text-ink">{r.marca}</span>
+                        <span aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-raised">
+                          <span className={`tc-barra block h-full rounded-full ${PONTO[canalDoRanking]}`} style={{ width: `${(r.v / ranking[0].v) * 100}%` }} />
+                        </span>
+                        <span className="text-right font-semibold tabular-nums text-ink">{fmtPct(r.v)}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                .
-              </span>
-            </span>
-          </Note>
-        </section>
+              </Panel>
 
-        {/* ── 3. Taxa do marketplace por marca ── */}
-        {canaisDoGrafico.length > 0 && (dataIsFresh ? linhasTaxa.length > 0 : true) && (
-          <Panel
-            titulo={
-              <>
-                Taxa do marketplace sobre o GMV, por marca
-                <InfoDica texto="Cada canal mede taxas próprias: barras lado a lado, nunca somadas." />
-              </>
-            }
-            icone={BarChart3}
-          >
-            {dataIsFresh ? (
-              <FeeByBrandChart linhas={linhasTaxa} canais={canaisDoGrafico} />
-            ) : (
-              <div className="h-[220px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
+              {/* ── Receita por canal: composicao (identidade do canal, nunca estado) ── */}
+              <Panel
+                titulo="Receita por canal"
+                acao={
+                  showTiktok ? (
+                    <Link href={buildHref("/canais#afiliados")} className="inline-flex min-h-11 items-center rounded text-xs font-semibold text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                      Afiliados em Canais →
+                    </Link>
+                  ) : undefined
+                }
+              >
+                {!dataIsFresh ? (
+                  <div className="h-[180px] animate-pulse rounded-lg bg-raised" aria-hidden="true" />
+                ) : receita == null ? (
+                  <p className="py-6 text-center text-sm text-ink-faint">Sem receita no período.</p>
+                ) : (
+                  <div className="flex flex-col gap-4">
+                    <div aria-hidden="true" className="tc-barra flex h-3 gap-0.5 overflow-hidden rounded-full">
+                      {comGmv.map((p) => (
+                        <span key={p.canal} className={`h-full ${p.ponto}`} style={{ flexGrow: p.gmv ?? 0 }} />
+                      ))}
+                    </div>
+                    <ul className="flex flex-col gap-2.5">
+                      {paineis.map((p) => (
+                        <li key={p.canal} className="flex items-center gap-2 text-sm">
+                          <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${p.ponto}`} />
+                          <span className="min-w-0 flex-1 truncate text-ink-muted">{p.titulo}</span>
+                          <span className="font-semibold tabular-nums text-ink">{p.gmv != null ? fmtBrlCurto(p.gmv) : "—"}</span>
+                          <span className="w-14 text-right tabular-nums text-ink-faint">{p.gmv != null ? fmtPct((p.gmv / receita) * 100) : ""}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </Panel>
+            </div>
+
+            {/* ── Taxas por marca x canal: barrinha na cor do canal, sem mapa de calor ── */}
+            {(dataIsFresh ? linhasTaxa.length > 0 : true) && (
+              <Panel titulo="Taxas por marca" ajuda={semTaxa.length ? `Sem taxa carregada no período: ${semTaxa.join(", ")}.` : undefined} semPadding>
+                <TableScrollHint>
+                  <table className="w-full text-data" aria-label="Taxa do marketplace sobre o GMV, por marca e canal">
+                    <thead>
+                      <tr className="bg-raised text-left">
+                        <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">Marca</th>
+                        {canaisComTaxa.map((c) => (
+                          <th key={c} scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted">{ROTULO_TAXA[c]}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className={`divide-y divide-line transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`}>
+                      {linhasTaxa.map((l) => (
+                        <tr key={l.brand} className={TR}>
+                          <td className={TD_MARCA}>
+                            <Link href={buildHref(`/brand/${l.brand}?brands=${l.brand}`)} className={LINK_MARCA}>{l.marca}</Link>
+                          </td>
+                          {canaisComTaxa.map((c) => {
+                            const v = l[c];
+                            return (
+                              <td key={c} className={TD}>
+                                {v != null ? <CelulaBarra valor={fmtPct(v)} peso={maiorTaxa > 0 ? v / maiorTaxa : 0} cor={COR[c]} /> : <span className="text-ink-faint">—</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableScrollHint>
+              </Panel>
             )}
-          </Panel>
+          </>
         )}
 
-        {/* Navegacao interna compacta (Task 4) */}
-        <nav aria-label="Navegação interna da página" className="flex flex-wrap items-center gap-1">
-          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">Tabelas por marca</span>
-          {showTiktok && <a href="#tiktok" className="inline-flex min-h-11 items-center gap-1 px-2.5 rounded-lg text-xs font-semibold text-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">TikTok Shop</a>}
-          {showMl && <a href="#mercado-livre" className="inline-flex min-h-11 items-center gap-1 px-2.5 rounded-lg text-xs font-semibold text-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Mercado Livre</a>}
-          {showShopee && <a href="#shopee" className="inline-flex min-h-11 items-center gap-1 px-2.5 rounded-lg text-xs font-semibold text-accent hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Shopee</a>}
-        </nav>
-
         {/* ── 4a. Tabela: Repasses TikTok ── */}
-        {showTiktok && (
+        {visaoAtiva === "tiktok" && (
           <Panel
             id="tiktok"
-            titulo={
-              <>
-                Repasses TikTok
-                <InfoDica texto="Repasse e GMV podem ter competências diferentes: o repasse pode incluir pedidos de outros meses." />
-              </>
-            }
+            titulo="Repasses TikTok"
+            ajuda={`Repasse e GMV podem ter competências diferentes: o repasse pode incluir pedidos de outros meses.\n${FAIXAS_TAXA}`}
             icone={Receipt}
             semPadding
-            rodape={
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Taxas e encargos / GMV</span>
-                <Faixa ponto="bg-ink-faint" tinta="text-ink-muted">abaixo de 20%</Faixa>
-                <Faixa ponto="bg-warn" tinta="text-warn-ink">20–30%</Faixa>
-                <Faixa ponto="bg-crit" tinta="text-crit-ink">acima de 30%</Faixa>
-              </div>
-            }
           >
             <TableScrollHint>
               <table className="w-full text-data" aria-label="Repasses TikTok por marca">
@@ -550,7 +654,7 @@ function FinanceiroPageInner() {
                           {b.label}
                         </Link>
                       </td>
-                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.tiktok_gmv!)}</td>
+                      <td className={TD}><CelulaBarra valor={fmtBrlCurto(b.tiktok_gmv!)} peso={maiorGmv.tiktok > 0 ? b.tiktok_gmv! / maiorGmv.tiktok : 0} cor={COR.tiktok} /></td>
                       <td className={`${TD} text-ink-muted`}>{fmtBrlCurto(b.tiktok_fees!)}</td>
                       <td className={`${TD} font-semibold ${feePctColor(b.tiktok_avg_fee_pct)}`}>
                         {fmtPct(b.tiktok_avg_fee_pct)}
@@ -566,29 +670,13 @@ function FinanceiroPageInner() {
         )}
 
         {/* ── 4b. Tabela: Tarifa, publicidade e custos ML ── */}
-        {showMl && (
+        {visaoAtiva === "ml" && (
           <Panel
             id="mercado-livre"
-            titulo={
-              <>
-                Tarifa, publicidade e custos ML
-                <InfoDica texto="Ads + Frete / GMV não inclui a tarifa do Mercado Livre. Tarifa ML = só a comissão do marketplace; não é margem. Receita Ads = GMV atribuído a anúncios." />
-              </>
-            }
+            titulo="Tarifa, publicidade e custos ML"
+            ajuda={`Ads + Frete / GMV não inclui a tarifa do Mercado Livre. Tarifa ML = só a comissão do marketplace; não é margem. Receita Ads = GMV atribuído a anúncios.\nROAS: acima de 10x bom · 5x–10x atenção · abaixo de 5x crítico.\nBarra de Ads + Frete / GMV: primeiro trecho Ads, segundo frete.`}
             icone={Megaphone}
             semPadding
-            rodape={
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">ROAS</span>
-                <Faixa ponto="bg-ok" tinta="text-ok-ink">acima de 10x</Faixa>
-                <Faixa ponto="bg-warn" tinta="text-warn-ink">5x–10x</Faixa>
-                <Faixa ponto="bg-crit" tinta="text-crit-ink">abaixo de 5x</Faixa>
-                <span aria-hidden="true" className="h-3 w-px bg-line-strong" />
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Ads + Frete / GMV</span>
-                <Faixa ponto="bg-chart-2" tinta="text-ink-muted">Ads</Faixa>
-                <Faixa ponto="bg-chart-4" tinta="text-ink-muted">Frete</Faixa>
-              </div>
-            }
           >
             <TableScrollHint>
               <table className="w-full text-data" aria-label="Tarifa, publicidade e custos ML por marca">
@@ -625,7 +713,7 @@ function FinanceiroPageInner() {
                             {b.label}
                           </Link>
                         </td>
-                        <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.ml_gmv!)}</td>
+                        <td className={TD}><CelulaBarra valor={fmtBrlCurto(b.ml_gmv!)} peso={maiorGmv.ml > 0 ? b.ml_gmv! / maiorGmv.ml : 0} cor={COR.ml} /></td>
                         <td className={`${TD} text-ink-muted`}>{b.ml_fees != null ? fmtBrlCurto(b.ml_fees) : "—"}</td>
                         <td className={`${TD} text-ink-muted`}>{fmtPct(b.ml_avg_fee_pct ?? null)}</td>
                         <td className={`${TD} text-ink-muted`}>{fmtBrlCurto(b.ml_ad_spend!)}</td>
@@ -650,25 +738,13 @@ function FinanceiroPageInner() {
         )}
 
         {/* ── 4c. Tabela: Taxas e Custos Shopee ── */}
-        {showShopee && (
+        {visaoAtiva === "shopee" && (
           <Panel
             id="shopee"
-            titulo={
-              <>
-                Taxas e Custos Shopee
-                <InfoDica texto="Total Global (pedidos) não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV." />
-              </>
-            }
+            titulo="Taxas e Custos Shopee"
+            ajuda={`Total Global (pedidos) não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV.\n${FAIXAS_TAXA}`}
             icone={Percent}
             semPadding
-            rodape={
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Taxas e encargos %</span>
-                <Faixa ponto="bg-ink-faint" tinta="text-ink-muted">abaixo de 20%</Faixa>
-                <Faixa ponto="bg-warn" tinta="text-warn-ink">20–30%</Faixa>
-                <Faixa ponto="bg-crit" tinta="text-crit-ink">acima de 30%</Faixa>
-              </div>
-            }
           >
             <TableScrollHint>
               <table className="w-full text-data" aria-label="Taxas e custos Shopee por marca">
@@ -699,7 +775,7 @@ function FinanceiroPageInner() {
                           {b.label}
                         </Link>
                       </td>
-                      <td className={`${TD} text-ink-muted font-medium`}>{fmtBrlCurto(b.shopee_gmv!)}</td>
+                      <td className={TD}><CelulaBarra valor={fmtBrlCurto(b.shopee_gmv!)} peso={maiorGmv.shopee > 0 ? b.shopee_gmv! / maiorGmv.shopee : 0} cor={COR.shopee} /></td>
                       <td className={`${TD} text-ink-muted`}>{b.shopee_fees != null ? fmtBrlCurto(b.shopee_fees) : "—"}</td>
                       <td className={`${TD} font-semibold ${feePctColor(b.shopee_avg_fee_pct ?? null)}`}>
                         {fmtPct(b.shopee_avg_fee_pct ?? null)}
@@ -734,7 +810,7 @@ function FinanceiroPageInner() {
         <FinanceiroDrilldownContent painel={painelAberto} periodLabel={periodLabel} refreshedAt={displayRefreshedAt} />
       )}
     </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
 
