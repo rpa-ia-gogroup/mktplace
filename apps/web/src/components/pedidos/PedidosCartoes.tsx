@@ -125,7 +125,7 @@ export function GrupoCanal({
       <Cartao rotulo="Pedidos" icone={ShoppingBag} identidade="pedidos" valor={fmtNumCurto(dados.orders)} serie={serieOrders} onAbrir={() => onAbrir(chaveOrders)} />
       <Cartao rotulo="GMV" icone={CircleDollarSign} identidade="gmv" valor={fmtBrlCurto(dados.gmv)} onAbrir={() => onAbrir(chaveGmv)} />
       <Cartao
-        rotulo="Cancelados"
+        rotulo="Taxa de cancelamento"
         icone={PackageX}
         identidade="atendimento"
         // a taxa e' o numero (como na Visao geral); a contagem vai na legenda
