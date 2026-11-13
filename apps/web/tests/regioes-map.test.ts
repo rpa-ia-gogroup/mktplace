@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  computeGmvIntensity, intensityToColor, textColorForIntensity, coverageGlyph,
+  computeGmvIntensity, intensityToColor, coverageGlyph,
   coverageStrokeColor, topUfsByGmv,
 } from "../src/lib/regioes-map.ts";
 
@@ -83,11 +83,12 @@ test("intensityToColor: e' deterministico (mesma entrada, mesma saida)", () => {
 });
 
 // ---------------------------------------------------------------------------
-// textColorForIntensity
+// coverageStrokeColor em token (ALVO-GRADE: o mapa segue o tema escuro;
+// textColorForIntensity saiu: nenhum componente usava)
 // ---------------------------------------------------------------------------
-test("textColorForIntensity: intensidade baixa usa texto escuro, alta usa texto claro", () => {
-  assert.equal(textColorForIntensity(0), "#312e81");
-  assert.equal(textColorForIntensity(1), "#ffffff");
+test("coverageStrokeColor: contorno de alerta vem dos tokens do tema, nunca hex", () => {
+  assert.equal(coverageStrokeColor("low"), "rgb(var(--tc-crit))");
+  assert.equal(coverageStrokeColor("partial"), "rgb(var(--tc-warn))");
 });
 
 // ---------------------------------------------------------------------------

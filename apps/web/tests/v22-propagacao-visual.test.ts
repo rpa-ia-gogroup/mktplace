@@ -40,6 +40,12 @@ const ROTAS = [
   ["brand", "app/brand/[brand]/page.tsx"],
 ] as const;
 
+/**
+ * ALVO-GRADE (12/11/2026): rotas ja' migradas para o esqueleto `layout/Aba`, que
+ * traz o respiro, o titulo e a barra de filtros (no lugar de PageContainer + PageHeader).
+ */
+const NA_GRADE_UNICA = new Set<string>(["regioes"]);
+
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
 
@@ -50,6 +56,11 @@ const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pe
 test("P1. as dez rotas usam o container compartilhado, e nenhuma mantem max-w-7xl", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
+    if (NA_GRADE_UNICA.has(nome)) {
+      assert.match(src, /<Aba\b/, `${nome} usa o esqueleto Aba`);
+      assert.doesNotMatch(src, /<PageContainer>/, `${nome}: o respiro e' da Aba, sem container duplicado`);
+      continue;
+    }
     assert.match(src, /<PageContainer>/, `${nome} deve usar PageContainer`);
     assert.match(src, /<\/PageContainer>/, `${nome} deve fechar PageContainer`);
     assert.doesNotMatch(src, /max-w-7xl/, `${nome} nao pode mais fixar max-w-7xl`);
@@ -73,13 +84,14 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 8, consumidores.join(","));
+  // cada rota que migra para a `Aba` (NA_GRADE_UNICA) sai desta conta
+  assert.equal(consumidores.length, 8 - NA_GRADE_UNICA.size, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
-    const passaFiltros = /<PageHeader[\s\S]*?filters=\{/.test(src);
+    const passaFiltros = NA_GRADE_UNICA.has(nome) ? /<Aba\b[\s\S]*?filtros=\{/.test(src) : /<PageHeader[\s\S]*?filters=\{/.test(src);
     if (COM_FILTROS_GLOBAIS.includes(nome) && nome !== "brand") {
       assert.ok(passaFiltros, `${nome} herda filtros globais e deve passar filters=`);
     } else if (nome !== "brand") {

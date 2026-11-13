@@ -10,16 +10,15 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import CartoesRegioes, { GRADE_REGIOES, TOTAL_DE_CARTOES_REGIOES, VISUAL_REGIOES } from "@/components/regioes/RegioesCartoes";
+import CartoesRegioes, { FreteRegioes, GRADE_REGIOES, TOTAL_DE_CARTOES_REGIOES, VISUAL_REGIOES } from "@/components/regioes/RegioesCartoes";
 import RegioesDrilldownContent from "@/components/regioes/RegioesDrilldownContent";
 import { TITULO_DETALHE, type ChaveRegioes } from "@/lib/regioes-cartoes";
+import Aba from "@/components/layout/Aba";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import Freshness from "@/components/ui/Freshness";
-import { MapPinned } from "lucide-react";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
-import BrandFilter from "@/components/BrandFilter";
-import DateRangeFilter from "@/components/DateRangeFilter";
+import CelulaBarra from "@/components/ui/CelulaBarra";
+import MaisDetalhes from "@/components/ui/MaisDetalhes";
+import Panel from "@/components/ui/Panel";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
 import {
@@ -51,13 +50,13 @@ const ALL_UFS = [
 const RegioesBrazilMap = dynamic(() => import("@/components/RegioesBrazilMap"), {
   ssr: false,
   loading: () => (
-    <div className="bg-white border border-violet-100 rounded-2xl shadow-sm h-96 animate-pulse" aria-hidden="true" />
+    <div className="h-96 animate-pulse rounded-2xl border border-line bg-surface motion-reduce:animate-none" aria-hidden="true" />
   ),
 });
 
 function CoverageBadge({ level }: { level: RegiaoUfRow["coverage_level"] }) {
   return (
-    <span className={`inline-block text-[10px] font-semibold uppercase tracking-wide border rounded-full px-2 py-0.5 whitespace-nowrap ${coverageBadgeClass(level)}`}>
+    <span className={`inline-block text-xs font-semibold uppercase tracking-wide border rounded-full px-2 py-0.5 whitespace-nowrap ${coverageBadgeClass(level)}`}>
       {coverageLabel(level)}
     </span>
   );
@@ -235,96 +234,127 @@ function RegioesPageInner() {
   };
   const brandSort = useSortableTable(displayByBrand, brandGetValue, brandColumnTypes);
 
+  const pesoGmvUf = (() => {
+    const max = Math.max(0, ...ufSort.sortedRows.map((r) => r.gmv ?? 0));
+    return ufSort.sortedRows.map((r) => (r.gmv == null || max <= 0 ? null : r.gmv / max));
+  })();
+  const pesoGmvMarca = (() => {
+    const max = Math.max(0, ...brandSort.sortedRows.map((r) => r.gmv ?? 0));
+    return brandSort.sortedRows.map((r) => (r.gmv == null || max <= 0 ? null : r.gmv / max));
+  })();
+  const corpoOpaco = `divide-y divide-line transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`;
+  const TH = "px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted";
+  const TD = "px-4 py-3 text-right tabular-nums text-ink-muted";
+  const naoSeAplicaUf = ufFilter ? (
+    <span className="rounded-md bg-warn-soft px-2 py-1 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
+      Nacional · filtro de UF ({ufFilter}) não se aplica
+    </span>
+  ) : undefined;
+
   return (
-    <PageContainer>
-      <PageHeader
-        title="Regiões"
-        icon={MapPinned}
-        meta={
-          <>
-            {linhaTemporal && (
-              <span data-testid="regioes-linha-atualizacao" className={`text-xs ${canaisComAtraso.length > 0 ? "font-medium text-warn-ink" : "text-ink-muted"}`}>
-                {linhaTemporal}
-              </span>
-            )}
-          </>
+    <>
+      <Aba
+        titulo="Regiões"
+        selo={
+          linhaTemporal && canaisComAtraso.length > 0 ? (
+            // canal atrasado: "Dados completos até", escrito em tom de alerta (nunca so' o refreshed_at)
+            <span data-testid="regioes-linha-atualizacao" className="inline-flex min-h-8 items-center rounded-md bg-warn-soft px-2.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
+              {linhaTemporal}
+            </span>
+          ) : (
+            <span data-testid="regioes-linha-atualizacao">
+              <SeloAtualizado aoVivo={displaySummary ? true : null} em={displayRefreshedAt} carregando={isLoadingState} />
+            </span>
+          )
         }
-        filters={
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />
-            {/* A UF e' filtro/acao DESTA pagina: fica na barra, entra na
-                identidade da requisicao local e nao vira filtro global. */}
-            <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm">
-              <label htmlFor="uf-filter" className="text-ink-muted">UF</label>
-              <select
-                id="uf-filter"
-                value={ufFilter}
-                onChange={(e) => setUfFilter(e.target.value)}
-                className="rounded bg-transparent font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <option value="">Todas</option>
-                {ALL_UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
-              </select>
-            </div>
+        filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
+        direita={
+          // A UF e' filtro/acao DESTA pagina: entra na identidade da requisicao local e nao vira filtro global.
+          <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm">
+            <label htmlFor="uf-filter" className="text-ink-muted">UF</label>
+            <select
+              id="uf-filter"
+              value={ufFilter}
+              onChange={(e) => setUfFilter(e.target.value)}
+              className="rounded bg-transparent font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            >
+              <option value="">Todas</option>
+              {ALL_UFS.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+            </select>
           </div>
         }
-      />
+        faixa={
+          isErrorState ? undefined : (
+            // A ressalva de escopo e de atraso vai para o ⓘ do GMV; o aviso de canal parado vem ANTES dos cartoes
+            // (muda a leitura deles) e fica mesmo sem dado, porque explica o vazio.
+            <div className="flex flex-col gap-3" aria-busy={isLoadingState}>
+            {/* REGIONAL-SOURCE-RECOVERY-2: canal com fonte regional parado — muda a leitura dos cartoes. */}
+            {avisoCobertura && (
+              <div
+                role="status"
+                data-testid="aviso-cobertura-canal"
+                className={`rounded-2xl p-4 ring-1 ring-inset ${avisoCobertura.severidade === "critico" ? "bg-crit-soft ring-crit/30" : "bg-warn-soft ring-warn/30"}`}
+              >
+                <p className={`flex items-center gap-1.5 text-sm font-semibold ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>
+                  {avisoCobertura.titulo}
+                  <InfoDica texto={[avisoCobertura.mensagem, ...avisoCobertura.detalhes].join(" ")} />
+                </p>
+                {/* T-0088: quais canais e ate quando, em TEXTO VISIVEL — antes so' no ⓘ. */}
+                <p data-testid="aviso-cobertura-resumo" className={`mt-1 text-sm ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>
+                  {avisoCobertura.resumo}
+                </p>
+                {avisoCobertura.detalhes.map((d) => (
+                  <p key={d} className={`mt-1 text-xs ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>{d}</p>
+                ))}
+              </div>
+            )}
 
+              {/* Cartoes no padrao da Gerencial. ALVO-GRADE: quatro CartaoIndicador. */}
+              {isLoadingState ? (
+                <FaixaCarregando cartoes={TOTAL_DE_CARTOES_REGIOES} className={GRADE_REGIOES} />
+              ) : isEmpty ? null : (
+                <CartoesRegioes resumo={displaySummary} notaDoGmv={notaDoGmv} onAbrir={setDetalhe} />
+              )}
+            </div>
+          )
+        }
+        atencao={
+          regionalScope || (dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial")) || partialWarning ? (
+            <div className="flex flex-col gap-2">
+              {/* Gate DQ2: escopo do que esta sendo medido, SEMPRE visivel com dado fresco. O texto completo fica no ⓘ. */}
+              {regionalScope && (
+                <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset ${regionalScope.status === "not_applicable" ? "bg-raised text-ink-muted ring-line" : regionalScope.status === "partial_channels" ? "bg-warn-soft text-warn-ink ring-warn/30" : "bg-accent-soft text-accent-ink ring-accent/20"}`}>
+                  {regionalScope.status === "not_applicable"
+                    ? "Sem cobertura regional na seleção · não é venda zero"
+                    : regionalScope.status === "partial_channels"
+                      ? `Só ${regionalScope.channelsInScope.join(" + ")} · ${regionalScope.channelsOutOfScope.join(", ")} fora · não comparável ao GMV total`
+                      : `Escopo regional: ${regionalScope.channelsInScope.join(" + ")} · não comparável ao GMV total`}
+                  {regionalScope.ufFillCaveat && <span className="text-warn-ink">· UF 100% só no escopo regional</span>}
+                  <InfoDica texto={[regionalScope.scopeNote, regionalScope.ufFillCaveat, aviso].filter(Boolean).join(" ")} />
+                </p>
+              )}
+
+              {dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial") && (
+                <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs ring-1 ring-inset ${nivelSoUf === "low" ? "bg-crit-soft text-crit-ink ring-crit/30" : "bg-warn-soft text-warn-ink ring-warn/30"}`}>
+                  <span className="font-semibold">{nivelSoUf === "low" ? "Cobertura de UF baixa" : "Cobertura de UF parcial"}</span>
+                  <span className="tabular-nums">· {fmtPctOrNA(displaySummary.uf_fill_pct)} com UF ({fmtNumCurto(displaySummary.uf_known_orders)} de {fmtNumCurto(displaySummary.uf_eligible_orders)})</span>
+                  <InfoDica texto="Os números por UF refletem só os pedidos elegíveis com UF conhecida — limitação da fonte, não erro." />
+                </p>
+              )}
+
+              {partialWarning && !isErrorState && !isEmpty && (
+                <p className="w-fit rounded-lg bg-warn-soft px-3 py-1.5 text-xs text-warn-ink ring-1 ring-inset ring-warn/30">{partialWarning}</p>
+              )}
+            </div>
+          ) : undefined
+        }
+      >
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState ? "Carregando dados regionais..." : isErrorState ? "Falha ao carregar dados regionais." : "Dados regionais carregados."}
         </span>
 
-        {/* Gate DQ2: escopo do que esta sendo medido, SEMPRE visivel com dado
-            fresco — separa cobertura de canal (dimensao 1) do preenchimento de
-            UF (dimensao 3) e impede a leitura de "cobertura integral". O texto
-            completo (e o do canal sem cobertura regional) fica no ⓘ. */}
-        {regionalScope && (
-          <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium ${regionalScope.status === "not_applicable" ? "bg-slate-50 border-slate-200 text-slate-700" : regionalScope.status === "partial_channels" ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-violet-50/60 border-violet-100 text-violet-700"}`}>
-            {regionalScope.status === "not_applicable"
-              ? "Sem cobertura regional na seleção · não é venda zero"
-              : regionalScope.status === "partial_channels"
-                ? `Só ${regionalScope.channelsInScope.join(" + ")} · ${regionalScope.channelsOutOfScope.join(", ")} fora · não comparável ao GMV total`
-                : `Escopo regional: ${regionalScope.channelsInScope.join(" + ")} · não comparável ao GMV total`}
-            {regionalScope.ufFillCaveat && <span className="text-amber-800">· UF 100% só no escopo regional</span>}
-            <InfoDica texto={[regionalScope.scopeNote, regionalScope.ufFillCaveat, aviso].filter(Boolean).join(" ")} />
-          </p>
-        )}
-
-        {/* REGIONAL-SOURCE-RECOVERY-2: canal com fonte regional parado. Fica
-            ANTES dos KPIs, porque e' o que muda a leitura deles. */}
-        {avisoCobertura && (
-          <div
-            role="status"
-            data-testid="aviso-cobertura-canal"
-            className={`rounded-2xl p-4 border ${avisoCobertura.severidade === "critico" ? "bg-rose-50 border-rose-200" : avisoCobertura.severidade === "alerta" ? "bg-amber-50 border-amber-300" : "bg-amber-50/60 border-amber-200"}`}
-          >
-            <p className={`flex items-center gap-1.5 text-sm font-semibold ${avisoCobertura.severidade === "critico" ? "text-rose-800" : "text-amber-900"}`}>
-              {avisoCobertura.titulo}
-              <InfoDica texto={[avisoCobertura.mensagem, ...avisoCobertura.detalhes].join(" ")} />
-            </p>
-            {/* T-0088: quais canais e ate quando, em TEXTO VISIVEL — antes so' no ⓘ. */}
-            <p data-testid="aviso-cobertura-resumo" className={`mt-1 text-sm ${avisoCobertura.severidade === "critico" ? "text-rose-800" : "text-amber-900"}`}>
-              {avisoCobertura.resumo}
-            </p>
-            {avisoCobertura.detalhes.map((d) => (
-              <p key={d} className={`mt-1 text-xs ${avisoCobertura.severidade === "critico" ? "text-rose-700" : "text-amber-800"}`}>{d}</p>
-            ))}
-          </div>
-        )}
-
-        {dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial") && (
-          <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs ${nivelSoUf === "low" ? "bg-rose-50 border-rose-200 text-rose-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
-            <span className="font-semibold">{nivelSoUf === "low" ? "Cobertura de UF baixa" : "Cobertura de UF parcial"}</span>
-            <span className="tabular-nums">· {fmtPctOrNA(displaySummary.uf_fill_pct)} com UF ({fmtNumCurto(displaySummary.uf_known_orders)} de {fmtNumCurto(displaySummary.uf_eligible_orders)})</span>
-            <InfoDica texto="Os números por UF refletem só os pedidos elegíveis com UF conhecida — limitação da fonte, não erro." />
-          </p>
-        )}
-
         {isErrorState ? (
-          // FINDING 2: erro definitivo mostra so cabecalho/filtros/banner de
-          // erro (ja renderizado acima) — nunca skeleton, nunca dado antigo,
-          // nunca `aria-busy=true`. Estado de erro dedicado, sem tentar
-          // renderizar KPIs/mapa/tabelas.
+          // FINDING 2: erro definitivo — nunca skeleton, nunca dado antigo, nunca `aria-busy=true`.
           <StateBlock
             tipo="erro"
             titulo="Não foi possível carregar os dados regionais."
@@ -335,192 +365,170 @@ function RegioesPageInner() {
           <StateBlock tipo="vazio" titulo="Sem dados regionais no período e filtros selecionados." />
         ) : (
           <>
-            {partialWarning && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
-                <p className="text-xs text-amber-800">{partialWarning}</p>
-              </div>
-            )}
-
-            {/* Cartoes no padrao da Gerencial. A ressalva de escopo e de atraso (antes uma linha sob o
-                numero) vai para o ⓘ do GMV; o aviso de canal parado segue acima, visivel. */}
-            <div aria-busy={isLoadingState}>
-              {isLoadingState ? (
-                <FaixaCarregando cartoes={TOTAL_DE_CARTOES_REGIOES} className={GRADE_REGIOES} />
-              ) : (
-                <CartoesRegioes resumo={displaySummary} notaDoGmv={notaDoGmv} onAbrir={setDetalhe} />
-              )}
-            </div>
-
-            {/* Mapa do Brasil por UF — geometria real (SVG), ver RegioesBrazilMap.tsx.
-                Carregado via next/dynamic (Task 5) — usa o filtro local de UF. */}
+            {/* Mapa do Brasil por UF — geometria real (SVG), ver RegioesBrazilMap.tsx. Usa o filtro local de UF. */}
             <RegioesBrazilMap rows={displayByUf} totalGmv={displaySummary?.gmv ?? 0} loading={isLoadingState} />
 
-            {/* Ranking por UF — usa o filtro local de UF */}
-            <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-violet-50">
-                <h2 className="text-sm font-semibold text-slate-700">Ranking por UF</h2>
-              </div>
-              <TableScrollHint>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 text-left">
-                      <SortableHeader label="UF" column="uf" sort={ufSort.sort} onSort={ufSort.toggleSort} align="left" />
-                      <SortableHeader label="GMV" column="gmv" sort={ufSort.sort} onSort={ufSort.toggleSort} />
-                      <SortableHeader label="Pedidos" column="orders" sort={ufSort.sort} onSort={ufSort.toggleSort} />
-                      <SortableHeader label="Participação" column="share" sort={ufSort.sort} onSort={ufSort.toggleSort} />
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Cobertura</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y divide-slate-50 transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`}>
-                    {displayByUf.length === 0 && dataIsFresh && (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-slate-400 text-sm">
-                          {unavailableSections.includes("byUf")
-                            ? "Dados indisponíveis para o Ranking por UF neste momento."
-                            : "Sem dados por UF para o período e filtros selecionados."}
-                        </td>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              {/* Ranking por UF — usa o filtro local de UF */}
+              <Panel titulo="Ranking por UF" semPadding>
+                <TableScrollHint>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="bg-raised text-left">
+                        <SortableHeader label="UF" column="uf" sort={ufSort.sort} onSort={ufSort.toggleSort} align="left" />
+                        <SortableHeader label="GMV" column="gmv" sort={ufSort.sort} onSort={ufSort.toggleSort} />
+                        <SortableHeader label="Pedidos" column="orders" sort={ufSort.sort} onSort={ufSort.toggleSort} />
+                        <SortableHeader label="Participação" column="share" sort={ufSort.sort} onSort={ufSort.toggleSort} />
+                        <th className={TH}>Cobertura</th>
                       </tr>
-                    )}
-                    {ufSort.sortedRows.map((row) => {
-                      const share = displaySummary ? fmtShareOfTotalPct(row.gmv, displaySummary.gmv) : null;
-                      return (
-                        <tr key={row.uf} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-3 font-semibold text-slate-700 whitespace-nowrap">{row.uf}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(row.gmv)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(row.orders)}</td>
-                          <td className="px-4 py-3 text-right tabular-nums text-slate-600">{share != null ? fmtPctSimples(share) : "N/A"}</td>
-                          <td className="px-4 py-3 text-right"><CoverageBadge level={row.coverage_level} /></td>
+                    </thead>
+                    <tbody className={corpoOpaco}>
+                      {displayByUf.length === 0 && dataIsFresh && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-8 text-center text-sm text-ink-faint">
+                            {unavailableSections.includes("byUf")
+                              ? "Dados indisponíveis para o Ranking por UF neste momento."
+                              : "Sem dados por UF para o período e filtros selecionados."}
+                          </td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </TableScrollHint>
+                      )}
+                      {ufSort.sortedRows.map((row, i) => {
+                        const share = displaySummary ? fmtShareOfTotalPct(row.gmv, displaySummary.gmv) : null;
+                        const peso = pesoGmvUf[i];
+                        return (
+                          <tr key={row.uf} className="transition-colors hover:bg-raised/60">
+                            <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink">{row.uf}</td>
+                            <td className="px-4 py-3 text-right">{peso == null ? <span className="text-ink-faint">{fmtBrlCurto(row.gmv)}</span> : <CelulaBarra valor={fmtBrlCurto(row.gmv)} peso={peso} cor="rgb(var(--tc-kpi-gmv))" />}</td>
+                            <td className={TD}>{fmtNumCurto(row.orders)}</td>
+                            <td className={TD}>{share != null ? fmtPctSimples(share) : "N/A"}</td>
+                            <td className="px-4 py-3 text-right"><CoverageBadge level={row.coverage_level} /></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </TableScrollHint>
+              </Panel>
+
+              {/* Tendencia — escopo NACIONAL dos filtros globais: o endpoint trend nao aceita filtro de UF. */}
+              <Panel
+                titulo="Tendência"
+                semPadding
+                acao={
+                  <>
+                    {naoSeAplicaUf}
+                    <span className="text-xs font-semibold uppercase tracking-widest text-ink-faint">
+                      Granularidade {trendGranularity === "day" ? "diária" : "mensal"}
+                    </span>
+                  </>
+                }
+              >
+                <TableScrollHint className="max-h-80 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-raised">
+                      <tr className="text-left">
+                        <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">Período</th>
+                        <th className={TH}>GMV</th>
+                        <th className={TH}>Pedidos</th>
+                        <th className={TH}>Cobertura UF</th>
+                      </tr>
+                    </thead>
+                    <tbody className={corpoOpaco}>
+                      {displayTrend.length === 0 && dataIsFresh && (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-8 text-center text-sm text-ink-faint">
+                            {unavailableSections.includes("trend")
+                              ? "Dados indisponíveis para a Tendência neste momento."
+                              : "Sem série de tendência para o período e filtros selecionados."}
+                          </td>
+                        </tr>
+                      )}
+                      {displayTrend.map((p) => {
+                        const ausente = marcaPontoAusente(p.canais_ausentes);
+                        return (
+                          <tr key={p.date} className="transition-colors hover:bg-raised/60">
+                            <td className="whitespace-nowrap px-4 py-3 font-medium text-ink">
+                              {p.label}
+                              {ausente && (
+                                <span data-testid="tendencia-canal-ausente" className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink ring-1 ring-inset ring-warn/30">
+                                  {ausente}
+                                </span>
+                              )}
+                            </td>
+                            <td className={TD}>{fmtBrlCurto(p.gmv)}</td>
+                            <td className={TD}>{fmtNumCurto(p.orders)}</td>
+                            <td className={TD}>{fmtPctOrNA(p.uf_fill_pct)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </TableScrollHint>
+              </Panel>
             </div>
 
-            {/* Tabela por marca x marketplace — escopo NACIONAL dos filtros
-                globais: o endpoint by-brand nao aceita filtro de UF (contrato
-                de backend nao alterado neste gate). */}
-            <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-violet-50">
-                <h2 className="text-sm font-semibold text-slate-700">Cobertura por Marca × Canal</h2>
-                {ufFilter && (
-                  <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 mt-2 inline-block">
-                    Nacional · filtro de UF ({ufFilter}) não se aplica
-                  </p>
-                )}
-              </div>
+            {/* Marca x marketplace — escopo NACIONAL: o endpoint by-brand nao aceita filtro de UF. */}
+            <Panel
+              titulo="Cobertura por Marca × Canal"
+              semPadding
+              ajuda={displaySemCobertura.length > 0 ? `${displaySemCobertura.map((c) => (c === "tiktok" ? "TikTok Shop" : c)).join(", ")} fora: sem dado regional.` : undefined}
+              acao={naoSeAplicaUf}
+            >
               <TableScrollHint>
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-slate-50 text-left">
+                    <tr className="bg-raised text-left">
                       <SortableHeader label="Marca" column="brand" sort={brandSort.sort} onSort={brandSort.toggleSort} align="left" />
                       <SortableHeader label="Canal" column="marketplace" sort={brandSort.sort} onSort={brandSort.toggleSort} align="left" />
                       <SortableHeader label="GMV" column="gmv" sort={brandSort.sort} onSort={brandSort.toggleSort} />
                       <SortableHeader label="Pedidos" column="orders" sort={brandSort.sort} onSort={brandSort.toggleSort} />
                       <SortableHeader label="Cobertura UF" column="uf_fill_pct" sort={brandSort.sort} onSort={brandSort.toggleSort} />
                       <SortableHeader label="Cobertura Frete" column="shipping_pct" sort={brandSort.sort} onSort={brandSort.toggleSort} />
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Alerta</th>
+                      <th className={TH}>Alerta</th>
                     </tr>
                   </thead>
-                  <tbody className={`divide-y divide-slate-50 transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`}>
+                  <tbody className={corpoOpaco}>
                     {displayByBrand.length === 0 && dataIsFresh && (
                       <tr>
-                        <td colSpan={7} className="px-6 py-8 text-center text-slate-400 text-sm">
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink-faint">
                           {unavailableSections.includes("byBrand")
                             ? "Dados indisponíveis para Cobertura por Marca × Canal neste momento."
                             : "Sem dados por marca/canal para o período e filtros selecionados."}
                         </td>
                       </tr>
                     )}
-                    {brandSort.sortedRows.map((row) => (
-                      <tr key={`${row.brand}-${row.marketplace_id}`} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-3 font-semibold text-slate-700 whitespace-nowrap">{row.label}</td>
-                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap capitalize">{row.marketplace}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(row.gmv)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(row.orders)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(row.uf_fill_pct)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(row.shipping_cost_coverage_pct)}</td>
-                        <td className="px-4 py-3 text-right">
-                          {row.coverage_warning
-                            ? <CoverageBadge level={row.coverage_level} />
-                            : <span className="text-slate-300 text-xs">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </TableScrollHint>
-              {displaySemCobertura.length > 0 && (
-                <div className="px-6 py-3 border-t border-slate-50">
-                  <span className="text-[11px] text-slate-400">
-                    {displaySemCobertura.map((c) => (c === "tiktok" ? "TikTok Shop" : c)).join(", ")} fora: sem dado regional
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Tendencia — tabela simples (sem mapa/grafico nesta fase).
-                Escopo NACIONAL dos filtros globais: o endpoint trend nao
-                aceita filtro de UF. */}
-            <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-4 border-b border-violet-50 flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-700">Tendência</h2>
-                  {ufFilter && (
-                    <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1 mt-2 inline-block">
-                      Nacional · filtro de UF ({ufFilter}) não se aplica
-                    </p>
-                  )}
-                </div>
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
-                  Granularidade {trendGranularity === "day" ? "diária" : "mensal"}
-                </span>
-              </div>
-              <TableScrollHint className="max-h-80 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 bg-slate-50">
-                    <tr className="text-left">
-                      <th className="px-6 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">Período</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">GMV</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Pedidos</th>
-                      <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">Cobertura UF</th>
-                    </tr>
-                  </thead>
-                  <tbody className={`divide-y divide-slate-50 transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`}>
-                    {displayTrend.length === 0 && dataIsFresh && (
-                      <tr>
-                        <td colSpan={4} className="px-6 py-8 text-center text-slate-400 text-sm">
-                          {unavailableSections.includes("trend")
-                            ? "Dados indisponíveis para a Tendência neste momento."
-                            : "Sem série de tendência para o período e filtros selecionados."}
-                        </td>
-                      </tr>
-                    )}
-                    {displayTrend.map((p) => {
-                      const ausente = marcaPontoAusente(p.canais_ausentes);
+                    {brandSort.sortedRows.map((row, i) => {
+                      const peso = pesoGmvMarca[i];
                       return (
-                      <tr key={p.date} className="hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-3 font-medium text-slate-700 whitespace-nowrap">
-                          {p.label}
-                          {ausente && (
-                            <span data-testid="tendencia-canal-ausente" className="ml-2 text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-full px-2 py-0.5">
-                              {ausente}
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtBrlCurto(p.gmv)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNumCurto(p.orders)}</td>
-                        <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtPctOrNA(p.uf_fill_pct)}</td>
-                      </tr>
+                        <tr key={`${row.brand}-${row.marketplace_id}`} className="transition-colors hover:bg-raised/60">
+                          <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink">{row.label}</td>
+                          <td className="whitespace-nowrap px-4 py-3 capitalize text-ink-muted">{row.marketplace}</td>
+                          <td className="px-4 py-3 text-right">{peso == null ? <span className="text-ink-faint">{fmtBrlCurto(row.gmv)}</span> : <CelulaBarra valor={fmtBrlCurto(row.gmv)} peso={peso} cor="rgb(var(--tc-kpi-gmv))" />}</td>
+                          <td className={TD}>{fmtNumCurto(row.orders)}</td>
+                          <td className={TD}>{fmtPctOrNA(row.uf_fill_pct)}</td>
+                          <td className={TD}>{fmtPctOrNA(row.shipping_cost_coverage_pct)}</td>
+                          <td className="px-4 py-3 text-right">
+                            {row.coverage_warning
+                              ? <CoverageBadge level={row.coverage_level} />
+                              : <span className="text-xs text-ink-faint">—</span>}
+                          </td>
+                        </tr>
                       );
                     })}
                   </tbody>
                 </table>
               </TableScrollHint>
-            </div>
+            </Panel>
+
+            {/* Frete (antes 5º e 6º cartoes): a faixa tem sempre quatro. */}
+            <MaisDetalhes resumo="frete">
+              <div className="px-5 pb-3">
+                <FreteRegioes resumo={displaySummary} />
+              </div>
+            </MaisDetalhes>
           </>
         )}
+      </Aba>
       <KpiDrilldownDialog
         open={detalhe != null}
         onClose={() => setDetalhe(null)}
@@ -541,13 +549,13 @@ function RegioesPageInner() {
           />
         )}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </>
   );
 }
 
 export default function RegioesPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#f8f7ff]" />}>
+    <Suspense fallback={<div className="min-h-screen" />}>
       <RegioesPageInner />
     </Suspense>
   );
