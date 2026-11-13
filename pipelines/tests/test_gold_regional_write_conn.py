@@ -590,7 +590,7 @@ def test_run_preflight_ok_quando_hosts_diferem_mas_cluster_fisico_e_o_mesmo(monk
 
 def test_run_preflight_bloqueia_se_tabela_ja_existe_antes_do_ddl(monkeypatch):
     responses = [r for r in _MAIN_HAPPY_RESPONSES if r[0] != "INFORMATION_SCHEMA.TABLES"]
-    responses.append(("INFORMATION_SCHEMA.TABLES", "all", [("marketplace_region_daily",)]))
+    responses.append(("INFORMATION_SCHEMA.TABLES", "all", [("fct_marketplace_region_daily",)]))
     write_url = _install_fake_connect(monkeypatch, main_responses=responses)
     report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=False)
     assert report.ok is False
@@ -627,7 +627,7 @@ def _priv_row(**overrides):
     return tuple(values[label] for label in _PRIV_LABELS)
 
 
-def _incremental_responses(can_create=True, can_use=True, priv_row=None, tables=("marketplace_region_daily",)):
+def _incremental_responses(can_create=True, can_use=True, priv_row=None, tables=("fct_marketplace_region_daily",)):
     # GOLD_INCR_PRIV vem PRIMEIRO: a consulta de privilégios também contém
     # HAS_SCHEMA_PRIVILEGE, e o ScriptedCursor casa a primeira substring.
     responses = [("GOLD_INCR_PRIV", "one", priv_row if priv_row is not None else _priv_row())]
@@ -647,12 +647,12 @@ def test_run_preflight_tabela_existente_sem_create_passa(monkeypatch):
 
 
 def test_run_preflight_tabela_existente_sem_insert_recusa(monkeypatch):
-    row = _priv_row(**{"INSERT em gold.marketplace_region_daily": False})
+    row = _priv_row(**{"INSERT em gold.fct_marketplace_region_daily": False})
     write_url = _install_fake_connect(
         monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
     report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
     assert report.ok is False
-    assert any("INSERT em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+    assert any("INSERT em gold.fct_marketplace_region_daily" in r for r in report.blocking_reasons)
 
 
 def test_run_preflight_tabela_ausente_sem_create_recusa(monkeypatch):
@@ -677,9 +677,9 @@ def test_run_preflight_tabela_existente_sem_usage_em_gold_recusa(monkeypatch):
     "SELECT em raw.ml_orders",
     "SELECT em raw.ml_shipments",
     "SELECT em raw.ml_shipment_costs",
-    "SELECT em gold.marketplace_region_daily",
+    "SELECT em gold.fct_marketplace_region_daily",
     "TEMP no banco",
-    "USAGE na sequence de gold.marketplace_region_daily",
+    "USAGE na sequence gold.marketplace_region_daily_id_seq",
     "USAGE no schema silver (fonte Shopee)",
     "SELECT em silver.stg_shopee_order_item_snapshots",
 ])
@@ -695,8 +695,9 @@ def test_run_preflight_tabela_existente_privilegio_negado_recusa(monkeypatch, la
 @pytest.mark.parametrize("label", [
     "USAGE no schema raw",
     "SELECT em raw.ml_orders",
-    "SELECT em gold.marketplace_region_daily",
-    "INSERT em gold.marketplace_region_daily",
+    "SELECT em gold.fct_marketplace_region_daily",
+    "INSERT em gold.fct_marketplace_region_daily",
+    "USAGE na sequence gold.marketplace_region_daily_id_seq",
 ])
 def test_run_preflight_objeto_obrigatorio_ausente_recusa(monkeypatch, label):
     row = _priv_row(**{label: None})
@@ -708,9 +709,9 @@ def test_run_preflight_objeto_obrigatorio_ausente_recusa(monkeypatch, label):
 
 
 def test_run_preflight_objetos_opcionais_ausentes_passam(monkeypatch):
-    # sem sequence, sem schema silver e sem a fonte Shopee (arquivada)
+    # sem schema silver e sem a fonte Shopee (arquivada). T-0109c: a sequence
+    # saiu desta lista — agora é obrigatória (ver o teste de trava abaixo).
     row = _priv_row(**{
-        "USAGE na sequence de gold.marketplace_region_daily": None,
         "USAGE no schema silver (fonte Shopee)": None,
         "SELECT em silver.stg_shopee_order_item_snapshots": None,
     })
@@ -909,3 +910,63 @@ def test_fetch_target_identity_fallback_sysid_none_preservado(monkeypatch):
 
     assert identity == {"db": "datamart", "port": 5432, "sysid": None}
     assert conn.close_calls == 1
+
+
+# --- T-0109c: tabela real e sequence pelo nome do catálogo ----------------------
+
+def test_t0109c_preflight_pede_privilegios_na_tabela_real_e_na_sequence_real():
+    """Trava: SELECT/INSERT e existência na TABELA `gold.fct_marketplace_region_daily`
+    (não na view de compatibilidade `gold.marketplace_region_daily`) e USAGE na
+    sequence pelo nome que o rename NÃO mudou, `gold.marketplace_region_daily_id_seq`."""
+    checks = {label: (expr, absent_blocks) for label, expr, absent_blocks in wc.INCREMENTAL_PRIVILEGE_CHECKS}
+
+    for priv in ("SELECT", "INSERT"):
+        expr, absent_blocks = checks[f"{priv} em gold.fct_marketplace_region_daily"]
+        assert "n.nspname = 'gold'" in expr
+        assert "c.relname = 'fct_marketplace_region_daily'" in expr
+        assert f"'{priv}'" in expr
+        assert absent_blocks is True
+
+    expr, absent_blocks = checks["USAGE na sequence gold.marketplace_region_daily_id_seq"]
+    assert "has_sequence_privilege" in expr
+    assert "c.relname = 'marketplace_region_daily_id_seq'" in expr
+    assert "c.relkind = 'S'" in expr
+    assert absent_blocks is True
+
+    # nenhuma checagem de privilégio aponta para a view de compatibilidade
+    assert "relname = 'marketplace_region_daily'" not in wc.SQL_INCREMENTAL_PRIVILEGES
+    assert "fct_marketplace_region_daily_id_seq" not in wc.SQL_INCREMENTAL_PRIVILEGES
+    # existência: só a tabela real conta
+    assert wc._GOLD_TABLES == ("fct_marketplace_region_daily",)
+
+
+def test_t0109c_preflight_existencia_filtra_base_table(monkeypatch):
+    executed = []
+    write_url = _install_fake_connect(monkeypatch, main_responses=_incremental_responses())
+    import pipelines.ingestion.gold_regional.write_conn as mod
+    real_connect = mod._connect_readonly
+
+    def spy(url):
+        conn = real_connect(url)
+        original_cursor = conn.cursor
+
+        def cursor(*a, **k):
+            cur = original_cursor(*a, **k)
+            original_execute = cur.execute
+
+            def execute(sql, params=None):
+                executed.append((" ".join(sql.split()), params))
+                return original_execute(sql, params) if params is not None else original_execute(sql)
+            cur.execute = execute
+            return cur
+        conn.cursor = cursor
+        return conn
+
+    monkeypatch.setattr(mod, "_connect_readonly", spy)
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is True, report.blocking_reasons
+    table_queries = [(s, p) for s, p in executed if "information_schema.tables" in s]
+    assert len(table_queries) == 1
+    sql, params = table_queries[0]
+    assert "table_type = 'BASE TABLE'" in sql
+    assert params == (["fct_marketplace_region_daily"],)

@@ -1,6 +1,8 @@
 """
 Parsing e execução do DDL versionado
 (`db/sql/gold/marketplace_region_daily_ddl.sql`) para o Gate 6A.
+O nome do arquivo é histórico; a tabela real é `gold.fct_marketplace_region_daily`
+(ver `_LEGACY_GOLD_TABLE_RE` abaixo, T-0109c).
 
 O arquivo .sql é a fonte de verdade para revisão humana (inclui comentários
 com as decisões de design — Shopee dedup, fonte ML raw, Barbours,
@@ -24,8 +26,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import re
+
 import psycopg2
 
+from pipelines.ingestion.gold_regional import GOLD_REGION_TABLE
 from pipelines.ingestion.gold_regional.write_conn import (
     ADVISORY_LOCK_KEY,
     WritePreflightBlocked,
@@ -37,6 +42,24 @@ from pipelines.ingestion.gold_regional.write_conn import (
 DEFAULT_DDL_PATH = Path(__file__).resolve().parents[3] / "db" / "sql" / "gold" / "marketplace_region_daily_ddl.sql"
 
 _TRANSACTION_CONTROL_STATEMENTS = {"begin", "commit", "rollback"}
+
+# T-0109c — o DDL só vale para a TABELA real `gold.fct_marketplace_region_daily`.
+# O nome antigo `gold.marketplace_region_daily` é hoje uma VIEW de compatibilidade
+# (rename airflow #1939); um DDL que ainda o cite criaria uma segunda tabela
+# paralela à real. O `.sql` versionado ainda usa o nome antigo e NÃO foi
+# reescrito aqui: trocar só o nome no `CREATE TABLE ... id BIGSERIAL PRIMARY KEY`
+# criaria `gold.fct_marketplace_region_daily_id_seq` e `..._pkey`, divergentes
+# do que existe (`gold.marketplace_region_daily_id_seq`,
+# `marketplace_region_daily_pkey`). Até o `.sql` ser reescrito com sequence e
+# PK nomeadas explicitamente, `execute_ddl` recusa (fail-closed) qualquer DDL
+# que cite o nome antigo — sem abrir conexão. `\b` não casa a sequence
+# (`..._daily_id_seq`): `_` é caractere de palavra.
+_LEGACY_GOLD_TABLE_RE = re.compile(r"\bgold\.marketplace_region_daily\b", re.IGNORECASE)
+
+
+def legacy_table_statements(statements: list[str]) -> list[str]:
+    """Statements que ainda citam o nome antigo (a view de compatibilidade)."""
+    return [s for s in statements if _LEGACY_GOLD_TABLE_RE.search(s)]
 
 
 def _strip_line_comment(line: str, in_string: bool) -> tuple[str, bool]:
@@ -103,6 +126,12 @@ def execute_ddl(write_url: str, ddl_path: Path = DEFAULT_DDL_PATH) -> list[str]:
     Retorna a lista de statements executados (para o relatório — nenhum
     contém dado de linha/PII, é só o schema)."""
     statements = parse_ddl_statements(ddl_path.read_text(encoding="utf-8"))
+    if legacy_table_statements(statements):
+        raise WritePreflightBlocked(
+            f"o DDL {ddl_path.name} ainda cita gold.marketplace_region_daily, hoje uma view de "
+            f"compatibilidade; a tabela real é {GOLD_REGION_TABLE}. Reescreva o DDL com a "
+            "sequence e a PK nomeadas como no catálogo antes de aplicá-lo. Nada foi executado."
+        )
 
     conn = psycopg2.connect(write_url, connect_timeout=15)
     conn.autocommit = False

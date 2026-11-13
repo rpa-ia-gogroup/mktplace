@@ -87,9 +87,9 @@ def _happy_responses(
         (_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), bad),
         (_contains("GMV = 'NAN'"), nan_neg),
         (_contains("MARKETPLACE_ID <> %(SHOPEE_MARKETPLACE_ID)S"), out_of_scope_staging),
-        (_contains("COALESCE(SUM(ORDERS), 0) FROM GOLD.MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID ="), gold_agg),
+        (_contains("COALESCE(SUM(ORDERS), 0) FROM GOLD.FCT_MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID ="), gold_agg),
         (_contains("FULL OUTER JOIN", "GOLD_WINDOW"), key_diff),
-        (_contains("ORDER BY DATE, LOJA_ID, UF", "FROM GOLD.MARKETPLACE_REGION_DAILY"), gold_rows),
+        (_contains("ORDER BY DATE, LOJA_ID, UF", "FROM GOLD.FCT_MARKETPLACE_REGION_DAILY"), gold_rows),
         (_contains("ORDER BY DATE, LOJA_ID, UF", "FROM STG_MARKETPLACE_REGION_DAILY"), staging_rows),
     ]
 
@@ -109,7 +109,7 @@ class FakeCursor:
         self.conn.executed.append((norm, params))
         if self.conn.fail_on_substring and self.conn.fail_on_substring in norm.upper():
             raise RuntimeError("falha simulada de execução")
-        if norm.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+        if norm.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             self.conn.final_insert_executed = True
 
     def _dispatch(self):
@@ -138,9 +138,9 @@ class FakeCursor:
     def rowcount(self):
         norm, _params = self.conn.executed[-1]
         upper = norm.upper()
-        if upper.startswith("DELETE FROM GOLD.MARKETPLACE_REGION_DAILY"):
+        if upper.startswith("DELETE FROM GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             return self.conn.delete_rowcount
-        if upper.startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+        if upper.startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             return self.conn.insert_rowcount
         return 0
 
@@ -331,7 +331,7 @@ def test_refresh_ordem_operacoes_caminho_feliz(monkeypatch, tmp_path):
     i_dup = idx(lambda s: "HAVING COUNT(*) > 1" in s)
     i_key_diff_first = idx(lambda s: "FULL OUTER JOIN" in s)
     i_delete = idx(lambda s: s.startswith("DELETE FROM"))
-    i_insert_final = idx(lambda s: s.startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"))
+    i_insert_final = idx(lambda s: s.startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"))
     i_unlock = idx(lambda s: "PG_ADVISORY_UNLOCK" in s)
 
     assert i_lock < i_table_lock < i_fp_before < i_staging_create < i_staging_insert
@@ -808,7 +808,7 @@ def test_refresh_delete_levanta_excecao_generica_preserva_backup(monkeypatch, tm
                 raise RuntimeError("deadlock detected postgresql://u:p@h/db")
             if self.conn.fail_on_substring and self.conn.fail_on_substring in norm.upper():
                 raise RuntimeError("falha simulada de execução")
-            if norm.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+            if norm.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
                 self.conn.final_insert_executed = True
 
     class FailingConn(FakeConn):
@@ -834,7 +834,7 @@ def test_refresh_insert_levanta_excecao_generica_preserva_backup(monkeypatch, tm
         def execute(self, sql, params=None):
             norm = " ".join(sql.split())
             self.conn.executed.append((norm, params))
-            if norm.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+            if norm.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
                 raise RuntimeError("connection lost postgresql://u:p@h/db")
             if self.conn.fail_on_substring and self.conn.fail_on_substring in norm.upper():
                 raise RuntimeError("falha simulada de execução")

@@ -137,9 +137,9 @@ class FakeCursor:
     def rowcount(self):
         norm, _params = self.conn.executed[-1]
         upper = norm.upper()
-        if upper.startswith("DELETE FROM GOLD.MARKETPLACE_REGION_DAILY"):
+        if upper.startswith("DELETE FROM GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             return self._resolve_rowcount(self.conn.delete_rowcount, "delete")
-        if upper.startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+        if upper.startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             return self._resolve_rowcount(self.conn.insert_rowcount, "insert")
         return 0
 
@@ -179,7 +179,7 @@ class FakeConn:
 
         self.responses = [
             (_contains("NOT (MARKETPLACE_ID = %(SHOPEE_MARKETPLACE_ID)S AND DATE BETWEEN"), fingerprint),
-            (_contains("ORDER BY DATE, LOJA_ID, UF", "FROM GOLD.MARKETPLACE_REGION_DAILY"), gold_window_rows),
+            (_contains("ORDER BY DATE, LOJA_ID, UF", "FROM GOLD.FCT_MARKETPLACE_REGION_DAILY"), gold_window_rows),
         ]
 
     def cursor(self):
@@ -526,7 +526,7 @@ def test_restore_ordem_lock_cas_delete_insert_reconcile_commit(monkeypatch, tmp_
     i_fp_before = idx(lambda s: "NOT (MARKETPLACE_ID" in s)
     i_select_current = idx(lambda s: "ORDER BY DATE, LOJA_ID, UF" in s)
     i_delete = idx(lambda s: s.startswith("DELETE FROM"))
-    i_insert = idx(lambda s: s.startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"))
+    i_insert = idx(lambda s: s.startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"))
     i_unlock = idx(lambda s: "PG_ADVISORY_UNLOCK" in s)
 
     assert i_lock < i_table_lock < i_fp_before < i_select_current < i_delete < i_insert < i_unlock

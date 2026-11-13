@@ -110,7 +110,7 @@ def _happy_responses(
     key_diff=(0, 0, 0),  # gold_only, source_only, changed
 ):
     return [
-        (_contains("COALESCE(SUM(GMV), 0), COALESCE(SUM(ORDERS), 0) FROM GOLD.MARKETPLACE_REGION_DAILY"), gold),
+        (_contains("COALESCE(SUM(GMV), 0), COALESCE(SUM(ORDERS), 0) FROM GOLD.FCT_MARKETPLACE_REGION_DAILY"), gold),
         (_contains("COALESCE(SUM(GMV), 0), COALESCE(SUM(ORDERS), 0) FROM SHOPEE_WINDOW_RECALC"), recalc),
         (_contains("HAVING COUNT(*) > 1"), dup),
         (_contains("DATE IS NULL OR MARKETPLACE_ID IS NULL"), nulls),
@@ -660,7 +660,7 @@ def test_sql_gold_aggregates_filtra_por_marketplace_shopee_e_janela():
     sql_upper = loader.SQL_SHOPEE_WINDOW_GOLD_AGGREGATES.upper()
     assert f"MARKETPLACE_ID = {loader.SHOPEE_MARKETPLACE_ID}" in sql_upper
     assert "DATE BETWEEN %(DATE_FROM)S AND %(DATE_TO)S" in sql_upper
-    assert "GOLD.MARKETPLACE_REGION_DAILY" in sql_upper
+    assert "GOLD.FCT_MARKETPLACE_REGION_DAILY" in sql_upper
 
 
 def test_nenhum_sql_destrutivo_nas_constantes_de_janela_shopee():
