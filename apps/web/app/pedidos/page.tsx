@@ -102,9 +102,14 @@ function CelulaNum({ texto, peso, cor }: { texto: string; peso: number | null; c
   return <td className={TD}>{peso == null ? <span className="text-ink-faint">{texto}</span> : <CelulaBarra valor={texto} peso={peso} cor={cor} />}</td>;
 }
 
-function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; loading: boolean }) {
-  const { sort, toggleSort, sortedRows } = useSortableTable(rows, getBrandSortValue, BRAND_COLUMN_TYPES);
-  const colSpan = 3 + (showTiktok ? 2 : 0) + (showMl ? 2 : 0);
+/** `showTotais`: Total e GMV somam os canais, entao so' aparecem na Visao geral (na aba de canal, misturariam canais). */
+function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; showTotais: boolean; loading: boolean }) {
+  const { sort, toggleSort, sortedRows, resetSortIfColumnMissing } = useSortableTable(rows, getBrandSortValue, BRAND_COLUMN_TYPES);
+  useEffect(() => {
+    // coluna escondida nao pode continuar ordenando a tabela
+    resetSortIfColumnMissing(["brand", ...(showTiktok ? ["tk_orders", "tk_cancel"] : []), ...(showMl ? ["ml_orders", "ml_cancel"] : []), ...(showTotais ? ["total_orders", "total_gmv"] : [])]);
+  }, [showTiktok, showMl, showTotais]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colSpan = 1 + (showTotais ? 2 : 0) + (showTiktok ? 2 : 0) + (showMl ? 2 : 0);
   const pTk = pesos(sortedRows.map((r) => r.tiktok_orders));
   const pMl = pesos(sortedRows.map((r) => r.ml_orders));
   const pTotal = pesos(sortedRows.map((r) => pedidosLiquidosDaMarca(r)));
@@ -127,8 +132,12 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
                 <SortableHeader label="ML · Cancelamento" column="ml_cancel" sort={sort} onSort={toggleSort} />
               </>
             )}
-            <SortableHeader label="Total" column="total_orders" sort={sort} onSort={toggleSort} />
-            <SortableHeader label="GMV" column="total_gmv" sort={sort} onSort={toggleSort} />
+            {showTotais && (
+              <>
+                <SortableHeader label="Total" column="total_orders" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="GMV" column="total_gmv" sort={sort} onSort={toggleSort} />
+              </>
+            )}
           </tr>
         </thead>
         <tbody className={`divide-y divide-line transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}>
@@ -158,8 +167,12 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
                   </td>
                 </>
               )}
-              <CelulaNum texto={fmtNum(pedidosLiquidosDaMarca(row))} peso={pTotal[i]} cor={COR.pedidos} />
-              <CelulaNum texto={fmtBrlCurto(row.total_gmv)} peso={pGmv[i]} cor={COR.gmv} />
+              {showTotais && (
+                <>
+                  <CelulaNum texto={fmtNum(pedidosLiquidosDaMarca(row))} peso={pTotal[i]} cor={COR.pedidos} />
+                  <CelulaNum texto={fmtBrlCurto(row.total_gmv)} peso={pGmv[i]} cor={COR.gmv} />
+                </>
+              )}
             </tr>
           ))}
         </tbody>
@@ -327,7 +340,7 @@ function PedidosPageInner() {
         faixa={faixa ? <div aria-busy={isLoadingState}>{faixa}</div> : undefined}
         atencao={
           // Selecao mista: os numeros nunca incluem Shopee.
-          showShopeeMixed ? (
+          showShopeeMixed && visaoAtiva === "geral" ? (
             <p className="w-fit rounded-lg bg-warn-soft px-3 py-1.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
               {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
             </p>
@@ -355,7 +368,7 @@ function PedidosPageInner() {
           <StateBlock tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos." descricao="Selecione TikTok Shop ou Mercado Livre." />
         ) : (
           <>
-            <Panel titulo={`Volume diário de pedidos — ${periodLabel}`}>
+            <Panel titulo="Volume diário de pedidos">
               {chartData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={chartData.length > 14 ? 8 : 14}>
@@ -384,7 +397,7 @@ function PedidosPageInner() {
             </Panel>
 
             <Panel titulo="Por marca" semPadding ajuda="Cancelamento: abaixo de 2% em verde, de 2% a 5% em âmbar, acima de 5% em vermelho. Pedidos e Total sem os cancelados.">
-              <BrandTable rows={brandRows} showTiktok={verTiktok} showMl={verMl} loading={isLoadingState} />
+              <BrandTable rows={brandRows} showTiktok={verTiktok} showMl={verMl} showTotais={visaoAtiva === "geral"} loading={isLoadingState} />
             </Panel>
 
             {dataIsFresh && !displayData && (

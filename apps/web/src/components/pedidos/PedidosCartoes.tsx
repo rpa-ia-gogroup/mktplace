@@ -80,7 +80,6 @@ export function FaixaTotais({ dados, series, onAbrir }: { dados: Dados; series: 
         icone={ShoppingBag}
         identidade="pedidos"
         valor={k ? fmtNumCurto(k.total_orders) : null}
-        legenda={k ? `${fmtNumCurto(canceladosTotal)} cancelados à parte` : undefined}
         serie={series.pedidos}
         onAbrir={() => onAbrir("total_pedidos")}
       />
@@ -129,8 +128,9 @@ export function GrupoCanal({
         rotulo="Cancelados"
         icone={PackageX}
         identidade="atendimento"
-        valor={fmtNumCurto(dados.canceled)}
-        legenda={taxa != null ? `${fmtPctSimples(taxa)} dos pedidos` : undefined}
+        // a taxa e' o numero (como na Visao geral); a contagem vai na legenda
+        valor={taxa != null ? fmtPctSimples(taxa) : null}
+        legenda={`${fmtNumCurto(dados.canceled)} cancelados`}
         pilula={pilulaDoCancelamento(taxa)}
         serie={serieCancelados}
         onAbrir={() => onAbrir(chaveCancelados)}
