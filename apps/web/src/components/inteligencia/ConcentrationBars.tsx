@@ -1,6 +1,6 @@
 "use client";
 
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto as fmtBrl, fmtNumCurto as fmtNumber } from "@/lib/formatters";
 import { brandLabel } from "@/lib/inteligencia/brands";
 import { decBr } from "@/lib/inteligencia/format";
 import {
@@ -78,7 +78,7 @@ export default function ConcentrationBars({ concentration, onOpenBucket, disable
                 <span className="font-semibold text-ink">{BUCKET_LETTER[b.bucket]}</span>
                 <span className="tabular-nums">
                   {b.sharePct == null ? "sem dado" : `${decBr(b.sharePct, 0)}% do GMV`} ·{" "}
-                  {fmtNumber(b.n_products)}p
+                  {fmtNumber(b.n_products)} produtos
                 </span>
               </li>
             ))}

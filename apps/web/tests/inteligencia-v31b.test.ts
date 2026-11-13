@@ -278,15 +278,11 @@ test("V31B: com timestamp o frescor e formatado a partir do valor recebido", () 
 
 test("V31B: o frescor ML nao e aplicado a blocos TikTok", () => {
   const s = src(PAGE);
-  const i = s.indexOf("frescorMl");
-  const usos = [...s.matchAll(/frescorMl/g)].length;
-  assert.ok(i > 0 && usos >= 2, "frescor calculado e usado");
-  // a unica renderizacao fica no bloco ML do mapa, nao perto de tk_products
-  const trecho = s.slice(s.indexOf("{frescorMl}") - 900, s.indexOf("{frescorMl}"));
-  // Abas objetivas: o rodape do mapa ficou so' com o frescor; o bloco segue
-  // marcado como ML pelo `regime={REGIME_ML}` do card.
-  assert.ok(/ml_snapshot|Mercado Livre|REGIME_ML/i.test(trecho), "o frescor aparece no bloco ML");
-  assert.ok(!/tk_products/.test(trecho), "nao encosta em tk_products");
+  // ALVO-GRADE: o frescor ML mora so' no selo do topo (a linha do mapa repetia o selo e saiu).
+  assert.match(s, /em=\{status\.fresh \? mlRefreshedAt : null\}/, "o selo usa o frescor ML");
+  assert.ok(!s.includes("frescorMl"), "sem segunda linha de frescor");
+  // o TikTok declara o proprio regime (30 dias), nunca o frescor ML
+  assert.match(s, /regime=\{REGIME_TK\}/);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -550,7 +546,7 @@ test("V3F sampleDeclaration usa contagem exata nos tres ramos", () => {
 
 test("V3F a matriz nao usa mais fmtNumber para contagem", () => {
   assert.doesNotMatch(MATRIZ_SRC, /fmtNumber\(/, "nenhuma contagem abreviada no componente");
-  assert.match(MATRIZ_SRC, /import \{ fmtBrl \} from "@\/lib\/formatters"/, "dinheiro segue com fmtBrl");
+  assert.match(MATRIZ_SRC, /import \{ fmtBrlCurto as fmtBrl \} from "@\/lib\/formatters"/, "dinheiro no formato curto da casa (R$ 1,1 mi)");
   // as nove contagens do componente passaram ao helper
   // 11 usos: as nove contagens visuais mais as duas da descricao sr-only do
   // plano, que o QA local pegou ainda cruas

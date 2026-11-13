@@ -3,7 +3,7 @@
 // `fmtNumber` saiu daqui: as nove contagens deste componente passaram a usar
 // `contagemExata`. Dinheiro segue com `fmtBrl`, que abrevia de propósito.
 import InfoDica from "@/components/ui/InfoDica";
-import { fmtBrl } from "@/lib/formatters";
+import { fmtBrlCurto as fmtBrl } from "@/lib/formatters";
 import { brandLabel } from "@/lib/inteligencia/brands";
 import { decBr, roasBr } from "@/lib/inteligencia/format";
 import {
@@ -84,22 +84,24 @@ export default function OpportunityMatrix({
       {/* ── universo, referências e a separação amostra × universo ───────── */}
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <p className="text-xs text-ink-muted tabular-nums">
+          <p className="flex items-center gap-1 text-xs text-ink-muted tabular-nums">
             Universo classificado: <strong className="text-ink">{contagemExata(map.total_count)}</strong>{" "}
             produtos · destaques plotados:{" "}
             <strong className="text-ink">{contagemExata(map.returned_count)}</strong>
+            {/* So' quando os pontos sao amostra: o metodo vai para o ⓘ (menos texto na tela). */}
+            {isSample(map) && <InfoDica texto={sampleDeclaration(map)} />}
           </p>
           <p className="flex items-center gap-1 text-xs text-ink-muted">
             Referências: ROAS {roasBr(map.roas_reference)} ·{" "}
-            {map.gmv_reference == null ? "GMV indisponível" : `GMV ${moedaExata(map.gmv_reference)}`}
+            {map.gmv_reference == null ? "GMV indisponível" : <span title={moedaExata(map.gmv_reference)}>GMV {fmtBrl(map.gmv_reference)}</span>}
             {/* A nota vem do backend e e' renderizada como veio, so' que no "ⓘ". */}
             {map.reference_note && <InfoDica texto={map.reference_note} />}
           </p>
         </div>
-        {/* So' quando os pontos sao amostra: ai' a separacao muda a leitura. */}
-        {isSample(map) && <p className="text-xs text-ink-muted">{sampleDeclaration(map)}</p>}
       </div>
 
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)] lg:items-start">
+      <div className="mx-auto w-full max-w-[560px] lg:mx-0">
       {indisponivel ? (
         <div className="rounded-xl border border-warn/30 bg-warn-soft px-4 py-4">
           <p className="text-sm font-semibold text-warn-ink">
@@ -137,6 +139,9 @@ export default function OpportunityMatrix({
         </>
       )}
 
+      </div>
+
+      <div className="flex flex-col gap-5">
       {/* ── agregados por quadrante: cobrem o UNIVERSO, não a amostra ───── */}
       <div>
         <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">
@@ -208,6 +213,8 @@ export default function OpportunityMatrix({
           })}
         </ul>
       </div>
+      </div>
+      </div>
     </div>
   );
 }
@@ -256,8 +263,8 @@ function Plano({
             viewBox={`0 0 ${VB} ${VB}`}
             role="img"
             aria-label={`Matriz de oportunidades com ${map.returned_count} destaques plotados`}
-            // ALVO-GRADE: o viewBox de 320 escalava ate' 1200px (rotulos de 45px); teto de 560px.
-            className="w-full max-w-[560px] h-auto rounded-xl border border-line bg-raised/60"
+            // ALVO-GRADE: a coluna da matriz tem teto de 560px (o viewBox de 320 escalava ate' 1200px).
+            className="w-full h-auto rounded-xl border border-line bg-raised/60"
           >
             {/* fundo por quadrante, cor consistente com a legenda */}
             {QUADRANT_KEYS.map((k) => {
@@ -296,19 +303,22 @@ function Plano({
             })}
 
             {pontos.map((p) => {
-              const cx = p.x * VB;
-              const cy = (1 - p.y) * VB;
               const r = pointRadius(p.weight);
+              // A bolha inteira dentro da area (antes saia cortada na borda); o dado do ponto nao muda.
+              const cx = Math.min(Math.max(p.x * VB, r + 1), VB - r - 1);
+              const cy = Math.min(Math.max((1 - p.y) * VB, r + 1), VB - r - 1);
               const h = p.highlight;
               const meta = QUADRANT_META[p.quadrant];
               const nome = `${h.title ?? h.item_id} · ${brandLabel(h.brand)} · ${meta.label} · GMV ${fmtBrl(h.gmv)} · Ads ${fmtBrl(h.ad_spend)} · ROAS ${h.ad_roas == null ? "indisponível" : roasBr(h.ad_roas)}`;
               return (
-                <g key={`${h.brand}:${h.item_id}`}>
+                <g key={`${h.brand}:${h.item_id}`} className="group">
                   <circle cx={cx} cy={cy} r={r} className={`${TINTA_DO_PONTO[meta.dot] ?? "text-ink-muted"} opacity-80`}
                     fill="currentColor" aria-hidden="true" />
                   {rotulados.has(h.item_id) && (
-                    <text x={cx} y={cy - r - 4} textAnchor="middle" className="fill-ink-muted"
-                      style={{ fontSize: 12 }} aria-hidden="true">
+                    <text x={cx} y={Math.max(cy - r - 4, 10)} textAnchor="middle"
+                      className="pointer-events-none fill-ink opacity-0 transition-opacity duration-[120ms] group-hover:opacity-100 group-focus-within:opacity-100"
+                      // fundo do rotulo: contorno na cor da superficie, por baixo da letra
+                      style={{ fontSize: 12, paintOrder: "stroke", stroke: "rgb(var(--tc-surface))", strokeWidth: 3 }} aria-hidden="true">
                       {(h.title ?? h.item_id).slice(0, 14)}
                     </text>
                   )}

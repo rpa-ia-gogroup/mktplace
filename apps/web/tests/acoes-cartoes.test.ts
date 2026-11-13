@@ -11,7 +11,7 @@ const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url),
 
 test("cartoes de prioridade: CartaoIndicador (ALVO-GRADE) com as 7 identidades existentes (nao cor de estado)", () => {
   const src = ler("src/components/inteligencia/PriorityCards.tsx");
-  assert.ok(src.includes("<CartaoIndicador") && src.includes("rotulo={p.title}") && src.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"));
+  assert.ok(src.includes("<CartaoIndicador") && src.includes("rotulo={ROTULO_CURTO[p.kind]}") && src.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"));
   assert.ok(src.includes('parar: { icone: OctagonX, identidade: "ads" }'));
   assert.ok(src.includes('escalar: { icone: Rocket, identidade: "roas" }'));
   assert.ok(src.includes('testar: { icone: FlaskConical, identidade: "gmv" }'));

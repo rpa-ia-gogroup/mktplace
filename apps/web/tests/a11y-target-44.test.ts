@@ -41,45 +41,29 @@ const MIN_44 = /\bmin-h-11\b/;
 // A1 — navegação interna da Inteligência
 // ---------------------------------------------------------------------------
 
-test("A1: cada link da navegação interna declara alvo de 44px explicitamente", () => {
+test("A1: a navegação interna virou as abas da moldura (Aba), com alvo de 44px", () => {
+  // ALVO-GRADE: as ancoras sao as `visoes` do `<Aba>`; cada aba e' um <button role="tab"> com min-h-11.
   const s = src(PAGE);
-  const nav = s.slice(s.indexOf('aria-label="Navegação interna da página"'));
-  const fim = nav.indexOf("</nav>");
-  assert.ok(fim > 0, "bloco <nav> não localizado");
-  const bloco = nav.slice(0, fim);
-
-  // compara TOKENS de classe, e nao substrings: `min-w-11` como substring
-  // casaria com `min-w-110` e a assercao passaria por acidente.
-  const classe = bloco.match(/className="(inline-flex[^"]*)"/)?.[1] ?? "";
-  const tokens = new Set(classe.split(/\s+/));
-
-  assert.ok(tokens.has("min-h-11"), "o link interno precisa de min-h-11 (44px)");
-  assert.ok(
-    tokens.has("inline-flex") && tokens.has("items-center") && tokens.has("justify-center"),
-    "min-h-11 so rende alvo real com o conteudo centrado: " + classe,
-  );
-  assert.ok(tokens.has("min-w-11"), 'rotulo curto ("LTV") mediu 39,8px de largura sem min-w-11');
-  assert.ok(!tokens.has("py-1"), "py-1 era a regra implicita que produzia os 24px medidos no QA");
-  // a altura e obrigatoria; a largura minima e piso, nao trava
-  assert.ok(tokens.has("px-2.5"), "o padding horizontal do rotulo deve ser preservado");
-  assert.ok(
-    !tokens.has("w-11") && !tokens.has("h-11"),
-    "largura/altura fixas cortariam os rotulos longos - o contrato pede piso, nao trava",
-  );
+  assert.ok(s.includes("visoes={ANCORAS.map(([id, rotulo]) => ({ id, rotulo }))}"));
+  const aba = src("src/components/layout/Aba.tsx");
+  assert.match(aba, /role="tab"/);
+  assert.match(aba, /inline-flex min-h-11 items-center/, "a aba garante 44px de altura");
+  assert.match(aba, /focus-visible:ring-accent/, "foco visível (token do tema)");
 });
 
 test("A1: rótulos, destinos e ordem da navegação interna não mudaram", () => {
   const s = src(PAGE);
   const esperado = ["Prioridades", "Oportunidades", "Concentração", "Produtos e mídia", "Fila de evidências", "LTV"];
-  const bloco = s.slice(s.indexOf('aria-label="Navegação interna da página"'));
+  const bloco = s.slice(s.indexOf("const ANCORAS = ["));
   let cursor = 0;
   for (const label of esperado) {
     const i = bloco.indexOf(`"${label}"`, cursor);
     assert.ok(i > 0, `rótulo ausente ou fora de ordem: ${label}`);
     cursor = i;
   }
-  assert.match(bloco, /href=\{`#\$\{anchor\}`\}/, "o destino continua sendo a âncora da seção");
-  assert.match(bloco, /focus-visible:ring-accent/, "foco visível preservado (token do tema)");
+  // o destino continua sendo a ancora da secao (o id nao muda e vai para a URL)
+  assert.match(s, /document\.getElementById\(id\)\?\.scrollIntoView/);
+  assert.match(s, /window\.history\.replaceState\(null, "", `#\$\{id\}`\)/);
 });
 
 // ---------------------------------------------------------------------------

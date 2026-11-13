@@ -21,6 +21,13 @@ export const VISUAL_PRIORIDADE: Record<Priority["kind"], { icone: LucideIcon; id
   testar: { icone: FlaskConical, identidade: "gmv" },
 };
 
+/** ALVO-GRADE: rotulo curto no cartao (cabe em 1440); o titulo inteiro segue no detalhe. */
+export const ROTULO_CURTO: Record<Priority["kind"], string> = {
+  parar: "Ads sem venda",
+  escalar: "Escalar",
+  testar: "Teste orgânico",
+};
+
 interface Props {
   priorities: Priority[];
   onOpen: (p: Priority) => void;
@@ -52,7 +59,7 @@ export default function PriorityCards({ priorities, onOpen, disabled, extra }: P
         return (
           <CartaoIndicador
             key={p.kind}
-            rotulo={p.title}
+            rotulo={ROTULO_CURTO[p.kind]}
             icone={icone}
             cor={`rgb(var(--tc-kpi-${identidade}))`}
             ajuda={<InfoDica texto={p.limitation} emControle />}

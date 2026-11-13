@@ -194,7 +194,18 @@ type DialogState =
   /** <640: a matriz inteira mora no diálogo (§13). */
   | { kind: "matrix" };
 
+/** ALVO-GRADE: a navegacao interna vira as abas da moldura; as ancoras (`#id`) das secoes nao mudam. */
+const ANCORAS = [
+  [INTELIGENCIA_ANCHORS.prioridades, "Prioridades"],
+  [INTELIGENCIA_ANCHORS.oportunidades, "Oportunidades"],
+  [INTELIGENCIA_ANCHORS.concentracao, "Concentração"],
+  [INTELIGENCIA_ANCHORS.produtos, "Produtos e mídia"],
+  [INTELIGENCIA_ANCHORS.fila, "Fila de evidências"],
+  [INTELIGENCIA_ANCHORS.ltv, "LTV"],
+] as const;
+
 function InteligenciaPageInner() {
+  const [ancora, setAncora] = useState<string>(INTELIGENCIA_ANCHORS.prioridades);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -316,7 +327,6 @@ function InteligenciaPageInner() {
   // proprio backend devolve null, e `new Date()` mostraria a hora do navegador
   // como se fosse a da carga.
   const mlRefreshedAt = displayData?.ml_snapshot_refreshed_at ?? null;
-  const frescorMl = freshnessLabel(mlRefreshedAt);
   const ltvRows = useMemo(() => filterByBrand(displayData?.ltv, brandSel), [displayData, brandSel]);
   const tkReceived = (displayData?.tk_products ?? []).length;
   const tkRows = useMemo(() => (displayData?.tk_products ?? []).slice(0, 5), [displayData]);
@@ -380,6 +390,14 @@ function InteligenciaPageInner() {
   return (
     <Aba
       titulo="Ações ML + TikTok"
+      visoes={ANCORAS.map(([id, rotulo]) => ({ id, rotulo }))}
+      visao={ancora}
+      onVisao={(id) => {
+        setAncora(id);
+        // A ancora segue na URL (#id), como o link antigo: compartilhar e o "voltar" levam a secao.
+        window.history.replaceState(null, "", `#${id}`);
+        document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }}
       selo={
         <>
           <SeloAtualizado
@@ -443,24 +461,6 @@ function InteligenciaPageInner() {
         />
       ) : (
         <>
-          <nav aria-label="Navegação interna da página" className="flex flex-wrap gap-1 -mx-2.5">
-            {[
-              [INTELIGENCIA_ANCHORS.prioridades, "Prioridades"],
-              [INTELIGENCIA_ANCHORS.oportunidades, "Oportunidades"],
-              [INTELIGENCIA_ANCHORS.concentracao, "Concentração"],
-              [INTELIGENCIA_ANCHORS.produtos, "Produtos e mídia"],
-              [INTELIGENCIA_ANCHORS.fila, "Fila de evidências"],
-              [INTELIGENCIA_ANCHORS.ltv, "LTV"],
-            ].map(([anchor, label]) => (
-              <a
-                key={anchor}
-                href={`#${anchor}`}
-                className="inline-flex items-center justify-center min-h-11 min-w-11 px-2.5 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                {label}
-              </a>
-            ))}
-          </nav>
 
           {/* ---------------- Bloco 3 — matriz definitiva (V3-1B, §7.3) ----------
               O bloco consome `opportunity_map` DIRETO. Nenhuma mediana,
@@ -476,7 +476,6 @@ function InteligenciaPageInner() {
             id={INTELIGENCIA_ANCHORS.oportunidades}
             title="Mapa de oportunidades"
             subtitle="Retorno × volume no snapshot ML inteiro."
-            regime={REGIME_ML}
           >
             <OpportunityMatrix
               map={oppMap}
@@ -487,15 +486,13 @@ function InteligenciaPageInner() {
               onOpenMatrix={() => setDialog({ kind: "matrix" })}
               disabled={status.loading}
             />
-            <p className="px-4 sm:px-6 pb-5 text-xs text-ink-muted">{frescorMl}.</p>
           </SectionCard>
 
           {/* ---------------- Bloco 4 — concentração ---------------- */}
           <SectionCard
             id={INTELIGENCIA_ANCHORS.concentracao}
             title="Concentração por marca"
-            subtitle="GMV por bucket A/B/C/D."
-            regime={REGIME_ML}
+            subtitle="GMV por curva A/B/C/D."
           >
             <ConcentrationBars
               concentration={concentration}
@@ -520,7 +517,7 @@ function InteligenciaPageInner() {
                 1,
               );
               return (
-                <SectionCard key={panel.title} title={panel.title} regime={REGIME_ML}>
+                <SectionCard key={panel.title} title={panel.title}>
                   {panel.rows.length === 0 ? (
                     <p className="px-6 py-8 text-center text-sm text-ink-muted">
                       Nenhum produto nesta faixa para {scope}.
@@ -632,7 +629,6 @@ function InteligenciaPageInner() {
             id={INTELIGENCIA_ANCHORS.fila}
             title="Fila de evidências"
             subtitle={lensSampleNote(lens, counts)}
-            regime={REGIME_ML}
           >
             <div className="px-4 sm:px-6 pt-4 flex flex-wrap gap-1" role="group" aria-label="Lente da fila de evidências">
               {LENSES.map((l) => {
@@ -670,8 +666,7 @@ function InteligenciaPageInner() {
               <SectionCard
                 id={INTELIGENCIA_ANCHORS.ltv}
                 title="LTV e fidelização"
-                regime={REGIME_ML}
-              >
+                  >
                 {ltvRows.length === 0 ? (
                   <p className="px-6 py-8 text-center text-sm text-ink-muted">Sem dados de LTV para {scope}.</p>
                 ) : (
