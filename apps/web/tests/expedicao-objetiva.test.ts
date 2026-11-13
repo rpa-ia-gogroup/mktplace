@@ -123,12 +123,13 @@ const { default: EvolucaoPorMarca } = await import("../src/components/expedicao/
 
 test("heroi: % da fila antes do absoluto; zero nao pinta; +48 h e' ambar; marcas em alerta so' com alerta", () => {
   assert.match(CLIENTE, /const pctHeroi = valorHeroi !== null && backlogRisco !== null \? percentualDaFila\(valorHeroi, backlogRisco\) : null;/);
-  assert.match(CLIENTE, /`\$\{numero\(valorHeroi\)\} \$\{valorHeroi === 1 \? "pedido" : "pedidos"\} de \$\{numero\(backlogRisco\)\} em fila`/);
-  assert.match(CLIENTE, /tom=\{valorHeroi === null \|\| valorHeroi === 0 \? "neutro" : temPrazo \? "critico" : "atencao"\}/);
-  assert.match(CLIENTE, /\{qtdAlerta > 0 \? \(\s*<Chip ponto tom="atencao"/);
+  assert.match(CLIENTE, /\{numero\(valorHeroi\)\} de \{numero\(backlogRisco\)\} na fila/);
+  assert.match(CLIENTE, /\? valorHeroi > 0\s*\? \{ texto: "Com atraso", tom: "crit" \}\s*: \{ texto: "Em dia", tom: "ok" \}/);
+  assert.match(CLIENTE, /qtdAlerta > 0 \? \(\s*<Chip ponto tom="atencao"/);
   // Ausencia (marca de varias contas, sem total) e' "—" com o motivo, nunca 0.
-  assert.match(CLIENTE, /valorHeroi === null \? \(\s*<span title=\{avisoRecorte \?\? "Medida não publicada nesta fotografia\."\}>—<\/span>/);
-  assert.match(CLIENTE, /selo=\{\s*valorHeroi === null\s*\? undefined/);
+  assert.match(CLIENTE, /valor=\{valorHeroi === null \? null : pctHeroi\}/);
+  assert.match(CLIENTE, /avisoRecorte \?\?\s*\(valorHeroi === null \? \(\s*"Medida não publicada nesta fotografia\."/);
+  assert.match(CLIENTE, /pilula=\{\s*valorHeroi === null\s*\? null/);
 });
 
 test("secao: o ⓘ e o selo ficam fora do h3 (nome da secao = titulo)", () => {
@@ -201,13 +202,13 @@ test("tabela unica: sem tendencia ainda mostra as marcas; canal sem prazo sem co
 // ---------------------------------------------------------------------------
 test("tela: heroi, faixa e fila sem repetir numero; a barra de prazo e' o meio do heroi", () => {
   assert.match(CLIENTE, /const chaveDestaque = temPrazo \? "overdue" : "over48h";/);
-  assert.match(CLIENTE, /meio=\{meioHeroi\}/);
+  assert.match(CLIENTE, /<Panel[\s\S]*?\{meioHeroi\}\s*<\/Panel>/);
   assert.match(CLIENTE, /const meioHeroi = temPrazo \?[\s\S]*?\{barraDePrazo\(\)\}/);
   // A faixa nao repete o heroi: so' perto de vencer, +48 h e travados (sem prazo, travados).
   assert.match(CLIENTE, /const chavesDaFaixa = temPrazo \? \["due_soon", "over48h", "stalled"\] : \["stalled"\];/);
   // "Ver pedidos →" sempre visivel (nao so' no hover), abrindo a lista do heroi.
   assert.match(CLIENTE, /const abrirHeroi = destaque \? abrirLista\(destaque, LISTA_DO_KPI\[destaque\.chave\]\) : undefined;/);
-  assert.match(CLIENTE, /onClick=\{abrirHeroi\}[\s\S]*?>\s*Ver pedidos →\s*<\/button>/);
+  assert.match(CLIENTE, /onAbrir=\{abrirHeroi\}/);
   assert.doesNotMatch(CLIENTE, /opacity-0[^"]*group-hover:opacity-100/);
   // O 1o item da fila e' o antigo "onde agir"; ate' 6 itens.
   assert.match(CLIENTE, /\]\.slice\(0, MAX_ITENS_DA_FILA\);/);
@@ -219,17 +220,17 @@ test("tela: 'desatualizada' uma vez (cabecalho) e no ⓘ do heroi; 'inclui FBS' 
   assert.doesNotMatch(CLIENTE, /SeloLeitura/);
   assert.match(CLIENTE, /desatualizada: confirme antes de agir/);
   assert.match(CLIENTE, /const extrasHeroi = \[\s*quando,/);
-  assert.match(CABECALHO, /<Chip ponto tom="atencao"[^>]*>\s*Desatualizada\s*<\/Chip>/);
-  assert.match(CLIENTE, /<Chip tom="atencao">inclui FBS<\/Chip>\s*<InfoDica texto=\{AVISO_FILA_COM_FBS\} \/>/);
-  assert.equal((CLIENTE.match(/>inclui FBS</g) ?? []).length, 1, "o selo so' no heroi");
-  // Nas tabelas da fila publicada, vira title + sr-only do titulo.
-  assert.match(CLIENTE, /<span className="sr-only"> \(inclui pedidos FBS\)<\/span>/);
+  assert.match(CABECALHO, /<SeloAtualizado em=\{f\.publicadaEm\} atrasado=\{Boolean\(f\.publicadaEm && f\.desatualizada\)\}/);
+  assert.match(CLIENTE, /incluiFbs \? AVISO_FILA_COM_FBS : null/);
+  assert.match(CLIENTE, /\{incluiFbs \? <span data-testid="exp-aviso-fbs"> · com FBS<\/span> : null\}/);
+  // Nas tabelas da fila publicada, a base fica ESCRITA no titulo ("· com FBS").
+  assert.match(CLIENTE, /\{titulo\} · com FBS<\/span>/);
   assert.match(CLIENTE, /<TituloComFbs titulo="Backlog por marca"/);
   assert.match(CABECALHO, /<InfoDica texto=\{definicao\} \/>/);
 });
 
 test("tela: o periodo fica no topo, so' na visao do gestor", () => {
-  assert.match(CLIENTE, /controles=\{visao === "gestor" \? controlePeriodo : undefined\}/);
+  assert.match(CLIENTE, /controles: visao === "gestor" \? controlePeriodo : undefined,/);
   // FILTROS-PADRAO: o Periodo e' o gatilho comum (`SeletorPeriodo`), com o "ⓘ" do periodo consultado.
   assert.match(CLIENTE, /const controlePeriodo = \([\s\S]*?<SeletorPeriodo\b/);
   assert.match(CLIENTE, /periodoConsultado \? <InfoDica texto=\{periodoConsultado\} \/> : undefined/);

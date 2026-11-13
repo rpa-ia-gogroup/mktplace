@@ -1,5 +1,6 @@
 "use client";
 
+import TableScrollHint from "@/components/TableScrollHint";
 import { useEffect, useState } from "react";
 
 import Chip from "@/components/ui/Chip";
@@ -83,7 +84,8 @@ export default function LdrTopo({ api, marca }: { api: string; marca: string | n
 
   return (
     <SecaoGerencial titulo="LDR · últimos 7 dias" dica={DICA_LDR}>
-      <div className="overflow-x-auto rounded-xl border border-line bg-surface" data-testid="exp-ldr-topo">
+      <div className="overflow-hidden rounded-xl border border-line bg-surface" data-testid="exp-ldr-topo">
+        <TableScrollHint>
         <table className="w-full min-w-[640px] border-collapse text-sm">
           <thead>
             <tr className="border-b border-line text-left">
@@ -129,6 +131,7 @@ export default function LdrTopo({ api, marca }: { api: string; marca: string | n
             ))}
           </tbody>
         </table>
+        </TableScrollHint>
       </div>
     </SecaoGerencial>
   );

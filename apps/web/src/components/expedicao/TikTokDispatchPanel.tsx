@@ -60,12 +60,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
-import CabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
+import cabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
 import JanelaPersonalizada from "@/components/expedicao/JanelaPersonalizada";
 import JornadaPedidos, { useJornada } from "@/components/expedicao/JornadaPedidos";
 import {
   BacklogPorMarcaTikTok,
-  HeroiTikTok,
+  PainelEtapasTikTok,
   cartoesDosAbertos,
   ondeAgirTikTok,
   useTikTokAbertos,
@@ -73,6 +73,7 @@ import {
 import { PopupColetaPerdida } from "@/components/expedicao/TikTokColetaPerdida";
 import { diaDentroDaJanelaDaLista } from "@/lib/expedicao-tiktok-abertos";
 import LayoutExpedicao, {
+  type Moldura,
   CLASSE_CABECALHO,
   CLASSE_RAIZ_EXPEDICAO,
   CLASSE_TABELA,
@@ -81,7 +82,8 @@ import LayoutExpedicao, {
 } from "@/components/expedicao/LayoutExpedicao";
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
-import { ConviteAoDetalhe, FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
+import PainelAtencao from "@/components/expedicao/PainelAtencao";
+import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
@@ -291,7 +293,7 @@ function Grafico({
 // Painel
 // ---------------------------------------------------------------------------
 export default function TikTokDispatchPanel({
-  seletorCanal,
+  moldura,
   visao = "gestor",
   aoTrocarVisao,
   marca = null,
@@ -300,7 +302,8 @@ export default function TikTokDispatchPanel({
   performance,
   itensOficiais = [],
 }: {
-  seletorCanal?: ReactNode;
+  /** ALVO-GRADE: a moldura `Aba` da casca (titulo + abas de canal). */
+  moldura: Moldura;
   visao?: Visao;
   aoTrocarVisao?: (v: Visao) => void;
   /** EXPEDICAO-UX-3: marca da casca; vai para a API como `brands`. */
@@ -489,12 +492,9 @@ export default function TikTokDispatchPanel({
     />
   ) : null;
 
-  const faixa = (
-    <FaixaKpis rotulo="Pedidos em aberto e LDR da janela">
-      {cartoesDosAbertos(abertos)}
-      {cartaoLdr}
-    </FaixaKpis>
-  );
+  // ALVO-GRADE: sempre quatro cartoes (os abertos de agora). A LDR da janela
+  // fica em "Mais detalhes" (Prazo) e no "LDR · últimos 7 dias".
+  const faixa = <FaixaKpis rotulo="Pedidos em aberto">{cartoesDosAbertos(abertos)}</FaixaKpis>;
 
   // Alertas da API, sem reescrita, como itens da fila; "onde agir" primeiro.
   const ondeAgir = ondeAgirTikTok(abertos);
@@ -503,7 +503,7 @@ export default function TikTokDispatchPanel({
     ...alertasNaFila(atencao),
     ...itensOficiais,
   ];
-  const fila = <FilaAtencao itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;
+  const fila = <PainelAtencao itens={itensFila} vazio="Nenhum alerta publicado para este recorte." />;
 
   // "Prazo": a janela da LDR, que so' o TikTok sustenta. Coleta e despacho
   // continuam sendo eventos separados, escolhidos no cabecalho. No gestor a
@@ -566,9 +566,7 @@ export default function TikTokDispatchPanel({
   // 6. EVOLUCAO — quando comecou. Sem nenhum vencimento fechado o grafico
   // seria um retangulo sem barra: a tela diz por que nao ha o que desenhar.
   const painelEvolucao = ldr ? (
-    <Panel
-      titulo="Evolução por dia de vencimento"
-    >
+    <Panel titulo="Evolução por dia de vencimento" className="h-full">
       {temDiaMedido ? (
         <Grafico
           dias={ldr.daily}
@@ -849,26 +847,21 @@ export default function TikTokDispatchPanel({
     <div className={CLASSE_RAIZ_EXPEDICAO} aria-busy={estado === "carregando"}>
     <LayoutExpedicao
       // 1-2. CABECALHO, FOTOGRAFIA, FRESCOR E FILTROS (compartilhado)
-      cabecalho={
-        <CabecalhoExpedicao
-          canal="TikTok Shop"
-          seletorCanal={seletorCanal}
-          fotografia={fotografia}
-          visao={visao}
-          aoTrocarVisao={aoTrocarVisao}
-          controles={controles}
-          definicao={DEFINICAO_TIKTOK}
-          filtroMarca={
-            aoTrocarMarca ? (
-              <SeletorMarca
-                marca={marca}
-                marcasPresentes={(dados?.brands ?? []).map((b) => b.brand)}
-                aoTrocar={aoTrocarMarca}
-              />
-            ) : undefined
-          }
-        />
-      }
+      moldura={moldura}
+      cabecalho={cabecalhoExpedicao({
+        fotografia,
+        visao,
+        aoTrocarVisao,
+        controles,
+        definicao: DEFINICAO_TIKTOK,
+        filtroMarca: aoTrocarMarca ? (
+          <SeletorMarca
+            marca={marca}
+            marcasPresentes={(dados?.brands ?? []).map((b) => b.brand)}
+            aoTrocar={aoTrocarMarca}
+          />
+        ) : undefined,
+      })}
       avisos={
         <>
           {janelaDescartada ? (
@@ -887,7 +880,7 @@ export default function TikTokDispatchPanel({
       estado={
         <>
           {estado === "carregando" ? (
-            <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div role="status" aria-busy="true" className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
               <span className="sr-only">{TEXTO_ESTADO.carregando}</span>
               {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
             </div>
@@ -914,8 +907,8 @@ export default function TikTokDispatchPanel({
           // RISCO ATUAL -> PRAZO (LDR) -> JORNADA -> EVOLUCAO -> CONCENTRACAO:
           // a ordem e' do esqueleto, a mesma dos tres canais.
           <CorpoGestor
-            heroi={<HeroiTikTok abertos={abertos} />}
             faixa={faixa}
+            prazo={<PainelEtapasTikTok abertos={abertos} />}
             atencao={fila}
             // EXPEDICAO-TIKTOK-PADRAO: "Backlog por marca" no lugar e no
             // formato da Shopee/ML; evolucao (7/12) e lojas (5/12) a seguir.
@@ -925,24 +918,15 @@ export default function TikTokDispatchPanel({
             ldr={faixaTopo}
             maisDetalhes={
               <MaisDetalhes resumo="janela da LDR, jornada e nota oficial">
-                {secaoPrazo(false)}
+                {secaoPrazo(true)}
                 <JornadaPedidos carga={jornada.carga} aoTentarDeNovo={jornada.tentarDeNovo} marca={marca} compacta />
                 {performance}
               </MaisDetalhes>
             }
-            convite={
-              aoTrocarVisao ? (
-                <ConviteAoDetalhe
-                  conteudo="Coortes por vencimento e fluxo por pagamento."
-                  aoAbrir={() => aoTrocarVisao("detalhe")}
-                />
-              ) : null
-            }
           />
         ) : (
           <>
-            <HeroiTikTok abertos={abertos} />
-            <FaixaKpis rotulo="Pedidos em aberto">{cartoesDosAbertos(abertos)}</FaixaKpis>
+            {faixa}
             <BacklogPorMarcaTikTok abertos={abertos} api={BASE} marca={marca} />
             {secaoPrazo(true)}
             {/* DETALHE: coorte, loja e fluxo */}

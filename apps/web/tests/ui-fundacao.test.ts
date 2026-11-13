@@ -110,7 +110,6 @@ const AINDA_FORA_DO_ESQUELETO = new Set([
   "/dre",
   "/estoque-full",
   "/estoque-ml-full",
-  "/expedicao",
   "/full",
   "/full-ml",
   "/full-shopee",
