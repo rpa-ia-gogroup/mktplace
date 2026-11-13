@@ -31,14 +31,14 @@ const VELOCITY_LABEL: Record<string, string> = {
   high: "Alta", medium: "Média", low: "Baixa", zero: "Zero",
 };
 const VELOCITY_CLASS: Record<string, string> = {
-  high: "bg-emerald-50 text-emerald-800 border-emerald-200",
-  medium: "bg-amber-50 text-amber-800 border-amber-200",
-  low: "bg-rose-50 text-rose-700 border-rose-200",
-  zero: "bg-slate-100 text-slate-600 border-slate-200",
+  high: "bg-ok-soft text-ok-ink border-ok/30",
+  medium: "bg-warn-soft text-warn-ink border-warn/30",
+  low: "bg-crit-soft text-crit-ink border-crit/30",
+  zero: "bg-raised text-ink-muted border-line",
 };
 
 function VelocityChip({ v }: { v: string | null }) {
-  if (!v) return <span className="text-slate-400">—</span>;
+  if (!v) return <span className="text-ink-faint">—</span>;
   return (
     <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold border ${VELOCITY_CLASS[v] ?? VELOCITY_CLASS.zero}`}>
       {VELOCITY_LABEL[v] ?? v}
@@ -47,16 +47,16 @@ function VelocityChip({ v }: { v: string | null }) {
 }
 
 const BUCKET_CLASS: Record<string, string> = {
-  A_top50: "bg-violet-600 text-white",
-  B_next30: "bg-violet-400 text-white",
-  C_next15: "bg-violet-100 text-violet-800",
-  D_tail: "bg-slate-100 text-slate-600",
+  A_top50: "bg-accent text-accent-on",
+  B_next30: "bg-accent/70 text-accent-on",
+  C_next15: "bg-accent-soft text-accent-ink",
+  D_tail: "bg-raised text-ink-muted",
 };
 
 function BucketChip({ v }: { v: string | null }) {
-  if (!v) return <span className="text-slate-400">—</span>;
+  if (!v) return <span className="text-ink-faint">—</span>;
   return (
-    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold ${BUCKET_CLASS[v] ?? "bg-slate-100 text-slate-600"}`}>
+    <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-bold ${BUCKET_CLASS[v] ?? "bg-raised text-ink-muted"}`}>
       {v.charAt(0)}
     </span>
   );
@@ -134,15 +134,15 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
   function cell(row: EvidenceItem, column: string) {
     switch (column) {
       case "kind":
-        return <span className="text-xs font-semibold text-slate-600">{KIND_LABELS[row.kind]}</span>;
+        return <span className="text-xs font-semibold text-ink-muted">{KIND_LABELS[row.kind]}</span>;
       case "brand":
-        return <span className="text-xs font-semibold text-slate-700 whitespace-nowrap">{brandLabel(row.brand)}</span>;
+        return <span className="text-xs font-semibold text-ink whitespace-nowrap">{brandLabel(row.brand)}</span>;
       case "title":
-        return <span className="text-sm text-slate-700" title={productLabel(row) ?? undefined}>{truncate(productLabel(row), 44)}</span>;
+        return <span className="text-sm text-ink" title={productLabel(row) ?? undefined}>{truncate(productLabel(row), 44)}</span>;
       case "gmv":
-        return <span className="text-sm font-semibold text-slate-900 tabular-nums">{n(row.gmv, fmtBrl)}</span>;
+        return <span className="text-sm font-semibold text-ink tabular-nums">{n(row.gmv, fmtBrl)}</span>;
       case "ad_spend":
-        return <span className="text-sm font-semibold text-rose-700 tabular-nums">{n(row.ad_spend, fmtBrl)}</span>;
+        return <span className="text-sm font-semibold text-crit-ink tabular-nums">{n(row.ad_spend, fmtBrl)}</span>;
       case "ad_roas":
         if (roasSemVendaNaFotografia(row)) {
           return (
@@ -152,18 +152,18 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
           );
         }
         return (
-          <span className="text-sm font-semibold text-slate-800 tabular-nums" title={row.ad_roas == null ? "sem dado" : ROAS_ATRIBUIDO_LABEL}>
+          <span className="text-sm font-semibold text-ink tabular-nums" title={row.ad_roas == null ? "sem dado" : ROAS_ATRIBUIDO_LABEL}>
             {row.ad_roas == null ? "—" : roasBr(row.ad_roas)}
           </span>
         );
       case "ad_acos_pct":
-        return <span className="text-sm text-slate-600 tabular-nums">{pct(row.ad_acos_pct)}</span>;
+        return <span className="text-sm text-ink-muted tabular-nums">{pct(row.ad_acos_pct)}</span>;
       case "revenue_share_pct":
-        return <span className="text-sm text-slate-600 tabular-nums">{sharePct(row.revenue_share_pct)}</span>;
+        return <span className="text-sm text-ink-muted tabular-nums">{sharePct(row.revenue_share_pct)}</span>;
       case "units_sold":
-        return <span className="text-sm text-slate-600 tabular-nums">{n(row.units_sold, fmtNumber)}</span>;
+        return <span className="text-sm text-ink-muted tabular-nums">{n(row.units_sold, fmtNumber)}</span>;
       case "cancel_rate_pct":
-        return <span className="text-sm text-slate-600 tabular-nums">{pct(row.cancel_rate_pct)}</span>;
+        return <span className="text-sm text-ink-muted tabular-nums">{pct(row.cancel_rate_pct)}</span>;
       case "pareto_bucket":
         return <BucketChip v={row.pareto_bucket} />;
       case "revenue_velocity":
@@ -175,7 +175,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
 
   if (!loading && rows.length === 0) {
     return (
-      <p className="px-6 py-10 text-center text-sm text-slate-500">
+      <p className="px-6 py-10 text-center text-sm text-ink-muted">
         Nenhuma evidência na lente <span className="font-semibold">{LENS_LABELS[lens]}</span> para o escopo
         selecionado.
       </p>
@@ -199,7 +199,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
           <div className="max-h-[520px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="bg-slate-50 text-left">
+                <tr className="bg-raised text-left">
                   {columns.map((c) => {
                     const h = HEAD[c];
                     if (!h) return null;
@@ -215,18 +215,18 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
                     ) : (
                       <th
                         key={c}
-                        className={`sticky top-0 z-10 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider ${h.align === "right" ? "text-right" : "text-left"}`}
+                        className={`sticky top-0 z-10 bg-raised px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider ${h.align === "right" ? "text-right" : "text-left"}`}
                       >
                         {h.label}
                       </th>
                     );
                   })}
-                  <th className="sticky top-0 z-10 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">
+                  <th className="sticky top-0 z-10 bg-raised px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-right">
                     Detalhe
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-line">
                 {sort.sortedRows.map((row, i) => (
                   <tr key={`${row.kind}-${row.brand}-${i}`}>
                     {columns.map((c) => (
@@ -239,7 +239,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
                         type="button"
                         onClick={() => onOpenDetail(row)}
                         aria-label={`Detalhe de ${productLabel(row) ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
-                        className="inline-flex items-center justify-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                        className="inline-flex items-center justify-center min-h-11 px-3 text-xs font-semibold text-accent-ink border border-line-strong rounded-lg hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
                         Detalhe
                       </button>
@@ -253,26 +253,26 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
       </div>
 
       {/* Mobile: card por evidência — a tabela larga não é comprimida */}
-      <ul className="sm:hidden divide-y divide-slate-100 list-none p-0 m-0">
+      <ul className="sm:hidden divide-y divide-line list-none p-0 m-0">
         {sort.sortedRows.map((row, i) => (
           <li key={`${row.kind}-${row.brand}-m${i}`} className="px-4 py-4 flex flex-col gap-2">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-500">{brandLabel(row.brand)}</p>
-                <p className="text-sm text-slate-800 leading-snug">{truncate(productLabel(row), 60)}</p>
+                <p className="text-xs font-semibold text-ink-muted">{brandLabel(row.brand)}</p>
+                <p className="text-sm text-ink leading-snug">{truncate(productLabel(row), 60)}</p>
               </div>
               <BucketChip v={row.pareto_bucket} />
             </div>
             <dl className="grid grid-cols-2 gap-2 m-0">
               <div>
-                <dt className="text-xs text-slate-500">{row.kind === "parar" ? "Ad spend" : "GMV"}</dt>
-                <dd className="text-sm font-semibold text-slate-900 tabular-nums m-0">
+                <dt className="text-xs text-ink-muted">{row.kind === "parar" ? "Ad spend" : "GMV"}</dt>
+                <dd className="text-sm font-semibold text-ink tabular-nums m-0">
                   {row.kind === "parar" ? n(row.ad_spend, fmtBrl) : n(row.gmv, fmtBrl)}
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-slate-500">{row.kind === "escalar" ? ROAS_ATRIBUIDO_CURTO : "Velocidade"}</dt>
-                <dd className="text-sm font-semibold text-slate-900 tabular-nums m-0">
+                <dt className="text-xs text-ink-muted">{row.kind === "escalar" ? ROAS_ATRIBUIDO_CURTO : "Velocidade"}</dt>
+                <dd className="text-sm font-semibold text-ink tabular-nums m-0">
                   {row.kind === "escalar"
                     ? (row.ad_roas == null ? "—" : roasBr(row.ad_roas))
                     : (VELOCITY_LABEL[row.revenue_velocity ?? ""] ?? "—")}
@@ -283,7 +283,7 @@ export default function EvidenceQueue({ lens, rows, onOpenDetail, loading }: Pro
               type="button"
               onClick={() => onOpenDetail(row)}
               aria-label={`Detalhe de ${productLabel(row) ?? "produto sem título"}, marca ${brandLabel(row.brand)}`}
-              className="self-start inline-flex items-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+              className="self-start inline-flex items-center min-h-11 px-3 text-xs font-semibold text-accent-ink border border-line-strong rounded-lg hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Detalhe
             </button>

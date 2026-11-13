@@ -9,9 +9,9 @@ import { readFileSync } from "node:fs";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
 
-test("cartoes de prioridade: KpiTile gerencial com as 7 identidades existentes (nao cor de estado)", () => {
+test("cartoes de prioridade: CartaoIndicador (ALVO-GRADE) com as 7 identidades existentes (nao cor de estado)", () => {
   const src = ler("src/components/inteligencia/PriorityCards.tsx");
-  assert.ok(src.includes('variante="gerencial"') && src.includes("rotulo={p.title}"));
+  assert.ok(src.includes("<CartaoIndicador") && src.includes("rotulo={p.title}") && src.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"));
   assert.ok(src.includes('parar: { icone: OctagonX, identidade: "ads" }'));
   assert.ok(src.includes('escalar: { icone: Rocket, identidade: "roas" }'));
   assert.ok(src.includes('testar: { icone: FlaskConical, identidade: "gmv" }'));
@@ -25,8 +25,8 @@ test("cartoes: valor no formato da casa, contagem de registros recebidos e limit
   assert.ok(src.includes("valor={fmtBrlCurto(p.amount)}") && !src.includes("fmtBrl("));
   assert.ok(src.includes("registro${p.received === 1") && src.includes("<InfoDica texto={p.limitation} emControle />"));
   assert.ok(src.includes("onAbrir={disabled ? undefined : () => onOpen(p)}"));
-  // Quantidade impar: o ultimo fecha a linha no celular
-  assert.ok(src.includes("impar && i === priorities.length - 1") && src.includes('"col-span-2 lg:col-span-1"'));
+  // ALVO-GRADE: a faixa de 4 (3 prioridades ML + TikTok como irmao na mesma grade).
+  assert.ok(src.includes("xl:grid-cols-4") && src.includes("{extra}"));
 });
 
 test("pagina: o detalhe de uma prioridade herda icone e cor; os outros 5 detalhes seguem como estavam", () => {

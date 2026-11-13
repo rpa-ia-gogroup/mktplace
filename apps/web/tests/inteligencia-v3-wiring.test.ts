@@ -174,15 +174,13 @@ test("29b. todo acionamento e' button/link com nome acessivel", () => {
   assert.match(c, /<button/);
   assert.match(c, /aria-label=\{`Detalhe do bucket/);
   const p = read("src/components/inteligencia/PriorityCards.tsx");
-  // O cartao e' o KpiTile gerencial: o <button> (min-h-11, aria-haspopup) tem como nome acessivel o
-  // rotulo + o valor + "(abrir detalhe)" (sr-only), em vez do aria-label escrito a mao de antes.
-  assert.match(p, /<KpiTile/);
+  // ALVO-GRADE: o cartao e' o CartaoIndicador: um <button type="button"> real com aria-haspopup,
+  // cujo nome acessivel e' o texto do proprio cartao (rotulo + valor + legenda).
+  assert.match(p, /<CartaoIndicador/);
   assert.match(p, /rotulo=\{p\.title\}/);
   assert.match(p, /onAbrir=\{disabled \? undefined : \(\) => onOpen\(p\)\}/);
-  const tile = read("src/components/ui/KpiTile.tsx");
-  assert.match(tile, /aria-haspopup=/);
-  assert.match(tile, /min-h-11/);
-  assert.match(tile, /sr-only/);
+  const tile = read("src/components/ui/CartaoIndicador.tsx");
+  assert.match(tile, /<button type="button" onClick=\{onAbrir\} aria-haspopup="dialog"/);
 });
 
 // ---------------------------------------------------------------------------
@@ -359,8 +357,10 @@ test("33b. o ramo de loading nao contem NENHUM texto de vazio", () => {
 
 test("33c. controles ficam desabilitados durante loading", () => {
   const src = read(INTEL);
-  assert.ok((src.match(/disabled=\{status\.loading\}/g) ?? []).length >= 4,
-    "chips e cartoes precisam ficar inertes enquanto carrega");
+  assert.ok((src.match(/disabled=\{status\.loading\}/g) ?? []).length >= 3,
+    "cartoes, matriz e barras precisam ficar inertes enquanto carrega");
+  // ALVO-GRADE: a marca e' o Segmented da casa; enquanto carrega, a escolha e' ignorada.
+  assert.ok(src.includes("aoEscolher={(b) => { if (!status.loading) setBrand(b); }}"), "marca inerte enquanto carrega");
 });
 
 test("34. as duas listas ML abrem o dialogo unico e tem CTA para a lente certa", () => {

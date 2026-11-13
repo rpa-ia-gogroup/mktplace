@@ -3,10 +3,12 @@
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight } from "lucide-react";
-import LiveStatusBadge from "@/components/LiveStatusBadge";
+import { ArrowRight, Sparkles } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import Segmented from "@/components/ui/Segmented";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownMetricPair from "@/components/drilldown/DrilldownMetricPair";
@@ -65,17 +67,6 @@ import {
 const REGIME_ML = "Mercado Livre · fotografia do último carregamento";
 const REGIME_TK = "TikTok Shop · últimos 30 dias";
 
-function RegimeBadge({ text, tone = "ml" }: { text: string; tone?: "ml" | "tk" }) {
-  const cls = tone === "ml"
-    ? "bg-slate-100 text-slate-700 border-slate-200"
-    : "bg-violet-50 text-violet-800 border-violet-200";
-  return (
-    <span className={`inline-block text-xs font-semibold px-2.5 py-1 rounded-lg border ${cls}`}>
-      {text}
-    </span>
-  );
-}
-
 function SectionCard({ id, title, subtitle, regime, action, children }: {
   id?: string;
   title: string;
@@ -87,13 +78,13 @@ function SectionCard({ id, title, subtitle, regime, action, children }: {
   return (
     <section
       id={id}
-      className={`bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden${id ? " scroll-mt-24" : ""}`}
+      className={`bg-surface border border-line rounded-2xl shadow-sm overflow-hidden${id ? " scroll-mt-24" : ""}`}
     >
-      <div className="px-4 sm:px-6 py-4 border-b border-violet-50 flex items-start justify-between gap-3 flex-wrap">
+      <div className="px-4 sm:px-6 py-4 border-b border-line flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
-          <h2 className="text-sm font-semibold text-slate-800">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>}
-          {regime && <p className="text-xs text-slate-400 mt-1">{regime}</p>}
+          <h2 className="text-sm font-semibold text-ink">{title}</h2>
+          {subtitle && <p className="text-xs text-ink-muted mt-0.5">{subtitle}</p>}
+          {regime && <p className="text-xs text-ink-faint mt-1">{regime}</p>}
         </div>
         {action}
       </div>
@@ -145,7 +136,7 @@ const CLASSE_CTA_BOTAO =
 
 /** `null` → "—" com título "sem dado"; zero continua sendo zero. */
 function nullable(v: number | null | undefined, fmt: (x: number) => string) {
-  if (v == null) return <span className="text-slate-400" title="sem dado">—</span>;
+  if (v == null) return <span className="text-ink-faint" title="sem dado">—</span>;
   return <span className="tabular-nums">{fmt(v)}</span>;
 }
 
@@ -173,16 +164,16 @@ function InteligenciaSkeleton() {
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="bg-white border border-violet-100 rounded-2xl shadow-sm p-4 flex flex-col gap-3 animate-pulse min-h-[9rem]">
-            <div className="h-3 bg-slate-100 rounded w-32" />
-            <div className="h-3 bg-slate-100 rounded w-full" />
-            <div className="h-8 bg-slate-200 rounded w-16 mt-auto" />
+          <div key={i} className="bg-surface border border-line rounded-2xl shadow-sm p-4 flex flex-col gap-3 animate-pulse min-h-[9rem]">
+            <div className="h-3 bg-raised rounded w-32" />
+            <div className="h-3 bg-raised rounded w-full" />
+            <div className="h-8 bg-line rounded w-16 mt-auto" />
           </div>
         ))}
       </div>
-      <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-        <div className="px-4 sm:px-6 py-4 border-b border-violet-50 animate-pulse">
-          <div className="h-3 bg-slate-100 rounded w-48" />
+      <div className="bg-surface border border-line rounded-2xl shadow-sm overflow-hidden">
+        <div className="px-4 sm:px-6 py-4 border-b border-line animate-pulse">
+          <div className="h-3 bg-raised rounded w-48" />
         </div>
         <table className="w-full text-sm">
           <tbody><SkeletonTableRows rows={5} cols={6} /></tbody>
@@ -371,60 +362,59 @@ function InteligenciaPageInner() {
     : dialog.kind === "point" ? `point:${dialog.highlight.item_id}`
     : `evidence:${dialog.item.kind}:${dialog.item.brand}:${dialog.item.title}`;
 
+  // TikTok na faixa: a soma do GMV dos produtos RECEBIDOS (janela de 30 dias), como as
+  // prioridades somam os registros recebidos; nunca o total do canal.
+  const tkGmv = (displayData?.tk_products ?? []).reduce((n, r) => n + (r.gmv ?? 0), 0);
+  const cartaoTikTok = tkReceived > 0 ? (
+    <CartaoIndicador
+      rotulo="TikTok em destaque"
+      icone={Sparkles}
+      cor="rgb(var(--tc-kpi-ticket))"
+      ajuda={<InfoDica emControle texto={`${REGIME_TK}. Soma do GMV dos produtos recebidos, não o total do canal. O filtro de marca vale só para o Mercado Livre.`} />}
+      valor={fmtBrlCurto(tkGmv)}
+      legenda={`GMV de ${tkReceived} produto${tkReceived === 1 ? "" : "s"} · 30 dias${singleBrand ? " · todas as marcas" : ""}`}
+      onAbrir={status.loading ? undefined : () => document.getElementById(INTELIGENCIA_ANCHORS.produtos)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+    />
+  ) : null;
+
   return (
-    <PageContainer>
-      {/* ---------------- Bloco 1 — cabeçalho e regimes ---------------- */}
-      <PageHeader
-        title="Inteligência"
-        subtitle="Radar de portfólio."
-        status={
-          status.fresh ? <LiveStatusBadge live={displayIsLive} />
-            : status.loading ? (
-              <span className="text-xs text-slate-500 bg-slate-100 border border-slate-200 rounded-lg px-3 py-1.5 font-medium">
-                Atualizando dados...
-              </span>
-            ) : null
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <RegimeBadge text={REGIME_ML} />
-        <RegimeBadge text={REGIME_TK} tone="tk" />
-        <InfoDica texto="Os blocos ML não têm janela de datas e não respondem ao período global. O filtro de marca é local." />
-      </div>
-
-      {/* Chips de marca: a lista vem do PAYLOAD, incluindo Rituária */}
-      <div className="-mx-1 overflow-x-auto">
-        <div className="flex items-center gap-2 px-1 py-0.5 w-max" role="group" aria-label="Filtro local de marca ML">
-          <button
-            type="button"
-            onClick={() => setBrand(BRAND_ALL)}
-            aria-pressed={brandSel === BRAND_ALL}
-            disabled={status.loading}
-            className={`min-h-11 px-3 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
-              brandSel === BRAND_ALL ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-violet-100 hover:border-violet-300"
-            }`}
-          >
-            Todas as marcas
-          </button>
-          {mlBrands.map((b) => (
-            <button
-              key={b}
-              type="button"
-              onClick={() => setBrand(b)}
-              aria-pressed={brandSel === b}
-              disabled={status.loading}
-              aria-label={`Filtrar por ${brandLabel(b)}`}
-              className={`min-h-11 px-3 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
-                brandSel === b ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-violet-100 hover:border-violet-300"
-              }`}
-            >
-              {brandLabel(b)}
-            </button>
-          ))}
+    <Aba
+      titulo="Ações ML + TikTok"
+      selo={
+        <>
+          <SeloAtualizado
+            em={status.fresh ? mlRefreshedAt : null}
+            carregando={status.loading}
+            aoVivo={status.fresh ? displayIsLive : null}
+            detalhe={`${REGIME_ML} · ${REGIME_TK}`}
+          />
+          <InfoDica texto={`${REGIME_ML}. ${REGIME_TK}. Os blocos ML não têm janela de datas e não respondem ao período global. O filtro de marca é local.`} />
+        </>
+      }
+      filtros={
+        // Marca: a lista vem do PAYLOAD, incluindo Rituária. 390: a trilha rola sozinha.
+        <div data-trilha className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
+          <Segmented
+            rotulo="Filtro local de marca ML"
+            opcoes={[{ valor: BRAND_ALL, texto: "Todas as marcas" }, ...mlBrands.map((b) => ({ valor: b, texto: brandLabel(b) }))]}
+            valor={brandSel}
+            aoEscolher={(b) => { if (!status.loading) setBrand(b); }}
+            className="whitespace-nowrap"
+          />
         </div>
-      </div>
-
+      }
+      faixa={
+        hasData && !status.loading ? (
+          <section id={INTELIGENCIA_ANCHORS.prioridades} aria-label={`Prioridades da fotografia ML atual · ${scope}`} className="scroll-mt-24">
+            {priorities.length > 0 || cartaoTikTok ? (
+              <PriorityCards priorities={priorities} onOpen={(p) => setDialog({ kind: "priority", priority: p })} disabled={status.loading} extra={cartaoTikTok} />
+            ) : (
+              <StateBlock tipo="vazio" titulo={`Nenhuma prioridade nas listas recebidas para ${scope}.`} />
+            )}
+          </section>
+        ) : undefined
+      }
+    >
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {status.loading ? "Carregando inteligência..."
           : status.error ? "Falha ao carregar."
@@ -465,25 +455,12 @@ function InteligenciaPageInner() {
               <a
                 key={anchor}
                 href={`#${anchor}`}
-                className="inline-flex items-center justify-center min-h-11 min-w-11 px-2.5 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                className="inline-flex items-center justify-center min-h-11 min-w-11 px-2.5 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 {label}
               </a>
             ))}
           </nav>
-
-          {/* ---------------- Bloco 2 — prioridades ---------------- */}
-          <section id={INTELIGENCIA_ANCHORS.prioridades} className="scroll-mt-24">
-            <h2 className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
-              Prioridades da fotografia ML atual · {scope}
-              <InfoDica texto="As contagens são dos registros recebidos, não do portfólio." />
-            </h2>
-            {priorities.length > 0 ? (
-              <PriorityCards priorities={priorities} onOpen={(p) => setDialog({ kind: "priority", priority: p })} disabled={status.loading} />
-            ) : (
-              <StateBlock tipo="vazio" titulo={`Nenhuma prioridade nas listas recebidas para ${scope}.`} />
-            )}
-          </section>
 
           {/* ---------------- Bloco 3 — matriz definitiva (V3-1B, §7.3) ----------
               O bloco consome `opportunity_map` DIRETO. Nenhuma mediana,
@@ -510,7 +487,7 @@ function InteligenciaPageInner() {
               onOpenMatrix={() => setDialog({ kind: "matrix" })}
               disabled={status.loading}
             />
-            <p className="px-4 sm:px-6 pb-5 text-xs text-slate-500">{frescorMl}.</p>
+            <p className="px-4 sm:px-6 pb-5 text-xs text-ink-muted">{frescorMl}.</p>
           </SectionCard>
 
           {/* ---------------- Bloco 4 — concentração ---------------- */}
@@ -545,22 +522,22 @@ function InteligenciaPageInner() {
               return (
                 <SectionCard key={panel.title} title={panel.title} regime={REGIME_ML}>
                   {panel.rows.length === 0 ? (
-                    <p className="px-6 py-8 text-center text-sm text-slate-500">
+                    <p className="px-6 py-8 text-center text-sm text-ink-muted">
                       Nenhum produto nesta faixa para {scope}.
                     </p>
                   ) : (
-                    <ul className="divide-y divide-slate-100 list-none p-0 m-0">
+                    <ul className="divide-y divide-line list-none p-0 m-0">
                       {panel.rows.map((r, i) => {
                         const value = (panel.kind === "parar" ? r.ad_spend : r.gmv) ?? 0;
                         return (
                           <li key={`${r.brand}-${i}`} className={`px-4 sm:px-6 py-3 ${i >= 3 ? "hidden sm:block" : ""}`}>
                             <div className="flex items-baseline justify-between gap-3">
-                              <p className="text-xs font-semibold text-slate-500">{brandLabel(r.brand)}</p>
-                              <p className="text-sm font-semibold text-slate-900 tabular-nums">
+                              <p className="text-xs font-semibold text-ink-muted">{brandLabel(r.brand)}</p>
+                              <p className="text-sm font-semibold text-ink tabular-nums">
                                 {panel.kind === "parar"
                                   ? nullable(r.ad_spend, fmtBrlCurto)
                                   : (r.ad_roas == null
-                                      ? <span className="text-slate-400" title="sem dado">—</span>
+                                      ? <span className="text-ink-faint" title="sem dado">—</span>
                                       : roasBr(r.ad_roas))}
                               </p>
                             </div>
@@ -568,14 +545,14 @@ function InteligenciaPageInner() {
                               // T-0096: sem titulo na gold, o MLB identifica o item.
                               const rotulo = productLabel(r);
                               return (
-                                <p className="text-sm text-slate-700 leading-snug" title={rotulo ?? undefined}>
+                                <p className="text-sm text-ink leading-snug" title={rotulo ?? undefined}>
                                   {rotulo && rotulo.length > 46 ? `${rotulo.slice(0, 46)}…` : (rotulo ?? "—")}
                                 </p>
                               );
                             })()}
-                            <div className="mt-1.5 h-1.5 bg-slate-100 rounded-full overflow-hidden" aria-hidden="true">
+                            <div className="mt-1.5 h-1.5 bg-raised rounded-full overflow-hidden" aria-hidden="true">
                               <div
-                                className={panel.kind === "parar" ? "tc-barra h-full bg-rose-400" : "tc-barra h-full bg-emerald-400"}
+                                className={panel.kind === "parar" ? "tc-barra h-full bg-crit" : "tc-barra h-full bg-ok"}
                                 style={{ width: `${Math.max(4, (Math.abs(value) / max) * 100)}%` }}
                               />
                             </div>
@@ -583,7 +560,7 @@ function InteligenciaPageInner() {
                               type="button"
                               onClick={() => setDialog({ kind: "evidence", item: r })}
                               aria-label={`Detalhe de ${r.title ?? r.item_id ?? "produto sem título"}, marca ${brandLabel(r.brand)}`}
-                              className="mt-2 inline-flex items-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                              className="mt-2 inline-flex items-center min-h-11 px-3 text-xs font-semibold text-accent-ink border border-line-strong rounded-lg hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
                               Detalhe
                             </button>
@@ -592,11 +569,11 @@ function InteligenciaPageInner() {
                       })}
                     </ul>
                   )}
-                  <div className="px-4 sm:px-6 py-3 border-t border-slate-100 flex flex-col gap-1">
+                  <div className="px-4 sm:px-6 py-3 border-t border-line flex flex-col gap-1">
                     {panel.kind === "parar" && (
-                      <p className="text-xs text-slate-500">Janela: {PARAR_JANELA}.</p>
+                      <p className="text-xs text-ink-muted">Janela: {PARAR_JANELA}.</p>
                     )}
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-ink-muted">
                       {panel.rows.length === 0
                         ? "Sem registros nesta lista."
                         : `${panel.total != null
@@ -606,7 +583,7 @@ function InteligenciaPageInner() {
                     <Link
                       href={buildLensHref("/inteligencia", panel.kind, searchParams, { anchor: INTELIGENCIA_ANCHORS.fila })}
                       aria-label={`Ver todos os registros da lente ${LENS_LABELS[panel.kind]} na fila de evidências`}
-                      className="inline-flex items-center min-h-11 text-xs font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded self-start"
+                      className="inline-flex items-center min-h-11 text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded self-start"
                     >
                       Ver todos na fila →
                     </Link>
@@ -623,19 +600,19 @@ function InteligenciaPageInner() {
               regime={REGIME_TK}
             >
               {tkRows.length === 0 ? (
-                <p className="px-6 py-8 text-center text-sm text-slate-500">Sem dados TikTok na janela de 30 dias.</p>
+                <p className="px-6 py-8 text-center text-sm text-ink-muted">Sem dados TikTok na janela de 30 dias.</p>
               ) : (
-                <ul className="divide-y divide-slate-100 list-none p-0 m-0">
+                <ul className="divide-y divide-line list-none p-0 m-0">
                   {tkRows.map((r, i) => (
                     <li key={`${r.brand}-tk-${i}`} className={`px-4 sm:px-6 py-3 ${i >= 3 ? "hidden sm:block" : ""}`}>
                       <div className="flex items-baseline justify-between gap-3">
-                        <p className="text-xs font-semibold text-slate-500">{brandLabel(r.brand)}</p>
-                        <p className="text-sm font-semibold text-slate-900 tabular-nums">{fmtBrlCurto(r.gmv)}</p>
+                        <p className="text-xs font-semibold text-ink-muted">{brandLabel(r.brand)}</p>
+                        <p className="text-sm font-semibold text-ink tabular-nums">{fmtBrlCurto(r.gmv)}</p>
                       </div>
-                      <p className="text-sm text-slate-700 leading-snug" title={r.product_name}>
+                      <p className="text-sm text-ink leading-snug" title={r.product_name}>
                         {r.product_name.length > 46 ? `${r.product_name.slice(0, 46)}…` : r.product_name}
                       </p>
-                      <p className="text-xs text-slate-500 tabular-nums mt-0.5">
+                      <p className="text-xs text-ink-muted tabular-nums mt-0.5">
                         {fmtNumCurto(r.orders)} pedidos · nota {r.avg_rating == null ? "—" : decBr(r.avg_rating)}
                       </p>
                     </li>
@@ -643,7 +620,7 @@ function InteligenciaPageInner() {
                 </ul>
               )}
               {tkRows.length > 0 && (
-                <p className="px-4 sm:px-6 py-3 text-xs text-slate-500 border-t border-slate-100">
+                <p className="px-4 sm:px-6 py-3 text-xs text-ink-muted border-t border-line">
                   {tkSampleNote(tkRows.length, tkReceived)}
                 </p>
               )}
@@ -667,12 +644,12 @@ function InteligenciaPageInner() {
                     onClick={() => setLens(l)}
                     aria-pressed={lens === l}
                     aria-label={`Lente ${LENS_LABELS[l]}, ${count} registros exibidos`}
-                    className={`min-h-11 px-3 rounded-lg text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 ${
-                      lens === l ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-600 border-violet-100 hover:border-violet-300"
+                    className={`min-h-11 px-3 rounded-lg text-xs font-semibold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      lens === l ? "bg-accent text-accent-on border-accent" : "bg-surface text-ink-muted border-line hover:border-accent/40"
                     }`}
                   >
                     {LENS_LABELS[l]}
-                    <span className={`ml-1.5 tabular-nums ${lens === l ? "text-violet-100" : "text-slate-400"}`}>{count}</span>
+                    <span className={`ml-1.5 tabular-nums ${lens === l ? "text-accent-on/80" : "text-ink-faint"}`}>{count}</span>
                   </button>
                 );
               })}
@@ -696,33 +673,33 @@ function InteligenciaPageInner() {
                 regime={REGIME_ML}
               >
                 {ltvRows.length === 0 ? (
-                  <p className="px-6 py-8 text-center text-sm text-slate-500">Sem dados de LTV para {scope}.</p>
+                  <p className="px-6 py-8 text-center text-sm text-ink-muted">Sem dados de LTV para {scope}.</p>
                 ) : (
                   <TableScrollHint>
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="bg-slate-50 text-left">
+                        <tr className="bg-raised text-left">
                           <SortableHeader label="Marca" column="brand" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="left" />
                           <SortableHeader label="Compradores" column="total_buyers" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="right" />
                           <SortableHeader label="Recorrência" column="repeat_rate_pct" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="right" />
                           <SortableHeader label="LTV médio" column="avg_customer_ltv" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="right" />
                           <SortableHeader label="Em risco" column="at_risk_or_churned" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="right" />
                           <SortableHeader label="ROAS geral" column="overall_roas" sort={ltvSort.sort} onSort={ltvSort.toggleSort} align="right" />
-                          <th scope="col" className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider text-right">Detalhe</th>
+                          <th scope="col" className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-right">Detalhe</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-line">
                         {ltvSort.sortedRows.map((r) => (
                           <tr key={r.brand}>
-                            <td className="px-4 py-3 text-xs font-semibold text-slate-700 whitespace-nowrap">{brandLabel(r.brand)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.total_buyers, fmtNumCurto)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">
-                              {r.repeat_rate_pct == null ? <span className="text-slate-400" title="sem dado">—</span> : <span className="tabular-nums">{pctBr(r.repeat_rate_pct)}</span>}
+                            <td className="px-4 py-3 text-xs font-semibold text-ink whitespace-nowrap">{brandLabel(r.brand)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-ink-muted">{nullable(r.total_buyers, fmtNumCurto)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-ink-muted">
+                              {r.repeat_rate_pct == null ? <span className="text-ink-faint" title="sem dado">—</span> : <span className="tabular-nums">{pctBr(r.repeat_rate_pct)}</span>}
                             </td>
-                            <td className="px-4 py-3 text-right text-sm font-semibold text-slate-900">{nullable(r.avg_customer_ltv, fmtBrlCurto)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">{nullable(r.at_risk_or_churned, fmtNumCurto)}</td>
-                            <td className="px-4 py-3 text-right text-sm text-slate-600">
-                              {r.overall_roas == null ? <span className="text-slate-400" title="sem dado">—</span> : <span className="tabular-nums">{roasBr(r.overall_roas)}</span>}
+                            <td className="px-4 py-3 text-right text-sm font-semibold text-ink">{nullable(r.avg_customer_ltv, fmtBrlCurto)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-ink-muted">{nullable(r.at_risk_or_churned, fmtNumCurto)}</td>
+                            <td className="px-4 py-3 text-right text-sm text-ink-muted">
+                              {r.overall_roas == null ? <span className="text-ink-faint" title="sem dado">—</span> : <span className="tabular-nums">{roasBr(r.overall_roas)}</span>}
                             </td>
                             <td className="px-4 py-3 text-right">
                               <Link
@@ -731,7 +708,7 @@ function InteligenciaPageInner() {
                                 // foco `ltv` e' demonstravel pelo dado exibido.
                                 href={`/brand/${r.brand}?brands=${r.brand}&${buildInteligenciaArrivalParams("ltv", r.brand)}`}
                                 aria-label={`Abrir a visão da marca ${brandLabel(r.brand)} pela evidência de LTV`}
-                                className="inline-flex items-center justify-center min-h-11 px-3 text-xs font-semibold text-violet-700 border border-violet-200 rounded-lg hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
+                                className="inline-flex items-center justify-center min-h-11 px-3 text-xs font-semibold text-accent-ink border border-line-strong rounded-lg hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                               >
                                 Abrir
                               </Link>
@@ -748,14 +725,14 @@ function InteligenciaPageInner() {
             <SectionCard title="Próximos destinos">
               <ul className="px-4 sm:px-6 py-4 flex flex-col gap-2 list-none m-0">
                 <li>
-                  <Link href="/canais" className="inline-flex items-center min-h-11 text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded">
+                  <Link href="/canais" className="inline-flex items-center min-h-11 text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded">
                     Comparar canais →
                   </Link>
                 </li>
                 <li>
                   <Link
                     href={singleBrand ? `/produtos?channels=ml&brands=${singleBrand}` : "/produtos?channels=ml"}
-                    className="inline-flex items-center min-h-11 text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                    className="inline-flex items-center min-h-11 text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
                   >
                     Abrir Produtos no Mercado Livre →
                   </Link>
@@ -765,7 +742,7 @@ function InteligenciaPageInner() {
                     <Link
                       href={`/brand/${singleBrand}?brands=${singleBrand}`}
                       aria-label={`Abrir a visão da marca ${brandLabel(singleBrand)}`}
-                      className="inline-flex items-center min-h-11 text-sm font-semibold text-violet-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded"
+                      className="inline-flex items-center min-h-11 text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
                     >
                       Abrir marca {brandLabel(singleBrand)} →
                     </Link>
@@ -1075,14 +1052,14 @@ function InteligenciaPageInner() {
           );
         })()}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
 
 export default function InteligenciaPage() {
   // `useSearchParams` exige limite de Suspense no App Router.
   return (
-    <Suspense fallback={<PageContainer><p className="text-sm text-slate-500">Carregando inteligência…</p></PageContainer>}>
+    <Suspense fallback={<PageContainer><p className="text-sm text-ink-muted">Carregando inteligência…</p></PageContainer>}>
       <InteligenciaPageInner />
     </Suspense>
   );

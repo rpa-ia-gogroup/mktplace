@@ -46,28 +46,28 @@ export const QUADRANT_META: Record<QuadrantKey, QuadrantMeta> = {
   escalar: {
     label: "Escalar",
     roasHigh: true, gmvHigh: true,
-    dot: "bg-emerald-500", chip: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-ok", chip: "bg-ok-soft text-ok-ink border-ok/30",
     regra: (r, g) => `ROAS ≥ ${r} e GMV ≥ ${g}`,
     leitura: "Retorno acima da referência com volume acima da referência.",
   },
   testar_investimento: {
     label: "Testar investimento",
     roasHigh: true, gmvHigh: false,
-    dot: "bg-sky-500", chip: "bg-sky-50 text-sky-700 border-sky-200",
+    dot: "bg-kpi-prazo", chip: "bg-kpi-prazo/10 text-kpi-prazo border-kpi-prazo/30",
     regra: (r, g) => `ROAS ≥ ${r} e GMV < ${g}`,
     leitura: "Retorno acima da referência, mas volume ainda abaixo dela.",
   },
   monitorar: {
     label: "Monitorar",
     roasHigh: false, gmvHigh: true,
-    dot: "bg-amber-500", chip: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-warn", chip: "bg-warn-soft text-warn-ink border-warn/30",
     regra: (r, g) => `ROAS < ${r} e GMV ≥ ${g}`,
     leitura: "Volume acima da referência sustentado por retorno abaixo dela.",
   },
   reduzir_parar: {
     label: "Reduzir ou parar",
     roasHigh: false, gmvHigh: false,
-    dot: "bg-rose-500", chip: "bg-rose-50 text-rose-700 border-rose-200",
+    dot: "bg-crit", chip: "bg-crit-soft text-crit-ink border-crit/30",
     regra: (r, g) => `ROAS < ${r} e GMV < ${g}`,
     leitura: "Retorno e volume ambos abaixo da referência.",
   },
@@ -91,7 +91,7 @@ export const BAND_META: Record<BandKey, BandMeta> = {
       + "fora dos quadrantes em vez de entrar como retorno baixo.",
     naoConfundir:
       "Não é retorno indisponível com gasto — isso é a outra faixa. Aqui não houve gasto.",
-    chip: "bg-slate-50 text-slate-600 border-slate-200",
+    chip: "bg-raised text-ink-muted border-line",
   },
   roas_indisponivel_com_investimento: {
     label: "Investimento sem ROAS medido",
@@ -102,7 +102,7 @@ export const BAND_META: Record<BandKey, BandMeta> = {
     naoConfundir:
       "Não é ROAS baixo. ROAS baixo é número medido e ocupa quadrante — inclusive "
       + "`ROAS = 0`, que é retorno baixo medido, nunca indisponibilidade.",
-    chip: "bg-violet-50 text-violet-700 border-violet-200",
+    chip: "bg-accent-soft text-accent-ink border-line-strong",
   },
 };
 

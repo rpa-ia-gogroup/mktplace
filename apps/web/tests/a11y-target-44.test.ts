@@ -79,7 +79,7 @@ test("A1: rótulos, destinos e ordem da navegação interna não mudaram", () =>
     cursor = i;
   }
   assert.match(bloco, /href=\{`#\$\{anchor\}`\}/, "o destino continua sendo a âncora da seção");
-  assert.match(bloco, /focus-visible:ring-violet-500/, "foco visível preservado");
+  assert.match(bloco, /focus-visible:ring-accent/, "foco visível preservado (token do tema)");
 });
 
 // ---------------------------------------------------------------------------
@@ -158,7 +158,7 @@ test("A3: cores, legenda, foco e contrato de clique do Pareto preservados", () =
   assert.match(s, /b\.sharePct == null \? 100 \/ c\.buckets\.length : b\.sharePct/, "regra de largura alterada");
   assert.match(s, /onOpenBucket\(c\.brand, b, c\.totalGmv\)/, "argumentos do drill-down alterados");
   assert.match(s, /aria-label=\{`Detalhe do bucket \$\{BUCKET_LABEL\[b\.bucket\]\} de/, "nome acessível do segmento alterado");
-  assert.match(s, /focus-visible:ring-inset focus-visible:ring-white/, "foco visível do segmento perdido");
+  assert.match(s, /focus-visible:ring-inset focus-visible:ring-surface/, "foco visível do segmento perdido (token: claro e escuro)");
   assert.match(s, /type="button"/, "o segmento continua sendo um <button> real");
   // legenda textual: a cor nunca carrega a informação sozinha
   assert.match(s, /BUCKET_LETTER\[b\.bucket\]/, "letra do bucket na legenda");

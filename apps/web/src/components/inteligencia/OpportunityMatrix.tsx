@@ -26,6 +26,18 @@ interface Props {
   semBreakpoint?: boolean;
 }
 
+/**
+ * Cor do ponto (o `<circle>` usa `fill="currentColor"`): a classe de TEXTO do mesmo
+ * token do quadrante, escrita por extenso para o Tailwind gera-la (classe montada
+ * em tempo de execucao nao entra no CSS e o ponto saia na cor da tinta).
+ */
+const TINTA_DO_PONTO: Record<string, string> = {
+  "bg-ok": "text-ok",
+  "bg-kpi-prazo": "text-kpi-prazo",
+  "bg-warn": "text-warn",
+  "bg-crit": "text-crit",
+};
+
 const VB = 320; // lado do viewBox; o SVG escala por CSS
 
 /**
@@ -48,14 +60,14 @@ export default function OpportunityMatrix({
 
   if (estado === "out_of_scope") {
     return (
-      <p className="px-6 py-8 text-center text-sm text-slate-500">
+      <p className="px-6 py-8 text-center text-sm text-ink-muted">
         Sem marca do Mercado Livre na seleção.
       </p>
     );
   }
   if (!map || estado === "empty") {
     return (
-      <p className="px-6 py-8 text-center text-sm text-slate-500">
+      <p className="px-6 py-8 text-center text-sm text-ink-muted">
         Nenhum produto classificado neste escopo.
       </p>
     );
@@ -72,12 +84,12 @@ export default function OpportunityMatrix({
       {/* ── universo, referências e a separação amostra × universo ───────── */}
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-3 flex-wrap">
-          <p className="text-xs text-slate-500 tabular-nums">
-            Universo classificado: <strong className="text-slate-800">{contagemExata(map.total_count)}</strong>{" "}
+          <p className="text-xs text-ink-muted tabular-nums">
+            Universo classificado: <strong className="text-ink">{contagemExata(map.total_count)}</strong>{" "}
             produtos · destaques plotados:{" "}
-            <strong className="text-slate-800">{contagemExata(map.returned_count)}</strong>
+            <strong className="text-ink">{contagemExata(map.returned_count)}</strong>
           </p>
-          <p className="flex items-center gap-1 text-xs text-slate-500">
+          <p className="flex items-center gap-1 text-xs text-ink-muted">
             Referências: ROAS {roasBr(map.roas_reference)} ·{" "}
             {map.gmv_reference == null ? "GMV indisponível" : `GMV ${moedaExata(map.gmv_reference)}`}
             {/* A nota vem do backend e e' renderizada como veio, so' que no "ⓘ". */}
@@ -85,15 +97,15 @@ export default function OpportunityMatrix({
           </p>
         </div>
         {/* So' quando os pontos sao amostra: ai' a separacao muda a leitura. */}
-        {isSample(map) && <p className="text-xs text-slate-500">{sampleDeclaration(map)}</p>}
+        {isSample(map) && <p className="text-xs text-ink-muted">{sampleDeclaration(map)}</p>}
       </div>
 
       {indisponivel ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
-          <p className="text-sm font-semibold text-amber-900">
+        <div className="rounded-xl border border-warn/30 bg-warn-soft px-4 py-4">
+          <p className="text-sm font-semibold text-warn-ink">
             Matriz indisponível: não há GMV positivo neste escopo.
           </p>
-          <p className="text-xs text-amber-800 mt-1 tabular-nums">
+          <p className="text-xs text-warn-ink mt-1 tabular-nums">
             {contagemExata(map.unclassified_count)} produtos sem classificação.
           </p>
         </div>
@@ -117,7 +129,7 @@ export default function OpportunityMatrix({
               onClick={onOpenMatrix}
               disabled={disabled}
               aria-label="Abrir a matriz de oportunidades em tela cheia"
-              className="sm:hidden inline-flex items-center justify-center min-h-11 px-4 rounded-xl border border-violet-200 bg-violet-50 text-sm font-semibold text-violet-700 hover:bg-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:opacity-50"
+              className="sm:hidden inline-flex items-center justify-center min-h-11 px-4 rounded-xl border border-line-strong bg-accent-soft text-sm font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
             >
               Abrir a matriz ({contagemExata(map.returned_count)} destaques)
             </button>
@@ -127,7 +139,7 @@ export default function OpportunityMatrix({
 
       {/* ── agregados por quadrante: cobrem o UNIVERSO, não a amostra ───── */}
       <div>
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+        <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">
           Agregados por quadrante · universo completo
         </h3>
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-none p-0 m-0">
@@ -141,16 +153,16 @@ export default function OpportunityMatrix({
                   onClick={() => onOpenQuadrant(k)}
                   disabled={disabled}
                   aria-label={`Detalhe do quadrante ${meta.label}: ${contagemExata(q?.count ?? 0)} produtos no universo`}
-                  className="w-full text-left min-h-11 rounded-xl border border-slate-200 bg-white px-3 py-2.5 hover:border-violet-300 hover:bg-violet-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:pointer-events-none disabled:opacity-50"
+                  className="w-full text-left min-h-11 rounded-xl border border-line bg-surface px-3 py-2.5 hover:border-accent/40 hover:bg-accent-soft/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50"
                 >
                   <span className="flex items-center gap-2 flex-wrap">
                     <span className={`w-2.5 h-2.5 rounded-full inline-block ${meta.dot}`} aria-hidden="true" />
-                    <span className="text-sm font-semibold text-slate-800">{meta.label}</span>
-                    <span className="text-xs text-slate-500 tabular-nums ml-auto">
+                    <span className="text-sm font-semibold text-ink">{meta.label}</span>
+                    <span className="text-xs text-ink-muted tabular-nums ml-auto">
                       {contagemExata(q?.count ?? 0)} produtos
                     </span>
                   </span>
-                  <span className="block mt-1 text-xs text-slate-500 tabular-nums">
+                  <span className="block mt-1 text-xs text-ink-muted tabular-nums">
                     {fmtBrl(q?.gmv ?? 0)} de GMV · {fmtBrl(q?.ad_spend ?? 0)} de Ads ·{" "}
                     {contagemExata(q?.returned_count ?? 0)} destaque
                     {(q?.returned_count ?? 0) === 1 ? "" : "s"} plotado
@@ -165,7 +177,7 @@ export default function OpportunityMatrix({
 
       {/* ── as duas faixas, sempre separadas ─────────────────────────────── */}
       <div>
-        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+        <h3 className="text-xs font-semibold text-ink-muted uppercase tracking-wider mb-2">
           Fora dos quadrantes · duas faixas distintas
         </h3>
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 list-none p-0 m-0">
@@ -179,7 +191,7 @@ export default function OpportunityMatrix({
                   onClick={() => onOpenBand(k)}
                   disabled={disabled}
                   aria-label={`Detalhe da faixa ${meta.label}: ${contagemExata(b?.count ?? 0)} produtos`}
-                  className={`w-full text-left min-h-11 rounded-xl border px-3 py-2.5 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:pointer-events-none disabled:opacity-50 ${meta.chip}`}
+                  className={`w-full text-left min-h-11 rounded-xl border px-3 py-2.5 hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-50 ${meta.chip}`}
                 >
                   <span className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-semibold">{meta.label}</span>
@@ -229,13 +241,13 @@ function Plano({
 
       <div className="relative w-full">
         {/* rótulos dos eixos */}
-        <div className="flex justify-between text-xs text-slate-500 mb-1">
+        <div className="flex justify-between text-xs text-ink-muted mb-1">
           <span>← retorno abaixo da referência</span>
           <span>retorno acima →</span>
         </div>
 
         <div className="flex gap-2">
-          <div className="flex flex-col justify-between text-xs text-slate-500 shrink-0 w-6">
+          <div className="flex flex-col justify-between text-xs text-ink-muted shrink-0 w-6">
             <span className="[writing-mode:vertical-rl] rotate-180 leading-none">volume ↑</span>
             <span className="[writing-mode:vertical-rl] rotate-180 leading-none">↓ volume</span>
           </div>
@@ -244,7 +256,8 @@ function Plano({
             viewBox={`0 0 ${VB} ${VB}`}
             role="img"
             aria-label={`Matriz de oportunidades com ${map.returned_count} destaques plotados`}
-            className="w-full h-auto rounded-xl border border-slate-200 bg-slate-50/60"
+            // ALVO-GRADE: o viewBox de 320 escalava ate' 1200px (rotulos de 45px); teto de 560px.
+            className="w-full max-w-[560px] h-auto rounded-xl border border-line bg-raised/60"
           >
             {/* fundo por quadrante, cor consistente com a legenda */}
             {QUADRANT_KEYS.map((k) => {
@@ -260,9 +273,9 @@ function Plano({
             })}
             {/* as duas linhas de referência */}
             <line x1={VB / 2} y1={0} x2={VB / 2} y2={VB} stroke="currentColor"
-              className="text-slate-300" strokeWidth={1} strokeDasharray="4 4" aria-hidden="true" />
+              className="text-ink-faint" strokeWidth={1} strokeDasharray="4 4" aria-hidden="true" />
             <line x1={0} y1={VB / 2} x2={VB} y2={VB / 2} stroke="currentColor"
-              className="text-slate-300" strokeWidth={1} strokeDasharray="4 4" aria-hidden="true" />
+              className="text-ink-faint" strokeWidth={1} strokeDasharray="4 4" aria-hidden="true" />
 
             {/* nome de cada quadrante no canto correspondente */}
             {QUADRANT_KEYS.map((k) => {
@@ -273,7 +286,7 @@ function Plano({
                   x={m.roasHigh ? VB - 6 : 6}
                   y={m.gmvHigh ? 14 : VB - 6}
                   textAnchor={m.roasHigh ? "end" : "start"}
-                  className="fill-slate-400"
+                  className="fill-ink-faint"
                   style={{ fontSize: 12 }}
                   aria-hidden="true"
                 >
@@ -291,10 +304,10 @@ function Plano({
               const nome = `${h.title ?? h.item_id} · ${brandLabel(h.brand)} · ${meta.label} · GMV ${fmtBrl(h.gmv)} · Ads ${fmtBrl(h.ad_spend)} · ROAS ${h.ad_roas == null ? "indisponível" : roasBr(h.ad_roas)}`;
               return (
                 <g key={`${h.brand}:${h.item_id}`}>
-                  <circle cx={cx} cy={cy} r={r} className={`${meta.dot} opacity-80`}
+                  <circle cx={cx} cy={cy} r={r} className={`${TINTA_DO_PONTO[meta.dot] ?? "text-ink-muted"} opacity-80`}
                     fill="currentColor" aria-hidden="true" />
                   {rotulados.has(h.item_id) && (
-                    <text x={cx} y={cy - r - 4} textAnchor="middle" className="fill-slate-600"
+                    <text x={cx} y={cy - r - 4} textAnchor="middle" className="fill-ink-muted"
                       style={{ fontSize: 12 }} aria-hidden="true">
                       {(h.title ?? h.item_id).slice(0, 14)}
                     </text>
@@ -304,7 +317,7 @@ function Plano({
                     cx={cx} cy={cy} r={22} fill="transparent"
                     role="button" tabIndex={disabled ? -1 : 0}
                     aria-label={`Detalhe do destaque ${nome}`}
-                    className="cursor-pointer focus-visible:outline-none focus-visible:stroke-violet-600 [stroke-width:2]"
+                    className="cursor-pointer focus-visible:outline-none focus-visible:stroke-accent [stroke-width:2]"
                     onClick={() => !disabled && onOpenPoint(h)}
                     onKeyDown={(e) => {
                       if (disabled) return;
@@ -321,12 +334,12 @@ function Plano({
       {/* legenda textual: a cor nunca carrega a informação sozinha */}
       <ul className="flex gap-x-4 gap-y-1 mt-2 flex-wrap list-none p-0 m-0">
         {QUADRANT_KEYS.map((k) => (
-          <li key={k} className="flex items-center gap-1.5 text-xs text-slate-500">
+          <li key={k} className="flex items-center gap-1.5 text-xs text-ink-muted">
             <span className={`w-2.5 h-2.5 rounded-full inline-block ${QUADRANT_META[k].dot}`} aria-hidden="true" />
             <span>{QUADRANT_META[k].label}</span>
           </li>
         ))}
-        <li className="text-xs text-slate-400">
+        <li className="text-xs text-ink-faint">
           tamanho do ponto = investimento em Ads
         </li>
       </ul>

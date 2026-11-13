@@ -116,7 +116,6 @@ const AINDA_FORA_DO_ESQUELETO = new Set([
   "/full",
   "/full-ml",
   "/full-shopee",
-  "/inteligencia",
   "/marcas-menores",
   "/metas",
   "/monitoramento-preco",
