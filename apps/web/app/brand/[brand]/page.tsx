@@ -31,6 +31,7 @@ import { SEM_DADO_NO_RECORTE, SEM_DADO_NO_RECORTE_DICA } from "@/lib/overview-se
 // so de formatacao, sem calculo, metrica nem arredondamento de negocio.
 // Reaproveitar e melhor que duplicar; o nome da pasta e artefato historico.
 import { decBr, pctBr, roasBr } from "@/lib/inteligencia/format";
+import { roasPorCanaisComAds } from "@/lib/brand-roas";
 import TableScrollHint from "@/components/TableScrollHint";
 import BrandArrivalBanner from "@/components/BrandArrivalBanner";
 import Aba from "@/components/layout/Aba";
@@ -448,7 +449,11 @@ function BrandPageInner() {
   const mixCanais = channelTotals(projectedDaily, filter);
   // Periodo anterior REAL: comparacao ligada E janela anterior com linhas.
   const cartoesMarca = cartoesSituacao(cur, prev, projectedDaily, filters.compare && prevDaily.length > 0);
-  const roasMarca = cur.adSpend != null && cur.adSpend > 0 && cur.gmv != null ? roasBr(cur.gmv / cur.adSpend) : null;
+  // T-0113: GMV e Ads do MESMO conjunto de canais (selecionados com Ads > 0 no
+  // periodo). O `cur.gmv / cur.adSpend` antigo somava o GMV dos 3 canais sobre o
+  // Ads de 1–2. O rotulo diz de quais canais saiu o numero.
+  const roasCanais = roasPorCanaisComAds(daily, filter);
+  const roasMarca = roasCanais.roas != null ? `${roasBr(roasCanais.roas)} (${roasCanais.rotulo})` : null;
   // T-0111: a serie diaria veio sem linha para os canais selecionados (ex.: Apice so' no ML).
   // GMV e Pedidos mostram "—" com este aviso; nunca a soma de uma lista vazia.
   const semDadoMarca = isLive && cur.gmv == null;
