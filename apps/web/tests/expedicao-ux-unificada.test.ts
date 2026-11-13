@@ -121,17 +121,16 @@ test("trocar de canal pelo teclado nao derruba o foco na travessia fila <-> TikT
   // Medido no QA: o corpo troca inteiro, o seletor renasce no outro painel e
   // o foco ia para o `body`. A casca lembra se o foco estava no seletor e o
   // devolve a opcao marcada depois da troca.
-  assert.match(CASCA, /devolverFoco\.current = Boolean\(seletorRef\.current\?\.contains\(document\.activeElement\)\);/);
-  assert.match(CASCA, /<span ref=\{seletorRef\} className="contents">/);
-  assert.match(CASCA, /querySelector<HTMLButtonElement>\('\[role="radio"\]\[aria-checked="true"\]'\)\s*\?\.focus\(\);/);
+  assert.match(CASCA, /devolverFoco\.current = document\.activeElement\?\.getAttribute\("role"\) === "tab";/);
+  assert.match(CASCA, /querySelector<HTMLButtonElement>\('\[data-esqueleto="aba"\] \[role="tab"\]\[aria-selected="true"\]'\)\?\.focus\(\);/);
 });
 
 test("a casca nao busca nada e so' monta o corpo do canal certo", () => {
   assert.ok(!CASCA.includes("fetch("));
   assert.match(CASCA, /ehCanalDaFila\(canal\) \? \(\s*<ExpedicaoClient/);
-  assert.match(CASCA, /<TikTokDispatchPanel\s+seletorCanal=\{seletorCanal\}/);
+  assert.match(CASCA, /<TikTokDispatchPanel\s+moldura=\{moldura\}/);
   // um canal so' => sem seletor: cromo vazio nao ajuda ninguem
-  assert.match(CASCA, /opcoes\.length > 1 \?/);
+  assert.match(CASCA, /visoes\.length > 1 \?/);
 });
 
 // ===========================================================================
@@ -392,12 +391,12 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
   // entao o gestor nao tem mais a segunda tabela com as mesmas marcas.
   // IDENTIDADE-GERENCIAL: heroi, faixa, atencao, backlog por marca (com a
   // evolucao), LDR, Mais detalhes, convite — a ordem e' do esqueleto.
-  for (const s of ["heroi={heroi}", "faixa={faixa}", "atencao={filaDeAtencao}", "backlog={painelEvolucao}", "maisDetalhes={maisDetalhes}", "<ConviteAoDetalhe"]) {
+  for (const s of ["faixa={faixa}", "prazo={painelPrazo}", "atencao={filaDeAtencao}", "backlog={painelEvolucao}", "maisDetalhes={maisDetalhes}"]) {
     assert.ok(gestor.includes(s), `gestor sem ${s}`);
   }
   assert.ok(!gestor.includes("painelContas("), "o gestor tem UMA tabela de marcas");
   assert.match(CLIENTE, /fila=\{linhasDaFila\}/);
-  assert.match(CLIENTE, /const filaDeAtencao = \(\s*<FilaAtencao\s+itens=\{itensDaFila\}/);
+  assert.match(CLIENTE, /const filaDeAtencao = \(\s*<PainelAtencao\s+itens=\{itensDaFila\}/);
   // marca de varias contas: a lista vazia diz POR QUE esta' vazia
   assert.match(CLIENTE, /Leitura por conta, sem total./);
   assert.ok(!gestor.includes("{painelFila}"), "a fila paginada nao e' visao do gestor");
@@ -408,14 +407,14 @@ test("fila: o gestor ve narrativa e concentracao; o detalhe ve a fila", () => {
 
 test("TikTok: LDR no gestor, fluxo por pagamento so' no detalhe", () => {
   const { gestor, detalhe } = ramos(TIKTOK.replace(/\r\n/g, "\n"));
-  for (const s of ["<HeroiTikTok", "faixa={faixa}", "atencao={fila}", "evolucao={painelEvolucao}", "concentracao={painelLojas(", "maisDetalhes=", "{secaoPrazo(false)}", "<ConviteAoDetalhe"]) {
+  for (const s of ["faixa={faixa}", "<PainelEtapasTikTok", "atencao={fila}", "evolucao={painelEvolucao}", "concentracao={painelLojas(", "maisDetalhes=", "{secaoPrazo(true)}"]) {
     assert.ok(gestor.includes(s), `gestor sem ${s}`);
   }
-  assert.match(TIKTOK, /const fila = <FilaAtencao itens=\{itensFila\}/);
+  assert.match(TIKTOK, /const fila = <PainelAtencao itens=\{itensFila\}/);
   // LDR e fluxo por pagamento nao dividem a primeira dobra.
   assert.ok(!gestor.includes("painelFluxo("));
   assert.ok(!gestor.includes("{painelCoortes}"));
-  for (const s of ["{secaoPrazo(true)}", "{painelCoortes}", "painelLojas(", "painelFluxo("]) {
+  for (const s of ["{faixa}", "{secaoPrazo(true)}", "{painelCoortes}", "painelLojas(", "painelFluxo("]) {
     assert.ok(detalhe.includes(s), `detalhe sem ${s}`);
   }
   // e o fluxo continua NOMEADO como visao auxiliar
@@ -433,7 +432,7 @@ test("o TikTok nao empilha mais banners antes do primeiro numero", () => {
   assert.doesNotMatch(codigo, /alerts\.map/, "um banner por alerta");
   assert.doesNotMatch(codigo, /AVISO_PRAZO_RECONSTRUIDO/, "aviso solto fora da barra");
   assert.match(TIKTOK, /<BarraDeQualidade barra=\{barra\} \/>/);
-  assert.match(TIKTOK, /<FilaAtencao itens=\{itensFila\}/);
+  assert.match(TIKTOK, /<PainelAtencao itens=\{itensFila\}/);
 });
 
 test("serie sem vencimento fechado troca o grafico por uma linha", () => {
@@ -483,23 +482,16 @@ const { default: CabecalhoExpedicao, ChipsFotografia } = await import(
   "../src/components/expedicao/CabecalhoExpedicao.tsx"
 );
 const { default: BarraDeQualidade } = await import("../src/components/expedicao/BarraDeQualidade.tsx");
-const { ConviteAoDetalhe } = await import("../src/components/expedicao/SecoesExpedicao.tsx");
 const { default: FilaAtencao } = await import("../src/components/ui/FilaAtencao.tsx");
 
-test("o cabecalho poe o canal no h2 e a profundidade num radiogroup", () => {
-  const html = renderToStaticMarkup(
-    h(CabecalhoExpedicao, {
-      canal: "Mercado Livre",
-      fotografia: null,
-      visao: "detalhe",
-      aoTrocarVisao: () => {},
-    }),
-  );
-  assert.match(html, /<h2[^>]*>Expedição — Mercado Livre<\/h2>/);
-  assert.doesNotMatch(html, /<h1/);
+test("o cabecalho entrega as partes da moldura: a profundidade e' um radiogroup", () => {
+  // ALVO-GRADE: o titulo e as abas de canal sao da moldura `Aba` (casca); o
+  // cabecalho compartilhado so' entrega selo, filtros e profundidade.
+  const partes = CabecalhoExpedicao({ fotografia: null, visao: "detalhe", aoTrocarVisao: () => {} });
+  const html = renderToStaticMarkup(h("div", null, partes.selo, partes.filtros, partes.direita));
+  assert.doesNotMatch(html, /<h1|<h2/);
   assert.match(html, /role="radiogroup"/);
   assert.match(html, /aria-checked="true"[^>]*>.*Detalhe operacional/);
-  assert.match(html, /id="exp-controles"/);
 });
 
 test("fotografia desatualizada e' ESCRITA, nao so' pintada", () => {
@@ -514,7 +506,7 @@ test("fotografia desatualizada e' ESCRITA, nao so' pintada", () => {
       },
     }),
   );
-  assert.match(velha, />Desatualizada</);
+  assert.match(velha, /Desatualizado · /);
   assert.doesNotMatch(velha, /há /, "sem idade publicada, sem idade na tela");
   const fresca = renderToStaticMarkup(
     h(ChipsFotografia, {
@@ -526,7 +518,7 @@ test("fotografia desatualizada e' ESCRITA, nao so' pintada", () => {
       },
     }),
   );
-  assert.doesNotMatch(fresca, /Desatualizada|não agora/);
+  assert.doesNotMatch(fresca, /Desatualizad|não agora/);
   assert.match(fresca, /há 1\.2 h/);
   // Selos so' do que a API mede: instante, idade, fonte. Nenhum modo.
   for (const html of [velha, fresca]) {
@@ -588,13 +580,6 @@ test("atencao: severidade escrita, uma linha por item, sem banner", () => {
   assert.match(vazio, /Nenhum alerta publicado/);
 });
 
-test("o convite ao detalhe e' um botao de 44px", () => {
-  const html = renderToStaticMarkup(
-    h(ConviteAoDetalhe, { conteudo: "Fila no detalhe.", aoAbrir: () => {} }),
-  );
-  assert.match(html, /<button[^>]*type="button"[^>]*class="[^"]*min-h-11[^"]*"[^>]*>Abrir detalhe operacional<\/button>/);
-});
-
 // ===========================================================================
 // 7. Nenhuma afirmacao de publicacao manual (a DAG publica desde 21/10/2026)
 // ===========================================================================
@@ -633,30 +618,31 @@ const { CorpoGestor, SecaoIndisponivel, EstadoSecao, CLASSE_RAIZ_EXPEDICAO } = a
   "../src/components/expedicao/LayoutExpedicao.tsx"
 );
 
-test("o corpo do gestor tem ordem fixa: heroi, faixa, atencao, backlog, evolucao|concentracao, ldr, mais detalhes, convite", () => {
+test("o corpo do gestor tem ordem fixa: faixa, prazo | atencao, backlog, evolucao|concentracao, ldr, mais detalhes", () => {
   const html = renderToStaticMarkup(
     h(CorpoGestor, {
       // fora de ordem de proposito: quem manda e' o esqueleto
-      convite: h("i", null, "9"),
       maisDetalhes: h("i", null, "8"),
       ldr: h("i", null, "7"),
       concentracao: h("i", null, "6"),
       evolucao: h("i", null, "5"),
       backlog: h("i", null, "4"),
       atencao: h("i", null, "3"),
-      faixa: h("i", null, "2"),
-      heroi: h("i", null, "1"),
+      prazo: h("i", null, "2"),
+      faixa: h("i", null, "1"),
     }),
   );
   assert.equal(
     html,
-    '<i>1</i><i>2</i><i>3</i><i>4</i><div class="grid grid-cols-1 gap-3 lg:grid-cols-12">' +
+    // ALVO-GRADE: os dois paineis lado a lado logo abaixo da faixa de cartoes.
+    '<i>1</i><div class="grid grid-cols-1 gap-3 lg:grid-cols-2"><i>2</i><i>3</i></div>' +
+      '<i>4</i><div class="grid grid-cols-1 gap-3 lg:grid-cols-12">' +
       '<div class="min-w-0 lg:col-span-7"><i>5</i></div><div class="min-w-0 lg:col-span-5"><i>6</i></div></div>' +
-      "<i>7</i><i>8</i><i>9</i>",
+      "<i>7</i><i>8</i>",
   );
-  // Sem evolucao nem concentracao (fila Shopee/ML), a grade 7/5 nao existe.
-  const semGrade = renderToStaticMarkup(h(CorpoGestor, { heroi: h("i", null, "1"), atencao: h("i", null, "3"), backlog: h("i", null, "4") }));
-  assert.equal(semGrade, "<i>1</i><i>3</i><i>4</i>");
+  // Sem painel de prazo, a atencao ocupa a largura; sem evolucao nem concentracao, a grade 7/5 nao existe.
+  const semGrade = renderToStaticMarkup(h(CorpoGestor, { faixa: h("i", null, "1"), atencao: h("i", null, "3"), backlog: h("i", null, "4") }));
+  assert.equal(semGrade, '<i>1</i><div class="grid grid-cols-1 gap-3 "><i>3</i></div><i>4</i>');
 });
 
 test("os dois corpos usam o mesmo esqueleto, a mesma raiz e a mesma tabela", () => {
