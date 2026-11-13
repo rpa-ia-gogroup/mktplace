@@ -87,7 +87,7 @@ import Aba from "@/components/layout/Aba";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
-import KpiBand from "@/components/gerencial/KpiBand";
+import KpiBand, { type GmvDoCartao } from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
 import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
@@ -178,6 +178,8 @@ function GerencialComGrandes() {
   // serie dos canais selecionados e nao toca as outras cinco fontes.
   const [granularity, setGranularity] = useState<TrendGranularityRequest>("auto");
   const [dialog, setDialog] = useState<DialogView | null>(null);
+  // Sub-visao da aba (abas sob o titulo): estado local, nao muda requisicao nenhuma.
+  const [visao, setVisao] = useState<"geral" | "produtos" | "cx">("geral");
 
   const sources = useGerencialSources({
     channels: filters.channels,
@@ -737,6 +739,43 @@ function GerencialComGrandes() {
   // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
   const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
 
+  const pct0 = (f: number) => `${Math.round(f * 100)}%`;
+  const gmvDoCartao: GmvDoCartao = {
+    valor: topo.gmv != null ? fmtCompacto(topo.gmv) : null,
+    deltaPct: comparar || compHoje != null ? topo.momPct : null,
+    progresso: progressoDia?.atingimento ?? progresso?.atingimento ?? null,
+    legenda: progresso
+      ? `${pct0(progresso.atingimento)} da meta de ${fmtCompacto(progresso.meta)}`
+      : progressoDia?.atingimento != null
+        ? `${pct0(progressoDia.atingimento)} da meta de hoje`
+        : compHoje?.rotuloCurto ?? "vs anterior",
+    aviso: avisoDeDado ? "dado incompleto" : linhaMenores?.aviso ? linhaMenores.texto : null,
+    dica: [
+      notaBase(overview, filters.channels),
+      notaDasMenores,
+      linhaMenores && !linhaMenores.aviso ? `O GMV ${linhaMenores.texto}.` : null,
+      progresso
+        ? `Meta: realizado ${fmtCompacto(progresso.realizado)}${progresso.projecao != null && !progresso.encerrado ? `, projeção ${fmtCompacto(progresso.projecao)}` : ""}${
+            progresso.porDiaNecessario != null ? `, faltam ${fmtCompacto(progresso.porDiaNecessario)} por dia` : ""
+          }.`
+        : null,
+      avisoDeDado?.message,
+    ]
+      .filter(Boolean)
+      .join(" "),
+    serie: Object.keys(serieGmvPorCanal).length
+      ? mergeChannelSeries(sources.series, filters.channels, "gmv", granularity)
+          .buckets.map((b) => b.total)
+          .filter((v): v is number => v != null)
+      : [],
+  };
+  const temCx = isMarketplaceSelected(filters.channels, "shopee");
+  const visoes = [
+    { id: "geral" as const, rotulo: "Visão geral" },
+    { id: "produtos" as const, rotulo: "Produtos" },
+    ...(temCx ? [{ id: "cx" as const, rotulo: "CX" }] : []),
+  ];
+  const visaoAtiva = visao === "cx" && !temCx ? "geral" : visao;
   const sinalTopo = queue.commercial.find((i) => i.severity !== "info") ?? null;
   const atencao = marcasEmRisco[0] ? (
     <AtencaoLinha
@@ -762,66 +801,20 @@ function GerencialComGrandes() {
     <Aba
       icone={LayoutDashboard}
       titulo="Visão Gerencial"
+      visoes={visoes}
+      visao={visaoAtiva}
+      onVisao={setVisao}
       // refreshed_at e selo saem SO' da resposta compativel com o filtro atual
       // — nunca da requisicao anterior (`headerLive` e' null ate' la').
       selo={<SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />}
-      filtros={
-        <>
-          <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />
-          <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
-        </>
-      }
-      atencao={atencao}
+      filtros={<GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />}
+      direita={<SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />}
+      atencao={visaoAtiva === "geral" ? atencao : null}
       faixa={
         <>
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </span>
-
-      {/* ---- Dobra 1: vamos bater a meta? (GERENCIAL-METAS-1) ----
-          Nenhum gate global daqui para baixo: cada bloco decide sozinho. */}
-      <MetaHero
-        periodLabel={periodLabel}
-        loading={overviewStatus.loading}
-        error={overviewStatus.error}
-        gmv={topo.gmv}
-        prevGmv={topo.prevGmv}
-        momPct={topo.momPct}
-        notaMenores={notaDasMenores}
-        notaVendas={notaBase(overview, filters.channels)}
-        linhaMenores={linhaMenores}
-        compareActive={comparar || compHoje != null}
-        rotuloComparacao={compHoje?.rotulo ?? null}
-        detalheComparacao={compHoje?.detalhe ?? null}
-        channels={filters.channels}
-        gmvByChannel={{
-          tiktok: canaisComMenores.tiktok.gmv,
-          ml: canaisComMenores.ml.gmv,
-          shopee: canaisComMenores.shopee.gmv,
-        }}
-        varGmvByChannel={{
-          tiktok: canaisComMenores.tiktok.variacao,
-          ml: canaisComMenores.ml.variacao,
-          shopee: canaisComMenores.shopee.variacao,
-        }}
-        mesMeta={mesMeta}
-        diaMeta={diaMeta}
-        hoje={hoje}
-        metasStatus={metasStatusTela}
-        onRetryMetas={metas.status === "error" ? metas.tentarDeNovo : sources.retry}
-        progresso={progresso}
-        comCurva={comCurva}
-        progressoDia={progressoDia}
-        semDado={progressoDia ? resumoSemDado(progressoDia.semDado, celulasEscopo) : []}
-        canaisForaDaMeta={celulasEscopo.length > 0 ? canaisForaDaMeta : []}
-        ultimoDia={ultimoDia}
-        aviso={avisoDeDado ? { texto: avisoDeDado.message, onOpen: () => setDialog({ kind: "confidence" }) } : null}
-        metasHref={mesDasMetas ? `/metas?mes=${mesDasMetas}` : "/metas"}
-        onOpenGmv={() => setDialog({ kind: "kpi", key: "gmv" })}
-        shareFull={shareFull}
-        serieGmvPorCanal={serieGmvPorCanal}
-        tendenciaDoDia={tendenciaTopo}
-      />
 
       <KpiBand
         kpis={kpisDaTela}
@@ -829,18 +822,20 @@ function GerencialComGrandes() {
         error={overviewStatus.error}
         onOpen={(key) => setDialog({ kind: "kpi", key })}
         onRetry={sources.retry}
-        semGmv
+        gmv={gmvDoCartao}
         tendencias={tendencias}
       />
         </>
       }
     >
 
+      {visaoAtiva === "geral" && (
+        <>
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
           os dois itens esticam juntos. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-6">
           <EvolutionCard
             merged={merged}
             metric={metric}
@@ -856,7 +851,7 @@ function GerencialComGrandes() {
             highlightedChannel={highlightedChannel}
           />
         </div>
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-6">
           <MarcasMeta
             brands={brandsComMenores}
             semMeta={menoresOk?.marcas.map((m) => m.brand)}
@@ -874,18 +869,6 @@ function GerencialComGrandes() {
         </div>
       </div>
 
-      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
-      {isMarketplaceSelected(filters.channels, "shopee") && (
-        <CxResumo
-          brands={filters.brands}
-          canais={filters.channels}
-          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
-        />
-      )}
-
       {/* ---- Dobra 3: marca x canal ---- */}
       <BrandChannelMatrix
         matrix={matrix}
@@ -900,24 +883,6 @@ function GerencialComGrandes() {
         brandHref={(b) => (MARCAS_MENORES_KEYS.includes(b) ? "/marcas-menores" : brandHref(b))}
         onRetry={sources.retry}
       />
-
-      <TopProdutosMarca
-        channels={filters.channels}
-        brands={filters.brands}
-        dateFrom={filters.dateFrom}
-        dateTo={filters.dateTo}
-        compare={filters.compare}
-      />
-
-      {produtosMenoresAtivo && (
-        <ProdutosMenores
-          r={prodMenores.produtos}
-          desistiu={prodMenores.desistiu}
-          onTentar={prodMenores.tentar}
-          titulo="Mais vendidos · demais marcas"
-          ids={escopo.menores}
-        />
-      )}
 
       {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
           Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
@@ -987,6 +952,44 @@ function GerencialComGrandes() {
           />
         </div>
       </details>
+
+        </>
+      )}
+
+      {visaoAtiva === "produtos" && (
+        <>
+      <TopProdutosMarca
+        channels={filters.channels}
+        brands={filters.brands}
+        dateFrom={filters.dateFrom}
+        dateTo={filters.dateTo}
+        compare={filters.compare}
+      />
+
+      {produtosMenoresAtivo && (
+        <ProdutosMenores
+          r={prodMenores.produtos}
+          desistiu={prodMenores.desistiu}
+          onTentar={prodMenores.tentar}
+          titulo="Mais vendidos · demais marcas"
+          ids={escopo.menores}
+        />
+      )}
+
+        </>
+      )}
+
+      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
+      {visaoAtiva === "cx" && (
+        <CxResumo
+          brands={filters.brands}
+          canais={filters.channels}
+          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
+          dateFrom={filters.dateFrom}
+          dateTo={filters.dateTo}
+          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
+        />
+      )}
 
       {/* ---- Shell UNICO de dialogo, para todos os drill-downs ---- */}
       <KpiDrilldownDialog

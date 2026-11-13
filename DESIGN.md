@@ -391,6 +391,51 @@ indicators inside `MaisDetalhes`. The rest is unchanged.
 - No note under the number. A caveat that changes the reading goes into an
   `InfoDica` (ⓘ) next to the label or a short chip.
 
+### Grade única das abas (ALVO-GRADE, approved 12/11/2026)
+
+The owner approved one composition for **every** tab (artifact "Torre em grade
+única"). Build tabs from these pieces; do not restyle them per tab.
+
+| Piece | File | Use |
+|---|---|---|
+| Frame | `shell/AppShell.tsx`, `shell/Sidebar.tsx`, `.tc-moldura*` | Two rounded panels with air around: navy menu + glass content. Nothing to do per tab. |
+| `Aba` | `layout/Aba.tsx` | Skeleton, in this order: big title + `selo`; `visoes` (tabs under the title, with `ponto` when the tab is a channel); `filtros` + `direita` on one row; `faixa` (the 4 cards); `atencao`; `children` (panels and tables). |
+| `CartaoIndicador` | `ui/CartaoIndicador.tsx` | The only KPI card: `rotulo`, `icone`, `cor` (identity), `valor`, `pilula {texto, tom}`, optional `progresso` (0..1), `legenda`, `serie` (trend line, 4+ real points), `ajuda`, `onAbrir`. |
+| `Panel` | `ui/Panel.tsx` | Panel with `titulo`, one `ajuda` (ⓘ) and `acao` in the corner: the panel's own `Segmented` or a "Ver todos →" link. No loose controls. |
+| `CelulaBarra` | `ui/CelulaBarra.tsx` | Numeric table cell with weight: value + thin bar in the identity colour. Replaces heat maps (rejected). |
+| Motion | `globals.css` (`--mov-*`, `.tc-barra`, `.tc-barra-dir`, `.tc-cartao-linha`, `.tc-entrada`) | Blocks enter in sequence, bars grow, the card lifts on hover, the trend line draws once. All off under reduced motion. |
+
+```tsx
+<Aba
+  titulo="Expedição"
+  selo={<SeloAtualizado em={geradoEm} />}
+  visoes={[{ id: "shopee", rotulo: "Shopee", ponto: "bg-canal-shopee" }, { id: "ml", rotulo: "Mercado Livre", ponto: "bg-canal-ml" }]}
+  visao={canal}
+  onVisao={setCanal}
+  filtros={<GlobalFilterControls … />}
+  direita={<Segmented rotulo="Visão" … />}
+  faixa={
+    <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+      <CartaoIndicador rotulo="Vencidos" icone={TriangleAlert} cor="#ef4444" valor="8,6%"
+        pilula={{ texto: "Com atraso", tom: "crit" }} legenda="100 de 1.162 na fila" serie={serie} onAbrir={abrir} />
+      {/* …mais três, sempre quatro */}
+    </div>
+  }
+>
+  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+    <Panel titulo="Fila por situação de prazo" acao={<Segmented … />}>…</Panel>
+    <Panel titulo="O que exige atenção" acao={<a href="…">Ver todos →</a>}>…</Panel>
+  </div>
+  <Panel titulo="Vencidos por marca" semPadding>{/* tabela em largura total; <td><CelulaBarra … /></td> */}</Panel>
+</Aba>
+```
+
+Rules: always **four** cards in the strip, same anatomy; identity colours are
+`#8b5cf6` violet, `#f59e0b` amber, `#3b82f6` blue, `#ec4899` pink, `#10b981`
+green, `#ef4444` red (state lives in the pill, never in the card colour); no
+trend line without a real series; absence is "—" or "N/D", never zero; cleaning
+means less **text**, never less visual richness.
+
 ### Tab skeleton (UI-FUNDACAO F1, 12/11/2026)
 
 Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):

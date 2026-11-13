@@ -59,7 +59,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const tematizada = rotaTematizada(pathname);
 
   return (
-    <div id="app-shell-root" className="tc-fundo min-h-screen bg-canvas md:flex">
+    <div id="app-shell-root" className="tc-fundo min-h-screen bg-canvas md:flex md:gap-3 md:p-3">
       {/* UX-TORRE-B2B-1 — o `<h1>` do shell no DESKTOP. A topbar (que carrega o
           `<h1>` visivel no mobile) fica `display: none` a partir de `md`, e a
           tela nao pode perder o titulo de nivel 1 na troca. `hidden md:block`
@@ -67,7 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <h1 className="sr-only hidden md:block">Torre de Controle</h1>
       <BarraDeNavegacao />
       <Sidebar />
-      <div className="flex-1 min-w-0 flex flex-col">
+      <div className="tc-moldura flex-1 min-w-0 flex flex-col">
         {/* Topbar + conteudo ficam inertes enquanto o drawer mobile esta
             aberto (Finding 2, correcao U1) — nem foco nem leitores de tela
             alcancam o fundo; o ciclo de Tab fica preso ao proprio drawer. */}

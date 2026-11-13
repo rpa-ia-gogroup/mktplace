@@ -31,6 +31,7 @@ import { fmtPctBr } from "@/lib/formatters";
 import { fullDaMarca, type FullDaMarca } from "@/lib/gerencial/divisao-full";
 import { tendenciaNosCanais, type MarcaTendencia } from "@/lib/gerencial/hoje-por-hora";
 import InfoDica from "@/components/ui/InfoDica";
+import Segmented from "@/components/ui/Segmented";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 
 const CHIP: Record<StatusMeta | StatusDia, string> = {
@@ -127,11 +128,11 @@ export default function MarcasMeta({
       : null;
   const soma = (p: Partial<Record<Marketplace, number>>) => Object.values(p).reduce((a, v) => a + (v ?? 0), 0);
   return (
-    <section aria-labelledby="marcas-meta-titulo" className="flex h-full flex-col rounded-xl border border-line bg-surface p-5">
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+    <section aria-labelledby="marcas-meta-titulo" className="flex h-full flex-col rounded-xl border border-line bg-surface p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <div className="flex items-center gap-1.5">
-            <h2 id="marcas-meta-titulo" className="text-sm font-semibold text-ink">
+            <h2 id="marcas-meta-titulo" className="text-[15px] font-semibold text-ink">
               Marcas
             </h2>
             <InfoDica
@@ -141,33 +142,22 @@ export default function MarcasMeta({
             />
           </div>
         </div>
-        <ul className="flex flex-wrap gap-1 text-xs" aria-label="Filtrar por canal">
-          {canaisDaPagina.map((c) => {
-            const ativo = channels.includes(c);
-            const so = filtrado && soCanal === c;
-            return (
-              <li key={c}>
-                <button
-                  type="button"
-                  onClick={() => setSoCanal(so ? null : c)}
-                  disabled={canaisDaPagina.length < 2}
-                  aria-pressed={so}
-                  title={so ? "Voltar a todos os canais neste card" : `Ver só ${CHANNEL_LABEL[c]} neste card`}
-                  className={`inline-flex min-h-8 items-center gap-1.5 rounded-full px-2.5 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                    so
-                      ? "bg-surface font-semibold text-ink ring-1 ring-line-strong"
-                      : ativo
-                        ? "text-ink-muted hover:bg-raised"
-                        : "text-ink-faint hover:bg-raised"
-                  }`}
-                >
-                  <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]} ${ativo ? "" : "opacity-40"}`} />
-                  {CHANNEL_LABEL[c]}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+        {canaisDaPagina.length > 1 && (
+          <Segmented<Marketplace | "todos">
+            rotulo="Canal deste painel"
+            valor={filtrado && soCanal ? soCanal : "todos"}
+            aoEscolher={(v) => setSoCanal(v === "todos" ? null : v)}
+            opcoes={[
+              { valor: "todos", texto: "Todos" },
+              ...canaisDaPagina.map((c) => ({
+                valor: c,
+                texto: c === "ml" ? "ML" : c === "tiktok" ? "TikTok" : "Shopee",
+                descricao: CHANNEL_LABEL[c],
+                icone: <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />,
+              })),
+            ]}
+          />
+        )}
       </div>
 
       {error ? (
@@ -188,7 +178,7 @@ export default function MarcasMeta({
             const d = divisao(b);
             const tende = tendenciaDoMes?.[b.brand] ?? null;
             return (
-              <li key={b.brand} className="border-t border-line first:border-t-0">
+              <li key={b.brand} >
                 <Linha
                   abrir={d ? () => setAberta(b.brand) : null}
                   href={semMeta.includes(b.brand) ? "/marcas-menores" : brandHref(b.brand)}
@@ -196,49 +186,45 @@ export default function MarcasMeta({
                   <span className="truncate text-sm font-semibold text-ink transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0">
                     {b.label}
                   </span>
-                  {(
-                    <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
-                      <span
-                        className="tc-barra absolute inset-y-0 left-0 flex overflow-hidden rounded-full"
-                        style={{ width: `${(valor(b) / escala) * 100}%` }}
-                      >
-                        {canaisDaBarra(b).map((c) => {
-                          const v = b[GMV_DO_CANAL[c]] ?? 0;
-                          return v > 0 ? <span key={c} className={PONTO[c]} style={{ flex: v }} /> : null;
-                        })}
-                      </span>
-                      {ref != null && (
-                        <span className="absolute -inset-y-1 w-0.5 bg-ink" style={{ left: `${(ref / escala) * 100}%` }} />
-                      )}
-                    </span>
-                  )}
+                  <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
+                    <span
+                      className="tc-barra absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#a98bf5] to-[#6d3fd8]"
+                      style={{ width: `${(valor(b) / escala) * 100}%` }}
+                    />
+                    {ref != null && <span className="absolute -inset-y-[3px] w-0.5 rounded-sm bg-ink" style={{ left: `${(ref / escala) * 100}%` }} />}
+                  </span>
                   <span className="flex flex-col items-end text-right tabular-nums">
-                    <span className="text-sm font-semibold text-ink">{fmtCompacto(valor(b))}</span>
-                    {/* Com a tendencia do mes, o realizado sai da vista e vai para o title do chip dela. */}
-                    {semMeta.includes(b.brand) ? (
-                      <>
-                        <span className="rounded bg-raised px-1.5 text-xs font-semibold text-ink-muted">sem meta</span>
-                        {compareActive && b.mom_pct != null && (
-                          <span className={`text-xs font-semibold ${b.mom_pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>{fmtPctBr(b.mom_pct)}</span>
-                        )}
-                      </>
-                    ) : p && tende != null ? null : p ? (
-                      <span className={`rounded px-1.5 text-xs font-semibold ${CHIP[p.status]}`}>
-                        {Math.round(p.atingimento * 100)}% {rotuloMeta}
-                      </span>
-                    ) : compareActive && b.mom_pct != null ? (
-                      <span className={`text-xs font-semibold ${b.mom_pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
-                        {fmtPctBr(b.mom_pct)}
-                      </span>
-                    ) : null}
+                    <span className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-ink">{fmtCompacto(valor(b))}</span>
+                      {semMeta.includes(b.brand) ? (
+                        <span className="rounded-full bg-raised px-2 py-0.5 text-xs font-semibold text-ink-muted">sem meta</span>
+                      ) : p && tende != null ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP[p.status]}`}
+                          title={`Tende a ${Math.round((tende / p.meta) * 100)}% da meta (${fmtCompacto(tende)}). Realizado: ${Math.round(p.atingimento * 100)}% da meta até ontem.`}
+                        >
+                          <span className="sr-only">tende a </span>
+                          {Math.round((tende / p.meta) * 100)}%
+                          <span className="sr-only"> da meta ({ROTULO_STATUS[p.status as StatusMeta] ?? ""})</span>
+                        </span>
+                      ) : p ? (
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP[p.status]}`} title={`${Math.round(p.atingimento * 100)}% ${rotuloMeta}`}>
+                          {Math.round(p.atingimento * 100)}%<span className="sr-only"> {rotuloMeta}</span>
+                        </span>
+                      ) : compareActive && b.mom_pct != null ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${b.mom_pct >= 0 ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink"}`}
+                          title="vs período anterior"
+                        >
+                          {fmtPctBr(b.mom_pct)}
+                        </span>
+                      ) : null}
+                    </span>
                     {/* Mesmos canais do valor ao lado: com meta, so' os que tem meta. */}
                     <TendenciaDoDia
                       t={tendenciaDoDia?.[b.brand] ? tendenciaNosCanais(tendenciaDoDia[b.brand], canaisDaBarra(b)) : null}
                     />
-                    {tende != null && <TendenciaDoMes tende={tende} p={p} className="hidden sm:flex" />}
                   </span>
-                  {/* 390: ao lado das barras nao cabe; desce para uma linha propria. */}
-                  {tende != null && <TendenciaDoMes tende={tende} p={p} className="col-span-full flex justify-self-end sm:hidden" />}
                 </Linha>
               </li>
             );
@@ -304,7 +290,7 @@ export default function MarcasMeta({
 const FULL_DICA = "Full = ML Full + Shopee FBS, pela proporção medida até ontem; TikTok entra em sem Full.";
 
 const LINHA =
-  "group grid min-h-11 w-full grid-cols-[88px_1fr_auto] items-center gap-3 rounded-lg px-1.5 py-2.5 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "group grid min-h-11 w-full grid-cols-[minmax(84px,1.1fr)_minmax(0,2fr)_auto] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /** A linha da marca: com a divisao Full medida, abre o dialogo; sem ela, vai para a pagina da marca. */
 function Linha({ abrir, href, children }: { abrir: (() => void) | null; href: string; children: React.ReactNode }) {
@@ -365,34 +351,6 @@ function BarraFull({
         </span>
       </span>
       <span className="whitespace-nowrap text-right tabular-nums">{fmtCompacto(total)}</span>
-    </span>
-  );
-}
-
-/**
- * "tende a 105% da meta · R$ 8,68 mi": percentual antes do absoluto, com a cor
- * do status projetado (rotulo no sr-only: a cor nunca e' a unica pista). O
- * realizado vai para o title. Sem meta: so' "tende a R$ X".
- */
-function TendenciaDoMes({ tende, p, className }: { tende: number; p: MetaDaMarca | null; className: string }) {
-  if (!p) {
-    return (
-      <span className={`${className} whitespace-nowrap text-xs text-ink-muted`} title="Pelo ritmo dos dias com dado até ontem. Marca sem meta: só o valor.">
-        tende a <b className="ml-1 font-semibold text-ink">{fmtCompacto(tende)}</b>
-      </span>
-    );
-  }
-  const real = Math.round(p.atingimento * 100);
-  return (
-    <span
-      className={`${className} items-center gap-x-1 whitespace-nowrap text-xs text-ink-muted`}
-      title={`Tende a ${fmtCompacto(tende)}. Realizado: ${real}% da meta até ontem. Tendência pelo ritmo dos dias com dado, na curva da meta (o mesmo cálculo do total).`}
-    >
-      <span className={`rounded px-1.5 font-semibold ${CHIP[p.status]}`}>
-        tende a {Math.round((tende / p.meta) * 100)}% da meta
-        <span className="sr-only"> ({ROTULO_STATUS[p.status as StatusMeta] ?? ""}; realizado {real}% da meta até ontem)</span>
-      </span>
-
     </span>
   );
 }

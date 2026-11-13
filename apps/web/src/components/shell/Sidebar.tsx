@@ -120,9 +120,9 @@ function SidebarInner() {
     // Duas camadas de proposito: a EXTERNA estica com o flex do shell e pinta
     // a faixa ate o rodape; a INTERNA gruda no topo e rola sozinha.
     <aside
-      className={`tc-shell-fundo hidden md:block md:shrink-0 md:border-r md:border-shell-line md:bg-shell ${animar ? "transition-[width] duration-200" : ""} ${largura}`}
+      className={`tc-shell-fundo tc-moldura-menu hidden overflow-hidden md:sticky md:top-3 md:block md:h-[calc(100vh-1.5rem)] md:shrink-0 md:self-start md:bg-shell ${animar ? "transition-[width] duration-200" : ""} ${largura}`}
     >
-      <div className="sticky top-0 flex h-screen flex-col">
+      <div className="flex h-full flex-col">
         {/* Identidade + botao de recolher */}
         <div className="flex items-center gap-2.5 border-b border-shell-line px-3 py-3">
           <MarcaTorre tamanho={32} className="h-8 w-8 rounded-lg" />

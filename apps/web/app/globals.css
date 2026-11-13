@@ -813,3 +813,87 @@ a.rounded-xl.border.bg-surface:focus-visible {
   outline: 2px solid rgb(var(--tc-accent));
   outline-offset: 2px;
 }
+
+
+/* ===========================================================================
+ * ALVO-GRADE (aprovado em 12/11/2026) — moldura em dois paineis e cartao unico.
+ * ======================================================================== */
+/* Conteudo: painel de vidro arredondado, com respiro em volta (o menu e' o outro painel). */
+@media (min-width: 768px) {
+  .tc-moldura {
+    border-radius: 20px;
+    border: 1px solid rgb(255 255 255 / 0.8);
+    background-color: rgb(var(--tc-surface) / 0.5);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 24px 50px -36px rgb(60 30 140 / 0.5);
+  }
+  .dark .tc-moldura {
+    border-color: rgb(255 255 255 / 0.08);
+    background-color: rgb(var(--tc-surface) / 0.35);
+  }
+  .tc-moldura-menu {
+    border-radius: 20px;
+    box-shadow: 0 20px 40px -28px rgb(23 20 58 / 0.8);
+  }
+}
+
+/* Cartao de indicador (`CartaoIndicador`). `--h` = cor de identidade. */
+.tc-cartao {
+  --h: rgb(var(--tc-accent));
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--h) 24%, rgb(var(--tc-line)));
+  background: linear-gradient(140deg, color-mix(in srgb, var(--h) 16%, rgb(var(--tc-surface))) 0%, rgb(var(--tc-surface)) 58%);
+  transition:
+    transform var(--mov-base) var(--mov-ease),
+    box-shadow var(--mov-base) var(--mov-ease);
+}
+@media (hover: hover) {
+  .tc-cartao:is(button):hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 30px -20px color-mix(in srgb, var(--h) 70%, transparent);
+  }
+}
+.tc-cartao-icone {
+  background: color-mix(in srgb, var(--h) 22%, rgb(var(--tc-surface)));
+  color: var(--h);
+}
+.tc-cartao-prog {
+  background: color-mix(in srgb, var(--h) 14%, rgb(var(--tc-surface)));
+}
+/* A linha de tendencia se desenha uma vez, da esquerda para a direita (pathLength=400). */
+.tc-cartao-linha {
+  stroke-dasharray: 400;
+  stroke-dashoffset: 400;
+  animation: tc-desenha 900ms var(--mov-ease) 200ms forwards;
+}
+.tc-cartao-area {
+  animation: tc-fade 600ms var(--mov-ease) 500ms both;
+}
+@keyframes tc-desenha {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-cartao-linha {
+    stroke-dashoffset: 0;
+    animation: none;
+  }
+  .tc-cartao-area {
+    animation: none;
+  }
+}
+
+/* Barrinha da tabela: cresce da direita (o valor e' alinhado a' direita). */
+.tc-barra-dir {
+  transform-origin: right;
+  animation: tc-barra 700ms var(--mov-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-barra-dir {
+    animation: none;
+  }
+}
