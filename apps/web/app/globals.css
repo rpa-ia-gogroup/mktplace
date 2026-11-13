@@ -318,7 +318,8 @@
  * ANIMACOES-1 — movimento da Torre.
  *
  * Uma curva e tres duracoes para o app inteiro: 120ms responde (hover, cor),
- * 200ms abre e fecha (popover, segmentado), 320ms entra (paineis, barras).
+ * 180ms abre e fecha (popover, segmentado), 240ms entra (paineis, barras).
+ * (UI-FUNDACAO F1: eram 200/320ms; 180/240 e' o plano aprovado em 12/11/2026.)
  * A curva desacelera no fim — chega rapido e assenta. So' `transform` e
  * `opacity` animam; nada repete em loop alem do esqueleto e do "ao vivo".
  * Quem pede menos movimento cai na regra global de `prefers-reduced-motion`
@@ -327,8 +328,30 @@
 :root {
   --mov-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --mov-rapido: 120ms;
-  --mov-base: 200ms;
-  --mov-lento: 320ms;
+  --mov-base: 180ms;
+  --mov-lento: 240ms;
+}
+
+/* UI-FUNDACAO (F1) — entrada de painel: aparece subindo 6px, uma vez. */
+.tc-painel-entra {
+  animation: tc-entra var(--mov-lento) var(--mov-ease) both;
+}
+
+/* UI-FUNDACAO (F1) — troca de conteudo ao filtrar SEM PISCAR: o conteudo
+   anterior fica na tela, esmaecido, enquanto o novo carrega (`aria-busy`), e
+   volta inteiro quando chega. Nada some e reaparece. */
+.tc-troca {
+  transition: opacity var(--mov-base) var(--mov-ease);
+}
+.tc-troca[aria-busy="true"] {
+  opacity: 0.55;
+}
+
+/* A barra de filtros encolhe ao rolar (`BarraDeFiltros`): padding anima. */
+.tc-barra-filtros {
+  transition:
+    padding var(--mov-base) var(--mov-ease),
+    box-shadow var(--mov-base) var(--mov-ease);
 }
 
 @keyframes tc-entra {
@@ -489,6 +512,7 @@ tbody tr:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tc-painel-entra,
   .tc-entrada > * > *,
   .tc-barra,
   .tc-revela,

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import InfoDica from "./InfoDica";
+
 /**
  * UX-TORRE-1 — a unidade de superficie da Torre.
  *
@@ -11,6 +13,7 @@ import type { LucideIcon } from "lucide-react";
 export default function Panel({
   titulo,
   descricao,
+  ajuda,
   acao,
   rodape,
   children,
@@ -27,6 +30,9 @@ export default function Panel({
   id?: string;
   /** Uma linha, no maximo. Metodologia longa vai para um recolhivel. */
   descricao?: ReactNode;
+  /** UI-FUNDACAO (F1): a metodologia do painel, num UNICO "ⓘ" colado ao titulo. */
+  ajuda?: string;
+  /** Acao do painel, sempre a' direita do titulo. */
   acao?: ReactNode;
   rodape?: ReactNode;
   children: ReactNode;
@@ -47,6 +53,7 @@ export default function Panel({
               <h3 className="flex items-center gap-2 text-sm font-semibold text-ink">
                 {Icone && <Icone aria-hidden="true" className="h-4 w-4 shrink-0 text-ink-faint" strokeWidth={1.75} />}
                 {titulo}
+                {ajuda ? <InfoDica texto={ajuda} /> : null}
               </h3>
             )}
             {descricao && (

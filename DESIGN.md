@@ -276,7 +276,11 @@ The primitives live in `apps/web/src/components/ui/`, plus `layout/` and
 | Page header (icon, title, subtitle, meta chips, sticky filter bar) | `layout/PageHeader.tsx`, `gerencial/GerencialHeader.tsx` | 10 routes + Gerencial |
 | Filter toolbar | `layout/GlobalFilterControls.tsx` | Gerencial, Canais, Financeiro |
 | Brand selector / period selector, `menu` variant | `BrandFilter.tsx`, `DateRangeFilter.tsx` + `ui/Popover.tsx` | toolbar (menu); other routes (faixa) |
-| Freshness + period chip | `ui/Freshness.tsx` | Gerencial, Canais, Financeiro |
+| Tab skeleton (icon + title, freshness, sticky filter bar that shrinks on scroll, main strip, attention, panels) | `layout/Aba.tsx` | new routes; the rest migrate in F2/F3 |
+| Freshness ("Atualizado HH:MM") | `ui/SeloAtualizado.tsx` (replaces `ui/Freshness.tsx` tab by tab) | via `Aba` |
+| Loading skeleton in the content's shape (cards, table, chart, list) | `ui/Esqueleto.tsx` | via `Aba` |
+| Table pieces (classes, `—` for empty, total row) | `ui/Tabela.tsx` + `ui/SortHeader.tsx` | via `Aba` |
+| Freshness + period chip (legacy) | `ui/Freshness.tsx` | Gerencial, Canais, Financeiro |
 | KPI card | `ui/KpiTile.tsx`, `ui/StatCard.tsx`, `gerencial/KpiBand.tsx` | Expedição, Canais, Financeiro, Gerencial |
 | Panel (title, subtitle, actions, footer, icon) | `ui/Panel.tsx` | Expedição, Canais, Financeiro, Gerencial |
 | Segmented / tabs | `ui/Segmented.tsx` | theme, Expedição, Canais detail tabs |
@@ -388,11 +392,40 @@ indicators inside `MaisDetalhes`. The rest is unchanged.
 - No note under the number. A caveat that changes the reading goes into an
   `InfoDica` (ⓘ) next to the label or a short chip.
 
+### Tab skeleton (UI-FUNDACAO F1, 12/11/2026)
+
+Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
+
+1. Header: 32px icon tile + title on the left; `SeloAtualizado` on the right.
+2. Filter bar: sticky; it shrinks (less padding, a soft shadow) once the page
+   scrolls. Canal · Marca · Período, then the tab's own controls on the right.
+3. Main strip: the hero and the indicator cards.
+4. "O que exige atenção".
+5. Panels and tables.
+
+- Freshness reads "Atualizado HH:MM" (another day: "dd/mm HH:MM"). The live
+  dot is green; demo mode stays written out; no time means "—".
+- Loading uses `Esqueleto` in the shape of the content, never a spinner in an
+  empty box. Empty, error and unavailable use `StateBlock`.
+- A route outside the skeleton fails `tests/ui-fundacao.test.ts` unless it is
+  on the exception list there. The list only shrinks.
+
+### Motion (UI-FUNDACAO F1)
+
+- One curve (`--mov-ease`) and three durations: 120ms responds (hover, colour),
+  180ms opens and closes (popover, segmented), 240ms enters (panels, bars).
+- Utilities: `tc-painel-entra` (panel entrance), `tc-troca` + `aria-busy`
+  (filtering keeps the old content dimmed instead of blanking it), popover
+  scale + fade on the tokens.
+- Only `transform` and `opacity` animate. Everything stops under
+  `prefers-reduced-motion`.
+
 ### Panel
 
 - 12px radius, 1px border.
 - Header: optional 16px icon, title (14/600), one-line subtitle, actions on the
   right.
+- Methodology goes in ONE ⓘ next to the title (`ajuda`), never in a caption.
 - No methodology on screen (ABAS-OBJETIVAS, 29/10/2026): no "Como ler",
   no explanatory subtitle or footer. A caveat that changes how a number is
   read becomes a chip of up to ~8 words or an `InfoDica`; the rest is cut.
@@ -403,7 +436,10 @@ indicators inside `MaisDetalhes`. The rest is unchanged.
 - Head on `raised`, using the label style.
 - Rows are 13–14px with no zebra striping and a hover tint.
 - Numbers are right-aligned and tabular.
-- The total row sits on `raised` with a 2px top border.
+- Sorting: the arrow shows only on the active column (and on hover or focus of
+  the others).
+- Empty is "—" (`ouVazio`), never 0 and never a blank cell.
+- The total row is the `<tfoot>` (`LinhaTotal`), with a 2px top border.
 - Wide tables scroll inside the panel, with a visible hint.
 
 ### Charts
