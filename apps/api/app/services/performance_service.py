@@ -1045,11 +1045,17 @@ def get_daily(
         d = r["date"]
         if d not in days:
             days[d] = {"date": d, "tiktok_gmv": None, "ml_gmv": None,
-                       "shopee_gmv": None, "orders": 0, "ad_spend": None}
+                       "shopee_gmv": None, "orders": 0, "ad_spend": None,
+                       "ml_ad_spend": None, "shopee_ad_spend": None}
         mkt = r["marketplace_id"]
         gmv_val = _f(r["gmv"]) or None
         orders_val = int(_f(r["orders"]))
         spend_val = _f(r["ad_spend"]) if r["ad_spend"] else None
+        # T-0113: Ads POR CANAL, para o ROAS da Marca 360 casar GMV e Ads do
+        # mesmo canal. Sem linha do canal no dia ou `ad_spend` NULL na fonte
+        # -> None; 0 so' quando a fonte grava 0. O `ad_spend` combinado (soma
+        # ML + Shopee, sem distinguir o canal) continua igual.
+        spend_canal = _f(r["ad_spend"]) if r["ad_spend"] is not None else None
 
         if mkt == TIKTOK_ID:
             days[d]["tiktok_gmv"] = gmv_val
@@ -1057,11 +1063,13 @@ def get_daily(
         elif mkt == ML_ID:
             days[d]["ml_gmv"] = gmv_val
             days[d]["orders"] += orders_val
+            days[d]["ml_ad_spend"] = spend_canal
             if spend_val:
                 days[d]["ad_spend"] = spend_val
         elif mkt == SHOPEE_ID:
             days[d]["shopee_gmv"] = gmv_val
             days[d]["orders"] += orders_val
+            days[d]["shopee_ad_spend"] = spend_canal
             if spend_val:
                 prev_spend = _f(days[d].get("ad_spend"))
                 days[d]["ad_spend"] = (prev_spend + spend_val) or None
@@ -1079,6 +1087,8 @@ def get_daily(
             "orders": orders,
             "avg_ticket": total / orders if orders > 0 else None,
             "ad_spend": v["ad_spend"],
+            "ml_ad_spend": v["ml_ad_spend"],
+            "shopee_ad_spend": v["shopee_ad_spend"],
             "tiktok_em_maturacao": (
                 d >= maturacao["em_maturacao_desde"] if maturacao is not None else None
             ),

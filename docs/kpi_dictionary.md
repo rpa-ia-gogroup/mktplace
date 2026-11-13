@@ -52,6 +52,16 @@ Legenda de disponibilidade:
 | Pedidos atribuÃ­dos | Pedidos de vendas via ad | â€” | dia/brand | â“ | âœ… `ad_units_sold` |
 | % investimento s/ GMV | ad_spend / gmv | â€” | dia/brand | â“ | ðŸ”¶ |
 
+### ROAS da Marca 360 (cartão Ad Spend, T-0113)
+
+- **Fórmula:** Σ GMV ÷ Σ Ads, só dos canais selecionados que tiveram Ads > 0 no período. O GMV de canal sem Ads
+  não entra no numerador. Nenhum canal com Ads → "—", nunca 0.
+- **Filtros:** canais selecionados e período (intervalo global da página).
+- **Fonte:** `/api/v1/performance/daily` (`ml_ad_spend` e `shopee_ad_spend` por dia; null = sem linha de Ads, não 0).
+  Cálculo em `apps/web/src/lib/brand-roas.ts`.
+- **Exibição:** aproximado, com o rótulo dos canais usados (ex.: "ROAS ~12,0x (só Shopee)").
+- **Limitação:** o TikTok não tem Ads na série diária, então nunca entra no ROAS da Marca 360.
+
 ---
 
 ## TikTok â€” GMV comercial (Gate DQ-TK1, 2026-08-25)

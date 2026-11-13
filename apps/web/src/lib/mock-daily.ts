@@ -12,6 +12,9 @@ export interface DailyRow {
   orders: number;
   avg_ticket: number | null;
   ad_spend: number | null;
+  /** T-0113: Ads do canal no dia; null/ausente = sem linha de Ads (nao e' 0). Ausente em API antiga. */
+  ml_ad_spend?: number | null;
+  shopee_ad_spend?: number | null;
   /** T-0074: GMV TikTok do dia ainda pode cair. Ausente em API antiga e no mock. */
   tiktok_em_maturacao?: boolean | null;
 }
@@ -88,6 +91,9 @@ export function generateDailyData(brand: string, daysBack: number = 60): DailyRo
       orders,
       avg_ticket: orders > 0 ? Math.round(total / orders) : null,
       ad_spend: adSpend,
+      // O Ads do mock e' so' de ML (6% do GMV ML); Shopee fica sem Ads no mock.
+      ml_ad_spend: adSpend,
+      shopee_ad_spend: null,
     });
   }
   return rows;
