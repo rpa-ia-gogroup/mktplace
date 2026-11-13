@@ -908,3 +908,16 @@ a.rounded-xl.border.bg-surface:focus-visible {
     animation: none;
   }
 }
+
+/* Cartao sem linha nem rodape: a reserva de altura so' aparece se algum cartao IRMAO tem apoio
+   (linha de tendencia ou rodape). Faixa inteira sem apoio fica com cartoes na altura do conteudo. */
+.tc-cartao-reserva {
+  display: none;
+}
+:has(> .tc-cartao > .tc-cartao-apoio) > .tc-cartao > .tc-cartao-reserva {
+  display: block;
+}
+/* Sem a linha colada na base, o cartao fecha com o mesmo respiro do topo. */
+.tc-cartao:not(:has(> svg.tc-cartao-apoio)) {
+  padding-bottom: 0.875rem;
+}
