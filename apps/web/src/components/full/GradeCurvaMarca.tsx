@@ -16,6 +16,10 @@ import {
 } from "@/lib/estoque-grade-curva";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
+/** Ruptura/baixo/excesso contam itens; o disponivel e' em unidades. */
+const itens = (n: number) => `${fmt(n)} ${n === 1 ? "item" : "itens"}`;
+/** Celula sem nenhum item: nao e' "sem dado". */
+const SemItens = () => <span className="text-xs text-ink-faint">sem itens</span>;
 
 const PILULAS: { chave: "ruptura" | "baixo" | "excesso"; rotulo: string; tom: string }[] = [
   { chave: "ruptura", rotulo: "Ruptura", tom: "bg-crit-soft text-crit-ink" },
@@ -36,16 +40,16 @@ function Pilula({ rotulo, valor, tom }: { rotulo: string; valor: string; tom: st
 const COR_DISPONIVEL = "rgb(var(--tc-kpi-gmv))";
 
 function CelulaAberta({ c, maximo }: { c: CelulaGrade; maximo: number }) {
-  if (c.itens === 0) return <span className="text-ink-faint">—</span>;
+  if (c.itens === 0) return <SemItens />;
   return (
-    <div className="flex min-w-[220px] flex-col gap-1.5">
+    <div className="flex w-[220px] flex-col gap-1.5">
       <div className="flex items-start justify-between gap-3">
         <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Disponível Full</span>
         {c.disponivel === null
           ? <span className="text-sm font-medium text-ink-faint">—</span>
           : <CelulaBarra valor={fmt(c.disponivel)} peso={maximo > 0 ? c.disponivel / maximo : 0} cor={COR_DISPONIVEL} />}
       </div>
-      {PILULAS.map((p) => <Pilula key={p.chave} rotulo={p.rotulo} valor={fmt(c[p.chave])} tom={p.tom} />)}
+      {PILULAS.map((p) => <Pilula key={p.chave} rotulo={p.rotulo} valor={itens(c[p.chave])} tom={p.tom} />)}
       <Pilula rotulo="Permanência" valor={fmtPermanencia(c.permanencia)} tom="bg-raised text-ink-muted" />
     </div>
   );
@@ -53,18 +57,29 @@ function CelulaAberta({ c, maximo }: { c: CelulaGrade; maximo: number }) {
 
 /** Linha recolhida e total: tudo numa linha, mesma ordem das pilulas. */
 function CelulaResumo({ c, forte = false }: { c: CelulaGrade; forte?: boolean }) {
-  if (c.itens === 0) return <span className="text-ink-faint">—</span>;
+  if (c.itens === 0) return <SemItens />;
+  const partes = [
+    { n: c.ruptura, txt: "em ruptura", tom: "text-crit-ink" },
+    { n: c.baixo, txt: "com estoque baixo", tom: "text-warn-ink" },
+    { n: c.excesso, txt: "em excesso", tom: "text-accent-ink" },
+  ].filter((x) => x.n > 0);
   return (
-    <div className="flex min-w-[168px] flex-col gap-0.5">
+    <div className="flex w-[220px] flex-col gap-0.5">
       <span className={`tabular-nums ${forte ? "text-base font-semibold text-ink" : "text-sm font-medium text-ink"}`}>
         {c.disponivel === null ? "—" : fmt(c.disponivel)} <span className="text-xs font-normal text-ink-faint">un.</span>
       </span>
       <span className="text-xs tabular-nums text-ink-muted">
-        <span className="text-crit-ink">{fmt(c.ruptura)} rupt</span> · <span className="text-warn-ink">{fmt(c.baixo)} baixo</span> ·{" "}
-        <span className="text-accent-ink">{fmt(c.excesso)} exc</span> · {fmtPermanencia(c.permanencia)}
+        {partes.map((x) => <span key={x.txt}><span className={x.tom}>{fmt(x.n)} {x.txt}</span> · </span>)}
+        {fmtPermanencia(c.permanencia)} de permanência
       </span>
     </div>
   );
+}
+
+/** A linha com mais disponivel abre por padrao (no ML e' "sem curva", com ~3/4 do estoque). */
+function linhaMaiorFatia(grade: Grade): LinhaCurva {
+  return LINHAS_CURVA.reduce((a, l) =>
+    (grade.celulas[l.chave][TOTAL].disponivel ?? 0) > (grade.celulas[a.chave][TOTAL].disponivel ?? 0) ? l : a).chave;
 }
 
 export default function GradeCurvaMarca({
@@ -79,7 +94,7 @@ export default function GradeCurvaMarca({
   ressalva?: string | null;
 }) {
   const [abertas, setAbertas] = useState<Set<LinhaCurva>>(
-    () => new Set(LINHAS_CURVA.filter((l) => l.aberta).map((l) => l.chave)),
+    () => new Set([...LINHAS_CURVA.filter((l) => l.aberta).map((l) => l.chave), linhaMaiorFatia(grade)]),
   );
   const alternar = (l: LinhaCurva) =>
     setAbertas((s) => { const n = new Set(s); if (n.has(l)) n.delete(l); else n.add(l); return n; });
@@ -103,7 +118,7 @@ export default function GradeCurvaMarca({
             <caption className="sr-only">Disponível Full, ruptura, estoque baixo, excesso e permanência por curva e marca, em {item}</caption>
             <thead>
               <tr className="border-b border-line bg-raised text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                <th scope="col" className="px-4 py-3">Curva</th>
+                <th scope="col" className="sticky left-0 z-10 bg-raised px-4 py-3">Curva</th>
                 {colunas.map((m) => (
                   <th key={m} scope="col" className={`px-4 py-3 ${m === TOTAL ? "text-ink" : ""}`}>
                     {m === TOTAL ? "Total curva" : rotuloMarca(m)}
@@ -116,12 +131,11 @@ export default function GradeCurvaMarca({
                 const aberta = abertas.has(l.chave);
                 return (
                   <tr key={l.chave} className="border-b border-line align-top hover:bg-raised/40">
-                    <th scope="row" className="px-4 py-3 text-left">
+                    <th scope="row" className="sticky left-0 z-10 bg-surface px-4 py-3 text-left">
                       <button type="button" aria-expanded={aberta} onClick={() => alternar(l.chave)}
                         className="inline-flex min-h-11 items-center gap-2 rounded font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-0">
                         <ChevronDown aria-hidden="true" className={`h-4 w-4 text-ink-faint transition-transform ${aberta ? "" : "-rotate-90"}`} />
                         {l.rotulo}
-                        <span className="sr-only">{aberta ? ", recolher" : ", abrir"}</span>
                       </button>
                     </th>
                     {colunas.map((m) => (
@@ -133,7 +147,7 @@ export default function GradeCurvaMarca({
                 );
               })}
               <tr className="border-t-2 border-line-strong bg-raised align-top">
-                <th scope="row" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Total marca</th>
+                <th scope="row" className="sticky left-0 z-10 bg-raised px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Total marca</th>
                 {colunas.map((m) => (
                   <td key={m} className="px-4 py-3"><CelulaResumo c={grade.totalMarca[m]} forte /></td>
                 ))}

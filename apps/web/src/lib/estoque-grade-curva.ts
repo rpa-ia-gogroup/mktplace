@@ -105,4 +105,4 @@ export function fmtPermanencia(dias: number | null): string {
 }
 
 export const AJUDA_GRADE =
-  "Mesmo recorte dos cartões (brinde e descontinuado fora). Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";
+  "Mesmo recorte dos cartões (brinde e descontinuado fora). Disponível em unidades; ruptura, estoque baixo e excesso em nº de itens. Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";
