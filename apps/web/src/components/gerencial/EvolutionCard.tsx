@@ -158,7 +158,7 @@ export default function EvolutionCard({
           {grainIssue && <p className="text-xs text-ink-faint">Granularidade inconsistente entre os canais</p>}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
           <div
             className="flex items-center gap-1 bg-accent-soft/70 rounded-lg p-0.5"
             role="group"
