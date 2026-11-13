@@ -179,6 +179,10 @@ class DailyRow(BaseModel):
     orders: int
     avg_ticket: Optional[float] = None
     ad_spend: Optional[float] = None
+    # T-0113, aditivo: Ads por canal (None = canal sem linha de Ads no dia),
+    # para o ROAS da Marca 360 usar so' os canais com Ads.
+    ml_ad_spend: Optional[float] = None
+    shopee_ad_spend: Optional[float] = None
     # T-0074, aditivo: o GMV TikTok deste dia ainda pode cair. None = TikTok
     # fora do escopo.
     tiktok_em_maturacao: Optional[bool] = None
