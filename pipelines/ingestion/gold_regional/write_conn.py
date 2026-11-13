@@ -59,6 +59,83 @@ _GOLD_TABLES = ("marketplace_region_daily",)
 _CREDENTIAL_IN_MESSAGE_RE = re.compile(r"//[^/\s@]+:[^/\s@]+@")
 
 
+# ---------------------------------------------------------------------------
+# T-0109 (R193) — privilégios mínimos da carga incremental. Com a tabela
+# destino JÁ existente, o preflight não exige CREATE em `gold` (o DDL não
+# roda); exige o que `loader.execute_incremental_load` usa de fato pela MESMA
+# conexão de escrita: lê as fontes ML em `raw`, lê/insere na destino, cria a
+# staging TEMP e consome a sequence do `id BIGSERIAL`. A fonte Shopee em
+# `silver` é opcional (arquivada desde 29/09): só conta se o schema/tabela
+# existir — se o schema existir sem USAGE, o `to_regclass` do loader levanta.
+# Nunca exige UPDATE/DELETE/TRUNCATE nem superuser.
+#
+# Tudo por OID via pg_namespace/pg_class (catálogo legível sem USAGE): checar
+# por nome (`has_table_privilege('raw.x', ...)`) levantaria erro em vez de
+# devolver false quando falta USAGE no schema ou a relação não existe.
+# Cada expressão devolve true/false, ou NULL quando o objeto não existe.
+# ---------------------------------------------------------------------------
+
+def _schema_usage_expr(schema: str) -> str:
+    return (
+        "(SELECT has_schema_privilege(current_user, n.oid, 'USAGE') "
+        f"FROM pg_namespace n WHERE n.nspname = '{schema}')"
+    )
+
+
+def _table_priv_expr(schema: str, table: str, privilege: str) -> str:
+    return (
+        f"(SELECT has_table_privilege(current_user, c.oid, '{privilege}') "
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        f"WHERE n.nspname = '{schema}' AND c.relname = '{table}')"
+    )
+
+
+# Sequence(s) dona(s) da tabela (serial = deptype 'a', identity = 'i').
+# bool_and sobre zero linhas = NULL = tabela sem sequence (nada a exigir).
+_GOLD_SEQUENCE_USAGE_EXPR = (
+    "(SELECT bool_and(has_sequence_privilege(current_user, s.oid, 'USAGE')) "
+    "FROM pg_depend d "
+    "JOIN pg_class s ON s.oid = d.objid AND s.relkind = 'S' "
+    "JOIN pg_class t ON t.oid = d.refobjid "
+    "JOIN pg_namespace n ON n.oid = t.relnamespace "
+    "WHERE d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass "
+    "AND d.deptype IN ('a', 'i') "
+    "AND n.nspname = 'gold' AND t.relname = 'marketplace_region_daily')"
+)
+
+# (rótulo seguro, expressão SQL, objeto ausente (NULL) bloqueia?)
+INCREMENTAL_PRIVILEGE_CHECKS: tuple[tuple[str, str, bool], ...] = (
+    ("USAGE no schema raw", _schema_usage_expr("raw"), True),
+    ("SELECT em raw.ml_orders", _table_priv_expr("raw", "ml_orders", "SELECT"), True),
+    ("SELECT em raw.ml_shipments", _table_priv_expr("raw", "ml_shipments", "SELECT"), True),
+    ("SELECT em raw.ml_shipment_costs", _table_priv_expr("raw", "ml_shipment_costs", "SELECT"), True),
+    ("SELECT em gold.marketplace_region_daily",
+     _table_priv_expr("gold", "marketplace_region_daily", "SELECT"), True),
+    ("INSERT em gold.marketplace_region_daily",
+     _table_priv_expr("gold", "marketplace_region_daily", "INSERT"), True),
+    ("TEMP no banco", "has_database_privilege(current_user, current_database(), 'TEMP')", True),
+    ("USAGE na sequence de gold.marketplace_region_daily", _GOLD_SEQUENCE_USAGE_EXPR, False),
+    ("USAGE no schema silver (fonte Shopee)", _schema_usage_expr("silver"), False),
+    ("SELECT em silver.stg_shopee_order_item_snapshots",
+     _table_priv_expr("silver", "stg_shopee_order_item_snapshots", "SELECT"), False),
+)
+
+SQL_INCREMENTAL_PRIVILEGES = "SELECT " + ", ".join(
+    f"{expr} AS gold_incr_priv_{i}" for i, (_, expr, _) in enumerate(INCREMENTAL_PRIVILEGE_CHECKS)
+)
+
+
+def missing_incremental_privileges(row: tuple) -> list[str]:
+    """Traduz a linha de `SQL_INCREMENTAL_PRIVILEGES` nos rótulos dos
+    privilégios que faltam. `False` sempre falta; `NULL` (objeto ausente) só
+    falta quando o objeto é obrigatório."""
+    missing = []
+    for (label, _, absent_blocks), value in zip(INCREMENTAL_PRIVILEGE_CHECKS, row):
+        if value is False or (value is None and absent_blocks):
+            missing.append(label)
+    return missing
+
+
 class SecretLoadError(RuntimeError):
     """Falha ao carregar/validar o arquivo de secret de escrita."""
 
@@ -332,6 +409,14 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
             )
             existing_gold_objects = [r[0] for r in cur.fetchall()]
 
+            # T-0109 (R193): carga sobre tabela existente → privilégios
+            # mínimos efetivamente usados, em vez de CREATE no schema.
+            incremental_mode = expect_table_exists and set(_GOLD_TABLES) <= set(existing_gold_objects)
+            missing_incremental = None
+            if incremental_mode:
+                cur.execute(SQL_INCREMENTAL_PRIVILEGES)
+                missing_incremental = missing_incremental_privileges(cur.fetchone())
+
             try:
                 cur.execute("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
                 row = cur.fetchone()
@@ -352,7 +437,16 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
         report.blocking_reasons.append(
             f"conexão de escrita não aponta para o mesmo cluster físico da leitura ({target_check_note})"
         )
-    if not can_create_in_gold or not can_use_gold:
+    if incremental_mode:
+        # Tabela já existe: o DDL não roda, CREATE em gold não é exigido.
+        if not can_use_gold:
+            missing_incremental = ["USAGE no schema gold", *missing_incremental]
+        if missing_incremental:
+            report.blocking_reasons.append(
+                f"privilégio(s) insuficiente(s) para a carga incremental: {missing_incremental}"
+            )
+    elif not can_create_in_gold or not can_use_gold:
+        # Tabela ausente: o DDL roda, CREATE continua obrigatório.
         report.blocking_reasons.append("permissão insuficiente no schema gold (CREATE/USAGE)")
 
     if expect_table_exists:
@@ -383,6 +477,7 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
         "can_create_in_gold": can_create_in_gold,
         "can_use_gold": can_use_gold,
         "existing_gold_objects": existing_gold_objects,
+        "privilegios_incrementais_faltando": missing_incremental,
         "ssl_in_use": ssl_in_use,
         "server_version": server_version,
     }

@@ -605,12 +605,138 @@ def test_run_preflight_bloqueia_se_tabela_nao_existe_antes_da_carga(monkeypatch)
 
 
 def test_run_preflight_ok_quando_tabela_existe_e_carga_esperada(monkeypatch):
-    responses = [r for r in _MAIN_HAPPY_RESPONSES if r[0] != "INFORMATION_SCHEMA.TABLES"]
-    responses.append(("INFORMATION_SCHEMA.TABLES", "all", [("marketplace_region_daily",)]))
-    write_url = _install_fake_connect(monkeypatch, main_responses=responses)
+    write_url = _install_fake_connect(monkeypatch, main_responses=_incremental_responses())
     report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
     assert report.ok is True
     assert report.blocking_reasons == []
+    assert report.safe_summary["privilegios_incrementais_faltando"] == []
+
+
+# --- T-0109 (R193): privilégios mínimos da carga incremental -------------------
+
+_PRIV_LABELS = [label for label, _, _ in wc.INCREMENTAL_PRIVILEGE_CHECKS]
+
+
+def _priv_row(**overrides):
+    """Linha de SQL_INCREMENTAL_PRIVILEGES com tudo concedido; `overrides`
+    troca o valor de um rótulo (False = negado, None = objeto ausente)."""
+    values = {label: True for label in _PRIV_LABELS}
+    values.update(overrides)
+    unknown = set(overrides) - set(_PRIV_LABELS)
+    assert not unknown, unknown
+    return tuple(values[label] for label in _PRIV_LABELS)
+
+
+def _incremental_responses(can_create=True, can_use=True, priv_row=None, tables=("marketplace_region_daily",)):
+    # GOLD_INCR_PRIV vem PRIMEIRO: a consulta de privilégios também contém
+    # HAS_SCHEMA_PRIVILEGE, e o ScriptedCursor casa a primeira substring.
+    responses = [("GOLD_INCR_PRIV", "one", priv_row if priv_row is not None else _priv_row())]
+    for key, kind, value in _MAIN_HAPPY_RESPONSES:
+        if key == "HAS_SCHEMA_PRIVILEGE":
+            value = (can_create, can_use)
+        elif key == "INFORMATION_SCHEMA.TABLES":
+            value = [(t,) for t in tables]
+        responses.append((key, kind, value))
+    return responses
+
+
+def test_run_preflight_tabela_existente_sem_create_passa(monkeypatch):
+    write_url = _install_fake_connect(monkeypatch, main_responses=_incremental_responses(can_create=False))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is True, report.blocking_reasons
+
+
+def test_run_preflight_tabela_existente_sem_insert_recusa(monkeypatch):
+    row = _priv_row(**{"INSERT em gold.marketplace_region_daily": False})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert any("INSERT em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+
+
+def test_run_preflight_tabela_ausente_sem_create_recusa(monkeypatch):
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, tables=()))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=False)
+    assert report.ok is False
+    assert any("CREATE" in r for r in report.blocking_reasons)
+    assert report.safe_summary["privilegios_incrementais_faltando"] is None
+
+
+def test_run_preflight_tabela_existente_sem_usage_em_gold_recusa(monkeypatch):
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=True, can_use=False))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert any("USAGE no schema gold" in r for r in report.blocking_reasons)
+
+
+@pytest.mark.parametrize("label", [
+    "USAGE no schema raw",
+    "SELECT em raw.ml_orders",
+    "SELECT em raw.ml_shipments",
+    "SELECT em raw.ml_shipment_costs",
+    "SELECT em gold.marketplace_region_daily",
+    "TEMP no banco",
+    "USAGE na sequence de gold.marketplace_region_daily",
+    "USAGE no schema silver (fonte Shopee)",
+    "SELECT em silver.stg_shopee_order_item_snapshots",
+])
+def test_run_preflight_tabela_existente_privilegio_negado_recusa(monkeypatch, label):
+    row = _priv_row(**{label: False})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert report.safe_summary["privilegios_incrementais_faltando"] == [label]
+
+
+@pytest.mark.parametrize("label", [
+    "USAGE no schema raw",
+    "SELECT em raw.ml_orders",
+    "SELECT em gold.marketplace_region_daily",
+    "INSERT em gold.marketplace_region_daily",
+])
+def test_run_preflight_objeto_obrigatorio_ausente_recusa(monkeypatch, label):
+    row = _priv_row(**{label: None})
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert label in report.safe_summary["privilegios_incrementais_faltando"]
+
+
+def test_run_preflight_objetos_opcionais_ausentes_passam(monkeypatch):
+    # sem sequence, sem schema silver e sem a fonte Shopee (arquivada)
+    row = _priv_row(**{
+        "USAGE na sequence de gold.marketplace_region_daily": None,
+        "USAGE no schema silver (fonte Shopee)": None,
+        "SELECT em silver.stg_shopee_order_item_snapshots": None,
+    })
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=_incremental_responses(can_create=False, priv_row=row))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is True, report.blocking_reasons
+
+
+def test_run_preflight_tabela_existente_mantem_checagens_de_identidade_e_role(monkeypatch):
+    responses = [r for r in _incremental_responses(can_create=False) if r[0] != "FROM PG_ROLES"]
+    responses.append(("FROM PG_ROLES", "one", (True, False, False, False, False)))
+    write_url = _install_fake_connect(
+        monkeypatch, main_responses=responses,
+        write_identity=("datamart", 5432, "sysid-A"), read_identity=("datamart", 5432, "sysid-B"))
+    report = wc.run_preflight(write_url, _READ_URL, expect_table_exists=True)
+    assert report.ok is False
+    assert "rolsuper=true" in report.blocking_reasons
+    assert any("cluster físico" in r for r in report.blocking_reasons)
+
+
+def test_sql_privilegios_incrementais_nunca_exige_update_delete_truncate():
+    sql = wc.SQL_INCREMENTAL_PRIVILEGES.upper()
+    for privilegio in ("'UPDATE'", "'DELETE'", "'TRUNCATE'", "'CREATE'"):
+        assert privilegio not in sql
+    assert "ROLSUPER" not in sql
 
 
 def test_run_preflight_nunca_expoe_usuario_ou_senha_no_summary(monkeypatch):
