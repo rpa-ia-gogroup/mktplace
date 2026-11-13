@@ -28,6 +28,7 @@ import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
 import type { ComFrescor } from "@/lib/frescor-carga";
 import { buildChartData } from "@/lib/operacoes-trend";
+import { mensagemBr } from "@/lib/operacoes-cartoes";
 import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 
@@ -291,7 +292,7 @@ export default function OperacoesPage() {
 
   return (
     <Aba<Visao>
-      titulo="Operações"
+      titulo="Criadores + Alertas"
       selo={
         <>
         <SeloAtualizado
@@ -366,7 +367,7 @@ export default function OperacoesPage() {
                           {BRAND_LABELS[a.brand] ?? a.brand}
                         </span>
                       </div>
-                      <p className="text-sm text-crit-ink">{a.mensagem}</p>
+                      <p className="text-sm text-crit-ink">{mensagemBr(a.mensagem)}</p>
                     </div>
                   </div>
                   {a.ad_spend != null && (
@@ -395,7 +396,7 @@ export default function OperacoesPage() {
                           {BRAND_LABELS[a.brand] ?? a.brand}
                         </span>
                       </div>
-                      <p className="text-sm text-warn-ink">{a.mensagem}</p>
+                      <p className="text-sm text-warn-ink">{mensagemBr(a.mensagem)}</p>
                     </div>
                   </div>
                   {a.roas != null && (
@@ -446,7 +447,6 @@ export default function OperacoesPage() {
             <thead>
               <tr className="bg-raised text-left">
                 <Th>#</Th>
-                <Th>Marca</Th>
                 <SortableHeader
                   label="Criador"
                   column="creator"
@@ -501,34 +501,33 @@ export default function OperacoesPage() {
             <tbody className="divide-y divide-line">
               {creatorsSort.sortedRows.map((r, i) => (
                 <tr key={i} className="hover:bg-raised transition-colors">
-                  <td className="px-4 py-3 text-xs font-bold text-ink-faint tabular-nums w-8">
+                  <td className="px-4 py-2 text-xs font-bold text-ink-faint tabular-nums w-8">
                     {i + 1}
                   </td>
-                  <td className="px-4 py-3 text-xs font-semibold text-ink whitespace-nowrap">
-                    {BRAND_LABELS[r.brand] ?? r.brand}
+                  {/* Marca como linha pequena sob o criador: no 390 o GMV entra na tela logo apos o nome. */}
+                  <td className="px-4 py-2 max-w-[180px]" title={r.creator}>
+                    <span className="block truncate text-ink">{r.creator}</span>
+                    <span className="block text-xs font-semibold text-ink-faint">{BRAND_LABELS[r.brand] ?? r.brand}</span>
                   </td>
-                  <td className="px-4 py-3 text-ink max-w-[180px] truncate" title={r.creator}>
-                    {r.creator}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink font-semibold text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink font-semibold text-sm">
                     {fmtBrlCurto(r.gmv)}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
                     {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
                     {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
                     {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
                     {r.videos > 0 ? r.videos : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
                     {r.lives > 0 ? r.lives : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-2 text-right">
                     {r.videos > 0 ? (
                       <GpmBadge v={r.gpm_video} />
                     ) : (
