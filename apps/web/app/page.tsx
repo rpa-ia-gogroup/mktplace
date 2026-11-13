@@ -47,7 +47,6 @@ import {
   buildConfidenceStrip,
   type ChannelSeriesState,
   type CommercialAttentionItem,
-  type DataConfidenceItem,
 } from "@/lib/gerencial/attention";
 import {
   buildBrandChannelMatrix,
@@ -122,7 +121,6 @@ import {
   ChannelSeriesDrilldownContent,
   CommercialAttentionDrilldownContent,
   ConfidenceDrilldownContent,
-  DataWarningDrilldownContent,
   MatrixCellUnavailableContent,
   MatrixChannelDrilldownContent,
   MovementDrilldownContent,
@@ -149,7 +147,6 @@ type DialogView =
   | { kind: "matrixChannel"; channel: Marketplace }
   | { kind: "movement"; movement: Movement }
   | { kind: "commercial"; item: CommercialAttentionItem }
-  | { kind: "dataWarning"; item: DataConfidenceItem }
   | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
 
 function GerencialComGrandes() {
@@ -700,8 +697,6 @@ function GerencialComGrandes() {
         return `${dialog.movement.brandLabel} — ${CHANNEL_LABEL[dialog.movement.channel]}`;
       case "commercial":
         return dialog.item.title;
-      case "dataWarning":
-        return "Aviso de confiança no dado";
       case "cx":
         return `${ROTULO_INDICADOR[dialog.indicador]} por marca · Shopee`;
       case "pulse": {
@@ -938,14 +933,12 @@ function GerencialComGrandes() {
 
           <AttentionQueue
             commercial={queue.commercial}
-            dataConfidence={queue.dataConfidence}
             commercialLoading={sources.executiveSummary.status.loading}
             commercialError={sources.executiveSummary.status.error}
             onOpenCommercial={(item) => setDialog({ kind: "commercial", item })}
-            onOpenDataWarning={(item) => setDialog({ kind: "dataWarning", item })}
             health={sources.executiveSummary.data?.health ?? null}
             dataUnavailable={pulse.dataUnavailable}
-            groupedCount={pulse.commercial.length + pulse.dataConfidence.groups.length}
+            temSinais={pulse.commercial.length + pulse.dataConfidence.groups.length > 0}
             onOpenAll={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
             onRetry={sources.retry}
           />
@@ -1155,14 +1148,6 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "dataWarning" && (
-          <DataWarningDrilldownContent
-            item={dialog.item}
-            periodLabel={periodLabel}
-            refreshedAt={sources.executiveSummary.refreshedAt}
-            href={dialog.item.href ? buildHref(dialog.item.href) : null}
-          />
-        )}
       </KpiDrilldownDialog>
     </Aba>
   );

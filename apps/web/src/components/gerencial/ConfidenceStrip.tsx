@@ -67,9 +67,19 @@ export default function ConfidenceStrip({ data, loading, onOpen }: Props) {
       className={`${SELO} ${alerta ? "bg-warn-soft text-warn-ink ring-warn/30" : "bg-surface text-ink-muted ring-line"} hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors`}
     >
       <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
-      Dados <span className="tabular-nums text-ink">{availableCount}/{selectedCount}</span>
-      {data.warningsChecked && data.warningCount > 0 && (
-        <span className="tabular-nums">· {data.warningCount} aviso{data.warningCount > 1 ? "s" : ""}</span>
+      {/* Frase de gestor; contagem de series e defasagem ficam no title e no detalhe. */}
+      {unavailableCount > 0 ? (
+        <span className="tabular-nums">
+          {unavailableCount} {unavailableCount === 1 ? "canal sem dado" : "canais sem dado"}
+        </span>
+      ) : data.warningsChecked && data.warningCount > 0 ? (
+        <span className="tabular-nums">
+          {data.warningCount} {data.warningCount === 1 ? "aviso" : "avisos"} no dado
+        </span>
+      ) : data.warningsChecked && allAvailable ? (
+        "Dado ok"
+      ) : (
+        "Dado não verificado"
       )}
     </button>
   );

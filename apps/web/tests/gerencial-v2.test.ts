@@ -747,7 +747,7 @@ test("21. nenhuma regra hard-coded por marca sobrou no JSX da Gerencial", () => 
   }
   // a fila de atencao vem do contrato, nao de condicional local
   assert.match(page, /commercial=\{queue\.commercial\}/);
-  assert.match(page, /dataConfidence=\{queue\.dataConfidence\}/);
+  assert.match(page, /items=\{queue\.dataConfidence\}/, "os avisos de dado moram no detalhe do selo de confianca");
 });
 
 test("22. as seis fontes tem identidade propria e dado obsoleto nunca vaza", () => {

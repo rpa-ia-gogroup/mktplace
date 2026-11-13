@@ -892,45 +892,6 @@ export function CommercialAttentionDrilldownContent({
   );
 }
 
-export function DataWarningDrilldownContent({
-  item,
-  periodLabel,
-  refreshedAt,
-  href,
-}: {
-  item: DataConfidenceItem;
-  periodLabel: string;
-  refreshedAt: string | null;
-  href: string | null;
-}) {
-  const acima = item.stalenessDays != null && item.thresholdDays != null && item.stalenessDays > item.thresholdDays;
-  return (
-    <div className="flex flex-col gap-4 text-sm">
-      <Topo
-        valor={item.stalenessDays != null ? `${item.stalenessDays} dia(s)` : null}
-        vazio="Defasagem não declarada"
-        tom={acima ? "text-warn-ink" : "text-ink"}
-        extra={item.thresholdDays != null && <Selo pele={acima ? "warn" : "neutro"}>limiar {item.thresholdDays} dia(s)</Selo>}
-        leading="Defasagem"
-        periodLabel={periodLabel}
-        refreshedAt={refreshedAt}
-        dica="Um aviso de dado descreve o que a fonte não sustenta neste período. Não é diagnóstico comercial e não deve ser lido como queda de desempenho."
-      />
-
-      <p className="text-ink-muted leading-snug">{item.message}</p>
-
-      <DrilldownSecao titulo="Evidência">
-        <ul className="flex flex-col">
-          <EvidenceRow label="Fonte" value={item.source ?? "Não declarada"} tone={item.source ? "value" : "muted"} />
-          <EvidenceRow label="Última data" value={item.lastDate ?? "Não declarada"} tone={item.lastDate ? "value" : "muted"} />
-        </ul>
-      </DrilldownSecao>
-
-      {href && <DrilldownCta href={href}>Entender esta limitação →</DrilldownCta>}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Movimento (alta / queda)
 // ---------------------------------------------------------------------------
