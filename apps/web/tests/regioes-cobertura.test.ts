@@ -267,9 +267,9 @@ test("T-0088: o aviso de UF le' o nivel SO' de UF (uf_coverage_level, ou o antig
 test("T-0088: page.tsx mostra o resumo em texto visivel, mantem o ⓘ e o aviso de UF le' so' a UF", () => {
   assert.match(PAGE, /data-testid="aviso-cobertura-resumo"/);
   assert.match(PAGE, /\{avisoCobertura\.resumo\}/);
-  assert.match(PAGE, /avisoCobertura\.detalhes\.map\(/);
-  // o ⓘ (aria-label) continua no titulo do quadro
-  assert.match(PAGE, /<InfoDica texto=\{\[avisoCobertura\.mensagem, \.\.\.avisoCobertura\.detalhes\]\.join\(" "\)\} \/>/);
+  // ALVO-GRADE (Revisor UX, #437): um aviso so' numa linha; quais canais e ate quando seguem VISIVEIS
+  // (o resumo), a mensagem e os detalhes vao para o ⓘ da mesma linha.
+  assert.match(PAGE, /avisoCobertura\?\.mensagem,\s*\.\.\.\(avisoCobertura\?\.detalhes \?\? \[\]\)/);
   assert.match(PAGE, /nivelUf\(displaySummary\)/);
   // o quadro "Cobertura de UF ..." nao e' mais ligado pelo coverage_level (que agora inclui frescor)
   assert.doesNotMatch(PAGE, /displaySummary\?\.coverage_warning &&/);

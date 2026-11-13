@@ -2,32 +2,34 @@
 
 import { CircleDollarSign, MapPin, Percent, ShieldCheck, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
 
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import type { RegioesSummaryData } from "@/lib/api-client";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
-import { coverageLabel, fmtPctOrNA } from "@/lib/regioes-format";
-import { tomDaCobertura, type ChaveRegioes } from "@/lib/regioes-cartoes";
+import { fmtPctOrNA } from "@/lib/regioes-format";
+import type { ChaveRegioes } from "@/lib/regioes-cartoes";
 import { REGIONAL_GMV_LABEL, UF_FILL_LABEL } from "@/lib/regioes-scope";
 
 /**
- * Cartoes de Regioes no padrao da Gerencial (`KpiTile` gerencial). Identidades (so'
- * as 7 existentes): GMV -> `gmv`, pedidos -> `pedidos`, UFs com venda -> `ticket`,
- * UF preenchida -> `roas` (com o tom da regra de cobertura que ja' existia: OK,
- * parcial, baixa), cobertura e custo de frete -> `prazo`. So' GMV e Pedidos abrem
- * detalhe (por UF e por marca, dados ja' carregados). Sem periodo anterior (o filtro
- * "Comparar" nao existe aqui) e a serie de tendencia e' nacional e ignora o filtro
- * de UF: nada disso entra no cartao.
+ * ALVO-GRADE (12/11/2026) — a faixa de Regioes: SEMPRE quatro `CartaoIndicador`.
+ * GMV regional (`gmv`), Pedidos (`pedidos`), UFs com venda (`ticket`) e UF
+ * preenchida (`roas`; o nivel de cobertura fica no aviso da faixa, nao no
+ * cartao). So' GMV e Pedidos abrem detalhe. Sem periodo
+ * anterior e a serie de tendencia e' nacional (ignora o filtro de UF): nenhuma
+ * linha nem variacao no cartao. Os dois indicadores de frete saem da faixa e
+ * vao para `FreteRegioes` ("Mais detalhes").
  */
 export const VISUAL_REGIOES: Record<ChaveRegioes, { icone: LucideIcon; identidade: IdentidadeKpi }> = {
   gmv: { icone: CircleDollarSign, identidade: "gmv" },
   pedidos: { icone: ShoppingBag, identidade: "pedidos" },
 };
 
-export const GRADE_REGIOES = "grid grid-cols-2 md:grid-cols-4 gap-3";
-export const TOTAL_DE_CARTOES_REGIOES = 6;
+export const GRADE_REGIOES = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
+export const TOTAL_DE_CARTOES_REGIOES = 4;
 
-const AUSENTE = "Sem dado no período";
+const AUSENTE = "sem dado no período";
+const cor = (id: IdentidadeKpi) => `rgb(var(--tc-kpi-${id}))`;
 
 interface Props {
   resumo: RegioesSummaryData | null;
@@ -38,68 +40,57 @@ interface Props {
 
 export default function CartoesRegioes({ resumo, notaDoGmv, onAbrir }: Props) {
   const r = resumo;
-  const semResumo = r == null;
-  const coberturaTom = tomDaCobertura(r?.coverage_level);
   return (
     <div className={GRADE_REGIOES}>
-      <KpiTile
-        variante="gerencial"
-        identidade="gmv"
-        icone={VISUAL_REGIOES.gmv.icone}
+      <CartaoIndicador
         rotulo={REGIONAL_GMV_LABEL}
+        icone={VISUAL_REGIOES.gmv.icone}
+        cor={cor("gmv")}
         ajuda={notaDoGmv ? <InfoDica emControle texto={notaDoGmv} /> : undefined}
-        valor={r ? fmtBrlCurto(r.gmv) : "—"}
-        comparacao={semResumo ? AUSENTE : undefined}
-        tom={semResumo ? "ausente" : "neutro"}
-        onAbrir={semResumo ? undefined : () => onAbrir("gmv")}
+        valor={r ? fmtBrlCurto(r.gmv) : null}
+        legenda={r ? undefined : AUSENTE}
+        onAbrir={r ? () => onAbrir("gmv") : undefined}
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="pedidos"
-        icone={VISUAL_REGIOES.pedidos.icone}
+      <CartaoIndicador
         rotulo="Pedidos"
-        valor={r ? fmtNumCurto(r.orders) : "—"}
-        comparacao={semResumo ? AUSENTE : undefined}
-        tom={semResumo ? "ausente" : "neutro"}
-        onAbrir={semResumo ? undefined : () => onAbrir("pedidos")}
+        icone={VISUAL_REGIOES.pedidos.icone}
+        cor={cor("pedidos")}
+        valor={r ? fmtNumCurto(r.orders) : null}
+        legenda={r ? undefined : AUSENTE}
+        onAbrir={r ? () => onAbrir("pedidos") : undefined}
       />
-      <KpiTile
-        variante="gerencial"
-        identidade="ticket"
-        icone={MapPin}
-        rotulo="UFs com venda"
-        valor={r ? `${r.ufs_com_venda}/27` : "—"}
-        comparacao={semResumo ? AUSENTE : undefined}
-        tom={semResumo ? "ausente" : "neutro"}
-      />
-      <KpiTile
-        variante="gerencial"
-        identidade="roas"
-        icone={Percent}
+      <CartaoIndicador rotulo="UFs com venda" icone={MapPin} cor={cor("ticket")} valor={r ? `${r.ufs_com_venda}/27` : null} legenda={r ? undefined : AUSENTE} />
+      <CartaoIndicador
         rotulo={UF_FILL_LABEL}
-        valor={r ? fmtPctOrNA(r.uf_fill_pct) : "—"}
-        comparacao={r ? `${coverageLabel(r.coverage_level)} · dentro dos pedidos elegíveis` : AUSENTE}
-        tom={r ? coberturaTom : "ausente"}
-      />
-      <KpiTile
-        variante="gerencial"
-        identidade="prazo"
-        icone={ShieldCheck}
-        rotulo="Cobertura Custo Frete"
-        valor={r ? fmtPctOrNA(r.shipping_cost_coverage_pct) : "—"}
-        comparacao={r ? "Shopee sem este dado" : AUSENTE}
-        tom={r ? "neutro" : "ausente"}
-      />
-      <KpiTile
-        variante="gerencial"
-        identidade="prazo"
-        icone={Truck}
-        rotulo="Custo Frete Seller"
-        valor={r?.seller_shipping_cost != null ? fmtBrlCurto(r.seller_shipping_cost) : "N/A"}
-        comparacao={semResumo ? AUSENTE : undefined}
-        tom={r?.seller_shipping_cost != null ? "neutro" : "ausente"}
+        icone={Percent}
+        cor={cor("roas")}
+        valor={r ? fmtPctOrNA(r.uf_fill_pct) : null}
+        // sem pilula: "100%" ao lado de "Cobertura baixa" se lia como contradicao; o nivel ja' esta' no aviso da faixa
+        legenda={r ? "dentro dos pedidos elegíveis" : AUSENTE}
       />
     </div>
   );
 }
 
+/** Os indicadores de frete (antes 5º e 6º cartoes), em linhas no "Mais detalhes". Ausencia escrita, nunca zero. */
+export function FreteRegioes({ resumo }: { resumo: RegioesSummaryData | null }) {
+  const r = resumo;
+  const linhas = [
+    { icone: ShieldCheck, rotulo: "Cobertura Custo Frete", valor: r ? fmtPctOrNA(r.shipping_cost_coverage_pct) : "N/A", nota: r ? "Shopee sem este dado" : AUSENTE },
+    { icone: Truck, rotulo: "Custo Frete Seller", valor: r?.seller_shipping_cost != null ? fmtBrlCurto(r.seller_shipping_cost) : "N/A", nota: r ? undefined : AUSENTE },
+  ];
+  return (
+    <dl className="flex flex-col divide-y divide-line">
+      {linhas.map((l) => (
+        <div key={l.rotulo} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+          <dt className="flex items-center gap-2 text-ink-muted">
+            <l.icone aria-hidden="true" className="h-4 w-4 shrink-0" style={{ color: cor("prazo") }} />
+            {l.rotulo}
+            {l.nota && <span className="text-xs text-ink-faint">· {l.nota}</span>}
+          </dt>
+          <dd className={`font-semibold tabular-nums ${l.valor === "N/A" ? "text-ink-faint" : "text-ink"}`}>{l.valor}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}

@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos", "pedidos", "operacoes", "brand"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos", "pedidos", "operacoes", "brand", "regioes"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -76,7 +76,7 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   const consumidores = ROTAS.filter(([, arquivo]) =>
     codeOnly(read(arquivo)).includes("<PageHeader"),
   ).map(([nome]) => nome);
-  assert.ok(consumidores.length >= 2, "extracao exige ao menos 2 consumidores reais");
+  // o PageHeader esvazia conforme as rotas migram para a Aba (ALVO-GRADE); a contagem abaixo segue exata
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");

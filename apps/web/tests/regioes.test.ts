@@ -45,9 +45,10 @@ test("coverageBadgeClass: nunca retorna vazio para nenhum nivel", () => {
 });
 
 test("coverageBadgeClass: low e' visualmente mais forte (rose) que partial (amber)", () => {
-  assert.match(coverageBadgeClass("low"), /rose/);
-  assert.match(coverageBadgeClass("partial"), /amber/);
-  assert.match(coverageBadgeClass("ok"), /emerald/);
+  // ALVO-GRADE: tokens do tema (crit/warn/ok) no lugar da paleta literal
+  assert.match(coverageBadgeClass("low"), /crit/);
+  assert.match(coverageBadgeClass("partial"), /warn/);
+  assert.match(coverageBadgeClass("ok"), /\bok-/);
 });
 
 // ---------------------------------------------------------------------------
