@@ -89,7 +89,8 @@ test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
     const passaFiltros = NO_ESQUELETO_ABA.has(nome) ? /<Aba[<\s][\s\S]*?filtros=\{/.test(src) : /<PageHeader[\s\S]*?filters=\{/.test(src);
     if (COM_FILTROS_GLOBAIS.includes(nome) && nome !== "brand") {
       assert.ok(passaFiltros, `${nome} herda filtros globais e deve passar filters=`);
-    } else if (nome !== "brand") {
+    } else if (nome !== "brand" && !NO_ESQUELETO_ABA.has(nome)) {
+      // na Aba, `filtros` pode ser filtro proprio da pagina (ex.: status em /produtos), nao barra global vazia
       assert.ok(!passaFiltros, `${nome} nao herda filtros globais: barra vazia seria afordancia falsa`);
     }
   }
