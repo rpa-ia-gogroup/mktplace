@@ -119,8 +119,8 @@ test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
 });
 
 test("kpi-identidade.ts repete os pares icone + identidade do cartao da KpiBand (duas fontes, uma verdade)", () => {
-  // ALVO-GRADE: a KpiBand tem 4 cartoes (o ROAS virou o ACOS na legenda do Investimento em ads), com o
-  // mapa CARTAO { icone, cor }. O mapa do detalhe segue com os 5 (o detalhe do ROAS continua existindo).
+  // ALVO-GRADE: a KpiBand tem o mapa CARTAO { icone, cor } dos 5; na Gerencial o ACOS por canal e' o
+  // 1o cartao (GMV e meta voltaram para o MetaHero, 13/11).
   const mapa = ler("src/lib/gerencial/kpi-identidade.ts");
   const band = ler("src/components/gerencial/KpiBand.tsx");
   const pares: [string, string, string][] = [
@@ -132,9 +132,8 @@ test("kpi-identidade.ts repete os pares icone + identidade do cartao da KpiBand 
   ];
   for (const [kpi, icone, identidade] of pares) {
     assert.ok(mapa.includes(`${kpi}: { icone: ${icone}, identidade: "${identidade}" }`), `mapa novo: ${kpi}`);
-    if (kpi !== "roas") assert.ok(band.includes(`${kpi}: { icone: ${icone}, cor: `), `KpiBand: ${kpi}`);
+    assert.ok(band.includes(`${kpi}: { icone: ${icone}, cor: `), `KpiBand: ${kpi}`);
   }
-  assert.ok(!band.includes("roas: {"), "a faixa nao tem mais cartao de ROAS");
 });
 
 // A cor do cartao tem de ser a MESMA do ladrilho do detalhe: o token kpi-*, que tambem troca no escuro.
