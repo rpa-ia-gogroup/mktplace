@@ -1,10 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
-} from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   fetchPedidos,
   type PedidosData,
@@ -15,18 +12,18 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import { FaixaTotais, GrupoCanal, VISUAL_DETALHE } from "@/components/pedidos/PedidosCartoes";
+import { FaixaTotais, GRADE_PEDIDOS, GrupoCanal, VISUAL_DETALHE } from "@/components/pedidos/PedidosCartoes";
 import PedidosDrilldownContent from "@/components/pedidos/PedidosDrilldownContent";
+import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import { ShoppingBag } from "lucide-react";
-import BrandFilter from "@/components/BrandFilter";
-import DateRangeFilter from "@/components/DateRangeFilter";
-import LiveStatusBadge from "@/components/LiveStatusBadge";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import CelulaBarra from "@/components/ui/CelulaBarra";
+import Panel from "@/components/ui/Panel";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import { useTema } from "@/components/theme/ThemeProvider";
+import { temaDoGrafico } from "@/lib/chart-theme";
 import { fmtBrlCurto, fmtPctSimples, fmtNumCurto } from "@/lib/formatters";
 import { paraPedidosLiquidos, pedidosLiquidosDaMarca, seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
-import { fmtPeriodo, fmtRefreshedAt } from "@/lib/filters/format";
+import { fmtPeriodo } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -44,10 +41,10 @@ function fmtRate(v: number | null): string {
 }
 
 function cancelColor(v: number | null): string {
-  if (v == null) return "text-slate-400";
-  if (v < 2) return "text-emerald-700";
-  if (v < 5) return "text-amber-700";
-  return "text-rose-700";
+  if (v == null) return "text-ink-faint";
+  if (v < 2) return "text-ok-ink";
+  if (v < 5) return "text-warn-ink";
+  return "text-crit-ink";
 }
 
 function shortDate(dateStr: string): string {
@@ -86,78 +83,108 @@ const BRAND_COLUMN_TYPES: Record<string, "numeric" | "text"> = {
   total_gmv: "numeric",
 };
 
-function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; loading: boolean }) {
-  const { sort, toggleSort, sortedRows } = useSortableTable(rows, getBrandSortValue, BRAND_COLUMN_TYPES);
-  const colSpan = 2 + (showTiktok ? 2 : 0) + (showMl ? 2 : 0);
+/** Peso 0..1 de cada linha na escala da coluna (so' desenha a barrinha); `null` sem dado. */
+function pesos(valores: (number | null)[]): (number | null)[] {
+  const max = Math.max(0, ...valores.map((v) => v ?? 0));
+  return valores.map((v) => (v == null || max <= 0 ? null : v / max));
+}
+
+const COR = {
+  tiktok: "rgb(var(--tc-canal-tiktok))",
+  ml: "rgb(var(--tc-canal-ml))",
+  pedidos: "rgb(var(--tc-kpi-pedidos))",
+  gmv: "rgb(var(--tc-kpi-gmv))",
+} as const;
+const TD = "px-4 py-3 text-right tabular-nums";
+
+/** Numero com a barrinha na cor de identidade; sem dado: "—", sem barra. */
+function CelulaNum({ texto, peso, cor }: { texto: string; peso: number | null; cor: string }) {
+  return <td className={TD}>{peso == null ? <span className="text-ink-faint">{texto}</span> : <CelulaBarra valor={texto} peso={peso} cor={cor} />}</td>;
+}
+
+/** `showTotais`: Total e GMV somam os canais, entao so' aparecem na Visao geral (na aba de canal, misturariam canais). */
+function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; showTotais: boolean; loading: boolean }) {
+  const { sort, toggleSort, sortedRows, resetSortIfColumnMissing } = useSortableTable(rows, getBrandSortValue, BRAND_COLUMN_TYPES);
+  useEffect(() => {
+    // coluna escondida nao pode continuar ordenando a tabela
+    resetSortIfColumnMissing(["brand", ...(showTiktok ? ["tk_orders", "tk_cancel"] : []), ...(showMl ? ["ml_orders", "ml_cancel"] : []), ...(showTotais ? ["total_orders", "total_gmv"] : [])]);
+  }, [showTiktok, showMl, showTotais]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colSpan = 1 + (showTotais ? 2 : 0) + (showTiktok ? 2 : 0) + (showMl ? 2 : 0);
+  const pTk = pesos(sortedRows.map((r) => r.tiktok_orders));
+  const pMl = pesos(sortedRows.map((r) => r.ml_orders));
+  const pTotal = pesos(sortedRows.map((r) => pedidosLiquidosDaMarca(r)));
+  const pGmv = pesos(sortedRows.map((r) => r.total_gmv));
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-violet-100 overflow-hidden">
-      <div className="px-5 py-4 border-b border-violet-100">
-        <h2 className="text-sm font-semibold text-slate-700">Por marca</h2>
-      </div>
-      <TableScrollHint>
-        <table className="w-full text-sm" role="table">
-          <thead>
-            <tr className="bg-slate-50 text-left">
-              <SortableHeader label="Marca" column="brand" sort={sort} onSort={toggleSort} align="left" className="!px-5 !py-3 !text-[10px]" />
+    <TableScrollHint>
+      <table className="w-full text-sm" role="table">
+        <thead>
+          <tr className="bg-raised text-left">
+            <SortableHeader label="Marca" column="brand" sort={sort} onSort={toggleSort} align="left" />
+            {showTiktok && (
+              <>
+                <SortableHeader label="TikTok · Pedidos" column="tk_orders" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="TikTok · Cancelamento" column="tk_cancel" sort={sort} onSort={toggleSort} />
+              </>
+            )}
+            {showMl && (
+              <>
+                <SortableHeader label="ML · Pedidos" column="ml_orders" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="ML · Cancelamento" column="ml_cancel" sort={sort} onSort={toggleSort} />
+              </>
+            )}
+            {showTotais && (
+              <>
+                <SortableHeader label="Total" column="total_orders" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="GMV" column="total_gmv" sort={sort} onSort={toggleSort} />
+              </>
+            )}
+          </tr>
+        </thead>
+        <tbody className={`divide-y divide-line transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}>
+          {sortedRows.length === 0 && (
+            <tr>
+              <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-ink-faint">
+                Sem dados por marca para o período e filtros selecionados.
+              </td>
+            </tr>
+          )}
+          {sortedRows.map((row, i) => (
+            <tr key={row.brand} className="transition-colors hover:bg-raised/60">
+              <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink">{row.label}</td>
               {showTiktok && (
                 <>
-                  <SortableHeader label="TK Pedidos" column="tk_orders" sort={sort} onSort={toggleSort} className="!px-4 !py-3 !text-[10px]" />
-                  <SortableHeader label="TK Cancel." column="tk_cancel" sort={sort} onSort={toggleSort} className="!px-4 !py-3 !text-[10px]" />
+                  <CelulaNum texto={fmtNum(row.tiktok_orders)} peso={pTk[i]} cor={COR.tiktok} />
+                  <td className={TD}>
+                    <span className={`font-semibold ${cancelColor(row.tiktok_cancel_rate_pct)}`}>{fmtRate(row.tiktok_cancel_rate_pct)}</span>
+                  </td>
                 </>
               )}
               {showMl && (
                 <>
-                  <SortableHeader label="ML Pedidos" column="ml_orders" sort={sort} onSort={toggleSort} className="!px-4 !py-3 !text-[10px]" />
-                  <SortableHeader label="ML Cancel." column="ml_cancel" sort={sort} onSort={toggleSort} className="!px-4 !py-3 !text-[10px]" />
+                  <CelulaNum texto={fmtNum(row.ml_orders)} peso={pMl[i]} cor={COR.ml} />
+                  <td className={TD}>
+                    <span className={`font-semibold ${cancelColor(row.ml_cancel_rate_pct)}`}>{fmtRate(row.ml_cancel_rate_pct)}</span>
+                  </td>
                 </>
               )}
-              <SortableHeader label="Total" column="total_orders" sort={sort} onSort={toggleSort} className="!px-4 !py-3 !text-[10px]" />
-              <SortableHeader label="GMV" column="total_gmv" sort={sort} onSort={toggleSort} className="!px-5 !py-3 !text-[10px]" />
+              {showTotais && (
+                <>
+                  <CelulaNum texto={fmtNum(pedidosLiquidosDaMarca(row))} peso={pTotal[i]} cor={COR.pedidos} />
+                  <CelulaNum texto={fmtBrlCurto(row.total_gmv)} peso={pGmv[i]} cor={COR.gmv} />
+                </>
+              )}
             </tr>
-          </thead>
-          <tbody className={`divide-y divide-slate-50 transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}>
-            {sortedRows.length === 0 && (
-              <tr>
-                <td colSpan={colSpan} className="px-5 py-8 text-center text-slate-400 text-sm">
-                  Sem dados por marca para o período e filtros selecionados.
-                </td>
-              </tr>
-            )}
-            {sortedRows.map((row) => (
-              <tr key={row.brand} className="hover:bg-slate-50/60 transition-colors">
-                <td className="px-5 py-3 font-semibold text-slate-700">{row.label}</td>
-                {showTiktok && (
-                  <>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNum(row.tiktok_orders)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <span className={`text-xs font-semibold ${cancelColor(row.tiktok_cancel_rate_pct)}`}>
-                        {fmtRate(row.tiktok_cancel_rate_pct)}
-                      </span>
-                    </td>
-                  </>
-                )}
-                {showMl && (
-                  <>
-                    <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtNum(row.ml_orders)}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      <span className={`text-xs font-semibold ${cancelColor(row.ml_cancel_rate_pct)}`}>
-                        {fmtRate(row.ml_cancel_rate_pct)}
-                      </span>
-                    </td>
-                  </>
-                )}
-                <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-800">
-                  {fmtNum(pedidosLiquidosDaMarca(row))}
-                </td>
-                <td className="px-5 py-3 text-right tabular-nums text-slate-700">{fmtBrlCurto(row.total_gmv)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </TableScrollHint>
-    </div>
+          ))}
+        </tbody>
+      </table>
+    </TableScrollHint>
   );
 }
+
+type VisaoPedidos = "geral" | "tiktok" | "ml";
+
+/** As ancoras de antes das abas continuam valendo: o link antigo abre a Visao geral. */
+const ANCORAS_ANTIGAS = new Set(["#resumo", "#por-canal", "#tendencia", "#por-marca"]);
 
 function PedidosPageInner() {
   const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "30d" });
@@ -172,6 +199,11 @@ function PedidosPageInner() {
   // a chave atual para decidir se o estado em memoria reflete de fato os
   // filtros exibidos agora (mesmo padrao Financeiro/Regioes/Qualidade, Gate U4/U5).
   const [resolvedKey, setResolvedKey] = useState<string | null>(null);
+  const [visao, setVisao] = useState<VisaoPedidos>("geral");
+  useEffect(() => {
+    if (ANCORAS_ANTIGAS.has(window.location.hash)) setVisao("geral");
+  }, []);
+  const tema = temaDoGrafico(useTema().resolvido);
 
   const showTiktokSel = isMarketplaceSelected(filters.channels, "tiktok");
   const showMlSel = isMarketplaceSelected(filters.channels, "ml");
@@ -252,10 +284,20 @@ function PedidosPageInner() {
   const brandRows = displayData?.by_brand ?? [];
   const periodLabel = fmtPeriodo(filters.dateFrom, filters.dateTo);
 
+  // Abas: Visao geral + um canal por aba (so' os canais do filtro). Aba de canal fora do filtro volta para a geral.
+  const visoes: VisaoDaAba<VisaoPedidos>[] = [
+    { id: "geral", rotulo: "Visão geral" },
+    ...(showTiktokSel ? [{ id: "tiktok" as const, rotulo: "TikTok Shop", ponto: "bg-canal-tiktok" }] : []),
+    ...(showMlSel ? [{ id: "ml" as const, rotulo: "Mercado Livre", ponto: "bg-canal-ml" }] : []),
+  ];
+  const visaoAtiva: VisaoPedidos = visoes.some((v) => v.id === visao) ? visao : "geral";
+  const verTiktok = showTiktokSel && visaoAtiva !== "ml";
+  const verMl = showMlSel && visaoAtiva !== "tiktok";
+
   const chartData = daily.map((r) => ({
     date: shortDate(r.date),
-    ...(showTiktokSel ? { tiktok: r.tiktok_orders } : {}),
-    ...(showMlSel ? { ml: r.ml_orders } : {}),
+    ...(verTiktok ? { tiktok: r.tiktok_orders } : {}),
+    ...(verMl ? { ml: r.ml_orders } : {}),
   }));
 
   const selecao = { tiktok: showTiktokSel, ml: showMlSel };
@@ -263,43 +305,48 @@ function PedidosPageInner() {
   // B1-04: pedidos liquidos (sem cancelados) em toda a tela, como o grafico e o ticket.
   const dadosCartoes = paraPedidosLiquidos({ kpis, tk, ml });
 
+  const canalDados = visaoAtiva === "tiktok" ? tk : visaoAtiva === "ml" ? ml : null;
+  const faixa = isErrorState || showShopeeOnly ? null : isLoadingState ? (
+    <FaixaCarregando cartoes={4} className={GRADE_PEDIDOS} />
+  ) : visaoAtiva === "geral" ? (
+    <FaixaTotais dados={dadosCartoes} series={series} onAbrir={setDetalhe} />
+  ) : canalDados ? (
+    visaoAtiva === "tiktok" ? (
+      <GrupoCanal dados={canalDados} serieOrders={series.tkPedidos} serieCancelados={series.tkCancelados} chaveOrders="tk_pedidos" chaveGmv="tk_gmv" chaveCancelados="tk_cancelados" onAbrir={setDetalhe} />
+    ) : (
+      <GrupoCanal dados={canalDados} serieOrders={series.mlPedidos} serieCancelados={series.mlCancelados} chaveOrders="ml_pedidos" chaveGmv="ml_gmv" chaveCancelados="ml_cancelados" onAbrir={setDetalhe} />
+    )
+  ) : dataIsFresh ? (
+    <StateBlock tipo="vazio" titulo="Sem dados de canais disponíveis." />
+  ) : null;
+
   return (
-    <PageContainer>
-      <PageHeader
-        title="Pedidos"
-        icon={ShoppingBag}
-        meta={
-          <>
-            {dataIsFresh && displayData?.refreshed_at && (
-              <span className="text-xs text-ink-muted tabular-nums">Atualizado em {fmtRefreshedAt(displayData.refreshed_at)}</span>
-            )}
-          </>
-        }
-        // FINDING 2 (rodada de correcao) — Shopee isolada nunca chama fetch
-        // (ver efeito abaixo): "API offline" implicaria falha de rede, que
-        // nunca ocorreu aqui — e' apenas uma fonte sem cobertura Shopee.
-        // Checado ANTES de `dataIsFresh` (que e' `true` nesse caminho, pois
-        // a identidade foi marcada como resolvida sem erro/loading).
-        status={
+    <>
+      <Aba
+        titulo="Pedidos"
+        visoes={showShopeeOnly ? undefined : visoes}
+        visao={visaoAtiva}
+        onVisao={setVisao}
+        selo={
+          // FINDING 2 (rodada de correcao) — Shopee isolada nunca chama fetch:
+          // "API offline" implicaria falha de rede; e' so' uma fonte sem cobertura Shopee.
           dataIsFresh && showShopeeOnly ? (
-            <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">
-              Shopee sem cobertura nesta visão
-            </span>
-          ) : dataIsFresh ? (
-            <LiveStatusBadge live={displayIsLive} offlineLabel="Sem dados · API offline" />
-          ) : null
+            <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">Shopee sem cobertura nesta visão</span>
+          ) : (
+            <SeloAtualizado aoVivo={dataIsFresh ? displayIsLive : null} em={dataIsFresh ? (displayData?.refreshed_at ?? null) : null} carregando={isLoadingState} />
+          )
         }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
-      />
-
-        {/* Shopee isolada: o selo do cabecalho e o estado vazio abaixo ja dizem
-            que nao ha cobertura. Selecao mista: os numeros nunca incluem Shopee. */}
-        {showShopeeMixed && (
-          <p className="w-fit rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800">
-            {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
-          </p>
-        )}
-
+        filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
+        faixa={faixa ? <div aria-busy={isLoadingState}>{faixa}</div> : undefined}
+        atencao={
+          // Selecao mista: os numeros nunca incluem Shopee.
+          showShopeeMixed && visaoAtiva === "geral" ? (
+            <p className="w-fit rounded-lg bg-warn-soft px-3 py-1.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
+              {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
+            </p>
+          ) : undefined
+        }
+      >
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState
             ? "Carregando dados de pedidos..."
@@ -310,111 +357,55 @@ function PedidosPageInner() {
             : "Dados de pedidos carregados."}
         </span>
 
-      {isErrorState ? (
-        <StateBlock
-          tipo="erro"
-          titulo="Não foi possível carregar os dados de pedidos."
-          descricao={error}
-          acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
-        />
-      ) : showShopeeOnly ? (
-        <StateBlock tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos." descricao="Selecione TikTok Shop ou Mercado Livre." />
-      ) : (
-      <>
-        {/* Navegacao interna compacta */}
-        <nav aria-label="Navegação interna da página" className="flex flex-wrap gap-1 -mx-2.5">
-          <a href="#resumo" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Resumo</a>
-          <a href="#por-canal" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Por Canal</a>
-          <a href="#tendencia" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Tendência</a>
-          <a href="#por-marca" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-violet-700 hover:bg-violet-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500">Por Marca</a>
-        </nav>
+        {isErrorState ? (
+          <StateBlock
+            tipo="erro"
+            titulo="Não foi possível carregar os dados de pedidos."
+            descricao={error}
+            acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
+          />
+        ) : showShopeeOnly ? (
+          <StateBlock tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos." descricao="Selecione TikTok Shop ou Mercado Livre." />
+        ) : (
+          <>
+            <Panel titulo="Volume diário de pedidos">
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={chartData.length > 14 ? 8 : 14}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: tema.eixo }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
+                    <YAxis tick={{ fontSize: 12, fill: tema.eixo }} tickLine={false} axisLine={false} tickFormatter={(v) => fmtNumCurto(v)} width={68} />
+                    <Tooltip
+                      cursor={{ fill: tema.grade, opacity: 0.45 }}
+                      contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 12, fontSize: 12, color: tema.tooltipTinta }}
+                      labelStyle={{ fontWeight: 600, color: tema.tooltipTinta }}
+                      formatter={(value: number, name: string) => [fmtNum(value), name === "tiktok" ? "TikTok Shop" : "Mercado Livre"]}
+                    />
+                    {verTiktok && <Bar dataKey="tiktok" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.tiktok} radius={[0, 0, 0, 0]} />}
+                    {verMl && <Bar dataKey="ml" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.ml} radius={[3, 3, 0, 0]} />}
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                dataIsFresh && <StateBlock tipo="vazio" compacto titulo="Sem série diária para o período e filtros selecionados." />
+              )}
+              {chartData.length > 0 && verTiktok && verMl && (
+                <ul aria-label="Séries do gráfico" className="m-0 mt-2 flex list-none flex-wrap justify-center gap-x-5 gap-y-1 p-0">
+                  <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-tiktok" />TikTok Shop</li>
+                  <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-ml" />Mercado Livre</li>
+                </ul>
+              )}
+            </Panel>
 
-        {/* Cartoes no padrao da Gerencial: os 4 totais e um grupo por canal. */}
-        <div id="resumo" className="scroll-mt-24" aria-busy={isLoadingState}>
-          {isLoadingState ? (
-            <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />
-          ) : (
-            <FaixaTotais dados={dadosCartoes} series={series} onAbrir={setDetalhe} />
-          )}
-        </div>
+            <Panel titulo="Por marca" semPadding ajuda="Cancelamento: abaixo de 2% em verde, de 2% a 5% em âmbar, acima de 5% em vermelho. Pedidos e Total sem os cancelados.">
+              <BrandTable rows={brandRows} showTiktok={verTiktok} showMl={verMl} showTotais={visaoAtiva === "geral"} loading={isLoadingState} />
+            </Panel>
 
-        <div id="por-canal" className="scroll-mt-24 flex flex-col gap-4">
-          {isLoadingState && <FaixaCarregando cartoes={4} className="grid grid-cols-2 md:grid-cols-4 gap-3" />}
-          {!isLoadingState && tk && (
-            <GrupoCanal
-              canal="tiktok" titulo="TikTok Shop" dados={tk}
-              serieOrders={series.tkPedidos} serieCancelados={series.tkCancelados}
-              chaveOrders="tk_pedidos" chaveGmv="tk_gmv" chaveCancelados="tk_cancelados" onAbrir={setDetalhe}
-            />
-          )}
-          {!isLoadingState && ml && (
-            <GrupoCanal
-              canal="ml" titulo="Mercado Livre" dados={ml}
-              serieOrders={series.mlPedidos} serieCancelados={series.mlCancelados}
-              chaveOrders="ml_pedidos" chaveGmv="ml_gmv" chaveCancelados="ml_cancelados" onAbrir={setDetalhe}
-            />
-          )}
-          {!isLoadingState && !tk && !ml && dataIsFresh && (
-            <StateBlock tipo="vazio" titulo="Sem dados de canais disponíveis." />
-          )}
-        </div>
-
-        {/* Daily chart */}
-        <div id="tendencia" className="scroll-mt-24 bg-white rounded-2xl shadow-sm border border-violet-100 p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">
-            Volume diário de pedidos — {periodLabel}
-          </h2>
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={chartData.length > 14 ? 8 : 14}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={chartData.length > 14 ? 4 : 1}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => fmtNumCurto(v)}
-                  width={56}
-                />
-                <Tooltip
-                  contentStyle={{ borderRadius: "12px", border: "1px solid #ede9fe", fontSize: 12 }}
-                  formatter={(value: number, name: string) => [
-                    fmtNum(value),
-                    name === "tiktok" ? "TikTok Shop" : "Mercado Livre",
-                  ]}
-                  labelStyle={{ fontWeight: 600, color: "#1e293b" }}
-                />
-                <Legend
-                  formatter={(v) => v === "tiktok" ? "TikTok Shop" : "Mercado Livre"}
-                  iconType="circle"
-                  iconSize={8}
-                  wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
-                />
-                {showTiktokSel && <Bar dataKey="tiktok" animationDuration={450} animationEasing="ease-out" stackId="orders" fill="#7c3aed" radius={[0, 0, 0, 0]} />}
-                {showMlSel && <Bar dataKey="ml" animationDuration={450} animationEasing="ease-out" stackId="orders" fill="#f59e0b" radius={[3, 3, 0, 0]} />}
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            dataIsFresh && <p className="text-sm text-slate-400 text-center py-10">Sem série diária para o período e filtros selecionados.</p>
-          )}
-        </div>
-
-        {/* Brand table */}
-        <div id="por-marca" className="scroll-mt-24">
-          <BrandTable rows={brandRows} showTiktok={showTiktokSel} showMl={showMlSel} loading={isLoadingState} />
-        </div>
-
-        {dataIsFresh && !displayData && (
-          <StateBlock tipo="indisponivel" titulo="API offline — pedidos indisponíveis." />
+            {dataIsFresh && !displayData && (
+              <StateBlock tipo="indisponivel" titulo="API offline — pedidos indisponíveis." />
+            )}
+          </>
         )}
-      </>
-      )}
+      </Aba>
       <KpiDrilldownDialog
         open={detalhe != null}
         onClose={() => setDetalhe(null)}
@@ -435,13 +426,13 @@ function PedidosPageInner() {
           />
         )}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </>
   );
 }
 
 export default function PedidosPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#f8f7ff]" />}>
+    <Suspense fallback={<div className="min-h-screen" />}>
       <PedidosPageInner />
     </Suspense>
   );

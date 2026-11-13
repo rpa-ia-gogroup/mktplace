@@ -181,7 +181,6 @@ test("rota nao migrada volta ao tema claro em vez de ficar meio escura", () => {
   // `/` na lista NAO pode virar coringa: so' a raiz casa. As rotas ainda em
   // literais claros continuam presas ao claro.
   for (const r of [
-    "/pedidos",
     "/regioes",
     "/brand/kokeshi",
     "/inteligencia",
@@ -204,7 +203,7 @@ test("a lista de rotas migradas e' explicita e comeca pela Expedicao", () => {
   // DRE-UX-1: `/dre` nasce tematizada (arvore inteira em tokens, abaixo).
   // METAS-1: `/metas` nasce tematizada (arvore inteira em tokens, abaixo).
   // CX-TEMA-ESCURO: `/cx` entra com a arvore inteira em tokens (abaixo).
-  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/qualidade"]);
+  assert.deepEqual([...ROTAS_TEMATIZADAS], ["/expedicao", "/", "/canais", "/financeiro", "/dre", "/metas", "/cx", "/full", "/marcas-menores", "/monitoramento-preco", "/operacoes", "/produtos", "/qualidade", "/pedidos"]);
 });
 
 // ---------------------------------------------------------------------------
@@ -231,6 +230,7 @@ const PAGINA_DA_ROTA: Record<string, string> = {
   "/operacoes": "app/operacoes/page.tsx",
   "/produtos": "app/produtos/page.tsx",
   "/qualidade": "app/qualidade/page.tsx",
+  "/pedidos": "app/pedidos/page.tsx",
 };
 
 // A propria fonte da paleta dos graficos (SVG precisa de cor resolvida).

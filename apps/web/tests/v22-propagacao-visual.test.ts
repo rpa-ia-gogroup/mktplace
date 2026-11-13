@@ -41,7 +41,7 @@ const ROTAS = [
 ] as const;
 
 /** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
-const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos"]);
+const NO_ESQUELETO_ABA = new Set<string>(["financeiro", "qualidade", "canais", "produtos", "pedidos"]);
 
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
@@ -333,8 +333,9 @@ test("P16. Qualidade nao cria ranking competitivo de cancelamento entre canais",
 test("P17. Pedidos: Shopee isolada e' ausencia de cobertura, nao API offline", () => {
   const src = read("app/pedidos/page.tsx");
   assert.match(src, /Shopee sem cobertura nesta visão/);
-  const statusBlock = src.slice(src.indexOf("        status={"), src.indexOf("        filters={"));
-  assert.ok(statusBlock.indexOf("showShopeeOnly") < statusBlock.indexOf("<LiveStatusBadge"),
+  // ALVO-GRADE: o selo da `Aba` faz o papel do antigo `status` do cabecalho.
+  const statusBlock = src.slice(src.indexOf("        selo={"), src.indexOf("        filtros={"));
+  assert.ok(statusBlock.indexOf("showShopeeOnly") >= 0 && statusBlock.indexOf("showShopeeOnly") < statusBlock.indexOf("<SeloAtualizado"),
     "a cobertura ausente e' checada antes do badge de rede");
 });
 
