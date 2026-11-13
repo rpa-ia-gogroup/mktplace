@@ -62,7 +62,7 @@ const REASONS: Record<EvidenceKind, string> = {
 };
 
 const AMOUNT_LABELS: Record<EvidenceKind, string> = {
-  parar: "Ad spend na amostra",
+  parar: "Investimento em Ads na amostra",
   escalar: "GMV na amostra",
   testar: "GMV na amostra",
 };

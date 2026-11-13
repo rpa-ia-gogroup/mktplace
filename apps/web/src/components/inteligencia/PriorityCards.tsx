@@ -1,9 +1,11 @@
 "use client";
 
 import { FlaskConical, OctagonX, Rocket, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import { fmtBrlCurto } from "@/lib/formatters";
 import type { Priority } from "@/lib/inteligencia/priorities";
 
@@ -19,15 +21,27 @@ export const VISUAL_PRIORIDADE: Record<Priority["kind"], { icone: LucideIcon; id
   testar: { icone: FlaskConical, identidade: "gmv" },
 };
 
+/**
+ * ALVO-GRADE: rotulo curto no cartao (cabe em 1440); o titulo inteiro segue no detalhe.
+ * Escalar e Teste organico dizem que sao os N primeiros da fila: o quadrante "Escalar"
+ * do mapa, logo abaixo, e' o universo inteiro (outro numero, mesmo nome).
+ */
+export function rotuloCurto(p: Priority): string {
+  if (p.kind === "parar") return "Ads sem venda";
+  return `${p.kind === "escalar" ? "Escalar" : "Teste orgânico"} · top ${p.received}`;
+}
+
 interface Props {
   priorities: Priority[];
   onOpen: (p: Priority) => void;
   disabled?: boolean;
+  /** ALVO-GRADE: cartao(oes) de fora da fotografia ML (TikTok), como irmaos na MESMA faixa. */
+  extra?: ReactNode;
 }
 
 /**
- * Bloco 2 — prioridades da fotografia ML (Gate V3-1A), no padrao da Gerencial
- * (`KpiTile` gerencial).
+ * Bloco 2 — prioridades da fotografia ML (Gate V3-1A), no `CartaoIndicador` da
+ * grade unica (ALVO-GRADE).
  *
  * Duas regras que o componente materializa e nao permite burlar:
  * - a contagem exibida e' de REGISTROS RECEBIDOS (nunca "N produtos no
@@ -35,34 +49,31 @@ interface Props {
  * - cartao sem registro nao chega aqui — `buildPriorities` ja' o omite, entao
  *   nao existe "prioridade zero".
  *
- * O cartao inteiro e' um `<button>` real (nome acessivel = rotulo + valor + acao),
- * com `card-hover`. Sem periodo anterior nem serie nesta fotografia: sem pilula e
- * sem grafico. `disabled` (atualizando) tira o clique e o hover, nao o numero.
+ * O cartao inteiro e' um `<button>` real (nome acessivel = rotulo + valor + acao).
+ * Sem periodo anterior nem serie nesta fotografia: sem pilula e sem linha.
+ * `disabled` (atualizando) tira o clique, nao o numero.
  */
-export default function PriorityCards({ priorities, onOpen, disabled }: Props) {
-  if (priorities.length === 0) return null;
-  const impar = priorities.length % 2 === 1;
+export default function PriorityCards({ priorities, onOpen, disabled, extra }: Props) {
+  if (priorities.length === 0 && !extra) return null;
   return (
-    <ul className="grid grid-cols-2 lg:grid-cols-3 gap-3 list-none p-0 m-0">
-      {priorities.map((p, i) => {
+    <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+      {priorities.map((p) => {
         const { icone, identidade } = VISUAL_PRIORIDADE[p.kind];
-        // Em 2 colunas (celular/tablet), o ultimo de uma quantidade impar fecha a linha.
-        const fechaLinha = impar && i === priorities.length - 1;
         return (
-          <li key={p.kind} className={fechaLinha ? "col-span-2 lg:col-span-1" : undefined}>
-            <KpiTile
-              variante="gerencial"
-              identidade={identidade}
-              icone={icone}
-              rotulo={p.title}
-              ajuda={<InfoDica texto={p.limitation} emControle />}
-              valor={fmtBrlCurto(p.amount)}
-              comparacao={`${p.amountLabel} · ${p.received} registro${p.received === 1 ? "" : "s"} exibido${p.received === 1 ? "" : "s"}`}
-              onAbrir={disabled ? undefined : () => onOpen(p)}
-            />
-          </li>
+          <CartaoIndicador
+            key={p.kind}
+            rotulo={rotuloCurto(p)}
+            icone={icone}
+            cor={`rgb(var(--tc-kpi-${identidade}))`}
+            ajuda={<InfoDica texto={p.limitation} emControle />}
+            valor={fmtBrlCurto(p.amount)}
+            // Com "top N" no rotulo, a legenda nao repete a contagem.
+            legenda={p.kind === "parar" ? `${p.amountLabel} · ${p.received} registro${p.received === 1 ? "" : "s"} exibido${p.received === 1 ? "" : "s"}` : p.amountLabel}
+            onAbrir={disabled ? undefined : () => onOpen(p)}
+          />
         );
       })}
-    </ul>
+      {extra}
+    </div>
   );
 }
