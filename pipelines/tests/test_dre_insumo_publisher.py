@@ -913,11 +913,15 @@ class _ConnFonte:
         pass
 
     def execute(self, sql, params=None):
+        self.eng.sqls.append((sql, len(self.eng.alvo.abertas)))
         self.eng.ao_ler()
         if sql is P.SQL_CMV:
             return _Res(linhas=self.eng.cmv)
         if sql is P.SQL_CMV_CONTRAPROVA:
             return _Res(linhas=[cp(c) for c in self.eng.cmv])
+        if sql is P.SQL_CMV_LACUNAS:  # T-0091b: as lacunas sao as celulas das linhas sem custo
+            return _Res(linhas=[{"competencia": m, "marca": marca} for m, marca in sorted(
+                {(r["competencia"], r["marca"]) for r in self.eng.estimado if r["tipo"] == "sem_custo"})])
         if sql is P.SQL_CMV_ESTIMADO:
             return _Res(linhas=self.eng.estimado)
         return _Res(linhas=[])
@@ -932,6 +936,7 @@ class _FonteFake:
         self.alvo, self.cmv, self.depois = alvo, list(cmv_rows), depois_da_leitura
         self.estimado = list(estimado)
         self.abertas_na_leitura = []
+        self.sqls = []  # (sql, conexoes do alvo abertas no instante do comando)
 
     def connect(self):
         return _ConnFonte(self)
@@ -1356,15 +1361,19 @@ def test_t0087b_ler_fonte_passa_a_janela_de_emissao():
 
 
 def test_t0087b_ler_cmv_estimado_passa_a_janela_de_emissao():
+    # T-0091b: a janela do lote vai para a pre-consulta; sem lacuna, a pesada nem roda
     eng = _EngParams()
     linhas, estado = P.ler_cmv_estimado(eng, [JUL, AGO, date(2026, 9, 1), OUT], ["shopee"], ["kokeshi"])
     assert linhas == [] and estado == "lido"
-    p = eng.params[P.SQL_CMV_ESTIMADO]
+    p = eng.params[P.SQL_CMV_LACUNAS]
     assert {k: p[k] for k in JANELA_JUL_OUT} == JANELA_JUL_OUT
-    # virada de ano: dezembro fecha em 1o de janeiro
+    assert P.SQL_CMV_ESTIMADO not in eng.params
+    # virada de ano: dezembro fecha em 1o de janeiro (na pre-consulta e na pesada)
     eng = _EngParams()
     P.ler_cmv_estimado(eng, [date(2026, 12, 1)], ["shopee"], ["kokeshi"])
-    p = eng.params[P.SQL_CMV_ESTIMADO]
+    p = eng.params[P.SQL_CMV_LACUNAS]
+    assert (p["inicio"], p["fim_exclusivo"]) == (date(2026, 12, 1), date(2027, 1, 1))
+    p = P.params_lacunas([{"competencia": date(2026, 12, 1), "marca": "kokeshi"}], ["shopee"])
     assert (p["inicio"], p["fim_exclusivo"]) == (date(2026, 12, 1), date(2027, 1, 1))
 
 
@@ -1397,3 +1406,272 @@ def test_t0091_publicar_le_a_estimativa_sem_conexao_do_neon_e_grava_o_cmv_estima
     (c,) = [r for r in alvo.inseridas if r["componente"] == "cmv"]
     assert c["valor"] == Decimal("200.00") and c["procedencia"] == P.PROC_CMV_ESTIMADO
     assert alvo.auditoria == ["running", "success"] and alvo.abertas == []
+
+
+# ---------------------------------------------------------------------------
+# T-0091b — a estimativa so' le os meses x marcas com custo nulo
+# ---------------------------------------------------------------------------
+# Emuladores em Python dos SQL sobre itens de NF de fixture: `_sql_antigo` e' o
+# `SQL_CMV_ESTIMADO` da T-0091 (com_custo de todos os meses, duas somas sobre
+# as linhas); `_sql_novo` e' o atual (so' as lacunas, um agregado por
+# mes x marca x codigo x sku e as somas por chave sobre ele). Provam a algebra
+# (mesma estimativa), nao o SQL: a sintaxe fica com os testes de texto e o EXPLAIN.
+
+def item(mes, marca, cod, sku, receita, qtd, custo, canal="marketplace", plat="shopee", inter=False):
+    return {"data_mes": mes, "marca": marca, "canal": canal, "plataforma": plat if canal == "marketplace" else None,
+            "codigo_produto": cod, "sku_canonico": sku, "receita_produto": Decimal(str(receita)),
+            "quantidade_item": Decimal(str(qtd)), "custo": None if custo is None else Decimal(str(custo)),
+            "intercompany": inter}
+
+
+def _na_janela(i, p):
+    return i["data_mes"] in p["competencias"] and p["inicio"] <= i["data_mes"] < p["fim_exclusivo"]
+
+
+def _celula_sem_custo(i, p):
+    return (_na_janela(i, p) and i["canal"] == "marketplace" and i["plataforma"] in p["plataformas"]
+            and i["marca"] in p["marcas"] and i["intercompany"] is not True and i["custo"] is None)
+
+
+def _com_custo(i, p):
+    return (_na_janela(i, p) and i["marca"] in p["marcas"] and i["intercompany"] is not True
+            and i["custo"] is not None and i["quantidade_item"] > 0)
+
+
+def _soma(vals):
+    vals = list(vals)
+    return sum(vals, Decimal(0)) if vals else None  # SUM de nada e' NULL
+
+
+def _emula_sem_custo(itens, p):
+    grupos = {}
+    for i in itens:
+        if _celula_sem_custo(i, p):
+            k = (i["data_mes"], i["marca"], i["plataforma"], i["codigo_produto"], i["sku_canonico"])
+            grupos.setdefault(k, []).append(i)
+    return [{"tipo": "sem_custo", "competencia": m, "marca": marca, "plataforma": plat, "codigo_produto": cod,
+             "sku_canonico": sku, "receita": _soma(i["receita_produto"] for i in g),
+             "receita_estimavel": _soma(i["receita_produto"] for i in g if i["quantidade_item"] > 0),
+             "quantidade": _soma(i["quantidade_item"] for i in g if i["quantidade_item"] > 0),
+             "custo": None, "linhas": len(g)}
+            for (m, marca, plat, cod, sku), g in sorted(grupos.items(), key=str)]
+
+
+def _unitarios(pares, tipo):
+    """`pares` = [((mes, marca, chave), quantidade, custo, linhas)] -> linhas de custo unitario."""
+    grupos = {}
+    for k, qtd, custo, n in pares:
+        g = grupos.setdefault(k, [Decimal(0), Decimal(0), 0])
+        g[0], g[1], g[2] = g[0] + qtd, g[1] + custo, g[2] + n
+    return [{"tipo": tipo, "competencia": m, "marca": marca, "plataforma": None,
+             "codigo_produto": v if tipo == "codigo_produto" else None,
+             "sku_canonico": v if tipo == "sku_canonico" else None, "receita": None, "receita_estimavel": None,
+             "quantidade": q, "custo": c, "linhas": n}
+            for (m, marca, v), (q, c, n) in sorted(grupos.items(), key=str)]
+
+
+def _chaves_sem_custo(sem):
+    return {r["codigo_produto"] for r in sem} - {None}, {r["sku_canonico"] for r in sem} - {None}
+
+
+def _sql_antigo(itens, p):
+    sem = _emula_sem_custo(itens, p)
+    cods, skus = _chaves_sem_custo(sem)
+    com = [i for i in itens if _com_custo(i, p)]
+    return (sem
+            + _unitarios([((i["data_mes"], i["marca"], i["codigo_produto"]), i["quantidade_item"], i["custo"], 1)
+                          for i in com if i["codigo_produto"] in cods], "codigo_produto")
+            + _unitarios([((i["data_mes"], i["marca"], i["sku_canonico"]), i["quantidade_item"], i["custo"], 1)
+                          for i in com if i["sku_canonico"] in skus], "sku_canonico"))
+
+
+def _sql_novo(itens, p):
+    sem = _emula_sem_custo(itens, p)
+    cods, skus = _chaves_sem_custo(sem)
+    agregado = {}  # um scan: semi-join (codigo OU sku) antes de agregar
+    for i in itens:
+        if _com_custo(i, p) and (i["codigo_produto"] in cods or i["sku_canonico"] in skus):
+            k = (i["data_mes"], i["marca"], i["codigo_produto"], i["sku_canonico"])
+            g = agregado.setdefault(k, [Decimal(0), Decimal(0), 0])
+            g[0], g[1], g[2] = g[0] + i["quantidade_item"], g[1] + i["custo"], g[2] + 1
+    return (sem
+            + _unitarios([((m, marca, cod), q, c, n) for (m, marca, cod, _), (q, c, n) in agregado.items()
+                          if cod in cods], "codigo_produto")
+            + _unitarios([((m, marca, sku), q, c, n) for (m, marca, _, sku), (q, c, n) in agregado.items()
+                          if sku in skus], "sku_canonico"))
+
+
+def _emula_lacunas(itens, p):
+    return [{"competencia": m, "marca": marca}
+            for m, marca in sorted({(i["data_mes"], i["marca"]) for i in itens if _celula_sem_custo(i, p)})]
+
+
+class _ConnItens:
+    def __init__(self, eng):
+        self.eng = eng
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def rollback(self):
+        pass
+
+    def execute(self, sql, params=None):
+        self.eng.chamadas.append((sql, params))
+        if sql is P.SQL_CMV_LACUNAS:
+            return _Res(linhas=_emula_lacunas(self.eng.itens, params))
+        if sql is P.SQL_CMV_ESTIMADO:
+            return _Res(linhas=_sql_novo(self.eng.itens, params))
+        return _Res()
+
+
+class _EngItens:
+    """Data Mart que responde a pre-consulta e a estimativa pelos emuladores."""
+
+    def __init__(self, itens):
+        self.itens, self.chamadas = list(itens), []
+
+    def connect(self):
+        return _ConnItens(self)
+
+    def sqls(self):
+        return [s for s, _ in self.chamadas if s in (P.SQL_CMV_LACUNAS, P.SQL_CMV_ESTIMADO)]
+
+    def params(self, sql):
+        (p,) = [p for s, p in self.chamadas if s is sql]
+        return p
+
+
+SET = date(2026, 9, 1)
+COMPS_JUL_OUT = [JUL, AGO, SET, OUT]
+CANAIS_3 = ["tiktok", "ml", "shopee"]
+MARCAS_5 = ["apice", "barbours", "kokeshi", "lescent", "rituaria"]
+
+#: Out/26 com lacuna (kokeshi e rituaria); jul-set com custo em tudo, mas com
+#: os MESMOS SKUs (o SQL antigo devolvia custo unitario desses meses tambem).
+ITENS = [
+    # kokeshi out: K1 sem custo casa por codigo; custo de outro canal tambem conta
+    item(OUT, "kokeshi", "K1", "S1", 600, 10, None),
+    item(OUT, "kokeshi", "K1", "S1", 300, 5, 40),
+    item(OUT, "kokeshi", "K1", "SX", 100, 2, 22, canal="ecommerce"),  # casa so' pelo codigo
+    item(OUT, "kokeshi", "K1", "S1", 999, 9, 1, inter=True),  # intercompany fica fora
+    # kokeshi out: K2 sem custo, codigo sem par, casa pelo sku S2 de outro codigo
+    item(OUT, "kokeshi", "K2", "S2", 250, 5, None, plat="tiktokshop"),
+    item(OUT, "kokeshi", "KY", "S2", 80, 4, 12, canal="atacado"),
+    # kokeshi out: sem codigo e sem par; e uma linha sem quantidade (receita nao estimavel)
+    item(OUT, "kokeshi", None, "S9", 70, 1, None),
+    item(OUT, "kokeshi", "K1", "S1", 15, 0, None),
+    # rituaria out: anuncio do Full so' casa pelo sku com linha de outro canal
+    item(OUT, "rituaria", "FULL-1", "R1", 500, 4, None, plat="mercadolivre"),
+    item(OUT, "rituaria", "R-ECOM", "R1", 120, 3, 45, canal="ecommerce"),
+    # jul-set: com custo, mesmos SKUs (nada a estimar nesses meses)
+    item(JUL, "kokeshi", "K1", "S1", 400, 8, 33),
+    item(AGO, "kokeshi", "KY", "S2", 50, 2, 7, canal="atacado"),
+    item(SET, "rituaria", "R-ECOM", "R1", 90, 2, 30, canal="ecommerce"),
+    item(SET, "barbours", "B1", "BS1", 900, 9, 300),
+]
+
+
+def _params(comps=COMPS_JUL_OUT, canais=CANAIS_3, marcas=MARCAS_5):
+    return {"competencias": list(comps), "plataformas": [P.PLATAFORMA_FISCAL[c] for c in canais],
+            "marcas": list(marcas), "inicio": comps[0], "fim_exclusivo": P.somar_meses(comps[-1], 1)}
+
+
+def _mes(v):
+    return date(v.year, v.month, 1)
+
+
+def test_t0091b_sql_da_pre_consulta_tem_os_filtros_de_celula_do_cmv():
+    sql = _sql(P.SQL_CMV_LACUNAS)
+    for filtro in ("data_mes = ANY(:competencias)", FILTRO_EMISSAO, "canal = 'marketplace'",
+                   "plataforma = ANY(:plataformas)", "marca = ANY(:marcas)", "intercompany IS NOT TRUE",
+                   "custo IS NULL", "GROUP BY data_mes, marca"):
+        assert filtro in sql
+    cmv = _sql(P.SQL_CMV)
+    where_do_cmv = cmv[cmv.index("FROM gold.nf_vendas_unificada_v2 WHERE"):cmv.index("GROUP BY")]
+    assert where_do_cmv in sql  # o WHERE inteiro do CMV, mais o custo nulo
+
+
+def test_t0091b_com_custo_e_um_scan_com_semi_join_antes_de_agregar():
+    sql = _sql(P.SQL_CMV_ESTIMADO)
+    com = sql[sql.index("com_custo AS"):sql.index("SELECT 'sem_custo'")]
+    assert ("(codigo_produto IN (SELECT codigo_produto FROM sem_custo) "
+            "OR sku_canonico IN (SELECT sku_canonico FROM sem_custo))") in com
+    assert com.index("OR sku_canonico IN") < com.index("GROUP BY data_mes, marca, codigo_produto, sku_canonico")
+    assert FILTRO_EMISSAO in com
+    assert sql.count("FROM gold.nf_vendas_unificada_v2") == 2  # sem_custo + um scan do custo
+
+
+def test_t0091b_pre_consulta_vazia_nao_roda_a_leitura_pesada():
+    so_com_custo = [i for i in ITENS if i["custo"] is not None]
+    eng = _EngItens(so_com_custo)
+    linhas, estado = P.ler_cmv_estimado(eng, COMPS_JUL_OUT, CANAIS_3, MARCAS_5)
+    assert (linhas, estado) == ([], "lido")
+    assert eng.sqls() == [P.SQL_CMV_LACUNAS]
+    # o SQL antigo tambem nao devolvia nada: o lote fica igual ao de hoje
+    assert _sql_antigo(so_com_custo, _params()) == []
+
+
+def test_t0091b_pre_consulta_com_out_le_so_out_e_as_marcas_com_lacuna():
+    eng = _EngItens(ITENS)
+    linhas, estado = P.ler_cmv_estimado(eng, COMPS_JUL_OUT, CANAIS_3, MARCAS_5)
+    assert estado == "lido" and linhas
+    assert eng.sqls() == [P.SQL_CMV_LACUNAS, P.SQL_CMV_ESTIMADO]
+    assert eng.params(P.SQL_CMV_LACUNAS) == _params()  # a pre-consulta ve o lote todo
+    assert eng.params(P.SQL_CMV_ESTIMADO) == {
+        "competencias": [OUT], "plataformas": _params()["plataformas"], "marcas": ["kokeshi", "rituaria"],
+        "inicio": OUT, "fim_exclusivo": date(2026, 11, 1)}
+    assert {_mes(r["competencia"]) for r in linhas} == {OUT}
+
+
+def test_t0091b_mesma_estimativa_que_o_sql_antigo():
+    antigo = _sql_antigo(ITENS, _params())
+    novo, _ = P.ler_cmv_estimado(_EngItens(ITENS), COMPS_JUL_OUT, CANAIS_3, MARCAS_5)
+    est_antigo, rec_antigo = P.estimar_cmv(antigo)
+    est_novo, rec_novo = P.estimar_cmv(novo)
+    assert rec_antigo == rec_novo == []
+    assert est_novo == est_antigo
+    # a fixture exercita o codigo, o sku e a receita descoberta
+    k = est_novo[(OUT, "shopee", "kokeshi")]
+    # K1: (40 + 22) / (5 + 2) por unidade x 10 = 88,57; o intercompany ficou fora; S9 sem par
+    assert k["custo_estimado"] == Decimal("88.57") and (k["skus_sem_custo"], k["skus_estimados"]) == (2, 1)
+    assert k["receita_sem_custo"] == Decimal(685) and k["receita_estimada"] == Decimal(600)
+    assert est_novo[(OUT, "tiktok", "kokeshi")]["custo_estimado"] == Decimal("15.00")  # K2 pelo sku S2: 12/4 x 5
+    r = est_novo[(OUT, "ml", "rituaria")]
+    assert r["custo_estimado"] == Decimal("60.00") and r["receita_estimada_sku"] == Decimal(500)
+    # o antigo devolvia custo unitario de jul-set que ninguem usava
+    assert len(antigo) > len(novo) and {_mes(r["competencia"]) for r in antigo} == {JUL, AGO, SET, OUT}
+
+
+def test_t0091b_mesma_estimativa_com_lacuna_em_dois_meses_e_marcas_diferentes():
+    itens = ITENS + [item(JUL, "barbours", "B1", "BS1", 100, 1, None),
+                     item(JUL, "barbours", "B1", "BS1", 200, 2, 70, canal="ecommerce")]
+    eng = _EngItens(itens)
+    novo, _ = P.ler_cmv_estimado(eng, COMPS_JUL_OUT, CANAIS_3, MARCAS_5)
+    p = eng.params(P.SQL_CMV_ESTIMADO)
+    assert p["competencias"] == [JUL, OUT] and p["marcas"] == ["barbours", "kokeshi", "rituaria"]
+    assert (p["inicio"], p["fim_exclusivo"]) == (JUL, date(2026, 11, 1))
+    est_novo = P.estimar_cmv(novo)
+    assert est_novo == P.estimar_cmv(_sql_antigo(itens, _params()))
+    assert est_novo[0][(JUL, "shopee", "barbours")]["custo_estimado"] == Decimal("35.00")
+
+
+def test_t0091b_erro_na_pre_consulta_vira_indisponivel():
+    linhas, estado = P.ler_cmv_estimado(_EngQuebra(), COMPS_JUL_OUT, ["shopee"], ["kokeshi"])
+    assert linhas is None and estado == "indisponivel: ProgrammingError"
+
+
+def test_t0091b_pre_consulta_roda_sem_conexao_do_neon_aberta():
+    for estimado in ([], [sem_custo("K1", receita=600, qtd=10), unitario("K1", custo=50, qtd=5)]):
+        alvo = _AlvoFake(_esp_shopee())
+        fonte = _FonteFake(alvo, [_shopee(rcc=400 if estimado else 1000)], estimado=estimado)
+        res = P.publicar(alvo, fonte, [OUT], ["shopee"],
+                         agora=datetime(2026, 11, 11, 12, 0, tzinfo=timezone.utc))
+        assert res["aplicado"] is True and res["recusas"] == []
+        assert res["cmv_estimado"]["estado"] == "publicado"
+        lidas = [(s, n) for s, n in fonte.sqls if s in (P.SQL_CMV_LACUNAS, P.SQL_CMV_ESTIMADO)]
+        assert [s for s, _ in lidas] == [P.SQL_CMV_LACUNAS] + ([P.SQL_CMV_ESTIMADO] if estimado else [])
+        assert {n for _, n in lidas} == {0}
