@@ -934,14 +934,17 @@ test("B3. concentracao explica antes de navegar", () => {
   assert.match(cd, /PRODUCTS_SCOPE_NOTE/, "CTA secundario declara o escopo proprio de Produtos");
 });
 
-test("B4. chips de sinal usam rotulo humano e nao criam botao aninhado", () => {
+test("B4. sinais da matriz: rotulo humano no nome acessivel, sem chip e sem botao aninhado", () => {
+  // ALVO-GRADE (12/11/2026): a tabela deixou de desenhar chips/pontos de sinal
+  // (valor + CelulaBarra). Os sinais vivem no dialogo da celula e continuam
+  // anunciados no nome acessivel do botao, com rotulo humano.
   const matrix = read("src/components/gerencial/BrandChannelMatrix.tsx");
-  assert.match(matrix, /signalLabel\(main\)/, "rotulo humano, nunca o snake_case cru");
-  assert.match(matrix, /\+\{rest\.length\}/, "sinal principal + contagem dos demais");
-  const from = matrix.indexOf("{main && (");
+  assert.match(matrix, /signals\.map\(signalLabel\)/, "o nome acessivel anuncia os sinais, com rotulo humano");
+  assert.doesNotMatch(matrix, /signalLabel\(main\)|\{main &&|\+\{rest\.length\}/, "a tabela nao desenha mais chip de sinal");
+  const from = matrix.indexOf("onClick={() => onOpenCell(");
   const cell = matrix.slice(from, matrix.indexOf("</button>", from));
-  assert.doesNotMatch(cell, /<button/, "chip nao pode ser botao dentro de botao");
-  assert.match(matrix, /signals\.map\(signalLabel\)/, "o nome acessivel anuncia os sinais");
+  assert.doesNotMatch(cell, /<button/, "nada de botao dentro do botao da celula");
+  assert.match(cell, /<CelulaBarra /, "valor + barra de peso no lugar do chip");
 });
 
 // Task C — matriz parcial
@@ -1196,7 +1199,7 @@ test("F3b. matriz e dialogo derivam o texto de signalLabel, nunca do identificad
   // nao existe interpolacao do sinal cru nem no texto nem no aria-label
   assert.doesNotMatch(matrix, /\$\{main\}/, "o chip não pode interpolar o identificador");
   assert.doesNotMatch(matrix, /\{main\}/, "o chip não pode renderizar o identificador");
-  assert.match(matrix, /signalLabel\(main\)/);
+  // ALVO-GRADE: sem chip na tabela; o unico texto de sinal da matriz e' o nome acessivel.
   assert.match(matrix, /signals\.map\(signalLabel\)/);
   const dialog = codeOnly(read("src/components/ChannelComparisonDialogContent.tsx"));
   assert.match(dialog, /signalLabel\(/);
@@ -1411,22 +1414,21 @@ test("V24-1. GerencialHeader devolve Fragment com UMA barra sticky (titulo, filt
 });
 
 test("V24-2. o pai efetivo do sticky e o container da pagina inteira", () => {
-  // `app/page.tsx` NAO precisou mudar: o GerencialHeader ja era filho direto do
-  // container. Este teste garante que ele continue sendo, e que o container nao
-  // ganhe `overflow`/`transform` — os dois criariam bloco de contencao e
-  // matariam o sticky outra vez.
+  // ALVO-GRADE (12/11/2026): a Gerencial usa `Aba` no lugar do GerencialHeader.
+  // O container e' o div raiz de `Aba`; este teste garante que a pagina renderiza
+  // <Aba direto na raiz (sem wrapper), que a BarraDeFiltros sticky e' filha DIRETA
+  // desse container e que ele nao ganha overflow/transform — os dois criariam
+  // bloco de contencao e matariam o sticky outra vez.
   const page = codeOnly(read("app/page.tsx"));
-  // UI-DENSIDADE-1: largura total (sem teto de 1440px); a regra do sticky e' a mesma.
-  const container = page.match(/<div className="w-full px-4[^"]*"/);
-  assert.ok(container, "container da Gerencial deve existir");
+  assert.match(page, /return \(\s*<Aba\b/, "a pagina devolve <Aba> direto, sem wrapper");
+  assert.doesNotMatch(page, /GerencialHeader/, "o cabecalho antigo saiu da Gerencial");
+  const aba = codeOnly(read("src/components/layout/Aba.tsx"));
+  const container = aba.match(/<div className="[^"]*" data-esqueleto="aba">/);
+  assert.ok(container, "container da Aba deve existir");
   assert.doesNotMatch(container[0], /overflow-(hidden|auto|scroll|clip)/);
   assert.doesNotMatch(container[0], /transform|scale-|rotate-|translate-/);
-  // e o cabecalho e' filho DIRETO desse container
-  const idxContainer = page.indexOf(container[0]);
-  const idxHeader = page.indexOf("<GerencialHeader");
-  assert.ok(idxHeader > idxContainer, "GerencialHeader vem dentro do container");
-  const entre = page.slice(idxContainer + container[0].length, idxHeader);
-  assert.equal((entre.match(/<div/g) || []).length, 0, "nenhum wrapper intermediario entre container e cabecalho");
+  assert.match(aba, /<BarraDeFiltros>\s*\{filtros\}/, "a barra recebe os filtros da pagina");
+  assert.equal((aba.match(/sticky top-0 z-30/g) || []).length, 1, "exatamente uma barra sticky");
 });
 
 test("V24-3. a correcao nao introduziu fetch, estado, modal ou filtro novo", () => {

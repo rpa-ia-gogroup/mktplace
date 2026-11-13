@@ -129,8 +129,14 @@ test("tendenciasDosKpis monta pedidos e ticket a partir das duas series", () => 
 
 test("o card usa o tom do KPI e a tendencia; a pagina passa as tendencias", () => {
   const card = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
-  assert.match(card, /<DeltaBadge pct=\{kpi\.deltaPct\} tone=\{kpi\.deltaTone\} \/>/);
-  assert.match(card, /<LinhaDeTendencia /);
+  // ALVO-GRADE (12/11/2026): a faixa usa o CartaoIndicador; o tom do KPI vira o tom da pilula
+  // (lower_is_better inverte bom/ruim) e a tendencia entra como serie do cartao.
+  assert.match(card, /const p = valor \? pilulaDe\(delta, kpi\.deltaTone\) : null;/);
+  // a pilula diz contra o que compara ("+42,4% vs anterior")
+  assert.match(card, /pilula=\{p && \{ \.\.\.p, texto: /);
+  assert.match(card, /tom === "neutral" \? "neutro" : \(pct >= 0\) !== \(tom === "lower_is_better"\) \? "ok" : "crit"/);
+  // sem valor nao ha' linha de tendencia
+  assert.match(card, /serie=\{!valor \? null : eGmv \? gmv\.serie : t \? suavizar\(t\.pontos\) : null\}/);
   const page = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /tendencias=\{tendencias\}/);
   assert.match(page, /buildKpiBand\(overview, filters\.channels, comparar\)/);
@@ -147,15 +153,25 @@ test("o detalhe do card usa a mesma comparacao do card", () => {
 });
 
 test("o card nao esconde valor e variacao do leitor de tela", () => {
-  const card = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
-  assert.doesNotMatch(card, /aria-label=\{`\$\{kpi\.label\} — abrir decomposição`\}/);
-  assert.match(card, /<span className="sr-only"> \(abrir decomposição\)<\/span>/);
+  // ALVO-GRADE: o cartao e' o CartaoIndicador. Sem aria-label no botao, o nome acessivel e' o
+  // proprio conteudo (rotulo, valor, pilula, legenda); a acao vai num sr-only.
+  const card = readFileSync(new URL("../src/components/ui/CartaoIndicador.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(card, /<button[^>]*aria-label=/);
+  assert.match(card, /<span className="sr-only"> \(abrir detalhe\)<\/span>/);
+  // valor e pilula (a variacao) ficam FORA de qualquer aria-hidden; so' barra e linha sao decorativas.
+  assert.doesNotMatch(card, /aria-hidden="true"[^>]*>\s*\{valor/);
+  const pil = card.slice(card.indexOf("{pilula && ("), card.indexOf("{progresso != null"));
+  assert.doesNotMatch(pil, /aria-hidden/);
 });
 
-test("tendencia e' so' o mini grafico com ponto final, sem texto visivel", () => {
-  // CARD-KPI-GERENCIAL: a Sparkline e a LinhaDeTendencia sairam da KpiBand para ui/Sparkline.
+test("tendencia e' so' o mini grafico, sem texto visivel (cartao da faixa e Sparkline do detalhe)", () => {
+  // ALVO-GRADE: a faixa desenha a tendencia como a linha com area do CartaoIndicador (so' com 4+ pontos reais).
   const band = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
-  assert.match(band, /import \{ LinhaDeTendencia \} from "@\/components\/ui\/Sparkline"/);
+  assert.match(band, /serie=\{/);
+  const cartao = readFileSync(new URL("../src/components/ui/CartaoIndicador.tsx", import.meta.url), "utf8");
+  assert.match(cartao, /serie && serie\.length >= 4 \? serie : null/, "sem 4 pontos reais, sem linha (nada inventado)");
+  assert.doesNotMatch(cartao, /↗ tende a subir|↘ tende a descer/);
+  // a Sparkline do detalhe (KpiDrilldownContent) segue com a leitura falada e o ponto final.
   const card = readFileSync(new URL("../src/components/ui/Sparkline.tsx", import.meta.url), "utf8");
   // nenhum rotulo visivel de tendencia
   assert.doesNotMatch(card, /↗ tende a subir|↘ tende a descer/);
@@ -164,6 +180,15 @@ test("tendencia e' so' o mini grafico com ponto final, sem texto visivel", () =>
   assert.match(card, /title=\{detalhe\}/);
   // ponto final do grafico (UX-VIDRO-3: redondo, com anel da superficie)
   assert.match(card, /rounded-full bg-current ring-2 ring-surface/);
+});
+
+// Regressao do ALVO-GRADE (ver relatorio): o cartao novo desenha a linha com aria-hidden e
+// nao leva a direcao da tendencia ao leitor de tela nem ao title (antes: sr-only "Tendência: ..." + title com a conta).
+test("o cartao da faixa conta a direcao da tendencia ao leitor de tela", () => {
+  const band = readFileSync(new URL("../src/components/gerencial/KpiBand.tsx", import.meta.url), "utf8");
+  const cartao = readFileSync(new URL("../src/components/ui/CartaoIndicador.tsx", import.meta.url), "utf8");
+  assert.match(band + cartao, /Tendência: /, "direcao falada (sr-only)");
+  assert.match(band + cartao, /\bt\.rotulo\b/, "a janela da tendencia (ex.: últimos 7 dias vs 7 anteriores) acompanha a direcao");
 });
 
 test("DM Sans no corpo e Inter so' nas tabelas (DM Sans nao tem tnum)", () => {

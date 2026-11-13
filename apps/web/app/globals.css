@@ -863,23 +863,16 @@ a.rounded-xl.border.bg-surface:focus-visible {
 .tc-cartao-prog {
   background: color-mix(in srgb, var(--h) 14%, rgb(var(--tc-surface)));
 }
-/* A linha de tendencia se desenha uma vez, da esquerda para a direita (pathLength=400). */
+/* A linha de tendencia se revela uma vez, da esquerda para a direita. Por recorte, e nao por
+   traco pontilhado: com `non-scaling-stroke` o dash vale em px de tela e cortava a linha em cartao largo. */
 .tc-cartao-linha {
-  stroke-dasharray: 400;
-  stroke-dashoffset: 400;
-  animation: tc-desenha 900ms var(--mov-ease) 200ms forwards;
+  animation: tc-revela 900ms var(--mov-ease) 200ms both;
 }
 .tc-cartao-area {
   animation: tc-fade 600ms var(--mov-ease) 500ms both;
 }
-@keyframes tc-desenha {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .tc-cartao-linha {
-    stroke-dashoffset: 0;
     animation: none;
   }
   .tc-cartao-area {

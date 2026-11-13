@@ -77,10 +77,13 @@ test("so' acrescimos: nenhum arquivo congelado mudou neste PR", () => {
   } catch {
     return; // sem git (ex.: CI sem historico): a asserção de classes acima cobre o KpiTile
   }
-  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/gerencial/GerencialDrilldowns.tsx", ":(exclude)src/components/gerencial/GerencialHeader.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", ":(exclude)src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
+  const mudou = execFileSync("git", ["diff", "--name-only", base, "--", "src/components/gerencial", ":(exclude)src/components/gerencial/CxResumo.tsx", ":(exclude)src/components/gerencial/CxDrilldown.tsx", ":(exclude)src/components/gerencial/KpiBand.tsx", ":(exclude)src/components/gerencial/AtencaoLinha.tsx", ":(exclude)src/components/gerencial/BrandChannelMatrix.tsx", ":(exclude)src/components/gerencial/EvolutionCard.tsx", ":(exclude)src/components/gerencial/EvolutionChart.tsx", ":(exclude)src/components/gerencial/MarcasMeta.tsx", ":(exclude)src/components/gerencial/MetaHero.tsx", ":(exclude)src/components/gerencial/TopProdutosMarca.tsx", ":(exclude)src/components/gerencial/TopProdutosComparar.tsx", ":(exclude)src/components/gerencial/GerencialDrilldowns.tsx", ":(exclude)src/components/gerencial/GerencialHeader.tsx", ":(exclude)src/components/KpiDrilldownDialog.tsx", ":(exclude)src/components/ui/Panel.tsx", "src/components/ui/Chip.tsx", ":(exclude)src/components/ui/InfoDica.tsx", "src/components/ui/StateBlock.tsx"], { encoding: "utf-8" }).trim();
   // CxResumo e CxDrilldown: do PR da CX (spec do Prumo), so' aditivos com padrao igual ao de antes
   // MetaHero: linha de tendencia do dia no topo (pedido da Nathalia)
   // GerencialHeader: so' o ponto em que a barra sobe para a linha do titulo (1800 -> 1920px), para o "Limpar" caber (FILTROS-PADRAO, PR A); depois, a barra fica SEMPRE abaixo do titulo (FILTROS-UMA-LINHA)
+  // ALVO-GRADE (12/11/2026, redesenho aprovado pelo dono do produto): KpiBand (sobre CartaoIndicador), MarcasMeta, BrandChannelMatrix
+  // (valor + CelulaBarra, uma coluna "vs anterior", linha Total), EvolutionChart/EvolutionCard (tooltip novo, anterior como Area) e o novo
+  // AtencaoLinha (linha "O que exige atencao") entram na lista de excecoes. As pecas ui/ compartilhadas seguem congeladas.
   // Panel: so' aditivo (prop opcional `ajuda`, um "ⓘ" no titulo) — UI-FUNDACAO F1; o resto da peca igual
   // GerencialDrilldowns: so' aditivo, o detalhe do ponto da serie segue a base Pagos | Realizados (pedido da Nathalia)
   // InfoDica: so' aditivo (quebra de linha no balao e encaixe na tela quando ele e' maior que o espaco) — PR do aviso de total parcial
@@ -99,10 +102,14 @@ test("KpiDrilldownDialog: excecao ao congelamento so' aditiva (icone + identidad
   assert.ok(src.includes('largura = "padrao"'), "largura padrao igual");
 });
 
-test("KpiCardSkeleton compartilhado tem as mesmas classes do esqueleto da KpiBand", () => {
+test("esqueletos de carregamento: o compartilhado segue igual; o da KpiBand (alvo) continua anunciado", () => {
   const classes = 'className="h-full bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 animate-pulse"';
   assert.ok(ler("src/components/ui/KpiCardSkeleton.tsx").includes(classes));
-  assert.ok(ler("src/components/gerencial/KpiBand.tsx").includes(classes));
+  // ALVO-GRADE: a KpiBand deixou de usar o esqueleto de antes; o proprio (rounded-2xl, mesma altura do cartao)
+  // mantem o contrato de carregamento: role=status, aria-busy e o texto para leitor de tela.
+  const band = ler("src/components/gerencial/KpiBand.tsx");
+  assert.ok(band.includes("animate-pulse") && band.includes('role="status"') && band.includes('aria-busy="true"'));
+  assert.ok(band.includes('<span className="sr-only">Carregando indicador…</span>'));
 });
 
 test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
@@ -111,7 +118,9 @@ test("tendencia do detalhe usa o Sparkline na cor de identidade do KPI", () => {
   assert.ok(src.includes('identidade ? IDENTIDADE[identidade].tinta : "text-accent"'));
 });
 
-test("kpi-identidade.ts repete os 5 pares icone + cor do ICONE_KPI da KpiBand (duas fontes, uma verdade)", () => {
+test("kpi-identidade.ts repete os pares icone + identidade do cartao da KpiBand (duas fontes, uma verdade)", () => {
+  // ALVO-GRADE: a KpiBand tem 4 cartoes (o ROAS virou o ACOS na legenda do Investimento em ads), com o
+  // mapa CARTAO { icone, cor }. O mapa do detalhe segue com os 5 (o detalhe do ROAS continua existindo).
   const mapa = ler("src/lib/gerencial/kpi-identidade.ts");
   const band = ler("src/components/gerencial/KpiBand.tsx");
   const pares: [string, string, string][] = [
@@ -123,7 +132,16 @@ test("kpi-identidade.ts repete os 5 pares icone + cor do ICONE_KPI da KpiBand (d
   ];
   for (const [kpi, icone, identidade] of pares) {
     assert.ok(mapa.includes(`${kpi}: { icone: ${icone}, identidade: "${identidade}" }`), `mapa novo: ${kpi}`);
-    assert.ok(band.includes(`${kpi}: { Icone: ${icone}, tinta: "text-kpi-${identidade}"`), `KpiBand: ${kpi}`);
+    if (kpi !== "roas") assert.ok(band.includes(`${kpi}: { icone: ${icone}, cor: `), `KpiBand: ${kpi}`);
+  }
+  assert.ok(!band.includes("roas: {"), "a faixa nao tem mais cartao de ROAS");
+});
+
+// A cor do cartao tem de ser a MESMA do ladrilho do detalhe: o token kpi-*, que tambem troca no escuro.
+test("a cor de cada cartao da KpiBand e' o token kpi-* da identidade (a mesma do detalhe)", () => {
+  const band = ler("src/components/gerencial/KpiBand.tsx");
+  for (const id of ["gmv", "pedidos", "ticket", "ads"]) {
+    assert.match(band, new RegExp(`cor: "[^"]*--tc-kpi-${id}`), `cartao ${id} fora do token`);
   }
 });
 
@@ -148,12 +166,13 @@ function naBaseline(rel: string): string | null {
 }
 const trecho = (src: string, de: string, ate: string) => src.slice(src.indexOf(de), src.indexOf(ate, src.indexOf(de)));
 
-test("KpiBand: o card, o DeltaBadge e a Sparkline tem o mesmo markup de antes da extracao", () => {
+test("DeltaBadge e Sparkline (ui/) tem o mesmo markup de antes da extracao; a KpiBand usa o CartaoIndicador", () => {
   const band = ler("src/components/gerencial/KpiBand.tsx");
   const delta = ler("src/components/ui/DeltaBadge.tsx");
   const spark = ler("src/components/ui/Sparkline.tsx");
-  assert.ok(band.includes('import DeltaBadge from "@/components/ui/DeltaBadge"') && band.includes('import { LinhaDeTendencia } from "@/components/ui/Sparkline"'));
-  assert.ok(!band.includes("function DeltaBadge") && !band.includes("function Sparkline") && !band.includes("function LinhaDeTendencia"));
+  // ALVO-GRADE: a faixa nao importa mais DeltaBadge/LinhaDeTendencia (pilula e linha sao do CartaoIndicador).
+  // As duas pecas seguem em ui/ para o KpiTile 'gerencial' e o detalhe, e continuam travadas abaixo.
+  assert.ok(band.includes('import CartaoIndicador') && !band.includes("function DeltaBadge") && !band.includes("function Sparkline") && !band.includes("function LinhaDeTendencia"));
   assert.ok(delta.includes("inline-flex w-fit items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold tabular-nums ${pele}"));
   for (const pele of ['"bg-raised text-ink-muted"', '"bg-ok-soft text-ok-ink"', '"bg-crit-soft text-crit-ink"']) assert.ok(delta.includes(pele), pele);
   const antes = naBaseline("src/components/gerencial/KpiBand.tsx");
@@ -161,9 +180,7 @@ test("KpiBand: o card, o DeltaBadge e a Sparkline tem o mesmo markup de antes da
   // o corpo da Sparkline e da LinhaDeTendencia, texto a texto
   assert.equal(trecho(spark, "  // `useId` traz", "\n}\n"), trecho(antes, "  // `useId` traz", "\n}\n"));
   assert.equal(trecho(spark, "export function LinhaDeTendencia", "\n}\n").replace("export ", ""), trecho(antes, "function LinhaDeTendencia", "\n}\n"));
-  // o KpiCard, a faixa e o resto do arquivo nao mudaram
-  assert.equal(trecho(band, "function KpiCard(", "\nexport default"), trecho(antes, "function KpiCard(", "\nexport default"));
-  assert.equal(trecho(band, "export default function KpiBand", "\n}\n"), trecho(antes, "export default function KpiBand", "\n}\n"));
+  // (o KpiCard e a faixa antigos foram substituidos de proposito pelo CartaoIndicador: nada a comparar aqui)
 });
 
 test("KpiTile 'gerencial' sem identidade: o render de antes, texto a texto", () => {

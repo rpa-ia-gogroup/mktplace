@@ -142,6 +142,12 @@ export default function MarcasMeta({
             />
           </div>
         </div>
+        {algumaMeta && (
+          <span className="mr-auto flex items-center gap-1.5 text-xs text-ink-muted">
+            <span aria-hidden="true" className="h-3 w-0.5 rounded-sm bg-ink" />
+            meta
+          </span>
+        )}
         {canaisDaPagina.length > 1 && (
           <Segmented<Marketplace | "todos">
             rotulo="Canal deste painel"
@@ -171,7 +177,7 @@ export default function MarcasMeta({
       ) : linhas.length === 0 ? (
         <p className="text-sm text-ink-faint">Sem venda por marca no período e filtros selecionados.</p>
       ) : (
-        <ul className="flex flex-col">
+        <ul className="flex flex-1 flex-col justify-around">
           {linhas.map((b) => {
             const p = progressoPorMarca[b.brand] ?? null;
             const ref = referencia(b);
@@ -188,7 +194,7 @@ export default function MarcasMeta({
                   </span>
                   <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
                     <span
-                      className="tc-barra absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-[#a98bf5] to-[#6d3fd8]"
+                      className="tc-barra absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-accent/55 to-accent"
                       style={{ width: `${(valor(b) / escala) * 100}%` }}
                     />
                     {ref != null && <span className="absolute -inset-y-[3px] w-0.5 rounded-sm bg-ink" style={{ left: `${(ref / escala) * 100}%` }} />}
@@ -203,13 +209,12 @@ export default function MarcasMeta({
                           className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP[p.status]}`}
                           title={`Tende a ${Math.round((tende / p.meta) * 100)}% da meta (${fmtCompacto(tende)}). Realizado: ${Math.round(p.atingimento * 100)}% da meta até ontem.`}
                         >
-                          <span className="sr-only">tende a </span>
-                          {Math.round((tende / p.meta) * 100)}%
+                          tende a {Math.round((tende / p.meta) * 100)}%
                           <span className="sr-only"> da meta ({ROTULO_STATUS[p.status as StatusMeta] ?? ""})</span>
                         </span>
                       ) : p ? (
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${CHIP[p.status]}`} title={`${Math.round(p.atingimento * 100)}% ${rotuloMeta}`}>
-                          {Math.round(p.atingimento * 100)}%<span className="sr-only"> {rotuloMeta}</span>
+                          {Math.round(p.atingimento * 100)}% {rotuloMeta}
                         </span>
                       ) : compareActive && b.mom_pct != null ? (
                         <span
