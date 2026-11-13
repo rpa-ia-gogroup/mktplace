@@ -3,6 +3,7 @@ import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
 
 /** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
 const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -61,7 +62,7 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
           <td className="px-4 py-3 text-[11px] text-ink-muted tabular-nums whitespace-nowrap">
             {p.sku_ref ?? <span className="text-ink-faint">—</span>}
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
           <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrlCurto(p.gmv)}</td>
           <td className="px-4 py-3 text-center">
             {p.pareto_bucket && (

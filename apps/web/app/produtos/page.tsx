@@ -62,14 +62,14 @@ const ML_BRANDS = [
   { value: "barbours", label: "BARBOURS" },
   { value: "kokeshi", label: "KOKESHI" },
   { value: "lescent", label: "LESCENT" },
-  { value: "rituaria", label: "RITUARIA" },
+  { value: "rituaria", label: "RITUÁRIA" },
 ];
 const TK_SH_BRANDS = [
-  { value: "apice", label: "APICE" },
+  { value: "apice", label: "ÁPICE" },
   { value: "barbours", label: "BARBOURS" },
   { value: "kokeshi", label: "KOKESHI" },
   { value: "lescent", label: "LESCENT" },
-  { value: "rituaria", label: "RITUARIA" },
+  { value: "rituaria", label: "RITUÁRIA" },
   // Marcas menores: dado do Bling, mesmo layout das outras (so' TikTok e Shopee; no ML elas nao vendem).
   ...MARCAS_MENORES_OPTIONS,
 ];

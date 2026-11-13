@@ -3,6 +3,7 @@ import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
 
 /** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
 const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -104,7 +105,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
             <p className="text-ink font-medium truncate leading-tight">{p.title}</p>
             {p.seller_sku && <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.seller_sku}</p>}
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
             <p className="tabular-nums text-ink font-medium">{fmtBrlCurto(p.gross_revenue)}</p>
             {p.revenue_share_pct != null && (

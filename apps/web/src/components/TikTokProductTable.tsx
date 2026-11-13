@@ -3,6 +3,7 @@ import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { brandLabel } from "@/lib/filters/brands";
 
 /** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
 const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -68,7 +69,7 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
             <p className="text-ink font-medium truncate leading-tight">{p.product_name}</p>
             <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.product_id}</p>
           </td>
-          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
+          <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
           <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrlCurto(p.gmv)}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-ink-muted">
             {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
