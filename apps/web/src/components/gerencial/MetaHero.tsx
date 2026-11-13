@@ -462,8 +462,14 @@ const TINTA_CANAL: Record<Marketplace, string> = {
   shopee: "text-canal-shopee",
 };
 
+const TRACO: Record<Marketplace, string> = {
+  tiktok: "stroke-canal-tiktok",
+  ml: "stroke-canal-ml",
+  shopee: "stroke-canal-shopee",
+};
+
 /**
- * Canais do GMV: uma barra empilhada com a fatia de cada canal e, embaixo, um
+ * Canais do GMV: a rosca com a fatia de cada canal e, ao lado, um
  * bloco por canal com a fatia, o valor, a variacao, a parte Full e a mini
  * tendencia do periodo. Passar o mouse (ou focar) num canal apaga os outros.
  */
@@ -486,21 +492,55 @@ function Divisao({
   const partes = channels
     .map((c) => ({ c, v: gmvByChannel[c], s: c === "tiktok" ? null : shareFull?.[c] ?? null }))
     .filter((x): x is { c: Marketplace; v: number; s: number | null } => x.v != null && x.v > 0);
-  if (!total || partes.length < 2) return null;
+  if (!total || partes.length === 0 || (partes.length < 2 && partes[0].s == null)) return null;
   const pct = (x: number) => Math.round(x * 100);
   const apagado = (c: Marketplace) => (ativo && ativo !== c ? "opacity-30" : "");
+  const doAtivo = partes.find((p) => p.c === ativo) ?? null;
+  // Circunferencia 100 (pathLength): cada fatia e' o proprio %, com uma folga entre elas.
+  const folga = partes.length > 1 ? 1 : 0;
+  let inicio = 0;
+  const arcos = partes.map(({ c, v }) => {
+    const tam = (v / total) * 100;
+    const arco = { c, tam: Math.max(tam - folga, 0), inicio };
+    inicio += tam;
+    return arco;
+  });
   return (
-    <div className="relative border-t border-line px-5 pb-4 pt-3.5">
-      <div
-        className="flex h-2.5 gap-0.5 overflow-hidden rounded-full"
-        role="img"
-        aria-label={partes.map(({ c, v }) => `${CHANNEL_LABEL[c]} ${pct(v / total)}% do GMV`).join("; ")}
-      >
-        {partes.map(({ c, v }) => (
-          <span key={c} className={`tc-barra ${PONTO[c]} transition-opacity duration-200 ${apagado(c)}`} style={{ flex: v }} />
-        ))}
+    <div className="relative flex items-center gap-4 border-t border-line px-5 pb-4 pt-3.5">
+      {/* A rosca da main (pedido do usuario em 13/11): fatia de cada canal; o canal sob o mouse engrossa e vai ao centro. */}
+      <div className="tc-rosca relative h-[84px] w-[84px] shrink-0">
+        <svg
+          viewBox="0 0 42 42"
+          className="h-full w-full -rotate-90"
+          role="img"
+          aria-label={partes.map(({ c, v }) => `${CHANNEL_LABEL[c]} ${pct(v / total)}% do GMV`).join("; ")}
+        >
+          <circle cx="21" cy="21" r="17" fill="none" className="stroke-raised" strokeWidth="4.5" />
+          {arcos.map(({ c, tam, inicio: ini }) => (
+            <circle
+              key={c}
+              cx="21"
+              cy="21"
+              r="17"
+              fill="none"
+              pathLength={100}
+              className={`${TRACO[c]} cursor-pointer transition-[opacity,stroke-width] duration-200 ${apagado(c)}`}
+              strokeWidth={ativo === c ? 6 : 4.5}
+              strokeDasharray={`${tam} ${100 - tam}`}
+              strokeDashoffset={-ini}
+              onMouseEnter={() => setAtivo(c)}
+              onMouseLeave={() => setAtivo(null)}
+            />
+          ))}
+        </svg>
+        {doAtivo && (
+          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none tabular-nums">
+            <span className="text-sm font-bold text-ink">{pct(doAtivo.v / total)}%</span>
+            <span className="mt-0.5 text-xs text-ink-muted">{fmtCompacto(doAtivo.v).replace(/^R\$\s*/, "")}</span>
+          </span>
+        )}
       </div>
-      <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-3">
+      <ul className="grid min-w-0 flex-1 grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-3">
         {partes.map(({ c, v, s }) => {
           const pontos = serie?.[c] ?? [];
           return (
