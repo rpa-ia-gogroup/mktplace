@@ -3,9 +3,10 @@
 import { useMemo, useState } from "react";
 import type { RegiaoUfRow } from "@/lib/api-client";
 import { BRAZIL_UF_PATHS, BRAZIL_MAP_VIEWBOX, UF_NAME } from "@/lib/brazil-uf-paths";
-import { computeGmvIntensity, intensityToColor, coverageStrokeColor, topUfsByGmv } from "@/lib/regioes-map";
+import { computeGmvIntensity, topUfsByGmv } from "@/lib/regioes-map";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { fmtPctOrNA, coverageLabel, coverageBadgeClass, fmtShareOfTotalPct } from "@/lib/regioes-format";
+import Panel from "@/components/ui/Panel";
 
 interface Props {
   /** Linhas de /regioes/by-uf — pode incluir "XX", o componente a exclui do
@@ -16,14 +17,22 @@ interface Props {
   loading?: boolean;
 }
 
-const NEUTRAL_STROKE = "#cbd5e1"; // slate-300 — contorno padrão entre estados
 const TOP_N = 3;
+
+/**
+ * ALVO-GRADE: o preenchimento sai do token de identidade do GMV (alfa pela
+ * intensidade), para o mapa seguir o tema escuro. Vai em `style`, nao no
+ * atributo SVG: `var()` em atributo de apresentacao nao e' garantido em todo navegador.
+ */
+function preenchimento(t: number): string {
+  return t > 0 ? `rgb(var(--tc-kpi-gmv) / ${Math.round((0.14 + 0.86 * Math.min(1, t)) * 1000) / 1000})` : "rgb(var(--tc-raised))";
+}
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-baseline justify-between gap-3 lg:justify-between">
-      <dt className="text-[11px] text-slate-500 whitespace-nowrap">{label}</dt>
-      <dd className="text-xs font-semibold tabular-nums text-slate-700 whitespace-nowrap">{value}</dd>
+      <dt className="whitespace-nowrap text-xs text-ink-muted">{label}</dt>
+      <dd className="whitespace-nowrap text-xs font-semibold tabular-nums text-ink">{value}</dd>
     </div>
   );
 }
@@ -58,35 +67,38 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
   const activeName = displayedUf ? UF_NAME[displayedUf] : null;
 
   return (
-    <div className="bg-white border border-violet-100 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-violet-50 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-slate-700">Mapa regional</h2>
-        <div className="flex items-center gap-2 text-[10px] text-slate-500 shrink-0">
-          <span className="font-semibold uppercase tracking-wide text-slate-400">GMV</span>
-          <span className="w-16 h-2.5 rounded-full" style={{ background: "linear-gradient(to right, rgb(238,242,247), rgb(91,33,182))" }} aria-hidden="true" />
+    <Panel
+      titulo="Mapa regional"
+      semPadding
+      acao={
+        <span className="flex shrink-0 items-center gap-2 text-xs text-ink-muted">
+          <span className="font-semibold uppercase tracking-wide text-ink-faint">GMV</span>
+          <span
+            className="h-2.5 w-16 rounded-full"
+            style={{ background: "linear-gradient(to right, rgb(var(--tc-kpi-gmv) / 0.14), rgb(var(--tc-kpi-gmv)))" }}
+            aria-hidden="true"
+          />
           <span>menor</span>
-          <span className="text-slate-300">→</span>
+          <span className="text-ink-faint">→</span>
           <span>maior</span>
-        </div>
-      </div>
-
+        </span>
+      }
+    >
       <div
-        className={`flex flex-col lg:flex-row gap-4 p-4 lg:p-6 transition-opacity duration-200 ${loading ? "opacity-50" : ""}`}
+        className={`flex flex-col gap-4 p-4 transition-opacity duration-200 lg:flex-row lg:p-6 ${loading ? "opacity-50" : ""}`}
         aria-busy={loading}
       >
-        <div className="flex-1 min-w-0 flex flex-col items-center justify-center gap-2">
+        <div className="flex min-w-0 flex-1 flex-col items-center justify-center gap-2">
           <svg
             viewBox={BRAZIL_MAP_VIEWBOX}
-            className="w-full h-auto max-h-[440px]"
+            className="h-auto max-h-[440px] w-full"
             role="img"
             aria-label="Mapa do Brasil, estados coloridos por intensidade de GMV no período e filtros selecionados"
           >
             {BRAZIL_UF_PATHS.map(({ uf, name, path }) => {
               const row = byUf.get(uf);
               const t = intensity.get(uf) ?? 0;
-              const fill = intensityToColor(t);
               const level = row?.coverage_level ?? "not_applicable";
-              const warnStroke = coverageStrokeColor(level);
               const isSelected = selectedUf === uf;
               const isActive = displayedUf === uf;
               const gmv = row?.gmv ?? 0;
@@ -97,17 +109,19 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                 <path
                   key={uf}
                   d={path}
-                  fill={fill}
-                  stroke={isActive ? "#5b21b6" : warnStroke ?? NEUTRAL_STROKE}
-                  strokeWidth={isActive ? 2.5 : warnStroke ? 1.4 : 0.75}
-                  strokeDasharray={!isActive && level === "low" ? "3,2" : undefined}
+                  // contorno neutro: vermelho tracejado se lia como erro; a cobertura fica no aria-label e no painel ao lado
+                  strokeWidth={isActive ? 2.5 : 0.75}
                   strokeLinejoin="round"
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSelected}
                   aria-label={`${name} (${uf}): GMV ${fmtBrlCurto(gmv)}, ${fmtNumCurto(orders)} pedidos${share != null ? `, ${fmtPctSimples(share)} de participação` : ""}. ${coverageLabel(level)}.`}
-                  className="cursor-pointer outline-none focus-visible:brightness-95 transition-[filter] duration-100"
-                  style={{ filter: isActive ? "brightness(1.05)" : undefined }}
+                  className="cursor-pointer outline-none transition-[filter] duration-100 focus-visible:brightness-95"
+                  style={{
+                    fill: preenchimento(t),
+                    stroke: isActive ? "rgb(var(--tc-accent-ink))" : "rgb(var(--tc-line-strong))",
+                    filter: isActive ? "brightness(1.05)" : undefined,
+                  }}
                   onMouseEnter={() => setHoverUf(uf)}
                   onMouseLeave={() => setHoverUf((cur) => (cur === uf ? null : cur))}
                   onFocus={() => setHoverUf(uf)}
@@ -126,23 +140,23 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
             })}
           </svg>
           {!hasAnyData && !loading && (
-            <p className="text-xs text-slate-400 max-w-xs text-center">
+            <p className="max-w-xs text-center text-xs text-ink-faint">
               Sem dados de GMV por UF para o período e filtros selecionados.
             </p>
           )}
         </div>
 
         {/* Painel de detalhe — compacto, nunca disputa espaço com o mapa */}
-        <div className="w-full lg:w-64 shrink-0 bg-slate-50 rounded-xl p-3.5 flex flex-col gap-2.5 self-start">
+        <div className="flex w-full shrink-0 flex-col gap-2.5 self-start rounded-xl bg-raised p-3.5 lg:w-64">
           {active ? (
             <>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-bold text-slate-700 leading-none">{activeName ?? active.uf} <span className="text-slate-400 font-semibold">· {active.uf}</span></p>
-                <span className={`inline-block text-[9px] font-semibold uppercase tracking-wide border rounded-full px-1.5 py-0.5 whitespace-nowrap ${coverageBadgeClass(active.coverage_level)}`}>
+                <p className="text-sm font-bold leading-none text-ink">{activeName ?? active.uf} <span className="font-semibold text-ink-faint">· {active.uf}</span></p>
+                <span className={`inline-block whitespace-nowrap rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${coverageBadgeClass(active.coverage_level)}`}>
                   {coverageLabel(active.coverage_level)}
                 </span>
               </div>
-              <dl className="flex flex-wrap lg:flex-col gap-x-4 gap-y-1.5 lg:gap-1.5">
+              <dl className="flex flex-wrap gap-x-4 gap-y-1.5 lg:flex-col lg:gap-1.5">
                 <StatRow label="GMV" value={fmtBrlCurto(active.gmv)} />
                 <StatRow label="Pedidos" value={fmtNumCurto(active.orders)} />
                 <StatRow
@@ -158,16 +172,16 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
             </>
           ) : (
             <>
-              <p className="text-xs text-slate-400">Selecione uma UF para detalhes.</p>
+              <p className="text-xs text-ink-faint">Selecione uma UF para detalhes.</p>
               {top3.length > 0 && (
-                <div className="pt-2 border-t border-slate-200 flex flex-col gap-1.5">
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Top {top3.length} UFs por GMV</p>
+                <div className="flex flex-col gap-1.5 border-t border-line pt-2">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Top {top3.length} UFs por GMV</p>
                   {top3.map((row, i) => {
                     const share = fmtShareOfTotalPct(row.gmv, totalGmv);
                     return (
                       <div key={row.uf} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="font-semibold text-slate-600">{i + 1}. {row.uf}</span>
-                        <span className="tabular-nums text-slate-500">
+                        <span className="font-semibold text-ink">{i + 1}. {row.uf}</span>
+                        <span className="tabular-nums text-ink-muted">
                           {fmtBrlCurto(row.gmv)}{share != null && ` · ${fmtPctSimples(share)}`}
                         </span>
                       </div>
@@ -181,29 +195,29 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
       </div>
 
       {xx && (
-        <div className="px-6 py-2.5 border-t border-slate-100 bg-slate-50/60">
-          <p className="text-[11px] text-slate-500">
-            <span className="font-semibold text-slate-600">Sem UF (XX), fora do mapa:</span> {fmtBrlCurto(xx.gmv)} · {fmtNumCurto(xx.orders)} pedidos
+        <div className="border-t border-line bg-raised/60 px-6 py-2.5">
+          <p className="text-xs text-ink-muted">
+            <span className="font-semibold text-ink">Sem UF (XX), fora do mapa:</span> {fmtBrlCurto(xx.gmv)} · {fmtNumCurto(xx.orders)} pedidos
           </p>
         </div>
       )}
 
       {/* Atribuicao obrigatoria da geometria do mapa (CC BY 4.0) — ver
          header de brazil-uf-paths.ts e THIRD_PARTY_NOTICES.md */}
-      <div className="px-6 py-1.5 border-t border-slate-50">
-        <p className="text-[10px] text-slate-300 text-right">
+      <div className="border-t border-line px-6 py-1.5">
+        <p className="text-right text-xs text-ink-faint">
           Mapa base:{" "}
           <a
             href="https://github.com/VictorCazanave/svg-maps"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-slate-400 underline decoration-dotted"
+            className="underline decoration-dotted hover:text-ink-muted"
           >
             @svg-maps/brazil
           </a>{" "}
           (CC BY 4.0)
         </p>
       </div>
-    </div>
+    </Panel>
   );
 }

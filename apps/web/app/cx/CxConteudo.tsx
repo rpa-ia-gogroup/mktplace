@@ -9,21 +9,22 @@
  * (04/11/2026: "Não foi possível contatar a API"), por isso a busca e' aqui,
  * com `torreFetch`.
  *
- * CX-IDENTIDADE (08/11/2026, spec do Prumo): o esqueleto da Gerencial.
- *   0. cabecalho com chips (canal, janela, captura da Saude da Conta);
- *   1. heroi: taxa de resposta, selo da meta oficial, Saude da Conta por marca;
- *   2. faixa: contact rate, cancelamento, reembolso, reenvio (os do card CX
- *      da Gerencial, no periodo do filtro);
- *   3. "O que exige atencao agora";
- *   4. por que: Pareto dos problemas (7/12) | problemas por marca (5/12);
- *   5. atendimento por loja;
+ * ALVO-GRADE (12/11/2026): a grade unica das abas (`layout/Aba`).
+ *   0. titulo + selo "Atualizado HH:MM"; os canais (Shopee | Mercado Livre) sao ABAS;
+ *   1. filtros numa linha (marca e periodo);
+ *   2. quatro cartoes iguais: Taxa de resposta (com o selo da meta oficial),
+ *      Cancelamento, Devolucao e Reembolso; linha de tendencia so' com serie real;
+ *   3. dois paineis: Pareto dos problemas | O que exige atencao (com a Saude da
+ *      Conta por marca);
+ *   4. tabela em largura total: problemas por marca, com barrinha;
+ *   5. atendimento por loja (o Contact rate fica aqui, com o total);
  *   6. avaliacoes de produto da Shopee (bloco proprio, falha sozinho);
- *      o CX do site (DTC) saiu da aba em 09/11, a pedido do usuario;
  *   7. Mais detalhes: fila do chat por espera e notas da coleta.
  * Um dialogo unico (`KpiDrilldownDialog`) para todos os detalhes.
  */
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Ban, MessageCircle, MessagesSquare, PackageX, Undo2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Ban, MessageCircle, PackageX, Undo2 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -31,20 +32,23 @@ import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
-import { LinhaSemComparacao, notasDoTile, pilula, rodapeComparacao, type RodapeCard } from "@/components/gerencial/CxResumo";
-import PageHeader from "@/components/layout/PageHeader";
+import { notasDoTile, rodapeComparacao } from "@/components/gerencial/CxResumo";
+import Aba from "@/components/layout/Aba";
+import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import Chip from "@/components/ui/Chip";
-import FilaAtencao from "@/components/ui/FilaAtencao";
-import Heroi from "@/components/ui/Heroi";
+import FilaAtencao, { type ItemAtencao } from "@/components/ui/FilaAtencao";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import Panel from "@/components/ui/Panel";
+import Segmented from "@/components/ui/Segmented";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import StateBlock from "@/components/ui/StateBlock";
 import {
   AJUDA_CX,
   AJUDA_RISCO,
+  CANAIS_CX,
   ROTULO_INDICADOR,
   avisoColetaChat,
   carregarCxShopee,
@@ -52,6 +56,7 @@ import {
   chipsCx,
   csvPedidosMotivo,
   heroiCx,
+  hrefCx,
   itensAtencaoCx,
   montarAtendimentoCx,
   montarAvaliacaoLoja,
@@ -61,6 +66,7 @@ import {
   nomeDoCsvPedidos,
   resumoCxGerencial,
   tipoDoItem,
+  type CanalCx,
   type CelulaMeta,
   type CxShopeeResponse,
   type DeltaCx,
@@ -70,19 +76,112 @@ import {
   type LinhaFilaCx,
   type ResultadoCx,
   type ResultadoPedidos,
-  type ResumoCx,
   type StatusMarca,
   type VisaoAtendimentoCx,
   type VisaoPareto,
 } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
+import { fmtDelta } from "@/lib/formatters";
+import type { DeltaTone } from "@/lib/gerencial/kpi-band";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import AvaliacoesProduto from "./AvaliacoesProduto";
+import FiltrosCxBarra from "./FiltrosCx";
 
-export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; barra: ReactNode }) {
+// ---------------------------------------------------------------------------
+// Moldura da aba (ALVO-GRADE): titulo + selo, os canais como ABAS, filtros, faixa
+// ---------------------------------------------------------------------------
+/** Os canais da CX viram as abas sob o titulo; a URL continua a mesma (`?canal=ml`). */
+const VISOES_CX = CANAIS_CX.map((c) => ({ id: c.valor, rotulo: c.rotulo, ponto: c.ponto }));
+
+/**
+ * Cores de identidade dos quatro cartoes, na ordem do alvo aprovado (violeta,
+ * rosa, ambar, azul), pelos tokens do tema; bom/ruim fica so' na pilula.
+ */
+export const COR_CX = {
+  resposta: "rgb(var(--tc-kpi-gmv))",
+  cancelamento: "rgb(var(--tc-kpi-ads))",
+  devolucao: "rgb(var(--tc-kpi-pedidos))",
+  reembolso: "rgb(var(--tc-kpi-prazo))",
+} as const;
+
+export const GRADE_FAIXA = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
+
+/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados). */
+export const intervaloDaJanela = (j: { inicio: string; fim: string }): string =>
+  `${j.inicio.slice(8, 10)}/${j.inicio.slice(5, 7)}–${j.fim.slice(8, 10)}/${j.fim.slice(5, 7)}`;
+
+export function AbaCx({ canal, filtros, intervalo, selo, faixa, children }: { canal: CanalCx; filtros: FiltrosCx; intervalo?: string; selo?: ReactNode; faixa?: ReactNode; children?: ReactNode }) {
+  const router = useRouter();
+  return (
+    <Aba
+      titulo="CX"
+      selo={selo}
+      visoes={VISOES_CX}
+      visao={canal}
+      onVisao={(c) => c !== canal && router.push(hrefCx(filtros, c), { scroll: false })}
+      filtros={<FiltrosCxBarra f={filtros} canal={canal} intervalo={intervalo} />}
+      faixa={faixa}
+    >
+      {children}
+    </Aba>
+  );
+}
+
+/** Os quatro cartoes enquanto a resposta nao chega (o mesmo esqueleto da faixa da Gerencial). */
+export function FaixaCarregando() {
+  return (
+    <div className={GRADE_FAIXA} aria-busy="true">
+      {[0, 1, 2, 3].map((k) => (
+        <div key={k} className="h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4" role="status">
+          <span className="sr-only">Carregando indicador…</span>
+          <div className="h-3 w-24 rounded bg-raised" />
+          <div className="mt-3 h-8 w-36 rounded bg-raised" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function TentarNovamente({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mt-1 inline-flex min-h-11 items-center rounded-lg border border-current/30 px-3 text-xs font-semibold hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      Tentar novamente
+    </button>
+  );
+}
+
+/**
+ * Pilula do cartao a partir de um delta da API-3. A mesma regra do `pilula` do
+ * CxResumo: menos de 0,05 e' estavel, sem cor de juizo.
+ */
+export function pilulaCartao(c: { delta: number | null; unidade: "pp" | "pct" | "pts"; tone: DeltaTone } | null | undefined): { texto: string; tom: TomPilula } | null {
+  if (c?.delta == null) return null;
+  const estavel = Math.abs(c.delta) < 0.05;
+  return {
+    texto: `${fmtDelta(estavel ? 0 : c.delta, c.unidade)} vs anterior`,
+    tom: estavel || c.tone === "neutral" ? "neutro" : (c.delta >= 0) !== (c.tone === "lower_is_better") ? "ok" : "crit",
+  };
+}
+
+/** Selo da meta oficial (regra de negocio) como pilula do cartao. */
+export const pilulaSelo = (s: { texto: string; tom: "ok" | "critico" } | null): { texto: string; tom: TomPilula } | null =>
+  s ? { texto: s.texto, tom: s.tom === "ok" ? "ok" : "crit" } : null;
+
+/** O selo da meta como legenda (quando a pilula e' a variacao): fora da meta continua em vermelho e escrito. */
+export const legendaSelo = (s: { texto: string; tom: "ok" | "critico" } | null): ReactNode =>
+  s ? <span className={s.tom === "ok" ? undefined : "font-semibold text-crit-ink"}>{s.texto}</span> : null;
+
+/** "—" (ausencia) vira `null`: o cartao escreve "N/D", nunca zero. */
+export const valorCartao = (v: string | null | undefined): string | null => (v && v !== "—" ? v : null);
+
+export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
   const [repetindo, setRepetindo] = useState(false);
@@ -102,59 +201,26 @@ export default function CxConteudo({ filtros, barra }: { filtros: FiltrosCx; bar
 
   useEffect(() => carregar(), [carregar]);
 
-  const chips = resultado?.ok ? chipsCx(resultado.dados) : null;
   // Avaliacoes de produto: busca propria, falha sozinha
   const avaliacoes = <AvaliacoesProduto filtros={filtros} />;
 
-  return (
-    <>
-      <PageHeader
-        title="CX"
-        icon={MessageCircle}
-        filters={barra}
-        meta={
-          <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
-            {/* o canal (Shopee) mora na barra de filtros, como nas outras abas */}
-            {/* um chip so': a captura da Saude da Conta vai no title; so' aparece escrita quando esta velha */}
-            {chips && (
-              <Chip title={chips.detalhe} tom={chips.saudeDesatualizada ? "atencao" : "neutro"}>
-                {chips.janela}
-                {chips.saudeDesatualizada && <span> · {chips.saudeDesatualizada}</span>}
-                <span className="sr-only"> · {chips.detalhe}</span>
-              </Chip>
-            )}
-          </span>
-        }
-      />
-      {!resultado ? (
-        <>
-          <Heroi rotulo={ROTULO_INDICADOR.resposta} valor="—" carregando meio={null} />
-          <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX"} />
-          {avaliacoes}
-        </>
-      ) : !resultado.ok ? (
-        <>
-          <StateBlock
-            tipo="erro"
-            titulo="Não foi possível carregar a aba CX"
-            descricao={resultado.motivo}
-            acao={
-              <button
-                type="button"
-                onClick={() => carregar()}
-                className="mt-1 inline-flex min-h-11 items-center rounded-lg border border-current/30 px-3 text-xs font-semibold hover:bg-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                Tentar novamente
-              </button>
-            }
-          />
-          {avaliacoes}
-        </>
-      ) : (
-        <Corpo dados={resultado.dados} filtros={filtros} avaliacoes={avaliacoes} />
-      )}
-    </>
-  );
+  if (!resultado) {
+    return (
+      <AbaCx canal="shopee" filtros={filtros} selo={<SeloAtualizado em={null} carregando />} faixa={<FaixaCarregando />}>
+        <StateBlock tipo="carregando" titulo={repetindo ? TITULO_SEGUNDA_TENTATIVA : "Carregando a aba CX"} />
+        {avaliacoes}
+      </AbaCx>
+    );
+  }
+  if (!resultado.ok) {
+    return (
+      <AbaCx canal="shopee" filtros={filtros}>
+        <StateBlock tipo="erro" titulo="Não foi possível carregar a aba CX" descricao={resultado.motivo} acao={<TentarNovamente onClick={() => carregar()} />} />
+        {avaliacoes}
+      </AbaCx>
+    );
+  }
+  return <Corpo dados={resultado.dados} filtros={filtros} avaliacoes={avaliacoes} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -171,6 +237,8 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
   const aviso = avisoColetaChat(dados);
   const atencao = itensAtencaoCx(dados, r, brandLabel);
   const janela = textoJanela(dados.janela);
+  const chips = chipsCx(dados);
+  const { dias } = filtros;
   const [dialogo, setDialogo] = useState<Dialogo | null>(null);
   // trocar de filtro fecha o detalhe (ele seria de outro recorte)
   useEffect(() => setDialogo(null), [filtros.marca, filtros.dias]);
@@ -184,62 +252,127 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
         ? `${ROTULO_INDICADOR[dialogo.indicador]} por marca · Shopee`
         : `${marcaAberta?.marca ?? brandLabel(dialogo.marca)} · Saúde da Conta`;
 
+  // Comparacao de cada cartao: as mesmas regras do card CX da Gerencial (`rodapeComparacao`), no formato do cartao novo.
+  const rodape = { resposta: rodapeComparacao(r, "resposta"), cancelamento: rodapeComparacao(r, "cancelamento"), reembolso: rodapeComparacao(r, "reembolso") };
+  const cancelamentoEstavel = r.cancelamentoDelta?.sentido === "estavel";
+  const pilulas = {
+    resposta: rodape.resposta.delta ? pilulaCartao(r.comparacao.resposta) : null,
+    cancelamento: rodape.cancelamento.delta
+      ? pilulaCartao({ delta: cancelamentoEstavel ? 0 : r.cancelamentoDeltaPp, unidade: "pp", tone: "lower_is_better" })
+      : null,
+    reembolso: rodape.reembolso.delta ? pilulaCartao(r.comparacao.reembolso) : null,
+  };
+  const selo = pilulaSelo(heroi.selo);
+  // Devolucao por marca, da maior taxa para a menor: ocupa o lugar da linha (a API nao traz serie de devolucoes)
+  const pesoDevolucao = pesosDaColuna(pareto.linhas.map((l) => l.devolucoesPct));
+  const devolucaoPorMarca = pareto.linhas
+    .map((l, k) => ({ l, peso: pesoDevolucao[k] }))
+    .filter((x): x is { l: (typeof pareto.linhas)[number]; peso: number } => x.peso != null)
+    .sort((a, b) => b.peso - a.peso)
+    .slice(0, 3)
+    .map((x) => `${x.l.marca} ${x.l.devolucoesPct}`)
+    .join(" · ");
+  const erroAtendimento = v.estado === "erro" ? (v.motivo ?? "Atendimento indisponível nesta carga.") : null;
+  const ajuda = (i: IndicadorCx, extra?: string | null) => <InfoDica emControle texto={[...notasDoTile(r, i, dias), extra].filter(Boolean).join(" ")} />;
+  const semDevolucao = pareto.total.devolucoesPct === "—";
+  const parcial = pareto.total.marcasDevolucao.lidas < pareto.total.marcasDevolucao.total;
+
   return (
-    <>
-      <Heroi
-        rotulo={ROTULO_INDICADOR.resposta}
-        ajuda={<InfoDica titulo={ROTULO_INDICADOR.resposta} texto={notasDoTile(r, "resposta", filtros.dias).join(" ")} />}
-        valor={r.resposta}
-        tom={r.resposta === "—" ? "ausente" : "neutro"}
-        // API-3: o heroi ganha so' a pilula (sem grafico)
-        delta={r.comparacao.resposta ? pilula(r.comparacao.resposta) : undefined}
-        contexto={
-          // sem pilula, a linha neutra da API-3 ("comparação a partir de dd/mm"), como na Gerencial
-          !r.comparacao.resposta?.delta && r.totais.resposta != null && r.semAnterior.resposta ? (
-            <>
-              {heroi.contexto && <span>{heroi.contexto}</span>}
-              <LinhaSemComparacao {...r.semAnterior.resposta} />
-            </>
-          ) : (
-            heroi.contexto
-          )
-        }
-        aviso={aviso ? <Chip>{aviso}</Chip> : undefined}
-        selo={heroi.selo ?? undefined}
-        erro={v.estado === "erro" ? (v.motivo ?? "Atendimento indisponível nesta carga.") : undefined}
-        meio={status.length ? <SaudePorMarca itens={status} abrir={(m) => setDialogo({ marca: m })} /> : undefined}
-      />
-
-      <Faixa r={r} dias={filtros.dias} pareto={pareto} heroiMostraSemComparacao={!r.comparacao.resposta?.delta && r.totais.resposta != null && !!r.semAnterior.resposta} abrir={(i) => setDialogo({ indicador: i })} abrirDevolucao={() => setDialogo({ devolucao: true })} />
-
-      <FilaAtencao
-        titulo={
-          <span className="inline-flex items-center gap-1.5">
-            O que exige atenção agora
-            <InfoDica titulo="Fora da curva" texto={AJUDA_RISCO} />
-          </span>
-        }
-        itens={atencao.map((x) => ({
-          chave: x.chave,
-          severidade: x.severidade,
-          titulo: x.titulo,
-          detalhe: x.detalhe ?? undefined,
-          onAbrir: () => setDialogo(x.abre),
-        }))}
-        vazio="Nenhuma loja fora da meta nem conversa esperando há mais de 24 h."
-      />
-
-      {/* Por que: 7/12 (dominante) | 5/12 (ranking), como a 2a dobra da Gerencial */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-7">
-          <Pareto v={pareto} filtros={filtros} />
-        </div>
-        <div className="min-w-0 lg:col-span-5">
-          <ProblemasPorMarca v={pareto} />
-        </div>
+    <AbaCx
+      canal="shopee"
+      filtros={filtros}
+      intervalo={intervaloDaJanela(dados.janela)}
+      selo={
+        <span className="flex flex-wrap items-center gap-1.5" data-testid="cx-escopo">
+          {/* dado velho e aviso de coleta ficam ESCRITOS ao lado do selo, nunca so' no title */}
+          {chips.saudeDesatualizada && (
+            <Chip tom="atencao" title={chips.detalhe}>
+              {chips.saudeDesatualizada}
+            </Chip>
+          )}
+          {aviso && <Chip>{aviso}</Chip>}
+          <SeloAtualizado em={dados.gerado_em} detalhe={`${chips.janela} · ${chips.detalhe}`} />
+        </span>
+      }
+      faixa={
+        <section aria-label="Indicadores do período">
+          <div className={GRADE_FAIXA} data-testid="cx-faixa">
+            {/* 1. Resposta do chat: a variacao e' a pilula (sem ela, o selo da meta oficial); a fila do chat ocupa o rodape */}
+            <CartaoIndicador
+              rotulo={ROTULO_INDICADOR.resposta}
+              icone={MessageCircle}
+              cor={COR_CX.resposta}
+              valor={valorCartao(r.resposta)}
+              pilula={pilulas.resposta ?? selo}
+              // a fila do chat (N aguardando, M ha mais de 24 h) fica SEMPRE na legenda (regra da Operacao)
+              legenda={erroAtendimento ?? ([pilulas.resposta ? legendaSelo(heroi.selo) : null, heroi.contexto].filter(Boolean).join(" · ") || null)}
+              serie={rodape.resposta.serie}
+              ajuda={ajuda("resposta", r.semAnterior.resposta?.texto)}
+              onAbrir={() => setDialogo({ indicador: "resposta" })}
+            />
+            <CartaoIndicador
+              rotulo={ROTULO_INDICADOR.cancelamento}
+              icone={Ban}
+              cor={COR_CX.cancelamento}
+              valor={valorCartao(r.cancelamento)}
+              pilula={pilulas.cancelamento}
+              // "comparação a partir de dd/mm" (sem periodo anterior) fica no ⓘ, como na Taxa de resposta
+              legenda={pilulas.cancelamento ? rodape.cancelamento.antes : null}
+              serie={rodape.cancelamento.serie}
+              ajuda={ajuda("cancelamento", r.semAnterior.cancelamento?.texto)}
+              onAbrir={() => setDialogo({ indicador: "cancelamento" })}
+            />
+            {/* devolucoes (sem as que o comprador cancelou) ÷ pedidos: a mesma conta da coluna Devol. da tabela por marca; a API nao traz serie nem periodo anterior */}
+            <CartaoIndicador
+              rotulo="Devolução"
+              icone={PackageX}
+              cor={COR_CX.devolucao}
+              valor={valorCartao(pareto.total.devolucoesPct)}
+              legenda={
+                pareto.total.devolucoes === "—"
+                  ? "Sem leitura de devoluções"
+                  : `${pareto.total.devolucoes} devoluções${parcial ? ` · ${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas` : ""}`
+              }
+              rodape={devolucaoPorMarca || undefined}
+              ajuda={<InfoDica emControle={!semDevolucao} texto={AJUDA_DEVOLUCAO} />}
+              onAbrir={semDevolucao ? undefined : () => setDialogo({ devolucao: true })}
+            />
+            {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
+            <CartaoIndicador
+              rotulo={ROTULO_INDICADOR.reembolso}
+              icone={Undo2}
+              cor={COR_CX.reembolso}
+              valor={valorCartao(r.reembolsoPct)}
+              pilula={pilulas.reembolso}
+              legenda={r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null}
+              serie={rodape.reembolso.serie}
+              ajuda={ajuda("reembolso", typeof rodape.reembolso.antes === "string" ? rodape.reembolso.antes : r.semAnterior.reembolso?.texto)}
+              onAbrir={() => setDialogo({ indicador: "reembolso" })}
+            />
+          </div>
+        </section>
+      }
+    >
+      {/* Dois paineis lado a lado: por que (Pareto) | o que exige atencao */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Pareto v={pareto} filtros={filtros} />
+        <PainelAtencao
+          ajuda={AJUDA_RISCO}
+          saude={status.length ? <SaudePorMarca itens={status} abrir={(m) => setDialogo({ marca: m })} /> : null}
+          itens={atencao.map((x) => ({
+            chave: x.chave,
+            severidade: x.severidade,
+            titulo: x.titulo,
+            detalhe: x.detalhe ?? undefined,
+            onAbrir: () => setDialogo(x.abre),
+          }))}
+          vazio="Nenhuma loja fora da meta nem conversa esperando há mais de 24 h."
+        />
       </div>
 
-      <AtendimentoPorLoja v={v} metaResposta={r.respostaMeta} metaNota={montarAvaliacaoLoja(dados, brandLabel)?.meta ?? null} />
+      <ProblemasPorMarca v={pareto} />
+
+      <AtendimentoPorLoja v={v} metaResposta={r.respostaMeta} metaNota={montarAvaliacaoLoja(dados, brandLabel)?.meta ?? null} contactRate={r.contactRate} contactRateDelta={dias > 30 ? null : (rodapeComparacao(r, "contactRate").delta ?? null)} contactRateAjuda={notasDoTile(r, "contactRate", dias).join(" ")} />
 
       {avaliacoes}
 
@@ -270,7 +403,50 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
           <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} />
         )}
       </KpiDrilldownDialog>
-    </>
+    </AbaCx>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Painel "O que exige atenção": a fila + Saude da Conta por marca; "Ver todos" abre a lista inteira
+// ---------------------------------------------------------------------------
+const ATENCAO_NO_PAINEL = 6;
+
+export function PainelAtencao({ ajuda, saude, itens, vazio, erro }: { ajuda: string; saude?: ReactNode; itens: ItemAtencao[]; vazio: string; erro?: string }) {
+  const [todos, setTodos] = useState(false);
+  return (
+    <Panel
+      titulo="O que exige atenção"
+      aria-label="O que exige atenção"
+      ajuda={ajuda}
+      className="h-full"
+      acao={
+        itens.length > ATENCAO_NO_PAINEL ? (
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            onClick={() => setTodos(true)}
+            className="inline-flex min-h-11 items-center text-[13px] font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Ver todos ({itens.length}) →
+          </button>
+        ) : undefined
+      }
+    >
+      <div className="flex flex-col gap-3" data-testid="cx-atencao">
+        {/* os alertas primeiro; a Saude da Conta (quase sempre verde) vem depois */}
+        <FilaAtencao semMoldura itens={itens.slice(0, ATENCAO_NO_PAINEL)} vazio={vazio} erro={erro} />
+        {saude}
+      </div>
+      <KpiDrilldownDialog open={todos} onClose={() => setTodos(false)} title="O que exige atenção">
+        {/* abrir um item fecha a lista: um dialogo por vez */}
+        <FilaAtencao
+          semMoldura
+          itens={itens.map((x) => (x.onAbrir ? { ...x, onAbrir: () => { setTodos(false); x.onAbrir?.(); } } : x))}
+          vazio={vazio}
+        />
+      </KpiDrilldownDialog>
+    </Panel>
   );
 }
 
@@ -310,11 +486,18 @@ export function ThAjuda({ children, ajuda, dica }: { children: string; ajuda?: s
 }
 
 /** Um numero por celula; o detalhe fica no title e no texto so' para leitor de tela. */
-export function Celula({ valor, dica, children }: { valor: string; dica?: string | null; children?: ReactNode }) {
+export function Celula({ valor, dica, barra, children }: { valor: string; dica?: string | null; barra?: { peso: number; cor: string } | null; children?: ReactNode }) {
   return (
     <td className={TD} title={dica ?? undefined}>
-      <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
-      {children}
+      {/* ALVO-GRADE: com peso, o numero ganha a barrinha na cor do indicador; ausencia continua "—", sem barra */}
+      {barra && valor !== "—" ? (
+        <CelulaBarra valor={<>{valor}{children}</>} peso={barra.peso} cor={barra.cor} />
+      ) : (
+        <>
+          <span className={valor === "—" ? "text-ink-faint" : "text-ink"}>{valor}</span>
+          {children}
+        </>
+      )}
       {dica && <span className="sr-only"> ({dica})</span>}
     </td>
   );
@@ -423,79 +606,6 @@ export function DetalheMarca({ s, fila }: { s: StatusMarca | null; fila: LinhaFi
   );
 }
 
-// ---------------------------------------------------------------------------
-// 2. Faixa de KPIs: os do card CX da Gerencial, menos a resposta (heroi) e o
-//    Reenvio sem fonte (cartao sem numero nao entra na 1a dobra; a nota esta'
-//    em Mais detalhes)
-// ---------------------------------------------------------------------------
-function Faixa({ r, dias, pareto, heroiMostraSemComparacao, abrir, abrirDevolucao }: { r: ResumoCx; dias: number; pareto: VisaoPareto; heroiMostraSemComparacao: boolean; abrir: (i: IndicadorCx) => void; abrirDevolucao: () => void }) {
-  // "comparação a partir de dd/mm" aparece UMA vez na tela (heroi ou 1o card); nos demais vira title
-  const visto = new Set<string>(heroiMostraSemComparacao && r.semAnterior.resposta ? [r.semAnterior.resposta.texto] : []);
-  const tile = (
-    i: IndicadorCx,
-    identidade: IdentidadeKpi,
-    icone: typeof Ban,
-    valor: string,
-    comparacao: ReactNode,
-    extra: RodapeCard = {},
-  ) => {
-    const sem = extra.delta ? undefined : r.semAnterior[i];
-    let contexto: string | undefined;
-    if (sem) {
-      if (visto.has(sem.texto)) {
-        extra = { ...extra, antes: undefined };
-        contexto = [sem.texto, sem.detalhe].filter(Boolean).join(" · ");
-      } else visto.add(sem.texto);
-    }
-    return (
-    <KpiTile
-      variante="gerencial"
-      identidade={identidade}
-      icone={icone}
-      rotulo={ROTULO_INDICADOR[i]}
-      valor={valor}
-      tom={valor === "—" ? "ausente" : "neutro"}
-      delta={extra.delta}
-      antes={extra.antes}
-      serie={extra.serie}
-      granularidade={extra.granularidade}
-      comparacao={comparacao}
-      // dentro de botao: o ⓘ so' tem `title`; o detalhe aberto traz as mesmas ressalvas
-      ajuda={<InfoDica emControle texto={notasDoTile(r, i, dias).join(" ")} />}
-      onAbrir={() => abrir(i)}
-      contexto={contexto}
-    />
-    );
-  };
-  return (
-    <section aria-label="Indicadores do período">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="cx-faixa">
-        {/* cor de identidade (spec do Prumo, 09/11): a mesma do card CX da Gerencial */}
-        {tile("contactRate", "atendimento", MessagesSquare, r.contactRate, dias > 30 ? "só em 7 e 30 dias" : null, dias > 30 ? {} : rodapeComparacao(r, "contactRate"))}
-        {tile("cancelamento", "ads", Ban, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
-        {/* devolucoes (sem as que o comprador cancelou) ÷ pedidos: a mesma conta da coluna Devol. da tabela por marca; sem periodo anterior medido na API */}
-        <KpiTile
-          variante="gerencial"
-          identidade="pedidos"
-          icone={PackageX}
-          rotulo="Devolução"
-          valor={pareto.total.devolucoesPct}
-          tom={pareto.total.devolucoesPct === "—" ? "ausente" : "neutro"}
-          comparacao={
-            pareto.total.devolucoes === "—"
-              ? "Sem leitura de devoluções"
-              : `${pareto.total.devolucoes} devoluções${pareto.total.marcasDevolucao.lidas < pareto.total.marcasDevolucao.total ? ` · ${pareto.total.marcasDevolucao.lidas} de ${pareto.total.marcasDevolucao.total} marcas` : ""}`
-          }
-          ajuda={<InfoDica emControle texto={AJUDA_DEVOLUCAO} />}
-          onAbrir={pareto.total.devolucoesPct === "—" ? undefined : abrirDevolucao}
-        />
-        {/* % antes do absoluto: a taxa no numero, o R$ realizado embaixo */}
-        {tile("reembolso", "gmv", Undo2, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
-      </div>
-    </section>
-  );
-}
-
 const AJUDA_DEVOLUCAO =
   "Pedidos que o comprador pediu para devolver no período ÷ pedidos do período, somando as marcas. Os que o próprio comprador cancelou ficam de fora. Cálculo da Torre.";
 
@@ -522,7 +632,7 @@ function DetalheDevolucao({ v, periodo, geradoEm }: { v: VisaoPareto; periodo: s
 }
 
 // ---------------------------------------------------------------------------
-// 4a. Pareto dos problemas (7/12)
+// 3a. Pareto dos problemas: painel com o seletor de tipo (Shopee e Mercado Livre)
 // ---------------------------------------------------------------------------
 /** Classes LITERAIS: o Tailwind so' gera o que encontra escrito. */
 const COR_TIPO: Record<string, string> = {
@@ -530,17 +640,52 @@ const COR_TIPO: Record<string, string> = {
   Cancelamento: "bg-accent",
 };
 
-function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
-  const [aberto, setAberto] = useState<ItemPareto | null>(null);
-  // trocar de filtro fecha a lista (ela seria de outro recorte)
-  useEffect(() => {
-    setAberto(null);
-  }, [filtros.marca, filtros.dias]);
+interface ItemBarra {
+  chave: string;
+  rotulo: string;
+  tipo: string;
+  natureza: string;
+  quantidade: string;
+  pct: string;
+  acumulado?: string;
+  largura: number;
+  mapeado: boolean;
+}
+
+/**
+ * O seletor so' FILTRA a lista na tela: percentuais e larguras continuam sobre
+ * o total de problemas. `aoAbrir` torna cada motivo um botao (lista de pedidos).
+ */
+export function PainelPareto<I extends ItemBarra>({
+  v,
+  cores,
+  semNome,
+  aberta,
+  aoAbrir,
+  children,
+}: {
+  v: { estado: string; motivo: string | null; itens: I[]; resto: string | null };
+  cores: Record<string, string>;
+  semNome: string;
+  aberta?: string | null;
+  aoAbrir?: (item: I) => void;
+  children?: ReactNode;
+}) {
+  const [tipo, setTipo] = useState("todos");
+  const tipos = [...new Set(v.itens.map((i) => i.tipo))];
+  // o tipo escolhido pode sumir ao trocar de filtro: volta a "Todos"
+  const ativo = tipos.includes(tipo) ? tipo : "todos";
+  const itens = ativo === "todos" ? v.itens : v.itens.filter((i) => i.tipo === ativo);
   return (
     <Panel
       titulo="Pareto dos problemas"
       aria-label="Pareto dos problemas"
       className="h-full"
+      acao={
+        v.estado === "dado" && tipos.length > 1 ? (
+          <Segmented rotulo="Tipo de problema" opcoes={[{ valor: "todos", texto: "Todos" }, ...tipos.map((t) => ({ valor: t, texto: t }))]} valor={ativo} aoEscolher={setTipo} />
+        ) : undefined
+      }
     >
       <div className="flex flex-col gap-4" data-testid="cx-pareto">
         {v.estado !== "dado" ? (
@@ -550,50 +695,85 @@ function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
             titulo={v.motivo ?? "Sem dados"}
           />
         ) : (
-          <ol className="flex min-w-0 flex-col gap-2.5" aria-label="Motivos, do maior para o menor">
-            {v.itens.map((i) => (
-              <li key={i.chave}>
-                <button
-                  type="button"
-                  onClick={() => setAberto(aberto?.chave === i.chave ? null : i)}
-                  aria-expanded={aberto?.chave === i.chave}
-                  aria-controls="cx-pedidos-motivo"
-                  title={`Acumulado ${i.acumulado} · ver os pedidos deste motivo`}
-                  className={`flex min-h-11 w-full flex-col justify-center gap-1 rounded-md px-1.5 py-1 text-left hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                    aberto?.chave === i.chave ? "bg-raised ring-1 ring-line-strong" : ""
-                  }`}
-                >
+          <ol className="flex min-w-0 flex-col gap-1.5" aria-label="Motivos, do maior para o menor">
+            {itens.map((i) => {
+              const linha = (
+                <>
                   <div className="flex w-full items-baseline justify-between gap-3 text-sm">
                     <span className="min-w-0 break-words text-ink">
                       {i.rotulo}
-                      {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">(sem tradução)</span>}
-                      <span className="ml-1.5 text-xs text-ink-faint">{i.tipo} · {i.natureza}</span>
+                      {!i.mapeado && <span className="ml-1.5 text-xs text-warn-ink">({semNome})</span>}
+                      {/* tipo e responsavel (Comprador / Vendedor / Logistica) escritos: e' a parte acionavel; filtrado por tipo, so' o responsavel */}
+                      <span className="ml-1.5 text-xs text-ink-faint">{ativo === "todos" ? `${i.tipo} · ${i.natureza}` : i.natureza}</span>
                     </span>
                     <span className="shrink-0 tabular-nums text-ink-muted">
-                      {i.pct} <span className="text-xs">· {i.quantidade}</span>
-                      <span className="sr-only"> · acumulado {i.acumulado}</span>
+                      <span className="font-semibold text-ink">{i.pct}</span> <span className="text-xs">· {i.quantidade}</span>
+                      {i.acumulado && <span className="sr-only"> · acumulado {i.acumulado}</span>}
                     </span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-raised" aria-hidden="true">
-                    <div className={`h-full rounded-full ${COR_TIPO[i.tipo] ?? "bg-accent"}`} style={{ width: `${i.largura}%` }} />
+                    <div className={`tc-barra h-full rounded-full ${cores[i.tipo] ?? "bg-accent"}`} style={{ width: `${i.largura}%` }} />
                   </div>
-                </button>
-              </li>
-            ))}
-            {v.resto && <li className="text-xs text-ink-faint">{v.resto}</li>}
+                </>
+              );
+              const dica = [i.acumulado && `Acumulado ${i.acumulado}`, aoAbrir && "ver os pedidos deste motivo"].filter(Boolean).join(" · ") || undefined;
+              return (
+                <li key={i.chave} title={dica}>
+                  {aoAbrir ? (
+                    <button
+                      type="button"
+                      onClick={() => aoAbrir(i)}
+                      aria-expanded={aberta === i.chave}
+                      aria-controls="cx-pedidos-motivo"
+                      className={`flex min-h-11 w-full flex-col justify-center gap-1 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                        aberta === i.chave ? "bg-raised ring-1 ring-line-strong" : ""
+                      }`}
+                    >
+                      {linha}
+                    </button>
+                  ) : (
+                    <div className="flex min-h-11 flex-col justify-center gap-1 px-1.5 py-1">{linha}</div>
+                  )}
+                </li>
+              );
+            })}
+            {v.resto && ativo === "todos" && <li className="text-xs text-ink-faint">{v.resto}</li>}
           </ol>
         )}
-        {aberto && <PedidosDoMotivo item={aberto} filtros={filtros} fechar={() => setAberto(null)} />}
+        {children}
       </div>
     </Panel>
   );
 }
 
+function Pareto({ v, filtros }: { v: VisaoPareto; filtros: FiltrosCx }) {
+  const [aberto, setAberto] = useState<ItemPareto | null>(null);
+  // trocar de filtro fecha a lista (ela seria de outro recorte)
+  useEffect(() => {
+    setAberto(null);
+  }, [filtros.marca, filtros.dias]);
+  return (
+    <PainelPareto v={v} cores={COR_TIPO} semNome="sem tradução" aberta={aberto?.chave} aoAbrir={(i) => setAberto(aberto?.chave === i.chave ? null : i)}>
+      {aberto && <PedidosDoMotivo item={aberto} filtros={filtros} fechar={() => setAberto(null)} />}
+    </PainelPareto>
+  );
+}
+
+/** Peso 0..1 de uma taxa ja' formatada ("6,2%") na escala da coluna; so' desenha a barrinha, nao muda numero. */
+export function pesosDaColuna(valores: string[]): (number | null)[] {
+  const n = valores.map((s) => parseFloat(s.replace(/\./g, "").replace(",", ".")));
+  const max = Math.max(0, ...n.filter(Number.isFinite));
+  return n.map((x) => (Number.isFinite(x) && max > 0 ? x / max : null));
+}
+const barra = (peso: number | null, cor: string) => (peso == null ? null : { peso, cor });
+
 // ---------------------------------------------------------------------------
-// 4b. Problemas por marca (5/12): um numero por celula, total em raised
+// 3b. Problemas por marca (largura total): um numero por celula, com barrinha; total em raised
 // ---------------------------------------------------------------------------
 function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
   const t = v.total;
+  const pesoCancel = pesosDaColuna(v.linhas.map((l) => l.cancelamentosPct));
+  const pesoDevol = pesosDaColuna(v.linhas.map((l) => l.devolucoesPct));
   return (
     <Panel titulo="Problemas por marca" aria-label="Problemas por marca" semPadding>
       {v.linhas.length === 0 ? (
@@ -602,7 +782,7 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
         </div>
       ) : (
         <TableScrollHint>
-          <table className="w-full min-w-[420px] border-collapse text-sm" data-testid="cx-problemas-marca">
+          <table className="w-full min-w-[620px] border-collapse text-sm" data-testid="cx-problemas-marca">
             <caption className="sr-only">Problemas por marca</caption>
             <thead className={THEAD}>
               <tr>
@@ -614,17 +794,18 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
               </tr>
             </thead>
             <tbody>
-              {v.linhas.map((l) => (
+              {v.linhas.map((l, k) => (
                 <tr key={l.chave} className={TR}>
                   <th scope="row" className="px-2 py-2 text-left font-medium text-ink">{l.marca}</th>
                   <td className={TD}>{l.pedidos}</td>
                   <Celula
                     valor={l.cancelamentosPct}
+                    barra={barra(pesoCancel[k], COR_CX.cancelamento)}
                     dica={dica(l.cancelamentos !== "—" && `${l.cancelamentos} cancelamentos`, l.cancelamentoAntes && `Antes: ${l.cancelamentoAntes}`)}
                   >
                     {l.cancelamentoDelta && <span className={`ml-1 text-xs ${COR_DELTA[l.cancelamentoDelta.sentido]}`}>{l.cancelamentoDelta.texto}</span>}
                   </Celula>
-                  <Celula valor={l.devolucoesPct} dica={dica(l.devolucoes !== "—" && `${l.devolucoes} devoluções`)} />
+                  <Celula valor={l.devolucoesPct} barra={barra(pesoDevol[k], COR_CX.devolucao)} dica={dica(l.devolucoes !== "—" && `${l.devolucoes} devoluções`)} />
                   <Celula valor={l.reembolsado} dica={dica(l.reembolsoPct && `${l.reembolsoPct} aceitas/pedidos`)} />
                 </tr>
               ))}
@@ -651,7 +832,7 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
 // ---------------------------------------------------------------------------
 // 5. Atendimento por loja: pior nota primeiro
 // ---------------------------------------------------------------------------
-function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimentoCx; metaResposta: string | null; metaNota: string | null }) {
+function AtendimentoPorLoja({ v, metaResposta, metaNota, contactRate, contactRateDelta, contactRateAjuda }: { v: VisaoAtendimentoCx; metaResposta: string | null; metaNota: string | null; contactRate: string; contactRateDelta: ReactNode; contactRateAjuda: string }) {
   // A antiga "(pior)" da avaliacao virou a ordem: nota mais baixa primeiro, sem nota no fim.
   const linhas = [...v.linhas].sort((a, b) => (a.notaNum ?? Infinity) - (b.notaNum ?? Infinity));
   return (
@@ -699,7 +880,16 @@ function AtendimentoPorLoja({ v, metaResposta, metaNota }: { v: VisaoAtendimento
                 <td className={TD}>{v.totais.conversas}</td>
                 <Celula valor={v.totais.aguardandoPct} dica={dica(v.totais.aguardando !== "—" && `${v.totais.aguardando} aguardando`)} />
                 <td className={TD}>{v.totais.naoLidas}</td>
-                <td className={TD} colSpan={4} />
+                <td className={TD} colSpan={3} />
+                {/* o Contact rate saiu da faixa (4 cartoes): o total do periodo fica aqui, na propria coluna */}
+                {/* "Sem dado de chat, fora da conta: X" (semChat) e a comparacao ficam no ⓘ; a variacao ao lado do numero */}
+                <td className={`${TD} ${contactRate === "—" ? "text-ink-faint" : "font-semibold text-ink"}`} data-testid="cx-contact-rate-total">
+                  <span className="inline-flex items-center justify-end gap-1.5">
+                    {contactRate}
+                    {contactRateDelta}
+                    <InfoDica texto={contactRateAjuda} />
+                  </span>
+                </td>
               </tr>
             </tbody>
           </table>

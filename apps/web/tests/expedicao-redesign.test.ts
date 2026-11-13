@@ -494,14 +494,12 @@ test("com a flag desligada a tela nao pede canal nenhum", () => {
 // 9. Design system e acessibilidade
 // ===========================================================================
 test("o seletor de canal continua navegavel e com alvo de toque", () => {
-  // O seletor unico mora na casca e e' o `Segmented` compartilhado.
-  assert.match(CASCA, /<Segmented\s+rotulo="Canal da Expedição"/);
-  assert.match(SEGMENTED, /role="radiogroup"/);
-  assert.match(SEGMENTED, /aria-label=\{rotuladoPor \? undefined : rotulo\}/);
-  assert.match(SEGMENTED, /role="radio"/);
-  assert.match(SEGMENTED, /aria-checked=\{ativo\}/);
-  // O alvo de 44px vive no componente compartilhado e vale para toda opcao.
-  assert.match(SEGMENTED, /min-h-11 min-w-11/);
+  // ALVO-GRADE: os canais viraram as ABAS da moldura (`Aba`), desenhada pela casca.
+  const ABA = readFileSync(join(RAIZ, "src/components/layout/Aba.tsx"), "utf8");
+  assert.match(CASCA, /<Aba\b[\s\S]*?visoes=\{visoes\}\s*visao=\{canal\}\s*onVisao=\{trocarCanal\}/);
+  assert.match(ABA, /role=\{ancoras \? "navigation" : "tablist"\} aria-label=\{ancoras \? `Seções de \$\{titulo\}` : `Visões de \$\{titulo\}`\}/);
+  assert.match(ABA, /role="tab"\s*aria-selected=\{ativa\}/);
+  assert.match(ABA, /min-h-11/);
 });
 
 test("radiogroup cumpre o teclado que o papel ARIA promete", () => {

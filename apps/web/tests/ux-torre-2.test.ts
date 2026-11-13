@@ -176,7 +176,7 @@ test("limiares com regra continuam pintando estado", () => {
   assert.match(fin, /if \(v >= 10\) return "text-ok-ink";/, "ROAS >= 10x");
   assert.match(fin, /if \(v < 30\) return "text-warn-ink";/, "taxas 20-30%");
   const can = fonte(PAGINAS.canais);
-  assert.match(can, /if \(v >= 15\) return "text-ok-ink bg-ok-soft font-semibold";/, "recompra >= 15%");
+  assert.match(can, /if \(v >= 15\) return "text-ok-ink font-semibold";/, "recompra >= 15%: so a tinta");
 });
 
 test("identidade de canal tem token proprio, com o hex de antes no tema claro", () => {

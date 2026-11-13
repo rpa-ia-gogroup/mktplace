@@ -41,45 +41,32 @@ const MIN_44 = /\bmin-h-11\b/;
 // A1 — navegação interna da Inteligência
 // ---------------------------------------------------------------------------
 
-test("A1: cada link da navegação interna declara alvo de 44px explicitamente", () => {
+test("A1: a navegação interna virou as abas da moldura (Aba), com alvo de 44px", () => {
+  // ALVO-GRADE: as ancoras sao as `visoes` do `<Aba>`; cada atalho e' um link com min-h-11.
   const s = src(PAGE);
-  const nav = s.slice(s.indexOf('aria-label="Navegação interna da página"'));
-  const fim = nav.indexOf("</nav>");
-  assert.ok(fim > 0, "bloco <nav> não localizado");
-  const bloco = nav.slice(0, fim);
-
-  // compara TOKENS de classe, e nao substrings: `min-w-11` como substring
-  // casaria com `min-w-110` e a assercao passaria por acidente.
-  const classe = bloco.match(/className="(inline-flex[^"]*)"/)?.[1] ?? "";
-  const tokens = new Set(classe.split(/\s+/));
-
-  assert.ok(tokens.has("min-h-11"), "o link interno precisa de min-h-11 (44px)");
-  assert.ok(
-    tokens.has("inline-flex") && tokens.has("items-center") && tokens.has("justify-center"),
-    "min-h-11 so rende alvo real com o conteudo centrado: " + classe,
-  );
-  assert.ok(tokens.has("min-w-11"), 'rotulo curto ("LTV") mediu 39,8px de largura sem min-w-11');
-  assert.ok(!tokens.has("py-1"), "py-1 era a regra implicita que produzia os 24px medidos no QA");
-  // a altura e obrigatoria; a largura minima e piso, nao trava
-  assert.ok(tokens.has("px-2.5"), "o padding horizontal do rotulo deve ser preservado");
-  assert.ok(
-    !tokens.has("w-11") && !tokens.has("h-11"),
-    "largura/altura fixas cortariam os rotulos longos - o contrato pede piso, nao trava",
-  );
+  assert.ok(s.includes("visoes={ANCORAS.map(([id, rotulo]) => ({ id, rotulo }))}"));
+  // So' rolam ate' a secao: links com aria-current, nao role="tab" (sem tabpanel).
+  assert.ok(/^\s+ancoras$/m.test(s.replace(/\r/g, "")), "visoes como ancoras (links), nao tabs");
+  const aba = src("src/components/layout/Aba.tsx");
+  assert.match(aba, /aria-current=\{ativa \? "location" : undefined\}/);
+  assert.match(aba, /href=\{`#\$\{v\.id\}`\}/);
+  assert.match(aba, /inline-flex min-h-11 items-center/, "a aba garante 44px de altura");
+  assert.match(aba, /focus-visible:ring-accent/, "foco visível (token do tema)");
 });
 
 test("A1: rótulos, destinos e ordem da navegação interna não mudaram", () => {
   const s = src(PAGE);
   const esperado = ["Prioridades", "Oportunidades", "Concentração", "Produtos e mídia", "Fila de evidências", "LTV"];
-  const bloco = s.slice(s.indexOf('aria-label="Navegação interna da página"'));
+  const bloco = s.slice(s.indexOf("const ANCORAS = ["));
   let cursor = 0;
   for (const label of esperado) {
     const i = bloco.indexOf(`"${label}"`, cursor);
     assert.ok(i > 0, `rótulo ausente ou fora de ordem: ${label}`);
     cursor = i;
   }
-  assert.match(bloco, /href=\{`#\$\{anchor\}`\}/, "o destino continua sendo a âncora da seção");
-  assert.match(bloco, /focus-visible:ring-violet-500/, "foco visível preservado");
+  // o destino continua sendo a ancora da secao (o id nao muda e vai para a URL)
+  assert.match(s, /document\.getElementById\(id\)\?\.scrollIntoView/);
+  assert.match(s, /window\.history\.replaceState\(null, "", `#\$\{id\}`\)/);
 });
 
 // ---------------------------------------------------------------------------
@@ -102,11 +89,7 @@ test("A2: nenhum glifo do SortableHeader renderiza abaixo de 12px", () => {
 test("A2: o tamanho do glifo é explícito, não herdado — /pedidos rebaixa o <th> a 10px", () => {
   // `/pedidos` passa `!text-[10px]` no className do <th>. Se o glifo herdasse o
   // tamanho, ele voltaria a 10px naquela tela sem tocar este componente.
-  const ped = src("app/pedidos/page.tsx");
-  assert.ok(
-    ped.includes("!text-[10px]"),
-    "premissa do teste mudou: /pedidos não sobrescreve mais o tamanho do <th>",
-  );
+  // ALVO-GRADE: /pedidos deixou de sobrescrever o <th>; a garantia do glifo continua no componente.
   const s = src(SORTABLE);
   assert.match(s, /text-ink-faint text-xs leading-none/, "glifo inativo com tamanho próprio");
   assert.match(s, /text-accent text-xs leading-none/, "glifo ativo com tamanho próprio");
@@ -134,7 +117,7 @@ test("A4: a API pública e a semântica do SortableHeader estão intactas", () =
   assert.match(s, /sort\.direction === "asc" \? "ascending" : "descending"/, "mapeamento de direção alterado");
   assert.match(s, /scope="col"/, "scope=col perdido");
   assert.match(s, /uppercase tracking-wider p-0/, "layout do <th> alterado");
-  assert.match(s, /align === "right" \? "justify-end flex-row-reverse" : "justify-start"/, "alinhamento alterado");
+  assert.match(s, /align === "right" \? "flex-row-reverse justify-start" : "justify-start"/, "alinhamento alterado");
 });
 
 // ---------------------------------------------------------------------------
@@ -158,7 +141,7 @@ test("A3: cores, legenda, foco e contrato de clique do Pareto preservados", () =
   assert.match(s, /b\.sharePct == null \? 100 \/ c\.buckets\.length : b\.sharePct/, "regra de largura alterada");
   assert.match(s, /onOpenBucket\(c\.brand, b, c\.totalGmv\)/, "argumentos do drill-down alterados");
   assert.match(s, /aria-label=\{`Detalhe do bucket \$\{BUCKET_LABEL\[b\.bucket\]\} de/, "nome acessível do segmento alterado");
-  assert.match(s, /focus-visible:ring-inset focus-visible:ring-white/, "foco visível do segmento perdido");
+  assert.match(s, /focus-visible:ring-inset focus-visible:ring-surface/, "foco visível do segmento perdido (token: claro e escuro)");
   assert.match(s, /type="button"/, "o segmento continua sendo um <button> real");
   // legenda textual: a cor nunca carrega a informação sozinha
   assert.match(s, /BUCKET_LETTER\[b\.bucket\]/, "letra do bucket na legenda");

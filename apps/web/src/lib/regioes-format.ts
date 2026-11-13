@@ -19,10 +19,10 @@ export function coverageLabel(level: CoverageLevel): string {
 
 export function coverageBadgeClass(level: CoverageLevel): string {
   switch (level) {
-    case "ok": return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "partial": return "bg-amber-50 text-amber-700 border-amber-200";
-    case "low": return "bg-rose-50 text-rose-700 border-rose-200";
-    case "not_applicable": return "bg-slate-50 text-slate-400 border-slate-200";
+    case "ok": return "bg-ok-soft text-ok-ink border-ok/30";
+    case "partial": return "bg-warn-soft text-warn-ink border-warn/30";
+    case "low": return "bg-crit-soft text-crit-ink border-crit/30";
+    case "not_applicable": return "bg-raised text-ink-faint border-line";
   }
 }
 

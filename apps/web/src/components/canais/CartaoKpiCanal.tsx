@@ -12,8 +12,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
-import { KPI_CANAL, PONTO_DO_CANAL, textoDoCartao, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
+import type { IdentidadeKpi } from "@/components/ui/KpiTile";
+import { KPI_CANAL, textoDoCartao, type KpiCanalChave } from "@/lib/canais-kpi-detalhe";
 import type { CanaisKpis } from "@/lib/api-client";
 
 /**
@@ -41,7 +42,7 @@ export const VISUAL_DO_KPI_CANAL: Record<KpiCanalChave, { icone: LucideIcon; ide
   shopee_conversao: { icone: Percent, identidade: "roas" },
 };
 
-/** O cartao padrao da Gerencial para um indicador de Canais; o clique abre o detalhe por marca. */
+/** O cartao unico das abas (`CartaoIndicador`) para um indicador de Canais; o clique abre o detalhe por marca. */
 export default function CartaoKpiCanal({
   chave,
   kpis,
@@ -55,19 +56,12 @@ export default function CartaoKpiCanal({
   const { icone, identidade } = VISUAL_DO_KPI_CANAL[chave];
   const texto = textoDoCartao(chave, kpis);
   return (
-    <KpiTile
-      variante="gerencial"
-      identidade={identidade}
+    <CartaoIndicador
+      rotulo={def.rotulo}
       icone={icone}
-      rotulo={
-        <>
-          <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_DO_CANAL[def.canal]}`} />
-          <span className="min-w-0">{def.rotulo}</span>
-        </>
-      }
-      valor={texto.valor}
-      comparacao={texto.comparacao}
-      tom={texto.ausente ? "ausente" : "neutro"}
+      cor={`rgb(var(--tc-kpi-${identidade}))`}
+      valor={texto.ausente ? null : texto.valor}
+      legenda={texto.comparacao}
       onAbrir={() => onAbrir(chave)}
     />
   );

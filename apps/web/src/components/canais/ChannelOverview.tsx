@@ -1,7 +1,6 @@
 import { Columns3 } from "lucide-react";
 import Panel from "@/components/ui/Panel";
 import InfoDica from "@/components/ui/InfoDica";
-import { SO_PAGOS } from "@/lib/base-vendas";
 import TableScrollHint from "@/components/TableScrollHint";
 import type { CanaisChannelMedian } from "@/lib/api-client";
 import { formatChannelMetric, type FormattedMetric } from "@/lib/canais-channel-metrics";
@@ -64,55 +63,17 @@ function Celula({ m }: { m: FormattedMetric }) {
 
 export default function ChannelOverview({
   colunas,
-  fmtBrl,
-  fmtNumber,
   carregando,
-  notaVendas = SO_PAGOS,
 }: {
   colunas: ColunaCanal[];
-  fmtBrl: (v: number) => string;
-  fmtNumber: (v: number) => string;
   carregando: boolean;
-  /** O que GMV e pedidos contam (pagos ou realizados). */
-  notaVendas?: string;
 }) {
-  // Mesmo recorte da "participacao no GMV" que a Gerencial ja' exibe: fatia
-  // de cada canal entre os canais selecionados COM dado.
-  const total = colunas.reduce((s, c) => s + (c.gmv ?? 0), 0);
-  const share = (c: ColunaCanal) => (c.gmv != null && total > 0 ? (c.gmv / total) * 100 : null);
-  const semDado = <span className="rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn-ink">Sem dado</span>;
 
   type Linha = { rotulo: string; dica?: string; valor: (c: ColunaCanal) => React.ReactNode };
   const grupos: { titulo: string; linhas: Linha[] }[] = [
     {
-      titulo: "Volume",
-      linhas: [
-        { rotulo: "GMV", valor: (c) => (c.gmv == null ? semDado : <span className="font-semibold text-ink">{fmtBrl(c.gmv)}</span>) },
-        {
-          rotulo: "Participação no GMV",
-          dica: "Entre os canais selecionados",
-          valor: (c) => {
-            const s = share(c);
-            return s == null ? <span className="text-xs text-ink-faint">—</span> : <span className="text-ink-muted">{fmtPctSimples(s)}</span>;
-          },
-        },
-        { rotulo: "Pedidos", valor: (c) => (c.pedidos == null ? semDado : <span className="text-ink-muted">{fmtNumber(c.pedidos)}</span>) },
-      ],
-    },
-    {
       titulo: "Custo · mediana das marcas",
       linhas: [
-        {
-          rotulo: "Custo marketplace / GMV",
-          valor: (c) => (
-            <span className="inline-flex items-baseline gap-1.5">
-              <Celula m={formatChannelMetric(c.mediana?.marketplace_cost_pct_median ?? null, c.aplicavel.custo, c.disponivel.custo, fmtPctSimples)} />
-              {c.mediana?.marketplace_cost_pct_p75 != null && c.aplicavel.custo && c.disponivel.custo && (
-                <span className="text-xs text-ink-faint">p75 {fmtPctSimples(c.mediana.marketplace_cost_pct_p75)}</span>
-              )}
-            </span>
-          ),
-        },
         {
           rotulo: "Ads / GMV",
           valor: (c) => <Celula m={formatChannelMetric(c.mediana?.ads_gmv_pct_median ?? null, c.aplicavel.ads, c.disponivel.ads, fmtPctSimples)} />,
@@ -145,7 +106,7 @@ export default function ChannelOverview({
         <>
           Canais lado a lado
           <InfoDica
-            texto={`GMV e pedidos — ${notaVendas} Custo, Ads, ROAS e frete: mediana das marcas de cada canal${
+            texto={`Ads, ROAS e frete: mediana das marcas de cada canal${
               carregando ? "" : ` (${colunas.map((c) => `${c.rotulo}: ${c.mediana?.brands_with_data ?? 0} marcas`).join(" · ")})`
             }. N/A = não se aplica · Sem dado = deveria existir, mas falta.`}
           />
@@ -154,25 +115,6 @@ export default function ChannelOverview({
       icone={Columns3}
       semPadding
     >
-      {/* Participacao em barra: a unica leitura VISUAL da tabela, em cor de
-          identidade. A largura e' a fatia do GMV dos canais selecionados. */}
-      <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
-        {carregando ? (
-          <div className="h-2.5 w-full animate-pulse rounded-full bg-raised" aria-hidden="true" />
-        ) : (
-          <div
-            className="flex h-2.5 w-full overflow-hidden rounded-full bg-raised"
-            role="img"
-            aria-label={`Participação no GMV: ${colunas
-              .map((c) => `${c.rotulo} ${share(c) == null ? "—" : fmtPctSimples(share(c)!)}`)
-              .join(", ")}`}
-          >
-            {colunas.map((c) => (
-              <span key={c.canal} className={PONTO[c.canal]} style={{ width: `${share(c) ?? 0}%` }} />
-            ))}
-          </div>
-        )}
-      </div>
       <TableScrollHint>
         <table className="w-full text-data" aria-label="Canais lado a lado">
           <thead>

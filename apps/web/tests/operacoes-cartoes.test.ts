@@ -58,7 +58,17 @@ test("T-0097: frescor de Operacoes vem de refreshed_at; ausente/nulo/ilegivel vi
   assert.match(rotuloFrescor("2026-11-10T12:30:00Z"), /^Atualizado em \d{2}\/\d{2}\/\d{4},? \d{2}:\d{2}$/);
   for (const v of [null, undefined, "", "nao-e-data"]) assert.equal(rotuloFrescor(v), FRESCOR_INDISPONIVEL);
   const P = ler("app/operacoes/page.tsx");
-  assert.ok(P.includes("rotuloFrescor((displayData as ComFrescor<OperacoesData> | null)?.refreshed_at)"),
-    "o rotulo le o refreshed_at da resposta protegida (displayData), nunca a ultima data da serie");
-  assert.ok(/displayIsLive && \(/.test(P), "demonstracao nao exibe frescor");
+  // ALVO-GRADE: o selo "Atualizado" le o refreshed_at da resposta protegida; ausente = "Atualizado —".
+  assert.ok(P.includes("em={displayIsLive ? (displayData as ComFrescor<OperacoesData> | null)?.refreshed_at ?? null : null}"),
+    "o selo le o refreshed_at da resposta protegida (displayData), nunca a ultima data da serie; sem dado vivo, sem horario");
+});
+
+test("mensagem do alerta em pt-BR sem mudar numero", async () => {
+  const { mensagemBr } = await import("../src/lib/operacoes-cartoes.ts");
+  assert.equal(
+    mensagemBr("LESCENT com ROAS 0.1x em 2026-11-11 (abaixo de 3x, investimento R$2,430)"),
+    "LESCENT com ROAS 0,1x em 11/11 (abaixo de 3x, investimento R$ 2.430)",
+  );
+  assert.equal(mensagemBr("gasto R$1,234.5 e R$ 80"), "gasto R$ 1.234,5 e R$ 80");
+  assert.equal(mensagemBr("sem numero"), "sem numero");
 });

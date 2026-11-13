@@ -34,12 +34,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import Aba from "@/components/layout/Aba";
+import type { Moldura } from "@/components/expedicao/LayoutExpedicao";
+
 import ExpedicaoClient from "./ExpedicaoClient";
 import LdrTopo from "@/components/expedicao/LdrTopo";
 import PerformanceOficial, { itensForaDoLimite, usePerformanceOficial } from "@/components/expedicao/PerformanceOficial";
 import TikTokDispatchPanel from "@/components/expedicao/TikTokDispatchPanel";
 import Note from "@/components/ui/Note";
-import Segmented from "@/components/ui/Segmented";
 import { demoAtivo } from "@/lib/expedicao-demo";
 import {
   ROTULO_CANAL_EXPEDICAO,
@@ -124,17 +126,16 @@ export default function ExpedicaoShell() {
   /**
    * Foco do teclado na troca de canal. Shopee <-> Mercado Livre nao remonta
    * nada, entao o foco fica onde estava. Fila <-> TikTok troca o CORPO
-   * inteiro, e o seletor renasce dentro do outro painel: sem isto, quem anda
-   * com as setas perdia o foco para o `body` a cada travessia (medido no QA
-   * deste gate). Se o foco estava no seletor, ele volta para a opcao marcada.
+   * inteiro, e as abas de canal renascem dentro do outro painel: sem isto,
+   * quem anda pelo teclado perdia o foco para o `body` a cada travessia. Se o
+   * foco estava numa aba, ele volta para a aba marcada.
    */
-  const seletorRef = useRef<HTMLSpanElement | null>(null);
   const devolverFoco = useRef(false);
 
   const trocarCanal = useCallback(
     (novo: CanalExpedicao) => {
       if (novo === canal) return;
-      devolverFoco.current = Boolean(seletorRef.current?.contains(document.activeElement));
+      devolverFoco.current = document.activeElement?.getAttribute("role") === "tab";
       window.history.replaceState(null, "", urlDoCanal(window.location.href, canal, novo));
       setCanal(novo);
     },
@@ -144,9 +145,7 @@ export default function ExpedicaoShell() {
   useEffect(() => {
     if (!devolverFoco.current) return;
     devolverFoco.current = false;
-    seletorRef.current
-      ?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]')
-      ?.focus();
+    document.querySelector<HTMLButtonElement>('[data-esqueleto="aba"] [role="tab"][aria-selected="true"]')?.focus();
   }, [canal]);
 
   const trocarVisao = useCallback((nova: Visao) => {
@@ -159,26 +158,25 @@ export default function ExpedicaoShell() {
     window.history.replaceState(null, "", urlComMarca(window.location.href, nova));
   }, []);
 
-  const opcoes = canaisHabilitados(FLAGS).map((c) => ({
-    valor: c,
-    texto: ROTULO_CANAL_EXPEDICAO[c],
-    icone: <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO_DO_CANAL[c]}`} />,
+  // ALVO-GRADE: os canais sao as ABAS da moldura, com o ponto de identidade.
+  const visoes = canaisHabilitados(FLAGS).map((c) => ({
+    id: c,
+    rotulo: ROTULO_CANAL_EXPEDICAO[c],
+    ponto: PONTO_DO_CANAL[c],
   }));
-
-  // Com um canal so' (as duas flags desligadas) nao ha o que escolher: o
-  // titulo ja' diz o canal, e um seletor de uma opcao seria cromo vazio.
-  const seletorCanal =
-    opcoes.length > 1 ? (
-      // `contents`: o invólucro so' carrega a ref, sem caixa propria no layout.
-      <span ref={seletorRef} className="contents">
-        <Segmented
-          rotulo="Canal da Expedição"
-          opcoes={opcoes}
-          valor={canal}
-          aoEscolher={trocarCanal}
-        />
-      </span>
-    ) : null;
+  // A casca desenha a moldura; cada painel entrega selo, filtros e corpo.
+  // Funcao, nao componente: trocar de canal nao remonta o painel da fila.
+  const moldura: Moldura = (partes) => (
+    <Aba
+      // Com um canal so' nao ha abas: o canal vai no titulo, para o numero de
+      // uma loja nunca ficar sob o titulo de outra (EXP-3C2-R/V).
+      titulo={visoes.length > 1 ? "Expedição" : `Expedição — ${ROTULO_CANAL_EXPEDICAO[canal]}`}
+      visoes={visoes}
+      visao={canal}
+      onVisao={trocarCanal}
+      {...partes}
+    />
+  );
 
   // Ate' a URL ser lida, NENHUM painel monta. Antes a fila montava "por
   // enquanto" — e, com a janela na URL, ela lia `?dias=45` de um link do
@@ -200,7 +198,7 @@ export default function ExpedicaoShell() {
   const corpo = ehCanalDaFila(canal) ? (
     <ExpedicaoClient
       canal={canal}
-      seletorCanal={seletorCanal}
+      moldura={moldura}
       visao={visao}
       aoTrocarVisao={trocarVisao}
       marca={marca}
@@ -210,7 +208,7 @@ export default function ExpedicaoShell() {
     />
   ) : (
     <TikTokDispatchPanel
-      seletorCanal={seletorCanal}
+      moldura={moldura}
       visao={visao}
       aoTrocarVisao={trocarVisao}
       marca={marca}
