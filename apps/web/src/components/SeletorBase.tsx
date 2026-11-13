@@ -21,7 +21,7 @@ export default function SeletorBase({ semRealizados = false }: { semRealizados?:
   return (
     <div className="flex flex-col items-end gap-1 sm:ml-auto sm:border-l sm:border-line sm:pl-3">
       <div className="flex items-center gap-2">
-        <span id={id} className="hidden 2xl:inline text-xs font-semibold uppercase tracking-wide text-ink-faint">
+        <span id={id} className="hidden min-[1760px]:inline text-xs font-semibold uppercase tracking-wide text-ink-faint">
           Vendas
         </span>
         <Segmented<BaseVendas> rotulo="Vendas" rotuladoPor={id} opcoes={OPCOES} valor={base} aoEscolher={setBase} />

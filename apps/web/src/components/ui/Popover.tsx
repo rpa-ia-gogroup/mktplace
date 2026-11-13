@@ -36,7 +36,7 @@ export default function Popover({
   ativo?: boolean;
   /** Complemento discreto do valor, fora do truncamento ("vs anterior"). */
   sufixo?: ReactNode;
-  /** Rotulo visivel so' a partir de 2xl (o icone diz o que e'); antes, so' para leitor de tela. */
+  /** Rotulo visivel so' a partir de 1760px, quando a barra inteira cabe (o icone diz o que e'); antes, so' para leitor de tela. */
   rotuloSoNoLargo?: boolean;
   icone?: ReactNode;
   children: (fechar: () => void) => ReactNode;
@@ -95,7 +95,7 @@ export default function Popover({
         }`}
       >
         {icone}
-        <span className={rotuloSoNoLargo ? "sr-only 2xl:not-sr-only 2xl:text-ink-muted" : "text-ink-muted"}>{rotulo}</span>
+        <span className={rotuloSoNoLargo ? "sr-only min-[1760px]:not-sr-only min-[1760px]:text-ink-muted" : "text-ink-muted"}>{rotulo}</span>
         <span className={`max-w-[11rem] truncate font-semibold ${ativo ? "text-accent-ink" : "text-ink"}`}>
           {valor}
         </span>
