@@ -42,11 +42,14 @@ const MIN_44 = /\bmin-h-11\b/;
 // ---------------------------------------------------------------------------
 
 test("A1: a navegação interna virou as abas da moldura (Aba), com alvo de 44px", () => {
-  // ALVO-GRADE: as ancoras sao as `visoes` do `<Aba>`; cada aba e' um <button role="tab"> com min-h-11.
+  // ALVO-GRADE: as ancoras sao as `visoes` do `<Aba>`; cada atalho e' um link com min-h-11.
   const s = src(PAGE);
   assert.ok(s.includes("visoes={ANCORAS.map(([id, rotulo]) => ({ id, rotulo }))}"));
+  // So' rolam ate' a secao: links com aria-current, nao role="tab" (sem tabpanel).
+  assert.ok(/^\s+ancoras$/m.test(s.replace(/\r/g, "")), "visoes como ancoras (links), nao tabs");
   const aba = src("src/components/layout/Aba.tsx");
-  assert.match(aba, /role="tab"/);
+  assert.match(aba, /aria-current=\{ativa \? "location" : undefined\}/);
+  assert.match(aba, /href=\{`#\$\{v\.id\}`\}/);
   assert.match(aba, /inline-flex min-h-11 items-center/, "a aba garante 44px de altura");
   assert.match(aba, /focus-visible:ring-accent/, "foco visível (token do tema)");
 });

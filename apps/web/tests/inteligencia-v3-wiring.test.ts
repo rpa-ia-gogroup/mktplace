@@ -177,7 +177,7 @@ test("29b. todo acionamento e' button/link com nome acessivel", () => {
   // ALVO-GRADE: o cartao e' o CartaoIndicador: um <button type="button"> real com aria-haspopup,
   // cujo nome acessivel e' o texto do proprio cartao (rotulo + valor + legenda).
   assert.match(p, /<CartaoIndicador/);
-  assert.match(p, /rotulo=\{ROTULO_CURTO\[p\.kind\]\}/);
+  assert.match(p, /rotulo=\{rotuloCurto\(p\)\}/);
   assert.match(p, /onAbrir=\{disabled \? undefined : \(\) => onOpen\(p\)\}/);
   const tile = read("src/components/ui/CartaoIndicador.tsx");
   assert.match(tile, /<button type="button" onClick=\{onAbrir\} aria-haspopup="dialog"/);

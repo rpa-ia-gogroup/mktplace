@@ -21,12 +21,15 @@ export const VISUAL_PRIORIDADE: Record<Priority["kind"], { icone: LucideIcon; id
   testar: { icone: FlaskConical, identidade: "gmv" },
 };
 
-/** ALVO-GRADE: rotulo curto no cartao (cabe em 1440); o titulo inteiro segue no detalhe. */
-export const ROTULO_CURTO: Record<Priority["kind"], string> = {
-  parar: "Ads sem venda",
-  escalar: "Escalar",
-  testar: "Teste orgânico",
-};
+/**
+ * ALVO-GRADE: rotulo curto no cartao (cabe em 1440); o titulo inteiro segue no detalhe.
+ * Escalar e Teste organico dizem que sao os N primeiros da fila: o quadrante "Escalar"
+ * do mapa, logo abaixo, e' o universo inteiro (outro numero, mesmo nome).
+ */
+export function rotuloCurto(p: Priority): string {
+  if (p.kind === "parar") return "Ads sem venda";
+  return `${p.kind === "escalar" ? "Escalar" : "Teste orgânico"} · top ${p.received}`;
+}
 
 interface Props {
   priorities: Priority[];
@@ -59,7 +62,7 @@ export default function PriorityCards({ priorities, onOpen, disabled, extra }: P
         return (
           <CartaoIndicador
             key={p.kind}
-            rotulo={ROTULO_CURTO[p.kind]}
+            rotulo={rotuloCurto(p)}
             icone={icone}
             cor={`rgb(var(--tc-kpi-${identidade}))`}
             ajuda={<InfoDica texto={p.limitation} emControle />}

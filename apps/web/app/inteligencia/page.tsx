@@ -391,6 +391,7 @@ function InteligenciaPageInner() {
     <Aba
       titulo="Ações ML + TikTok"
       visoes={ANCORAS.map(([id, rotulo]) => ({ id, rotulo }))}
+      ancoras
       visao={ancora}
       onVisao={(id) => {
         setAncora(id);
@@ -475,7 +476,7 @@ function InteligenciaPageInner() {
           <SectionCard
             id={INTELIGENCIA_ANCHORS.oportunidades}
             title="Mapa de oportunidades"
-            subtitle="Retorno × volume no snapshot ML inteiro."
+            subtitle="Retorno × volume na fotografia ML inteira."
           >
             <OpportunityMatrix
               map={oppMap}

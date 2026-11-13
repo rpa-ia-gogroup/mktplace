@@ -91,6 +91,7 @@ export default function Aba<T extends string = string>({
   faixa,
   atencao,
   children,
+  ancoras = false,
 }: {
   /** Mantido para as abas que ainda passam o icone da rota; o titulo grande nao o desenha. */
   icone?: LucideIcon;
@@ -107,6 +108,12 @@ export default function Aba<T extends string = string>({
   faixa?: ReactNode;
   atencao?: ReactNode;
   children?: ReactNode;
+  /**
+   * As visoes NAO trocam o painel: sao atalhos para secoes da mesma pagina
+   * (`#id`). Ai' sao links com `aria-current="location"`, nao `role="tab"`
+   * (tab sem tabpanel promete uma troca que nao acontece).
+   */
+  ancoras?: boolean;
 }) {
   const abas = useAbasRolaveis(visao);
   return (
@@ -117,9 +124,29 @@ export default function Aba<T extends string = string>({
         {selo ? <div className="flex flex-wrap items-center gap-1.5 pb-1">{selo}</div> : null}
       </header>
       {visoes && visoes.length > 1 ? (
-        <div ref={abas.ref} style={abas.estilo} role="tablist" aria-label={`Visões de ${titulo}`} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
+        <div ref={abas.ref} style={abas.estilo} role={ancoras ? "navigation" : "tablist"} aria-label={ancoras ? `Seções de ${titulo}` : `Visões de ${titulo}`} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
           {visoes.map((v) => {
             const ativa = v.id === visao;
+            const classe = `inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              ativa ? "border-accent font-semibold text-accent" : "border-transparent text-ink-muted hover:text-ink"
+            }`;
+            // Atalho para uma secao da mesma pagina: link com aria-current, nao tab sem tabpanel.
+            if (ancoras) {
+              return (
+                <a
+                  key={v.id}
+                  href={`#${v.id}`}
+                  aria-current={ativa ? "location" : undefined}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onVisao?.(v.id);
+                  }}
+                  className={classe}
+                >
+                  {v.rotulo}
+                </a>
+              );
+            }
             return (
               <button
                 key={v.id}
@@ -127,9 +154,7 @@ export default function Aba<T extends string = string>({
                 role="tab"
                 aria-selected={ativa}
                 onClick={() => onVisao?.(v.id)}
-                className={`inline-flex min-h-11 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 text-sm transition-colors duration-[180ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                  ativa ? "border-accent font-semibold text-accent" : "border-transparent text-ink-muted hover:text-ink"
-                }`}
+                className={classe}
               >
                 {v.ponto && <span aria-hidden="true" className={`h-2 w-2 rounded-full ${v.ponto}`} />}
                 {v.rotulo}
