@@ -10,8 +10,7 @@ import { useEffect, useState } from "react";
 import { Layers } from "lucide-react";
 
 import DateRangeFilter from "@/components/DateRangeFilter";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import { EsqueletoMarcasMenores, Marcas, Produtos, Topo } from "@/components/marcas-menores/Blocos";
@@ -49,17 +48,15 @@ export default function MarcasMenoresPage() {
   const emAndamento = !!dados?.periodo && dados.periodo.fim >= toISODate(new Date());
   const periodo = dados?.periodo ? fmtPeriodo(dados.periodo.inicio, dados.periodo.fim) : fmtPeriodo(filters.dateFrom, filters.dateTo);
   return (
-    <PageContainer>
-      <PageHeader
-        title="Demais marcas"
-        icon={Layers}
-        meta={
+    <Aba
+      titulo="Demais marcas"
+      selo={
           <>
             <Chip>{periodo}</Chip>
             <InfoDica texto={FONTE} />
           </>
         }
-        filters={
+      filtros={
           <DateRangeFilter
             dateFrom={filters.dateFrom}
             dateTo={filters.dateTo}
@@ -71,7 +68,7 @@ export default function MarcasMenoresPage() {
             hideCompare
           />
         }
-      />
+    >
       {estado === "carregando" ? (
         <EsqueletoMarcasMenores />
       ) : estado === "erro" || !dados ? (
@@ -85,6 +82,6 @@ export default function MarcasMenoresPage() {
           <Produtos r={produtos} desistiu={desistiu} onTentar={tentar} />
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
