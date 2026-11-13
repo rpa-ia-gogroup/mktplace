@@ -13,6 +13,14 @@ import pytest
 from pipelines.ingestion.gold_regional import write_conn as wc
 
 
+@pytest.fixture(autouse=True)
+def _sem_segredo_gold_no_env(monkeypatch):
+    """T-0109: `load_write_secret` consulta o env antes do arquivo — limpa as
+    2 chaves para os testes do caminho do arquivo não dependerem do shell."""
+    monkeypatch.delenv("DATAMART_GOLD_WRITE_URL", raising=False)
+    monkeypatch.delenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", raising=False)
+
+
 # --- load_write_secret --------------------------------------------------------
 
 def _fake_git_ok(args, cwd):
@@ -92,6 +100,82 @@ def test_load_write_secret_sucesso(tmp_path, monkeypatch):
     values = wc.load_write_secret(secret_path, tmp_path)
     assert set(values.keys()) == wc.EXPECTED_SECRET_KEYS
     assert values["DATAMART_GOLD_WRITE_URL"] == "postgresql://writer:S3nh4@host/db"
+
+
+# --- load_write_secret via variáveis de ambiente (T-0109) ----------------------
+
+_FAKE_ENV_URL = "postgresql://writer_env:S3nh4Env@host-env/db"
+
+
+def _git_proibido(args, cwd):
+    raise AssertionError("caminho de env não pode consultar o git/arquivo")
+
+
+def test_load_write_secret_env_completo_usa_env_sem_tocar_arquivo(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", "1")
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+
+    def _dotenv_proibido(*a, **k):
+        raise AssertionError("caminho de env não pode ler o arquivo de secret")
+
+    monkeypatch.setattr(wc, "dotenv_values", _dotenv_proibido)
+    # caminho inexistente: se o arquivo fosse consultado, levantaria "não encontrado"
+    values = wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    assert values == {"DATAMART_GOLD_WRITE_URL": _FAKE_ENV_URL, "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD": "1"}
+
+
+@pytest.mark.parametrize("presente", ["DATAMART_GOLD_WRITE_URL", "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"])
+def test_load_write_secret_env_parcial_recusa_sem_cair_no_arquivo(tmp_path, monkeypatch, presente):
+    # arquivo válido existe: o env parcial NÃO pode ser complementado por ele
+    secret_path = tmp_path / ".env.gold-write.local"
+    secret_path.write_text(
+        "DATAMART_GOLD_WRITE_URL=postgresql://writer:S3nh4@host/db\n"
+        "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD=1\n"
+    )
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    monkeypatch.setenv(presente, _FAKE_ENV_URL if presente == "DATAMART_GOLD_WRITE_URL" else "1")
+    with pytest.raises(wc.SecretLoadError, match="parcial") as exc_info:
+        wc.load_write_secret(secret_path, tmp_path)
+    assert _FAKE_ENV_URL not in str(exc_info.value)
+    assert _FAKE_ENV_URL not in repr(exc_info.value)
+    assert "S3nh4" not in str(exc_info.value)
+
+
+def test_load_write_secret_env_url_vazia_conta_como_ausente(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", "")
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", "1")
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    with pytest.raises(wc.SecretLoadError, match="parcial"):
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+
+
+@pytest.mark.parametrize("flag", ["0", "true", "yes", " 1", "1 "])
+def test_load_write_secret_env_flag_errada_recusa(tmp_path, monkeypatch, flag):
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", flag)
+    monkeypatch.setattr(wc, "_run_git", _git_proibido)
+    with pytest.raises(wc.SecretLoadError, match="I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD") as exc_info:
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    assert _FAKE_ENV_URL not in str(exc_info.value)
+    assert _FAKE_ENV_URL not in repr(exc_info.value)
+
+
+def test_load_write_secret_sem_env_segue_caminho_do_arquivo(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATAMART_GOLD_WRITE_URL", raising=False)
+    monkeypatch.delenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", raising=False)
+    with pytest.raises(wc.SecretLoadError, match="não encontrado"):
+        wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+
+
+def test_load_write_secret_env_nao_escreve_em_os_environ(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.setenv("DATAMART_GOLD_WRITE_URL", _FAKE_ENV_URL)
+    monkeypatch.setenv("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD", "1")
+    antes = dict(os.environ)
+    wc.load_write_secret(tmp_path / "nao_existe.local", tmp_path)
+    assert dict(os.environ) == antes
 
 
 # --- validate_write_guardrails -------------------------------------------------

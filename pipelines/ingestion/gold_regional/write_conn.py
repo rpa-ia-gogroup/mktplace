@@ -29,10 +29,14 @@ Guardrails aplicados aqui:
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
 import psycopg2
 from dotenv import dotenv_values
 
@@ -92,10 +96,44 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
 
 
+def _load_write_secret_from_environ(environ: Mapping[str, str]) -> Optional[dict[str, str]]:
+    """T-0109 — via do Airflow: o segredo chega como variáveis de ambiente
+    do subprocesso (Connection injetada), não como arquivo local.
+
+    Fail-closed:
+      - as 2 chaves presentes (não vazias) → usa, sem ler arquivo;
+      - só 1 presente → recusa (nunca cai para o arquivo em silêncio);
+      - nenhuma → devolve None e o chamador segue para o arquivo local;
+      - consentimento != '1' → recusa.
+    Só lê; nunca escreve em `os.environ`. As mensagens citam só NOMES de
+    chave, nunca valores."""
+    present = frozenset(k for k in EXPECTED_SECRET_KEYS if environ.get(k) not in (None, ""))
+    if not present:
+        return None
+    if present != EXPECTED_SECRET_KEYS:
+        missing = sorted(EXPECTED_SECRET_KEYS - present)
+        raise SecretLoadError(
+            f"segredo de escrita da gold parcial nas variáveis de ambiente (faltando: {missing}) — "
+            "defina as 2 chaves ou nenhuma (o arquivo local não é usado como complemento)"
+        )
+    if environ["I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"] != "1":
+        raise SecretLoadError("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD != '1' (variável de ambiente)")
+    return {k: environ[k] for k in EXPECTED_SECRET_KEYS}
+
+
 def load_write_secret(env_path: Path, repo_root: Path) -> dict[str, str]:
-    """Lê `.env.gold-write.local` (ou caminho equivalente) para um dict
-    local, sem tocar em `os.environ`. Levanta SecretLoadError com uma
-    mensagem que NUNCA contém valores do arquivo."""
+    """Carrega o segredo de escrita da gold para um dict local.
+
+    Ordem (T-0109): primeiro as variáveis de ambiente
+    `DATAMART_GOLD_WRITE_URL` + `I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD`
+    (via Airflow; ver `_load_write_secret_from_environ`); sem nenhuma delas,
+    lê `.env.gold-write.local` (ou caminho equivalente) com as checagens de
+    sempre. Nunca escreve em `os.environ`. Levanta SecretLoadError com uma
+    mensagem que NUNCA contém valores do segredo."""
+    from_env = _load_write_secret_from_environ(os.environ)
+    if from_env is not None:
+        return from_env
+
     if not env_path.is_file():
         raise SecretLoadError(f"arquivo de secret não encontrado: {env_path.name}")
 
