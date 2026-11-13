@@ -47,13 +47,10 @@ import {
   buildConfidenceStrip,
   type ChannelSeriesState,
   type CommercialAttentionItem,
-  type DataConfidenceItem,
 } from "@/lib/gerencial/attention";
 import {
   buildBrandChannelMatrix,
-  buildConcentration,
   buildMovements,
-  type ConcentrationEntry,
   type Movement,
 } from "@/lib/gerencial/brand-matrix";
 import { mergeChannelSeries, reconcileSeriesTotal, type MergedBucket } from "@/lib/gerencial/trend-series";
@@ -87,9 +84,8 @@ import Aba from "@/components/layout/Aba";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
-import KpiBand, { type GmvDoCartao } from "@/components/gerencial/KpiBand";
+import KpiBand from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
-import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
@@ -124,9 +120,7 @@ import { MARCAS, hojeBrt } from "@/lib/metas";
 import {
   ChannelSeriesDrilldownContent,
   CommercialAttentionDrilldownContent,
-  ConcentrationDrilldownContent,
   ConfidenceDrilldownContent,
-  DataWarningDrilldownContent,
   MatrixCellUnavailableContent,
   MatrixChannelDrilldownContent,
   MovementDrilldownContent,
@@ -152,9 +146,7 @@ type DialogView =
   | { kind: "matrix"; brand: string; channel: Marketplace }
   | { kind: "matrixChannel"; channel: Marketplace }
   | { kind: "movement"; movement: Movement }
-  | { kind: "concentration"; entry: ConcentrationEntry }
   | { kind: "commercial"; item: CommercialAttentionItem }
-  | { kind: "dataWarning"; item: DataConfidenceItem }
   | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
 
 function GerencialComGrandes() {
@@ -305,7 +297,6 @@ function GerencialComGrandes() {
 
   const brands = sources.brands.data ?? [];
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
-  const concentration = useMemo(() => buildConcentration(brands), [brands]);
 
   // Sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV (de `/brands`) nao depende deles.
   const signalsByCell = useMemo(() => {
@@ -704,12 +695,8 @@ function GerencialComGrandes() {
         return `${CHANNEL_LABEL[dialog.channel]} — distribuição por marca`;
       case "movement":
         return `${dialog.movement.brandLabel} — ${CHANNEL_LABEL[dialog.movement.channel]}`;
-      case "concentration":
-        return `${dialog.entry.label} — concentração`;
       case "commercial":
         return dialog.item.title;
-      case "dataWarning":
-        return "Aviso de confiança no dado";
       case "cx":
         return `${ROTULO_INDICADOR[dialog.indicador]} por marca · Shopee`;
       case "pulse": {
@@ -740,44 +727,6 @@ function GerencialComGrandes() {
   // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
   const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
 
-  const pct0 = (f: number) => `${Math.round(f * 100)}%`;
-  const gmvDoCartao: GmvDoCartao = {
-    valor: topo.gmv != null ? fmtCompacto(topo.gmv) : null,
-    deltaPct: comparar || compHoje != null ? topo.momPct : null,
-    progresso: progressoDia?.atingimento ?? progresso?.atingimento ?? null,
-    legenda: progresso
-      ? `${pct0(progresso.atingimento)} da meta de ${fmtCompacto(progresso.meta)}`
-      : progressoDia?.atingimento != null
-        ? `${pct0(progressoDia.atingimento)} da meta de hoje`
-        : "",
-    status: progresso
-      ? {
-          texto: ROTULO_STATUS[progresso.status],
-          tom: progresso.status === "atencao" ? "warn" : progresso.status === "abaixo" || progresso.status === "nao_atingida" ? "crit" : "ok",
-        }
-      : null,
-    projecao: progresso && !progresso.encerrado && progresso.projecao != null ? fmtCompacto(progresso.projecao) : null,
-    referencia: compHoje?.rotuloCurto ?? null,
-    aviso: avisoDeDado ? "dado incompleto" : linhaMenores?.aviso ? linhaMenores.texto : null,
-    dica: [
-      notaBase(overview, filters.channels),
-      notaDasMenores,
-      linhaMenores && !linhaMenores.aviso ? `O GMV ${linhaMenores.texto}.` : null,
-      progresso
-        ? `Meta: realizado ${fmtCompacto(progresso.realizado)}${progresso.projecao != null && !progresso.encerrado ? `, projeção ${fmtCompacto(progresso.projecao)}` : ""}${
-            progresso.porDiaNecessario != null ? `, faltam ${fmtCompacto(progresso.porDiaNecessario)} por dia` : ""
-          }.`
-        : null,
-      avisoDeDado?.message,
-    ]
-      .filter(Boolean)
-      .join(" "),
-    serie: Object.keys(serieGmvPorCanal).length
-      ? mergeChannelSeries(sources.series, filters.channels, "gmv", granularity)
-          .buckets.map((b) => b.total)
-          .filter((v): v is number => v != null)
-      : [],
-  };
   const temCx = isMarketplaceSelected(filters.channels, "shopee");
   const visoes = [
     { id: "geral" as const, rotulo: "Visão geral" },
@@ -815,7 +764,19 @@ function GerencialComGrandes() {
       onVisao={setVisao}
       // refreshed_at e selo saem SO' da resposta compativel com o filtro atual
       // — nunca da requisicao anterior (`headerLive` e' null ate' la').
-      selo={<SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />}
+      selo={
+        <>
+          <SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />
+          {/* Confianca no dado: selo pequeno ao lado do Atualizado; o clique abre o detalhe de sempre. */}
+          {visaoAtiva === "geral" && (
+            <ConfidenceStrip
+              data={confidence}
+              loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
+              onOpen={() => setDialog({ kind: "confidence" })}
+            />
+          )}
+        </>
+      }
       filtros={<GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />}
       direita={<SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />}
       atencao={visaoAtiva === "geral" ? atencao : null}
@@ -825,13 +786,57 @@ function GerencialComGrandes() {
         {liveAnnouncement}
       </span>
 
+      {/* Dobra 1: vamos bater a meta? GMV, meta e a rosca de canais em largura total (pedido do usuario, 13/11). */}
+      <MetaHero
+        periodLabel={periodLabel}
+        loading={overviewStatus.loading}
+        error={overviewStatus.error}
+        gmv={topo.gmv}
+        prevGmv={topo.prevGmv}
+        momPct={topo.momPct}
+        notaMenores={notaDasMenores}
+        notaVendas={notaBase(overview, filters.channels)}
+        linhaMenores={linhaMenores}
+        compareActive={comparar || compHoje != null}
+        rotuloComparacao={compHoje?.rotulo ?? null}
+        detalheComparacao={compHoje?.detalhe ?? null}
+        channels={filters.channels}
+        gmvByChannel={{
+          tiktok: canaisComMenores.tiktok.gmv,
+          ml: canaisComMenores.ml.gmv,
+          shopee: canaisComMenores.shopee.gmv,
+        }}
+        varGmvByChannel={{
+          tiktok: canaisComMenores.tiktok.variacao,
+          ml: canaisComMenores.ml.variacao,
+          shopee: canaisComMenores.shopee.variacao,
+        }}
+        mesMeta={mesMeta}
+        diaMeta={diaMeta}
+        hoje={hoje}
+        metasStatus={metasStatusTela}
+        onRetryMetas={metas.status === "error" ? metas.tentarDeNovo : sources.retry}
+        progresso={progresso}
+        comCurva={comCurva}
+        progressoDia={progressoDia}
+        semDado={progressoDia ? resumoSemDado(progressoDia.semDado, celulasEscopo) : []}
+        canaisForaDaMeta={celulasEscopo.length > 0 ? canaisForaDaMeta : []}
+        ultimoDia={ultimoDia}
+        aviso={avisoDeDado ? { texto: avisoDeDado.message, onOpen: () => setDialog({ kind: "confidence" }) } : null}
+        metasHref={mesDasMetas ? `/metas?mes=${mesDasMetas}` : "/metas"}
+        onOpenGmv={() => setDialog({ kind: "kpi", key: "gmv" })}
+        shareFull={shareFull}
+        serieGmvPorCanal={serieGmvPorCanal}
+        tendenciaDoDia={tendenciaTopo}
+      />
+
       <KpiBand
         kpis={kpisDaTela}
         loading={overviewStatus.loading}
         error={overviewStatus.error}
         onOpen={(key) => setDialog({ kind: "kpi", key })}
         onRetry={sources.retry}
-        gmv={gmvDoCartao}
+        acosProprio
         tendencias={tendencias}
       />
         </>
@@ -902,7 +907,7 @@ function GerencialComGrandes() {
           <span>
             Mais detalhes
             <span className="ml-2 font-normal text-ink-faint">
-              confiança no dado, pulso e canais, saúde do volume, movimentos e fila completa
+              saúde do volume, maiores altas e quedas e fila de atenção
             </span>
           </span>
           <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">
@@ -910,27 +915,6 @@ function GerencialComGrandes() {
           </span>
         </summary>
         <div className="flex flex-col gap-4 border-t border-line p-4">
-          <ConfidenceStrip
-            data={confidence}
-            loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
-            onOpen={() => setDialog({ kind: "confidence" })}
-          />
-
-          <PulseChannelsColumn
-            pulse={pulse}
-            health={sources.executiveSummary.data?.health ?? null}
-            pulseLoading={sources.executiveSummary.status.loading}
-            pulseUnavailable={sources.executiveSummary.status.error}
-            onOpenInsight={(key) => setDialog({ kind: "pulse", view: { mode: "insight", key } })}
-            onOpenAllInsights={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
-            overview={overview}
-            channels={filters.channels}
-            channelsLoading={overviewStatus.loading}
-            channelsUnavailable={overviewStatus.error}
-            onOpenChannel={(channel) => setDialog({ kind: "volume", channel })}
-            channelsHref={buildHref("/canais")}
-          />
-
           <VolumeHealthCard
             rows={volumeRows}
             loading={sources.quality.status.loading}
@@ -941,22 +925,21 @@ function GerencialComGrandes() {
 
           <MovementsPanels
             movements={movements}
-            concentration={concentration}
             loading={sources.brands.status.loading}
             error={sources.brands.status.error}
             onOpenMovement={(movement) => setDialog({ kind: "movement", movement })}
-            onOpenConcentration={(entry) => setDialog({ kind: "concentration", entry })}
-            produtosHref={buildHref("/produtos")}
             onRetry={sources.retry}
           />
 
           <AttentionQueue
             commercial={queue.commercial}
-            dataConfidence={queue.dataConfidence}
             commercialLoading={sources.executiveSummary.status.loading}
             commercialError={sources.executiveSummary.status.error}
             onOpenCommercial={(item) => setDialog({ kind: "commercial", item })}
-            onOpenDataWarning={(item) => setDialog({ kind: "dataWarning", item })}
+            health={sources.executiveSummary.data?.health ?? null}
+            dataUnavailable={pulse.dataUnavailable}
+            temSinais={pulse.commercial.length + pulse.dataConfidence.groups.length > 0}
+            onOpenAll={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
             onRetry={sources.retry}
           />
         </div>
@@ -1142,20 +1125,6 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "concentration" && (
-          <ConcentrationDrilldownContent
-            entry={dialog.entry}
-            position={concentration.entries.findIndex((e) => e.brand === dialog.entry.brand) + 1}
-            top1Pct={concentration.top1Pct}
-            top3Pct={concentration.top3Pct}
-            positiveBrands={concentration.positiveBrands}
-            ranking={concentration.entries}
-            periodLabel={periodLabel}
-            refreshedAt={sources.brands.refreshedAt}
-            brandHref={brandHref(dialog.entry.brand)}
-            produtosHref={buildHref("/produtos")}
-          />
-        )}
 
         {dialog?.kind === "commercial" && (
           <CommercialAttentionDrilldownContent
@@ -1179,14 +1148,6 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "dataWarning" && (
-          <DataWarningDrilldownContent
-            item={dialog.item}
-            periodLabel={periodLabel}
-            refreshedAt={sources.executiveSummary.refreshedAt}
-            href={dialog.item.href ? buildHref(dialog.item.href) : null}
-          />
-        )}
       </KpiDrilldownDialog>
     </Aba>
   );

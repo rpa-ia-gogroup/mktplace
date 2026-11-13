@@ -365,6 +365,26 @@
   }
 }
 
+/* Rosca de canais do heroi da Gerencial: entra girando um quarto de volta. */
+.tc-rosca {
+  animation: tc-rosca 520ms var(--mov-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-rosca {
+    animation: none;
+  }
+}
+@keyframes tc-rosca {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 @keyframes tc-pop {
   from {
     opacity: 0;
