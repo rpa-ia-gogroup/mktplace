@@ -1881,10 +1881,10 @@ def get_pedidos(
         end = date.today()
         start = end - timedelta(days=days_back - 1)
 
-    # Pedidos so cobre TikTok e ML na fonte atual (Shopee nao integrada nesta
-    # tela) — interseccao com o canal pedido, nunca ignora um filtro invalido
-    # silenciosamente: canal=shopee isolado retorna zero honesto, nao TK+ML.
-    mkt_ids = [i for i in parse_marketplace_param(marketplace) if i in (TIKTOK_ID, ML_ID)]
+    # T-0116: a Shopee entra (o mart tem orders = pagos, canceled_orders,
+    # delivered_orders e gmv da Shopee via `daily_shopee`/API). O canal pedido
+    # e' respeitado como veio: canal=shopee isolado devolve so' a Shopee.
+    mkt_ids = parse_marketplace_param(marketplace)
 
     params: dict = {"start": start, "end": end, "mkt_ids": mkt_ids}
     brand_filter = _brand_filter_sql(brand_keys, params)
@@ -1935,63 +1935,48 @@ def get_pedidos(
     daily_raw = db.execute(sql_daily, params).mappings().all()
     brand_raw = db.execute(sql_brand, params).mappings().all()
 
-    tk = kpis_by_mkt.get(TIKTOK_ID, {})
-    ml = kpis_by_mkt.get(ML_ID, {})
+    # Sem dado != 0 (T-0111/B1-10): canal pedido sem NENHUMA linha no recorte
+    # sai com os campos null; zero so' quando a fonte tem linha com 0.
+    present = [m for m in mkt_ids if m in kpis_by_mkt]
+    missing = [m for m in mkt_ids if m not in kpis_by_mkt]
 
-    tk_orders = int(_f(tk.get("orders")))
-    tk_canceled = int(_f(tk.get("canceled_orders")))
-    tk_gmv = _f(tk.get("gmv"))
-    # canceled/(paid+canceled) — denominador padrão; None quando sem cobertura (canceled=0)
-    tk_denom = tk_orders + tk_canceled
-    tk_cancel_rate = round(tk_canceled / tk_denom * 100, 2) if (tk_canceled > 0 and tk_denom > 0) else None
-
-    ml_orders = int(_f(ml.get("orders")))
-    ml_canceled = int(_f(ml.get("canceled_orders")))
-    ml_total = ml_orders + ml_canceled
-    ml_gmv = _f(ml.get("gmv"))
-    # canceled/(paid+canceled) — mesmo denominador que overview/brands/quality
-    ml_cancel_rate = round(ml_canceled / ml_total * 100, 2) if ml_total > 0 else None
-
-    total_paid = tk_orders + ml_orders
-    total_canceled = tk_canceled + ml_canceled
+    total_paid = sum(int(_f(kpis_by_mkt[m].get("orders"))) for m in present)
+    total_canceled = sum(int(_f(kpis_by_mkt[m].get("canceled_orders"))) for m in present)
     total_all = total_paid + total_canceled
-    total_gmv = tk_gmv + ml_gmv
+    total_gmv = sum(_f(kpis_by_mkt[m].get("gmv")) for m in present)
 
-    # Daily
+    # Daily — canal sem linha no dia sai null (nunca 0 inventado).
     daily_map: dict[date, dict] = {}
     for r in daily_raw:
+        prefix = _PEDIDOS_PREFIX.get(r["marketplace_id"])
+        if prefix is None:
+            continue
         d = r["date"]
         if d not in daily_map:
             daily_map[d] = {
                 "date": str(d)[:10],
-                "tiktok_orders": 0, "tiktok_canceled": 0,
-                "ml_orders": 0, "ml_canceled": 0,
+                "tiktok_orders": None, "tiktok_canceled": None,
+                "ml_orders": None, "ml_canceled": None,
+                "shopee_orders": None, "shopee_canceled": None,
                 "total_orders": 0, "total_gmv": 0.0,
             }
-        if r["marketplace_id"] == TIKTOK_ID:
-            daily_map[d]["tiktok_orders"] = int(_f(r["orders"]))
-            daily_map[d]["tiktok_canceled"] = int(_f(r["canceled_orders"]))
-        elif r["marketplace_id"] == ML_ID:
-            daily_map[d]["ml_orders"] = int(_f(r["orders"]))
-            daily_map[d]["ml_canceled"] = int(_f(r["canceled_orders"]))
+        orders_d = int(_f(r["orders"]))
+        daily_map[d][f"{prefix}_orders"] = orders_d
+        daily_map[d][f"{prefix}_canceled"] = int(_f(r["canceled_orders"]))
+        daily_map[d]["total_orders"] += orders_d  # pagos (liquido) dos canais com linha no dia
         daily_map[d]["total_gmv"] = round(daily_map[d]["total_gmv"] + _f(r["gmv"]), 2)
-
-    for v in daily_map.values():
-        v["total_orders"] = v["tiktok_orders"] + v["ml_orders"]
 
     # By brand
     brand_map: dict[str, dict[int, dict]] = {}
     for r in brand_raw:
-        brand = r["brand_key"]
-        if brand not in brand_map:
-            brand_map[brand] = {}
-        brand_map[brand][r["marketplace_id"]] = dict(r)
+        brand_map.setdefault(r["brand_key"], {})[r["marketplace_id"]] = dict(r)
 
     brands = []
     for brand in sorted(brand_map.keys()):
         bm = brand_map[brand]
         tk_b = bm.get(TIKTOK_ID, {})
         ml_b = bm.get(ML_ID, {})
+        sh_b = bm.get(SHOPEE_ID, {})
 
         tk_o = int(_f(tk_b["orders"])) if tk_b else None
         tk_c = int(_f(tk_b["canceled_orders"])) if tk_b else None
@@ -2002,7 +1987,12 @@ def get_pedidos(
         ml_total_b = (ml_o or 0) + (ml_c or 0)
         ml_g = round(_f(ml_b["gmv"]), 2) if ml_b else None
 
-        # canceled/(paid+canceled) para ambos; None quando canceled=0 (sem cobertura TikTok)
+        sh_o = int(_f(sh_b["orders"])) if sh_b else None
+        sh_c = int(_f(sh_b["canceled_orders"])) if sh_b else None
+        sh_g = round(_f(sh_b["gmv"]), 2) if sh_b else None
+        sh_denom_b = (sh_o or 0) + (sh_c or 0)
+
+        # canceled/(paid+canceled) para os 3; TikTok: None quando canceled=0 (sem cobertura TikTok)
         tk_denom_b = (tk_o or 0) + (tk_c or 0)
         brands.append({
             "brand": brand,
@@ -2015,9 +2005,28 @@ def get_pedidos(
             "ml_canceled": ml_c,
             "ml_cancel_rate_pct": round(ml_c / ml_total_b * 100, 2) if (ml_c is not None and ml_total_b > 0) else None,
             "ml_gmv": ml_g,
-            "total_orders": (tk_o or 0) + ml_total_b,
-            "total_gmv": round((tk_g or 0) + (ml_g or 0), 2),
+            # Shopee: orders = pagos (liquido); 0 real quando ha linha com 0 cancelado.
+            "shopee_orders": sh_o,
+            "shopee_canceled": sh_c,
+            "shopee_cancel_rate_pct": round(sh_c / sh_denom_b * 100, 2) if (sh_c is not None and sh_denom_b > 0) else None,
+            "shopee_gmv": sh_g,
+            # Contrato existente: TikTok liquido + ML bruto (o web desconta ml_canceled) + Shopee liquido.
+            "total_orders": (tk_o or 0) + ml_total_b + (sh_o or 0),
+            "total_gmv": round((tk_g or 0) + (ml_g or 0) + (sh_g or 0), 2),
         })
+
+    warnings: list[str] = []
+    missing_labels = ", ".join(_PEDIDOS_LABEL[m] for m in missing)
+    if missing and present:
+        present_labels = ", ".join(_PEDIDOS_LABEL[m] for m in present)
+        warnings.append(
+            f"sem_dado: {missing_labels} sem linha na fonte no periodo; "
+            f"totais parciais (soma so' de {present_labels})."
+        )
+    elif missing:
+        warnings.append(
+            f"sem_dado: nenhum canal pedido ({missing_labels}) tem linha na fonte no periodo; totais null, nao 0."
+        )
 
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
     return {
@@ -2027,27 +2036,50 @@ def get_pedidos(
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
         "kpis": {
-            "total_orders": total_all,
-            "total_gmv": round(total_gmv, 2),
-            "avg_ticket": round(total_gmv / total_paid, 2) if total_paid > 0 else 0.0,
+            # Contrato existente: total_orders BRUTO (pagos + cancelados); o web desconta os cancelados.
+            "total_orders": total_all if present else None,
+            "total_gmv": round(total_gmv, 2) if present else None,
+            "avg_ticket": round(total_gmv / total_paid, 2) if total_paid > 0 else None,
             "cancel_rate_pct": round(total_canceled / total_all * 100, 2) if total_all > 0 else None,
         },
-        "tiktok": {
-            "orders": tk_orders,
-            "canceled": tk_canceled,
-            "gmv": round(tk_gmv, 2),
-            "cancel_rate_pct": tk_cancel_rate,
-            "delivered": int(_f(tk.get("delivered_orders"))) or None,
-        },
-        "ml": {
-            "orders": ml_total,
-            "canceled": ml_canceled,
-            "gmv": round(ml_gmv, 2),
-            "cancel_rate_pct": ml_cancel_rate,
-            "delivered": int(_f(ml.get("delivered_orders"))) or None,
-        },
+        "tiktok": _pedidos_canal(kpis_by_mkt.get(TIKTOK_ID), TIKTOK_ID),
+        "ml": _pedidos_canal(kpis_by_mkt.get(ML_ID), ML_ID),
+        "shopee": _pedidos_canal(kpis_by_mkt.get(SHOPEE_ID), SHOPEE_ID),
         "daily": [v for _, v in sorted(daily_map.items())],
         "by_brand": brands,
+        "canais_sem_dado": [_PEDIDOS_PREFIX[m] for m in missing],
+        "warnings": warnings,
+    }
+
+
+_PEDIDOS_PREFIX = {TIKTOK_ID: "tiktok", ML_ID: "ml", SHOPEE_ID: "shopee"}
+_PEDIDOS_LABEL = {TIKTOK_ID: "TikTok Shop", ML_ID: "Mercado Livre", SHOPEE_ID: "Shopee"}
+
+
+def _pedidos_canal(row: dict | None, mkt_id: int) -> dict:
+    """KPIs de um canal em Pedidos. Sem linha na fonte -> todos os campos null.
+
+    Bases (contrato existente, ver docs/kpi_dictionary.md §Pedidos):
+      - TikTok e Shopee: `orders` = pagos (liquido);
+      - ML: `orders` = pagos + cancelados (bruto; o web desconta `canceled`).
+    Taxa = canceled / (paid + canceled). No TikTok, canceled=0 -> null (sem
+    cobertura de cancelamento na fonte); no ML e na Shopee, 0 real e' 0.
+    """
+    if row is None:
+        return {"orders": None, "canceled": None, "gmv": None, "cancel_rate_pct": None, "delivered": None}
+    paid = int(_f(row.get("orders")))
+    canceled = int(_f(row.get("canceled_orders")))
+    denom = paid + canceled
+    if mkt_id == TIKTOK_ID:
+        rate = round(canceled / denom * 100, 2) if (canceled > 0 and denom > 0) else None
+    else:
+        rate = round(canceled / denom * 100, 2) if denom > 0 else None
+    return {
+        "orders": denom if mkt_id == ML_ID else paid,
+        "canceled": canceled,
+        "gmv": round(_f(row.get("gmv")), 2),
+        "cancel_rate_pct": rate,
+        "delivered": int(_f(row.get("delivered_orders"))) or None,
     }
 
 

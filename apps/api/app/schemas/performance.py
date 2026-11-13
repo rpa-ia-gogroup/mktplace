@@ -950,26 +950,32 @@ class ProdutosShopeeSummaryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class PedidosKpis(BaseModel):
-    total_orders: int
-    total_gmv: float
-    avg_ticket: float
+    # T-0116 (sem dado != 0): null quando nenhum canal pedido tem linha na fonte;
+    # avg_ticket null tambem sem pedidos pagos.
+    total_orders: Optional[int] = None
+    total_gmv: Optional[float] = None
+    avg_ticket: Optional[float] = None
     cancel_rate_pct: Optional[float] = None
 
 
 class PedidosCanalKpis(BaseModel):
-    orders: int
-    canceled: int
-    gmv: float
+    # T-0116: canal sem linha na fonte no recorte -> todos os campos null (nunca 0).
+    orders: Optional[int] = None
+    canceled: Optional[int] = None
+    gmv: Optional[float] = None
     cancel_rate_pct: Optional[float] = None
     delivered: Optional[int] = None
 
 
 class PedidosDailyRow(BaseModel):
+    # T-0116: canal sem linha no dia -> null (nunca 0 inventado).
     date: str
-    tiktok_orders: int = 0
-    tiktok_canceled: int = 0
-    ml_orders: int = 0
-    ml_canceled: int = 0
+    tiktok_orders: Optional[int] = None
+    tiktok_canceled: Optional[int] = None
+    ml_orders: Optional[int] = None
+    ml_canceled: Optional[int] = None
+    shopee_orders: Optional[int] = None
+    shopee_canceled: Optional[int] = None
     total_orders: int = 0
     total_gmv: float = 0.0
 
@@ -985,6 +991,10 @@ class PedidosBrandRow(BaseModel):
     ml_canceled: Optional[int] = None
     ml_cancel_rate_pct: Optional[float] = None
     ml_gmv: Optional[float] = None
+    shopee_orders: Optional[int] = None
+    shopee_canceled: Optional[int] = None
+    shopee_cancel_rate_pct: Optional[float] = None
+    shopee_gmv: Optional[float] = None
     total_orders: int = 0
     total_gmv: float = 0.0
 
@@ -1000,6 +1010,11 @@ class PedidosResponse(BaseModel):
     date_to: Optional[date] = None
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
+    # T-0116 (aditivos): Shopee no mesmo formato de tiktok/ml; canais pedidos sem
+    # linha na fonte ("tiktok"/"ml"/"shopee") e avisos `sem_dado:` (total parcial).
+    shopee: Optional[PedidosCanalKpis] = None
+    canais_sem_dado: list[str] = []
+    warnings: list[str] = []
 
 
 # ---------------------------------------------------------------------------
