@@ -1097,7 +1097,7 @@ export default function ExpedicaoClient({
   );
 
   const faixaPrincipal = (
-    <FaixaKpis rotulo="Indicadores principais" semLinha>
+    <FaixaKpis rotulo="Indicadores principais">
       {principais.map((k) => (
         <CelulaKpi
           key={k.chave}
@@ -1304,10 +1304,7 @@ export default function ExpedicaoClient({
   // Sempre quatro: com prazo, Vencidos + os tres; sem prazo publicado (ML),
   // a fila inteira abre a faixa e o pedido mais antigo a fecha.
   const faixa = (
-    <FaixaKpis
-      rotulo="Indicadores da fila"
-      semLinha={![chaveDestaque, ...chavesDaFaixa].some((c) => serieDoCard(c).serie)}
-    >
+    <FaixaKpis rotulo="Indicadores da fila">
       {!temPrazo ? (
         <CartaoComAjuda
           ajuda={chaveDoKpiDaFila(filtros.channel, "backlog")}

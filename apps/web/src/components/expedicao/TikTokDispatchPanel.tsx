@@ -494,7 +494,7 @@ export default function TikTokDispatchPanel({
 
   // ALVO-GRADE: sempre quatro cartoes (os abertos de agora). A LDR da janela
   // fica em "Mais detalhes" (Prazo) e no "LDR · últimos 7 dias".
-  const faixa = <FaixaKpis rotulo="Pedidos em aberto" semLinha>{cartoesDosAbertos(abertos)}</FaixaKpis>;
+  const faixa = <FaixaKpis rotulo="Pedidos em aberto">{cartoesDosAbertos(abertos)}</FaixaKpis>;
 
   // Alertas da API, sem reescrita, como itens da fila; "onde agir" primeiro.
   const ondeAgir = ondeAgirTikTok(abertos);

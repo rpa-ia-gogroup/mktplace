@@ -20,18 +20,10 @@ export function FaixaKpis({
   rotulo,
   secundaria = false,
   colunas = 4,
-  semLinha = false,
   children,
 }: {
   rotulo: string;
   secundaria?: boolean;
-  /**
-   * NENHUM cartao da faixa tem serie real: a faixa nao reserva a altura da
-   * linha de tendencia (quatro cartoes ocos em sequencia no celular).
-   * shortcut: esconde por CSS o espaco vazio do `CartaoIndicador`; trocar por
-   * uma prop do proprio cartao quando a fundacao tiver uma.
-   */
-  semLinha?: boolean;
   colunas?: 2 | 3 | 4 | 6;
   children: ReactNode;
 }) {
@@ -48,10 +40,7 @@ export function FaixaKpis({
           : // ALVO-GRADE: a faixa dos 4 cartoes, a mesma grade da Gerencial.
             "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
   return (
-    <section
-      aria-label={rotulo}
-      className={`${grade} ${semLinha ? "[&_.tc-cartao>span:last-child:empty]:hidden [&_.tc-cartao]:pb-3.5" : ""}`}
-    >
+    <section aria-label={rotulo} className={grade}>
       {children}
     </section>
   );
