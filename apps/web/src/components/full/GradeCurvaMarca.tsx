@@ -9,6 +9,7 @@ import { useState } from "react";
 import { ChevronDown, Grid3x3 } from "lucide-react";
 
 import TableScrollHint from "@/components/TableScrollHint";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import Panel from "@/components/ui/Panel";
 import {
   AJUDA_GRADE, fmtPermanencia, LINHAS_CURVA, TOTAL, type CelulaGrade, type Grade, type LinhaCurva,
@@ -31,13 +32,18 @@ function Pilula({ rotulo, valor, tom }: { rotulo: string; valor: string; tom: st
   );
 }
 
-function CelulaAberta({ c }: { c: CelulaGrade }) {
+/** Barra do disponivel na cor de identidade (ALVO-GRADE: nunca mapa de calor). */
+const COR_DISPONIVEL = "rgb(var(--tc-kpi-gmv))";
+
+function CelulaAberta({ c, maximo }: { c: CelulaGrade; maximo: number }) {
   if (c.itens === 0) return <span className="text-ink-faint">—</span>;
   return (
-    <div className="flex min-w-[168px] flex-col gap-1.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Disponível Full</span>
-        <span className="text-base font-semibold tabular-nums text-ink">{c.disponivel === null ? "—" : fmt(c.disponivel)}</span>
+    <div className="flex min-w-[220px] flex-col gap-1.5">
+      <div className="flex items-start justify-between gap-3">
+        <span className="whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-ink-faint">Disponível Full</span>
+        {c.disponivel === null
+          ? <span className="text-sm font-medium text-ink-faint">—</span>
+          : <CelulaBarra valor={fmt(c.disponivel)} peso={maximo > 0 ? c.disponivel / maximo : 0} cor={COR_DISPONIVEL} />}
       </div>
       {PILULAS.map((p) => <Pilula key={p.chave} rotulo={p.rotulo} valor={fmt(c[p.chave])} tom={p.tom} />)}
       <Pilula rotulo="Permanência" valor={fmtPermanencia(c.permanencia)} tom="bg-raised text-ink-muted" />
@@ -78,6 +84,9 @@ export default function GradeCurvaMarca({
   const alternar = (l: LinhaCurva) =>
     setAbertas((s) => { const n = new Set(s); if (n.has(l)) n.delete(l); else n.add(l); return n; });
   const colunas = [...marcas, TOTAL];
+  // Escala da barra: a maior celula de marca (o total de curva teria sempre a barra cheia).
+  const maximo = Math.max(0, ...LINHAS_CURVA.flatMap((l) => marcas.map((m) => grade.celulas[l.chave][m].disponivel ?? 0)));
+  const maximoTotal = Math.max(0, ...LINHAS_CURVA.map((l) => grade.celulas[l.chave][TOTAL].disponivel ?? 0));
 
   return (
     <Panel
@@ -117,7 +126,7 @@ export default function GradeCurvaMarca({
                     </th>
                     {colunas.map((m) => (
                       <td key={m} className={`px-4 py-3 ${m === TOTAL ? "bg-raised/50" : ""}`}>
-                        {aberta ? <CelulaAberta c={grade.celulas[l.chave][m]} /> : <CelulaResumo c={grade.celulas[l.chave][m]} />}
+                        {aberta ? <CelulaAberta c={grade.celulas[l.chave][m]} maximo={m === TOTAL ? maximoTotal : maximo} /> : <CelulaResumo c={grade.celulas[l.chave][m]} />}
                       </td>
                     ))}
                   </tr>
