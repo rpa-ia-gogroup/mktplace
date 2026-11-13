@@ -1,22 +1,13 @@
 "use client";
 
 /**
- * Movimentos e Concentracao por marca (Gate V2-1, Task I).
+ * Maiores altas e quedas por marca (Gate V2-1, Task I).
  *
- * Tres paineis de alturas coordenadas (`h-full` dentro de uma grade sem
- * `items-start`; listas com `max-h` e rolagem interna).
- *
- * A terceira coluna e' **Concentracao por marca**, nao ranking de produtos:
- * produtos nao tem escopo temporal uniforme entre canais (ML e' acumulado
- * atual; TikTok e Shopee sao competencia mensal), entao um Top Produtos sob o
- * periodo global compararia tres janelas diferentes sob o mesmo rotulo.
+ * Dois paineis de alturas coordenadas (`h-full` dentro de uma grade sem
+ * `items-start`; listas com `max-h` e rolagem interna). A Concentracao por
+ * marca saiu no enxugamento do "Mais detalhes" (13/11).
  */
-import type {
-  Concentration,
-  ConcentrationEntry,
-  Movement,
-  Movements,
-} from "@/lib/gerencial/brand-matrix";
+import type { Movement, Movements } from "@/lib/gerencial/brand-matrix";
 import { MOVEMENT_FLOOR_NOTE } from "@/lib/gerencial/brand-matrix";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
 import { fmtBrlFull } from "@/lib/formatters";
@@ -24,13 +15,9 @@ import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 
 interface Props {
   movements: Movements;
-  concentration: Concentration;
   loading: boolean;
   error: boolean;
   onOpenMovement: (movement: Movement) => void;
-  /** Task B.3 — clicar numa marca abre a explicacao ANTES de navegar. */
-  onOpenConcentration: (entry: ConcentrationEntry) => void;
-  produtosHref: string;
   onRetry: () => void;
 }
 
@@ -118,97 +105,16 @@ function MovementList({
   );
 }
 
-function ConcentrationPanel({
-  concentration,
-  onOpenConcentration,
-}: {
-  concentration: Concentration;
-  onOpenConcentration: (entry: ConcentrationEntry) => void;
-}) {
-  const top = concentration.entries.slice(0, 5);
-  return (
-    <section aria-labelledby="concentracao-heading" className={PANEL}>
-      <h3 id="concentracao-heading" className="text-sm font-semibold text-ink-muted">
-        Concentração por marca
-      </h3>
-
-      {top.length === 0 ? (
-        <p className="text-xs text-ink-faint">Sem marcas com GMV positivo no período.</p>
-      ) : (
-        <>
-          <ul className="flex flex-col gap-1.5 max-h-56 overflow-y-auto pr-1">
-            {top.map((entry) => (
-              <li key={entry.brand}>
-                {/* Explicacao primeiro: o clique abre o drill-down, nunca navega
-                    direto — mesma regra dos demais blocos do V2. */}
-                <button
-                  type="button"
-                  onClick={() => onOpenConcentration(entry)}
-                  aria-haspopup="dialog"
-                  aria-label={`${entry.label} — abrir explicação da concentração`}
-                  className="w-full min-w-0 min-h-11 text-left rounded-lg px-2 -mx-2 py-1 hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors"
-                >
-                  <span className="flex items-center justify-between gap-2 text-xs">
-                    <span className="font-medium text-ink-muted truncate">{entry.label}</span>
-                    <span className="tabular-nums text-ink-muted shrink-0">
-                      {fmtBrlFull(entry.gmv)} <span className="text-ink-faint">· {entry.sharePct.toFixed(1)}%</span>
-                    </span>
-                  </span>
-                  <span className="mt-1 block w-full bg-accent-soft rounded-full h-1.5 overflow-hidden">
-                    <span
-                      className="tc-barra block h-1.5 rounded-full bg-accent"
-                      style={{ width: `${Math.min(entry.sharePct, 100)}%` }}
-                    />
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-
-          {/* Sem aproximacao: Top 3 so' aparece com >= 3 marcas positivas. */}
-          <dl className="mt-auto pt-1.5 border-t border-line flex items-center gap-4 text-xs">
-            <div className="flex items-baseline gap-1">
-              <dt className="text-ink-faint">Top 1</dt>
-              <dd className="font-semibold text-ink-muted tabular-nums">
-                {concentration.top1Pct != null ? `${concentration.top1Pct.toFixed(1)}%` : "N/D"}
-              </dd>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <dt className="text-ink-faint">Top 3</dt>
-              <dd className="font-semibold text-ink-muted tabular-nums">
-                {concentration.top3Pct != null ? (
-                  `${concentration.top3Pct.toFixed(1)}%`
-                ) : (
-                  <span
-                    className="font-medium text-ink-faint"
-                    title="Menos de três marcas com GMV positivo no período"
-                  >
-                    base insuficiente
-                  </span>
-                )}
-              </dd>
-            </div>
-          </dl>
-        </>
-      )}
-    </section>
-  );
-}
-
 export default function MovementsPanels({
   movements,
-  concentration,
   loading,
   error,
   onOpenMovement,
-  onOpenConcentration,
-  produtosHref,
   onRetry,
 }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <PanelSkeleton />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <PanelSkeleton />
         <PanelSkeleton />
       </div>
@@ -219,9 +125,9 @@ export default function MovementsPanels({
     return (
       <section className="bg-raised border border-line rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold text-ink-muted">Movimentos e concentração</h2>
+          <h2 className="text-sm font-semibold text-ink-muted">Maiores altas e quedas</h2>
           <p className="text-xs text-ink-faint">
-            Desempenho por marca indisponível nesta carga — sem base para calcular variações e participação.
+            Desempenho por marca indisponível nesta carga — sem base para calcular as variações.
           </p>
         </div>
         <button
@@ -238,7 +144,7 @@ export default function MovementsPanels({
   const floorNote = movements.excludedByFloor > 0;
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <MovementList
         title="Maiores altas"
         items={movements.gains}
@@ -253,7 +159,6 @@ export default function MovementsPanels({
         floorNote={floorNote}
         onOpenMovement={onOpenMovement}
       />
-      <ConcentrationPanel concentration={concentration} onOpenConcentration={onOpenConcentration} />
     </div>
   );
 }

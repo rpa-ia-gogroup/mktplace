@@ -137,8 +137,8 @@ export default function Popover({
           noFim ? "right-0 origin-top-right" : "left-0 origin-top-left"
         } ${
           aberto
-            ? "visible translate-y-0 scale-100 opacity-100 [transition:opacity_200ms_var(--mov-ease),transform_200ms_var(--mov-ease)]"
-            : "pointer-events-none invisible -translate-y-1 scale-[0.97] opacity-0 [transition:opacity_150ms_var(--mov-ease),transform_150ms_var(--mov-ease),visibility_0s_linear_150ms]"
+            ? "visible translate-y-0 scale-100 opacity-100 [transition:opacity_var(--mov-base)_var(--mov-ease),transform_var(--mov-base)_var(--mov-ease)]"
+            : "pointer-events-none invisible -translate-y-1 scale-[0.97] opacity-0 [transition:opacity_var(--mov-rapido)_var(--mov-ease),transform_var(--mov-rapido)_var(--mov-ease),visibility_0s_linear_var(--mov-rapido)]"
         }`}
       >
         {children(fechar)}

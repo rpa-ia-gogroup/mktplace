@@ -276,7 +276,10 @@ The primitives live in `apps/web/src/components/ui/`, plus `layout/` and
 | Page header (icon, title, subtitle, meta chips, sticky filter bar) | `layout/PageHeader.tsx`, `gerencial/GerencialHeader.tsx` | 10 routes + Gerencial |
 | Filter toolbar | `layout/GlobalFilterControls.tsx` | Gerencial, Canais, Financeiro |
 | Brand selector / period selector, `menu` variant | `BrandFilter.tsx`, `DateRangeFilter.tsx` + `ui/Popover.tsx` | toolbar (menu); other routes (faixa) |
-| Freshness + period chip | `ui/Freshness.tsx` | Gerencial, Canais, Financeiro |
+| Tab skeleton (icon + title, freshness, sticky filter bar that shrinks on scroll, main strip, attention, panels) | `layout/Aba.tsx` | new routes; the rest migrate in F2/F3 |
+| Freshness ("Atualizado HH:MM") | `ui/SeloAtualizado.tsx` (replaces `ui/Freshness.tsx` tab by tab) | via `Aba` |
+| Sortable column header | `ui/SortHeader.tsx` | sortable tables |
+| Freshness + period chip (legacy) | `ui/Freshness.tsx` | Gerencial, Canais, Financeiro |
 | KPI card | `ui/KpiTile.tsx`, `ui/StatCard.tsx`, `gerencial/KpiBand.tsx` | Expedição, Canais, Financeiro, Gerencial |
 | Panel (title, subtitle, actions, footer, icon) | `ui/Panel.tsx` | Expedição, Canais, Financeiro, Gerencial |
 | Segmented / tabs | `ui/Segmented.tsx` | theme, Expedição, Canais detail tabs |
@@ -388,11 +391,89 @@ indicators inside `MaisDetalhes`. The rest is unchanged.
 - No note under the number. A caveat that changes the reading goes into an
   `InfoDica` (ⓘ) next to the label or a short chip.
 
+### Grade única das abas (ALVO-GRADE, approved 12/11/2026)
+
+The owner approved one composition for **every** tab (artifact "Torre em grade
+única"). Build tabs from these pieces; do not restyle them per tab.
+
+| Piece | File | Use |
+|---|---|---|
+| Frame | `shell/AppShell.tsx`, `shell/Sidebar.tsx`, `.tc-moldura*` | Two rounded panels with air around: navy menu + glass content. Nothing to do per tab. |
+| `Aba` | `layout/Aba.tsx` | Skeleton, in this order: big title + `selo`; `visoes` (tabs under the title, with `ponto` when the tab is a channel); `filtros` + `direita` on one row; `faixa` (the 4 cards); `atencao`; `children` (panels and tables). |
+| `CartaoIndicador` | `ui/CartaoIndicador.tsx` | The only KPI card: `rotulo`, `icone`, `cor` (identity), `valor`, `pilula {texto, tom}`, optional `progresso` (0..1), `legenda`, `serie` (trend line, 4+ real points), `ajuda`, `onAbrir`. |
+| `Panel` | `ui/Panel.tsx` | Panel with `titulo`, one `ajuda` (ⓘ) and `acao` in the corner: the panel's own `Segmented` or a "Ver todos →" link. No loose controls. |
+| `CelulaBarra` | `ui/CelulaBarra.tsx` | Numeric table cell with weight: value + thin bar in the identity colour. Replaces heat maps (rejected). |
+| Motion | `globals.css` (`--mov-*`, `.tc-barra`, `.tc-barra-dir`, `.tc-cartao-linha`, `.tc-entrada`) | Blocks enter in sequence, bars grow, the card lifts on hover, the trend line draws once. All off under reduced motion. |
+
+```tsx
+<Aba
+  titulo="Expedição"
+  selo={<SeloAtualizado em={geradoEm} />}
+  visoes={[{ id: "shopee", rotulo: "Shopee", ponto: "bg-canal-shopee" }, { id: "ml", rotulo: "Mercado Livre", ponto: "bg-canal-ml" }]}
+  visao={canal}
+  onVisao={setCanal}
+  filtros={<GlobalFilterControls … />}
+  direita={<Segmented rotulo="Visão" … />}
+  faixa={
+    <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
+      <CartaoIndicador rotulo="Vencidos" icone={TriangleAlert} cor="rgb(var(--tc-crit))" valor="8,6%"
+        pilula={{ texto: "Com atraso", tom: "crit" }} legenda="100 de 1.162 na fila" serie={serie} onAbrir={abrir} />
+      {/* …mais três, sempre quatro */}
+    </div>
+  }
+>
+  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+    <Panel titulo="Fila por situação de prazo" acao={<Segmented … />}>…</Panel>
+    <Panel titulo="O que exige atenção" acao={<a href="…">Ver todos →</a>}>…</Panel>
+  </div>
+  <Panel titulo="Vencidos por marca" semPadding>{/* tabela em largura total; <td><CelulaBarra … /></td> */}</Panel>
+</Aba>
+```
+
+Rules: always **four** cards in the strip, same anatomy; identity colours come from the
+`--tc-kpi-*` tokens, written `cor="rgb(var(--tc-kpi-gmv))"` (`gmv` violet,
+`pedidos` amber, `ticket` indigo, `ads` magenta, `roas` green, `prazo` blue,
+`atendimento` teal), never a hex literal, so the dark theme follows (state
+lives in the pill, never in the card colour); no
+trend line without a real series (the card only reserves the line's height when a
+sibling card in the same strip has a line or a `rodape`, so keep the cards as
+direct children of the strip's grid); absence is "—" or "N/D", never zero; cleaning
+means less **text**, never less visual richness.
+
+### Tab skeleton (UI-FUNDACAO F1, 12/11/2026)
+
+Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
+
+1. Header: 32px icon tile + title on the left; `SeloAtualizado` on the right.
+2. Filter bar: sticky; it shrinks (less padding, a soft shadow) once the page
+   scrolls. Canal · Marca · Período, then the tab's own controls on the right.
+3. Main strip: the hero and the indicator cards.
+4. "O que exige atenção".
+5. Panels and tables.
+
+- Freshness reads "Atualizado HH:MM" (another day: "dd/mm HH:MM"). The live
+  dot is green; demo mode stays written out; no time means "—". Past the
+  source's SLA (each tab decides) it reads "Desatualizado · HH:MM" in warning
+  tone — written, never colour only.
+- A route outside the skeleton fails `tests/ui-fundacao.test.ts` unless it is
+  on the exception list there. The list only shrinks.
+
+### Motion (UI-FUNDACAO F1)
+
+- One curve (`--mov-ease`) and three durations: 120ms responds (hover, colour),
+  180ms opens and closes (popover, segmented), 240ms enters (panels, bars).
+- Utilities: `tc-painel-entra` (panel entrance), `tc-troca` + `aria-busy`
+  (filtering keeps the old content dimmed instead of blanking it), popover
+  scale + fade on the tokens.
+- Only `transform` and `opacity` animate. Everything stops under
+  `prefers-reduced-motion`.
+
 ### Panel
 
 - 12px radius, 1px border.
 - Header: optional 16px icon, title (14/600), one-line subtitle, actions on the
   right.
+- Methodology goes in ONE ⓘ next to the title (`ajuda`), never in a caption.
 - No methodology on screen (ABAS-OBJETIVAS, 29/10/2026): no "Como ler",
   no explanatory subtitle or footer. A caveat that changes how a number is
   read becomes a chip of up to ~8 words or an `InfoDica`; the rest is cut.
@@ -403,6 +484,8 @@ indicators inside `MaisDetalhes`. The rest is unchanged.
 - Head on `raised`, using the label style.
 - Rows are 13–14px with no zebra striping and a hover tint.
 - Numbers are right-aligned and tabular.
+- Sorting: ▲/▼ in accent only on the active column; the others keep a faded ↕
+  (40%) that turns full on hover or focus, so touch users still see it sorts.
 - The total row sits on `raised` with a 2px top border.
 - Wide tables scroll inside the panel, with a visible hint.
 

@@ -17,9 +17,14 @@ export interface NavSection {
   pages: NavPage[];
 }
 
+// ALVO-GRADE (aprovado em 12/11/2026) — menu em 3 grupos: o que se LE (Visão),
+// o que se OPERA (Operação) e o que se DIGITA (Planejamento). Mesmas rotas e
+// mesmos rotulos de item; so' o agrupamento muda. "Referências externas"
+// segue a' parte de proposito (Gate AVH-4B-S): e' dado de terceiro, com carga
+// manual, e a separacao no menu e' a barreira contra le-lo como oficial.
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Cockpits",
+    label: "Visão",
     pages: [
       { href: "/", label: "Gerencial" },
       { href: "/canais", label: "Canais" },
@@ -32,20 +37,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { href: "/regioes", label: "Regiões" },
       // Marcas menores: dado do Avoe, fora do GMV total e da meta da Gerencial.
       { href: "/marcas-menores", label: "Demais marcas" },
-    ],
-  },
-  {
-    label: "Pedidos",
-    // Gate EXP-UX-2C: sairam "TikTok Shop" e "Mercado Livre", ambos `disabled`
-    // com selo "Em breve" desde o Gate U1. Promessa que ficou parada no menu
-    // vira ruido: ocupa a mesma altura de um item real, some da navegacao por
-    // teclado e ensina o operador a ignorar aquela regiao da lista. Quando as
-    // rotas existirem, entram como itens de verdade.
-    pages: [{ href: "/pedidos", label: "Geral" }],
-  },
-  {
-    label: "Inteligência",
-    pages: [
       { href: "/inteligencia", label: "Ações ML + TikTok" },
       // Gate PMA-3. Observacional: compara o preco anunciado das lojas
       // proprias no ML com o preco sugerido de revenda das tabelas B2B.
@@ -53,31 +44,21 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "Operações",
+    label: "Operação",
     pages: [
+      // Era o grupo "Pedidos" com um item so' ("Geral"): o item leva o nome do grupo.
+      { href: "/pedidos", label: "Pedidos" },
       { href: "/operacoes", label: "Criadores + Alertas" },
-      // Gate FULL-1D. Rota PROPRIA, e nao /operacoes/full-ml, porque
-      // `isNavItemActive` casa por prefixo: um filho de /operacoes deixaria os
-      // dois itens ativos ao mesmo tempo.
-      //
-      // FULL-UNIFICADO-1: virou `/full`, rota unica com sub-abas (estoque ML e
-      // Shopee, envio ML, desempenho Shopee). As rotas antigas redirecionam.
-      // Nenhuma rota comeca com "/full" alem das antigas, que so' redirecionam,
-      // entao o casamento por prefixo nao acende outro item.
+      // FULL-UNIFICADO-1: `/full`, rota unica com sub-abas. Rota PROPRIA, e nao
+      // filha de /operacoes, porque `isNavItemActive` casa por prefixo.
       { href: "/full", label: "Full" },
     ],
   },
-  // METAS-1 — grupo PROPRIO: Metas e' a unica tela da Torre que RECEBE dado
-  // digitado pelo time, e nao uma leitura. Rota de topo (`/metas`), sem prefixo
-  // comum com nenhuma outra, entao `isNavItemActive` nao acende dois itens.
+  // METAS-1 — Metas e' a unica tela da Torre que RECEBE dado digitado pelo time.
   {
     label: "Planejamento",
     pages: [{ href: "/metas", label: "Metas" }],
   },
-  // Gate AVH-4B-S — grupo PROPRIO, e nao um item dentro de Cockpits ou
-  // Inteligência, de proposito: o que vive aqui e' dado de terceiro, com carga
-  // manual, que nao e' KPI da Torre. A separacao na navegacao e' a primeira
-  // barreira contra alguem ler estes numeros como oficiais.
   {
     label: "Referências externas",
     pages: [{ href: "/referencias-externas/avoe", label: "Avoe Hub" }],
@@ -151,7 +132,7 @@ export function navSections(flags: NavFlags | boolean = {}): NavSection[] {
   if (f.performanceContas) extras.push(PERFORMANCE_CONTAS_NAV);
   if (!extras.length) return NAV_SECTIONS;
   return NAV_SECTIONS.map((s) =>
-    s.label === "Operações" ? { ...s, pages: [...s.pages, ...extras] } : s,
+    s.label === "Operação" ? { ...s, pages: [...s.pages, ...extras] } : s,
   );
 }
 

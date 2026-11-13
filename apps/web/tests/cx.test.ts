@@ -118,7 +118,7 @@ test("carregar: nunca lanca; erro HTTP vira motivo", async () => {
 });
 
 test("menu: CX fica em Operações logo depois da Expedição e tem titulo proprio", () => {
-  const ops = navSections({ expedicao: true, cx: true }).find((s) => s.label === "Operações")!;
+  const ops = navSections({ expedicao: true, cx: true }).find((s) => s.label === "Operação")!;
   const hrefs = ops.pages.map((p) => p.href);
   assert.equal(hrefs.indexOf("/cx"), hrefs.indexOf("/expedicao") + 1);
   assert.deepEqual(CX_NAV, { href: "/cx", label: "CX" });

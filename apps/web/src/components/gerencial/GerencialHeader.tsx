@@ -17,7 +17,7 @@
  * proprio em volta, o `sticky` so' colaria dentro da altura do cabecalho.
  */
 import { LayoutDashboard } from "lucide-react";
-import Freshness from "@/components/ui/Freshness";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 
 interface Props {
   periodLabel: string;
@@ -56,7 +56,8 @@ export default function GerencialHeader({ periodLabel, refreshedAt, live, loadin
           </div>
           {/* refreshed_at e selo saem SO' da resposta compativel com o filtro
               atual — nunca da requisicao anterior (`live` e' null ate la'). */}
-          <Freshness live={live} refreshedAt={live != null ? refreshedAt : null} loading={loading} />
+          {/* UI-FUNDACAO (F1): o selo unico das abas, "Atualizado HH:MM". */}
+          <SeloAtualizado aoVivo={live} em={live != null ? refreshedAt : null} carregando={loading} />
         </div>
       </div>
     </>

@@ -318,7 +318,8 @@
  * ANIMACOES-1 — movimento da Torre.
  *
  * Uma curva e tres duracoes para o app inteiro: 120ms responde (hover, cor),
- * 200ms abre e fecha (popover, segmentado), 320ms entra (paineis, barras).
+ * 180ms abre e fecha (popover, segmentado), 240ms entra (paineis, barras).
+ * (UI-FUNDACAO F1: eram 200/320ms; 180/240 e' o plano aprovado em 12/11/2026.)
  * A curva desacelera no fim — chega rapido e assenta. So' `transform` e
  * `opacity` animam; nada repete em loop alem do esqueleto e do "ao vivo".
  * Quem pede menos movimento cai na regra global de `prefers-reduced-motion`
@@ -327,14 +328,56 @@
 :root {
   --mov-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --mov-rapido: 120ms;
-  --mov-base: 200ms;
-  --mov-lento: 320ms;
+  --mov-base: 180ms;
+  --mov-lento: 240ms;
+}
+
+/* UI-FUNDACAO (F1) — entrada de painel: aparece subindo 6px, uma vez. */
+.tc-painel-entra {
+  animation: tc-entra var(--mov-lento) var(--mov-ease) both;
+}
+
+/* UI-FUNDACAO (F1) — troca de conteudo ao filtrar SEM PISCAR: o conteudo
+   anterior fica na tela, esmaecido, enquanto o novo carrega (`aria-busy`), e
+   volta inteiro quando chega. Nada some e reaparece. */
+.tc-troca {
+  transition: opacity var(--mov-base) var(--mov-ease);
+}
+.tc-troca[aria-busy="true"] {
+  opacity: 0.55;
+}
+
+/* A barra de filtros encolhe ao rolar (`BarraDeFiltros`): padding anima. */
+.tc-barra-filtros {
+  transition:
+    padding var(--mov-base) var(--mov-ease),
+    box-shadow var(--mov-base) var(--mov-ease);
 }
 
 @keyframes tc-entra {
   from {
     opacity: 0;
     transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Rosca de canais do heroi da Gerencial: entra girando um quarto de volta. */
+.tc-rosca {
+  animation: tc-rosca 520ms var(--mov-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-rosca {
+    animation: none;
+  }
+}
+@keyframes tc-rosca {
+  from {
+    opacity: 0;
+    transform: rotate(-90deg) scale(0.85);
   }
   to {
     opacity: 1;
@@ -489,6 +532,7 @@ tbody tr:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tc-painel-entra,
   .tc-entrada > * > *,
   .tc-barra,
   .tc-revela,
@@ -788,4 +832,112 @@ button.rounded-xl.border.bg-surface:focus-visible,
 a.rounded-xl.border.bg-surface:focus-visible {
   outline: 2px solid rgb(var(--tc-accent));
   outline-offset: 2px;
+}
+
+
+/* ===========================================================================
+ * ALVO-GRADE (aprovado em 12/11/2026) — moldura em dois paineis e cartao unico.
+ * ======================================================================== */
+/* Conteudo: painel de vidro arredondado, com respiro em volta (o menu e' o outro painel). */
+@media (min-width: 768px) {
+  .tc-moldura {
+    border-radius: 20px;
+    border: 1px solid rgb(255 255 255 / 0.8);
+    background-color: rgb(var(--tc-surface) / 0.5);
+    -webkit-backdrop-filter: blur(14px);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 24px 50px -36px rgb(60 30 140 / 0.5);
+  }
+  .dark .tc-moldura {
+    border-color: rgb(255 255 255 / 0.08);
+    background-color: rgb(var(--tc-surface) / 0.35);
+  }
+  .tc-moldura-menu {
+    border-radius: 20px;
+    box-shadow: 0 20px 40px -28px rgb(23 20 58 / 0.8);
+  }
+}
+
+/* Cartao de indicador (`CartaoIndicador`). `--h` = cor de identidade. */
+.tc-cartao {
+  --h: rgb(var(--tc-accent));
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--h) 24%, rgb(var(--tc-line)));
+  background: linear-gradient(140deg, color-mix(in srgb, var(--h) 16%, rgb(var(--tc-surface))) 0%, rgb(var(--tc-surface)) 58%);
+  transition:
+    transform var(--mov-base) var(--mov-ease),
+    box-shadow var(--mov-base) var(--mov-ease);
+}
+@media (hover: hover) {
+  .tc-cartao:is(button):hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 30px -20px color-mix(in srgb, var(--h) 70%, transparent);
+  }
+}
+.tc-cartao-icone {
+  background: color-mix(in srgb, var(--h) 22%, rgb(var(--tc-surface)));
+  color: var(--h);
+}
+.tc-cartao-prog {
+  background: color-mix(in srgb, var(--h) 14%, rgb(var(--tc-surface)));
+}
+/* A linha de tendencia se revela uma vez, da esquerda para a direita. Por recorte, e nao por
+   traco pontilhado: com `non-scaling-stroke` o dash vale em px de tela e cortava a linha em cartao largo. */
+.tc-cartao-linha {
+  animation: tc-revela 900ms var(--mov-ease) 200ms both;
+}
+.tc-cartao-area {
+  animation: tc-fade 600ms var(--mov-ease) 500ms both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-cartao-linha {
+    animation: none;
+  }
+  .tc-cartao-area {
+    animation: none;
+  }
+}
+
+/* Barrinha da tabela: cresce da direita (o valor e' alinhado a' direita). */
+.tc-barra-dir {
+  transform-origin: right;
+  animation: tc-barra 700ms var(--mov-ease) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-barra-dir {
+    animation: none;
+  }
+}
+
+/* Entrada do grafico de barras: cada barra cresce da base UMA vez, quando nasce no DOM
+   (chegada de dado nao reinicia, porque o no' da barra e' o mesmo). */
+.tc-grafico-entra .recharts-bar-rectangle path {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: tc-cresce 700ms var(--mov-ease) both;
+}
+@keyframes tc-cresce {
+  from {
+    transform: scaleY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-grafico-entra .recharts-bar-rectangle path {
+    animation: none;
+  }
+}
+
+/* Cartao sem linha nem rodape: a reserva de altura so' aparece se algum cartao IRMAO tem apoio
+   (linha de tendencia ou rodape). Faixa inteira sem apoio fica com cartoes na altura do conteudo. */
+.tc-cartao-reserva {
+  display: none;
+}
+:has(> .tc-cartao > .tc-cartao-apoio) > .tc-cartao > .tc-cartao-reserva {
+  display: block;
+}
+/* Sem a linha colada na base, o cartao fecha com o mesmo respiro do topo. */
+.tc-cartao:not(:has(> svg.tc-cartao-apoio)) {
+  padding-bottom: 0.875rem;
 }

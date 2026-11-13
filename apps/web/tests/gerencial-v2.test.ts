@@ -747,7 +747,7 @@ test("21. nenhuma regra hard-coded por marca sobrou no JSX da Gerencial", () => 
   }
   // a fila de atencao vem do contrato, nao de condicional local
   assert.match(page, /commercial=\{queue\.commercial\}/);
-  assert.match(page, /dataConfidence=\{queue\.dataConfidence\}/);
+  assert.match(page, /items=\{queue\.dataConfidence\}/, "os avisos de dado moram no detalhe do selo de confianca");
 });
 
 test("22. as seis fontes tem identidade propria e dado obsoleto nunca vaza", () => {
@@ -874,7 +874,7 @@ test("A. nenhum gate global de erro/vazio envolve os blocos da pagina", () => {
 // Task B — os quatro caminhos novos existem e usam o shell unico.
 test("B. os tres novos conteudos de drill-down abrem no shell unico", () => {
   const page = codeOnly(read("app/page.tsx"));
-  for (const kind of ["channelSeries", "matrixChannel", "concentration"]) {
+  for (const kind of ["channelSeries", "matrixChannel"]) {
     assert.match(page, new RegExp('kind: "' + kind + '"'), kind + " deve ser um estado do dialogo");
   }
   assert.equal((page.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um unico shell");
@@ -884,7 +884,6 @@ test("B. os tres novos conteudos de drill-down abrem no shell unico", () => {
   for (const fn of [
     "ChannelSeriesDrilldownContent",
     "MatrixChannelDrilldownContent",
-    "ConcentrationDrilldownContent",
   ]) {
     assert.match(drills, new RegExp("export function " + fn), fn + " deve existir");
   }
@@ -918,30 +917,27 @@ test("B2. cabecalho de canal da matriz e clicavel e o destino vence o filtro atu
   assert.match(page, /channels=\$\{dialog\.channel\}/, "destino explicito com o canal");
 });
 
-test("B3. concentracao explica antes de navegar", () => {
-  const panels = codeOnly(read("src/components/gerencial/MovementsPanels.tsx"));
-  const conc = panels.slice(
-    panels.indexOf("function ConcentrationPanel"),
-    panels.indexOf("export default function"),
-  );
-  assert.match(conc, /onOpenConcentration\(entry\)/, "clique abre explicacao");
-  assert.match(conc, /aria-haspopup="dialog"/);
-  assert.doesNotMatch(conc, /<Link/, "nao pode navegar direto sem explicacao");
-
-  const drills = read("src/components/gerencial/GerencialDrilldowns.tsx");
-  const cd = drills.slice(drills.indexOf("export function ConcentrationDrilldownContent"));
-  assert.match(cd, /brandHref/, "CTA primario para a marca");
-  assert.match(cd, /PRODUCTS_SCOPE_NOTE/, "CTA secundario declara o escopo proprio de Produtos");
+test("B3. Mais detalhes enxuto: sem Concentracao, sem Canais, sem Pulso separado; confianca no topo", () => {
+  const page = codeOnly(read("app/page.tsx"));
+  assert.doesNotMatch(page, /ConcentrationDrilldownContent|kind: "concentration"|PulseChannelsColumn/);
+  const detalhes = page.slice(page.indexOf("<details"), page.indexOf("</details>"));
+  assert.doesNotMatch(detalhes, /<ConfidenceStrip/, "confianca saiu do Mais detalhes");
+  assert.match(page.slice(page.indexOf("selo={"), page.indexOf("filtros={")), /<ConfidenceStrip/, "selo ao lado do Atualizado");
+  const fila = codeOnly(read("src/components/gerencial/AttentionQueue.tsx"));
+  assert.match(fila, /HEALTH_STATUS_LABEL/, "a saude do Pulso entra na Fila");
+  assert.match(fila, /onClick=\{onOpenAll\}/, "atalho para os sinais agrupados");
 });
-
-test("B4. chips de sinal usam rotulo humano e nao criam botao aninhado", () => {
+test("B4. sinais da matriz: rotulo humano no nome acessivel, sem chip e sem botao aninhado", () => {
+  // ALVO-GRADE (12/11/2026): a tabela deixou de desenhar chips/pontos de sinal
+  // (valor + CelulaBarra). Os sinais vivem no dialogo da celula e continuam
+  // anunciados no nome acessivel do botao, com rotulo humano.
   const matrix = read("src/components/gerencial/BrandChannelMatrix.tsx");
-  assert.match(matrix, /signalLabel\(main\)/, "rotulo humano, nunca o snake_case cru");
-  assert.match(matrix, /\+\{rest\.length\}/, "sinal principal + contagem dos demais");
-  const from = matrix.indexOf("{main && (");
+  assert.match(matrix, /signals\.map\(signalLabel\)/, "o nome acessivel anuncia os sinais, com rotulo humano");
+  assert.doesNotMatch(matrix, /signalLabel\(main\)|\{main &&|\+\{rest\.length\}/, "a tabela nao desenha mais chip de sinal");
+  const from = matrix.indexOf("onClick={() => onOpenCell(");
   const cell = matrix.slice(from, matrix.indexOf("</button>", from));
-  assert.doesNotMatch(cell, /<button/, "chip nao pode ser botao dentro de botao");
-  assert.match(matrix, /signals\.map\(signalLabel\)/, "o nome acessivel anuncia os sinais");
+  assert.doesNotMatch(cell, /<button/, "nada de botao dentro do botao da celula");
+  assert.match(cell, /<CelulaBarra /, "valor + barra de peso no lugar do chip");
 });
 
 // Task C — matriz parcial
@@ -1196,7 +1192,7 @@ test("F3b. matriz e dialogo derivam o texto de signalLabel, nunca do identificad
   // nao existe interpolacao do sinal cru nem no texto nem no aria-label
   assert.doesNotMatch(matrix, /\$\{main\}/, "o chip não pode interpolar o identificador");
   assert.doesNotMatch(matrix, /\{main\}/, "o chip não pode renderizar o identificador");
-  assert.match(matrix, /signalLabel\(main\)/);
+  // ALVO-GRADE: sem chip na tabela; o unico texto de sinal da matriz e' o nome acessivel.
   assert.match(matrix, /signals\.map\(signalLabel\)/);
   const dialog = codeOnly(read("src/components/ChannelComparisonDialogContent.tsx"));
   assert.match(dialog, /signalLabel\(/);
@@ -1411,22 +1407,21 @@ test("V24-1. GerencialHeader devolve Fragment com UMA barra sticky (titulo, filt
 });
 
 test("V24-2. o pai efetivo do sticky e o container da pagina inteira", () => {
-  // `app/page.tsx` NAO precisou mudar: o GerencialHeader ja era filho direto do
-  // container. Este teste garante que ele continue sendo, e que o container nao
-  // ganhe `overflow`/`transform` — os dois criariam bloco de contencao e
-  // matariam o sticky outra vez.
+  // ALVO-GRADE (12/11/2026): a Gerencial usa `Aba` no lugar do GerencialHeader.
+  // O container e' o div raiz de `Aba`; este teste garante que a pagina renderiza
+  // <Aba direto na raiz (sem wrapper), que a BarraDeFiltros sticky e' filha DIRETA
+  // desse container e que ele nao ganha overflow/transform — os dois criariam
+  // bloco de contencao e matariam o sticky outra vez.
   const page = codeOnly(read("app/page.tsx"));
-  // UI-DENSIDADE-1: largura total (sem teto de 1440px); a regra do sticky e' a mesma.
-  const container = page.match(/<div className="w-full px-4[^"]*"/);
-  assert.ok(container, "container da Gerencial deve existir");
+  assert.match(page, /return \(\s*<Aba\b/, "a pagina devolve <Aba> direto, sem wrapper");
+  assert.doesNotMatch(page, /GerencialHeader/, "o cabecalho antigo saiu da Gerencial");
+  const aba = codeOnly(read("src/components/layout/Aba.tsx"));
+  const container = aba.match(/<div className="[^"]*" data-esqueleto="aba">/);
+  assert.ok(container, "container da Aba deve existir");
   assert.doesNotMatch(container[0], /overflow-(hidden|auto|scroll|clip)/);
   assert.doesNotMatch(container[0], /transform|scale-|rotate-|translate-/);
-  // e o cabecalho e' filho DIRETO desse container
-  const idxContainer = page.indexOf(container[0]);
-  const idxHeader = page.indexOf("<GerencialHeader");
-  assert.ok(idxHeader > idxContainer, "GerencialHeader vem dentro do container");
-  const entre = page.slice(idxContainer + container[0].length, idxHeader);
-  assert.equal((entre.match(/<div/g) || []).length, 0, "nenhum wrapper intermediario entre container e cabecalho");
+  assert.match(aba, /<BarraDeFiltros>\s*\{filtros\}/, "a barra recebe os filtros da pagina");
+  assert.equal((aba.match(/sticky top-0 z-30/g) || []).length, 1, "exatamente uma barra sticky");
 });
 
 test("V24-3. a correcao nao introduziu fetch, estado, modal ou filtro novo", () => {
@@ -1450,13 +1445,15 @@ test("V24-3. a correcao nao introduziu fetch, estado, modal ou filtro novo", () 
   assert.doesNotMatch(code, /Como estamos, onde investigar/);
   assert.doesNotMatch(code, /<PeriodChip/);
   assert.match(src, /<span className="sr-only"> · \{periodLabel\}<\/span>/);
-  assert.match(src, /<Freshness live=\{live\} refreshedAt=\{live != null \? refreshedAt : null\} loading=\{loading\} \/>/);
-  const selo = read("src/components/ui/Freshness.tsx");
-  assert.match(selo, /Atualizado em \{quando\}/);
-  assert.match(selo, /fmtRefreshedAt\(refreshedAt\)/);
+  // UI-FUNDACAO (F1): o selo unico "Atualizado HH:MM" no lugar do Freshness; o
+  // refreshed_at continua saindo SO' da resposta compativel com o filtro atual.
+  assert.match(src, /<SeloAtualizado aoVivo=\{live\} em=\{live != null \? refreshedAt : null\} carregando=\{loading\} \/>/);
+  const selo = read("src/components/ui/SeloAtualizado.tsx");
+  assert.match(selo, /Atualizado <span/);
+  assert.match(selo, /rotuloAtualizado\(em\)/);
   assert.match(selo, /Demonstração · API offline/);
   assert.match(selo, /Atualizando…/);
-  assert.match(selo, /if \(live == null\)/, "sem resposta fresca, nunca afirma ao vivo");
+  assert.match(selo, /aoVivo \? <span/, "so' afirma ao vivo com aoVivo verdadeiro");
   // o `<h1>` da Gerencial permanece: promover/rebaixar aqui mexeria na divida U6-04.
   // UI-DENSIDADE-1: escala `text-lg` (linha unica com os filtros).
   assert.match(code, /<h1 className="flex shrink-0 items-center gap-2 text-lg font-bold text-ink">/);
