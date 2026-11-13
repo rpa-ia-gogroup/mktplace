@@ -36,7 +36,7 @@
  * fica no catalogo (`expedicao-definicoes.ts`), fora da tela.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, CalendarClock, Clock, Hourglass, PauseCircle, type LucideIcon } from "lucide-react";
+import { AlertTriangle, CalendarClock, Clock, Hourglass, Inbox, PauseCircle, Timer, type LucideIcon } from "lucide-react";
 
 import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
 import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
@@ -49,7 +49,7 @@ import {
   textoDaReconciliacao,
   type DivisaoDaFila,
 } from "@/lib/expedicao-shopee-ldr";
-import CabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
+import cabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
 import TabelaSeteDias, { type LinhaSeteDias } from "@/components/expedicao/TabelaSeteDias";
 import TravadosDialog from "@/components/expedicao/TravadosDialog";
 import {
@@ -57,13 +57,13 @@ import {
   type AlvoTravados,
   type TipoLista,
 } from "@/lib/expedicao-travados";
-import { ConviteAoDetalhe, FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
+import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
-import Heroi from "@/components/ui/Heroi";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import InfoDica from "@/components/ui/InfoDica";
-import { Ajuda, KpiComAjuda } from "@/components/expedicao/KpiComAjuda";
+import { Ajuda, CartaoComAjuda, KpiComAjuda } from "@/components/expedicao/KpiComAjuda";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
@@ -128,6 +128,7 @@ import {
 import JanelaPersonalizada from "@/components/expedicao/JanelaPersonalizada";
 import JornadaPedidos, { useJornada } from "@/components/expedicao/JornadaPedidos";
 import LayoutExpedicao, {
+  type Moldura,
   CLASSE_CABECALHO,
   CLASSE_RAIZ_EXPEDICAO,
   CLASSE_TABELA,
@@ -270,9 +271,18 @@ const ICONE_DA_MEDIDA: Partial<Record<string, LucideIcon>> = {
  * diz bom ou ruim) e a coluna da serie horaria que alimenta o card.
  */
 const IDENTIDADE_DA_MEDIDA: Partial<Record<string, IdentidadeKpi>> = {
-  due_soon: "prazo",
-  over48h: "pedidos",
+  due_soon: "pedidos",
+  over48h: "prazo",
   stalled: "ads",
+};
+/** ALVO-GRADE: cor de identidade de cada cartao da faixa (estado fica so' na pilula). */
+const COR_DA_MEDIDA: Partial<Record<string, string>> = {
+  overdue: "#ef4444",
+  due_soon: "#f59e0b",
+  due24h: "#f59e0b",
+  over48h: "#3b82f6",
+  stalled: "#ec4899",
+  backlog: "#8b5cf6",
 };
 const MEDIDA_DA_SERIE: Partial<Record<string, MedidaDoCard>> = {
   overdue: "overdue_count",
@@ -359,24 +369,34 @@ function CelulaKpi({
   kpi,
   destaque,
   canal,
-  numeroGrande = false,
 }: {
   kpi: Kpi;
   destaque: boolean;
   canal: Canal;
-  /** Numero na escala grande sem a nota visivel (cartoes ao lado do destaque). */
-  numeroGrande?: boolean;
 }) {
-  const texto = kpi.valorTexto ?? (kpi.valor === null ? "—" : numero(kpi.valor));
+  const ausente = kpi.valorTexto !== undefined || kpi.valor === null;
+  // ALVO-GRADE: os 4 principais do detalhe sao o mesmo cartao da faixa do gestor.
+  if (destaque) {
+    return (
+      <CartaoComAjuda
+        ajuda={chaveDoKpiDaFila(canal, kpi.chave)}
+        rotulo={ROTULO_CURTO[kpi.chave] ?? kpi.rotulo}
+        icone={ICONE_DA_MEDIDA[kpi.chave] ?? Inbox}
+        cor={COR_DA_MEDIDA[kpi.chave] ?? "#8b5cf6"}
+        valor={ausente ? null : numero(kpi.valor ?? 0)}
+        pilula={!ausente && kpi.alerta ? { texto: "Atenção", tom: "warn" } : null}
+        // So' o numero na tela; a nota fica para o leitor de tela e a definicao, no "ⓘ".
+        legenda={ausente ? (kpi.valorTexto ?? kpi.nota) : kpi.nota ? <span className="sr-only">{kpi.nota}</span> : undefined}
+      />
+    );
+  }
   return (
     <KpiComAjuda
       ajuda={chaveDoKpiDaFila(canal, kpi.chave)}
       rotulo={kpi.rotulo}
-      valor={texto}
-      // So' o numero na tela; a nota vira tooltip e a definicao, o "ⓘ".
+      valor={kpi.valorTexto ?? (kpi.valor === null ? "—" : numero(kpi.valor))}
       contexto={kpi.nota}
       tom={tomDoKpi(kpi)}
-      destaque={destaque || numeroGrande}
       variante="gerencial"
       icone={ICONE_DA_MEDIDA[kpi.chave]}
       identidade={IDENTIDADE_DA_MEDIDA[kpi.chave]}
@@ -488,7 +508,7 @@ function ItemLegenda({ cor, children }: { cor: string; children: React.ReactNode
 
 export default function ExpedicaoClient({
   canal,
-  seletorCanal,
+  moldura,
   visao,
   aoTrocarVisao,
   marca,
@@ -499,7 +519,8 @@ export default function ExpedicaoClient({
 }: {
   /** Canal da fila ja' sanitizado pela casca (flag do ML aplicada la'). */
   canal: Canal;
-  seletorCanal?: ReactNode;
+  /** ALVO-GRADE: a moldura `Aba` da casca (titulo + abas de canal). */
+  moldura: Moldura;
   visao: Visao;
   aoTrocarVisao?: (v: Visao) => void;
   /** EXPEDICAO-UX-3: marca escolhida na casca (`?marca=`), ou nenhuma. */
@@ -1089,42 +1110,33 @@ export default function ExpedicaoClient({
   // O "ⓘ" do heroi: a definicao da medida + de quando e' a fila (com o
   // "desatualizada: confirme antes de agir") + o que o canal nao mede.
   const chaveAjudaHeroi = chaveDoKpiDaFila(filtros.channel, chaveDestaque);
+  // A fila publicada da Shopee inclui FBS: dito na legenda do cartao e no "ⓘ".
+  const incluiFbs = filtros.channel === "shopee" && !divisao && Boolean(recorte.totais);
   const extrasHeroi = [
     quando,
     !temPrazo ? SEM_PRAZO_CANAL_ML : !ldrNaSecao ? dicaDaSecaoPrazo(filtros.channel) : null,
+    incluiFbs ? AVISO_FILA_COM_FBS : null,
   ].filter((x): x is string => Boolean(x));
-  const ajudaHeroi = chaveAjudaHeroi ? (
-    <Ajuda chave={chaveAjudaHeroi} extras={extrasHeroi} />
-  ) : extrasHeroi.length ? (
-    <InfoDica texto={extrasHeroi.join(" ")} />
-  ) : null;
   const abrirHeroi = destaque ? abrirLista(destaque, LISTA_DO_KPI[destaque.chave]) : undefined;
-  const avisoHeroi = (
-    <>
-      {filtros.channel === "shopee" && !divisao && recorte.totais ? (
-        <span data-testid="exp-aviso-fbs" className="inline-flex items-center gap-1">
-          <Chip tom="atencao">inclui FBS</Chip>
-          <InfoDica texto={AVISO_FILA_COM_FBS} />
-        </span>
-      ) : null}
-      {qtdAlerta > 0 ? (
-        <Chip ponto tom="atencao" title="Marcas com a fonte em alerta: veja as limitações do dado.">
-          {numero(qtdAlerta)} {qtdAlerta === 1 ? "marca em alerta" : "marcas em alerta"}
-        </Chip>
-      ) : null}
-    </>
-  );
-  // Meio do heroi: a barra de prazo (Shopee; ML com SLA) ou, sem prazo, a
-  // barra do backlog com +48 h e travados sobrepostos (nunca empilhados).
+  // Cartao-botao: o "ⓘ" nao pode ser focavel dentro dele.
+  const ajudaHeroi = chaveAjudaHeroi ? (
+    <Ajuda chave={chaveAjudaHeroi} extras={extrasHeroi} emControle={Boolean(abrirHeroi)} />
+  ) : extrasHeroi.length ? (
+    <InfoDica texto={extrasHeroi.join(" ")} emControle={Boolean(abrirHeroi)} />
+  ) : null;
+  // ALVO-GRADE: "N marcas em alerta" fica ao lado do selo "Atualizado".
+  const avisoDeAlerta =
+    qtdAlerta > 0 ? (
+      <Chip ponto tom="atencao" title="Marcas com a fonte em alerta: veja as limitações do dado.">
+        {numero(qtdAlerta)} {qtdAlerta === 1 ? "marca em alerta" : "marcas em alerta"}
+      </Chip>
+    ) : null;
+  // O antigo meio do heroi, agora o painel ao lado de "O que exige atenção":
+  // a barra de prazo (Shopee; ML com SLA) ou, sem prazo, a barra do backlog
+  // com +48 h e travados sobrepostos (nunca empilhados).
   const meioHeroi = temPrazo ? (
     temBarraDePrazo ? (
-      <div data-testid="exp-barra-prazo">
-        <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          {divisao ? "Fila do vendedor por situação de prazo" : "Pedidos em fila por situação de prazo"}
-          <Ajuda chave={`${filtros.channel}.prazo_situacao`} />
-        </p>
-        {barraDePrazo()}
-      </div>
+      <div data-testid="exp-barra-prazo">{barraDePrazo()}</div>
     ) : undefined
   ) : totaisRisco && totaisRisco.backlog_count > 0 ? (
     <div data-testid="exp-barra-idade">
@@ -1165,71 +1177,72 @@ export default function ExpedicaoClient({
     if (!medida || divisao || !temSerieNaTendencia || !tendencia) return SEM_SERIE;
     return serieDaFila(tendencia.points, contasDaSerie, medida);
   };
-  const deltaDoCard = (s: SerieDoCard) =>
-    s.deltaPp !== null ? (
-      // "+0,0 p.p." nao e' piora: sem cor de juizo quando arredonda para zero.
-      <DeltaBadge pct={s.deltaPp} unidade="pp" tone={Math.abs(s.deltaPp) < 0.05 ? "neutral" : "lower_is_better"} />
-    ) : undefined;
   const antesDoCard = (s: SerieDoCard) =>
     s.antesPct !== null ? `antes ${formatarDecimal(s.antesPct, 1)}% · ${haQuantoTempo(janela)}` : undefined;
+  // A variacao da serie numa linha; o "antes X%" fica no `title`.
+  const deltaDoCard = (s: SerieDoCard) =>
+    s.deltaPp !== null ? `${s.deltaPp > 0 ? "+" : ""}${formatarDecimal(s.deltaPp, 1)} p.p. vs ${haQuantoTempo(janela)}` : undefined;
+  // Sem serie real o cartao nao ganha linha: a barra mostra a fracao medida.
+  const fracao = (parte: number | null | undefined, base: number | null | undefined) =>
+    parte != null && base ? parte / base : null;
   const serieHeroi = valorHeroi !== null ? serieDoCard(chaveDestaque) : SEM_SERIE;
-
-  const heroi = (
-    <Heroi
-      rotulo={temPrazo ? "Vencidos" : "Acima de 48 h"}
-      ajuda={ajudaHeroi}
-      valor={
-        valorHeroi === null ? (
-          <span title={avisoRecorte ?? "Medida não publicada nesta fotografia."}>—</span>
+  const painelPrazo = meioHeroi ? (
+    <Panel
+      titulo={
+        temPrazo ? (
+          <>
+            {divisao ? "Fila do vendedor por situação de prazo" : "Fila por situação de prazo"}
+            <Ajuda chave={`${filtros.channel}.prazo_situacao`} />
+          </>
         ) : (
-          pctHeroi ?? <span title="Fila vazia nesta fotografia.">—</span>
+          "Fila por idade"
         )
       }
-      tom={valorHeroi === null || valorHeroi === 0 ? "neutro" : temPrazo ? "critico" : "atencao"}
-      aviso={avisoHeroi}
-      delta={deltaDoCard(serieHeroi)}
-      serie={serieHeroi.serie}
-      granularidade="hour"
-      contexto={
-        avisoRecorte ??
-        (valorHeroi !== null && backlogRisco !== null
-          ? [
-              `${numero(valorHeroi)} ${valorHeroi === 1 ? "pedido" : "pedidos"} de ${numero(backlogRisco)} em fila`,
-              antesDoCard(serieHeroi),
-            ]
-              .filter(Boolean)
-              .join(" · ")
-          : undefined)
-      }
-      meio={meioHeroi}
-      selo={
+    >
+      {meioHeroi}
+    </Panel>
+  ) : undefined;
+
+  // ALVO-GRADE: o heroi virou o 1o cartao da faixa, com a mesma anatomia dos outros.
+  const cartaoDestaque = (
+    <CartaoIndicador
+      key="destaque"
+      rotulo={temPrazo ? "Vencidos" : "Acima de 48 h"}
+      icone={temPrazo ? AlertTriangle : Hourglass}
+      cor={COR_DA_MEDIDA[chaveDestaque] ?? "#ef4444"}
+      ajuda={ajudaHeroi}
+      valor={valorHeroi === null ? null : pctHeroi}
+      pilula={
         valorHeroi === null
-          ? undefined
+          ? null
           : temPrazo
             ? valorHeroi > 0
-              ? { texto: "Com atraso", tom: "critico" }
+              ? { texto: "Com atraso", tom: "crit" }
               : { texto: "Em dia", tom: "ok" }
             : valorHeroi > 0
-              ? { texto: "Acima do limiar", tom: "critico" }
+              ? { texto: "Acima do limiar", tom: "crit" }
               : { texto: "Dentro do limiar", tom: "ok" }
       }
-      acao={
-        abrirHeroi ? (
-          <button
-            type="button"
-            onClick={abrirHeroi}
-            aria-haspopup="dialog"
-            aria-label={`Ver os ${numero(valorHeroi ?? 0)} pedidos: ${temPrazo ? "Vencidos" : "Acima de 48 h"}`}
-            className="inline-flex min-h-[44px] items-center text-xs font-semibold text-accent-ink underline underline-offset-4 hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
-            Ver pedidos →
-          </button>
-        ) : undefined
+      progresso={serieHeroi.serie ? null : fracao(valorHeroi, backlogRisco)}
+      legenda={
+        avisoRecorte ??
+        (valorHeroi === null ? (
+          "Medida não publicada nesta fotografia."
+        ) : backlogRisco === null || pctHeroi === null ? (
+          "Fila vazia nesta fotografia."
+        ) : (
+          <span title={[deltaDoCard(serieHeroi), antesDoCard(serieHeroi)].filter(Boolean).join(" · ") || undefined}>
+            {numero(valorHeroi)} de {numero(backlogRisco)} na fila
+            {incluiFbs ? <span data-testid="exp-aviso-fbs"> · com FBS</span> : null}
+          </span>
+        ))
       }
+      serie={serieHeroi.serie ?? null}
+      onAbrir={abrirHeroi}
     />
   );
 
-  // Faixa de apoio: "% da fila" como valor, a contagem embaixo. Nao repete o heroi.
+  // Os outros cartoes: "% da fila" como valor, a contagem na pilula.
   const cartaoDaFaixa = (k: Kpi) => {
     const v = k.valor;
     const ausente = k.valorTexto !== undefined || v === null;
@@ -1238,52 +1251,62 @@ export default function ExpedicaoClient({
     const pct = !ausente && base != null ? percentualDaFila(v ?? 0, base) : null;
     const s = ausente ? SEM_SERIE : serieDoCard(k.chave);
     return (
-      <KpiComAjuda
+      <CartaoComAjuda
         key={k.chave}
-        variante="gerencial"
-        icone={ICONE_DA_MEDIDA[k.chave]}
-        identidade={IDENTIDADE_DA_MEDIDA[k.chave]}
-        serie={s.serie}
-        granularidade="hour"
-        delta={deltaDoCard(s)}
-        antes={antesDoCard(s)}
+        icone={ICONE_DA_MEDIDA[k.chave] ?? Inbox}
+        cor={COR_DA_MEDIDA[k.chave] ?? "#8b5cf6"}
         ajuda={chaveDoKpiDaFila(filtros.channel, k.chave)}
         // Com a divisao, "perto de vencer" e' da fila publicada (com FBS): a
-        // base fica escrita, porque a do heroi e' so' a do vendedor.
+        // base fica escrita, porque a do 1o cartao e' so' a do vendedor.
         rotulo={divisao && k.chave === "due_soon" ? "Perto de vencer · com FBS" : (ROTULO_CURTO[k.chave] ?? k.rotulo)}
-        valor={k.valorTexto ?? (ausente ? "—" : (pct ?? numero(v ?? 0)))}
-        comparacao={
+        valor={ausente ? null : (pct ?? numero(v ?? 0))}
+        pilula={
           ausente
-            ? undefined
-            : k.chave === "due_soon" && k.notaCurta
-              ? k.notaCurta
-              : `${numero(v ?? 0)} ${v === 1 ? "pedido" : "pedidos"}`
+            ? null
+            : {
+                texto:
+                  k.chave === "due_soon" && k.notaCurta ? k.notaCurta : `${numero(v ?? 0)} ${v === 1 ? "pedido" : "pedidos"}`,
+                tom: k.chave === "due_soon" && (v ?? 0) > 0 ? "warn" : "neutro",
+              }
         }
-        contexto={k.nota}
-        tom={ausente ? "ausente" : k.chave === "due_soon" && (v ?? 0) > 0 ? "atencao" : "neutro"}
+        progresso={s.serie || pct === null ? null : fracao(v, base)}
+        legenda={
+          ausente ? (k.valorTexto ?? k.nota) : deltaDoCard(s) ? <span title={antesDoCard(s)}>{deltaDoCard(s)}</span> : undefined
+        }
+        serie={s.serie ?? null}
         onAbrir={abrirLista(k, LISTA_DO_KPI[k.chave])}
       />
     );
   };
-  const chavesDaFaixa = temPrazo ? ["due_soon", "over48h", "stalled"] : ["stalled"];
-  const cartoesDaFaixa = chavesDaFaixa
+  const cartoesDaFaixa = (temPrazo ? ["due_soon", "over48h", "stalled"] : ["stalled"])
     .map((c) => risco.find((k) => k.chave === c))
     .filter((k): k is Kpi => k !== undefined)
     .map(cartaoDaFaixa);
+  // Sempre quatro: com prazo, Vencidos + os tres; sem prazo publicado (ML),
+  // a fila inteira abre a faixa e o pedido mais antigo a fecha.
   const faixa = (
-    <FaixaKpis rotulo="Indicadores de apoio" colunas={temPrazo ? 3 : 2}>
-      {cartoesDaFaixa}
-      {/* Sem prazo publicado (ML): o pedido mais antigo sai do painel Prazo. */}
+    <FaixaKpis rotulo="Indicadores da fila">
       {!temPrazo ? (
-        <KpiComAjuda
-          variante="gerencial"
-          icone={Hourglass}
-          identidade="pedidos"
+        <CartaoComAjuda
+          ajuda={chaveDoKpiDaFila(filtros.channel, "backlog")}
+          rotulo="Pedidos em fila"
+          icone={Inbox}
+          cor="#8b5cf6"
+          valor={backlogRisco === null ? null : numero(backlogRisco)}
+          legenda={backlogRisco === null ? (avisoRecorte ?? "Medida não publicada nesta fotografia.") : undefined}
+        />
+      ) : null}
+      {cartaoDestaque}
+      {cartoesDaFaixa}
+      {!temPrazo ? (
+        <CartaoComAjuda
           ajuda={AJUDA_CANAL_SEM_PRAZO.maisAntigo}
-          rotulo="Pedido mais antigo em fila"
-          valor={envelhecimento?.maisAntigo ? formatarHoras(envelhecimento.maisAntigo.horas) : "—"}
-          comparacao={envelhecimento?.maisAntigo ? brandLabel(envelhecimento.maisAntigo.marca) : "não informado pela fonte"}
-          tom={envelhecimento?.maisAntigo ? "neutro" : "ausente"}
+          rotulo="Pedido mais antigo"
+          icone={Timer}
+          cor="#10b981"
+          valor={envelhecimento?.maisAntigo ? formatarHoras(envelhecimento.maisAntigo.horas) : null}
+          pilula={envelhecimento?.maisAntigo ? { texto: brandLabel(envelhecimento.maisAntigo.marca), tom: "neutro" } : null}
+          legenda={envelhecimento?.maisAntigo ? undefined : "não informado pela fonte"}
         />
       ) : null}
     </FaixaKpis>
@@ -1316,6 +1339,7 @@ export default function ExpedicaoClient({
   ].slice(0, MAX_ITENS_DA_FILA);
   const filaDeAtencao = (
     <FilaAtencao
+      titulo="O que exige atenção"
       itens={itensDaFila}
       vazio={
         recorte.variasContas && !divisao
@@ -1398,6 +1422,15 @@ export default function ExpedicaoClient({
       titulo={<TituloComFbs titulo="Backlog por marca" incluiFbs={filtros.channel === "shopee"} />}
       acao={
         <div className="flex flex-wrap items-center gap-1.5">
+          <Segmented
+            rotulo="Período da tabela"
+            opcoes={[
+              { valor: "agora", texto: "Agora" },
+              { valor: "7d", texto: "Últimos 7 dias" },
+            ] as const}
+            valor={abaMarcas}
+            aoEscolher={setAbaMarcas}
+          />
           <InfoDica texto={mapa.nota} />
           {/* "Ver dados" so' existe quando HA dados a revelar.
               Com a tendencia vazia — o caso da Shopee quando a
@@ -1444,17 +1477,6 @@ export default function ExpedicaoClient({
           {relogios?.efetivoEm ? ` Última fotografia: ${dataCurta(relogios.efetivoEm)}.` : ""}
         </p>
       )}
-      <div className="mb-3">
-        <Segmented
-          rotulo="Período da tabela"
-          opcoes={[
-            { valor: "agora", texto: "Agora" },
-            { valor: "7d", texto: "Últimos 7 dias" },
-          ] as const}
-          valor={abaMarcas}
-          aoEscolher={setAbaMarcas}
-        />
-      </div>
       {abaMarcas === "7d" ? (
         <TabelaSeteDias
           linhas={linhasSeteDias}
@@ -1874,32 +1896,27 @@ export default function ExpedicaoClient({
       identidade={medidaDoAlvo ? IDENTIDADE_DA_MEDIDA[medidaDoAlvo] : undefined}
     />
     <LayoutExpedicao
-      // 1-2. CABECALHO, FOTOGRAFIA, FRESCOR E FILTROS (compartilhado). O canal
-      // fica NO TITULO, nao so' no seletor: numeros de uma loja sob o titulo de
-      // outra foi o defeito que o EXP-3C2-R/V corrigiu.
-      cabecalho={
-        <CabecalhoExpedicao
-          canal={ROTULO_CANAL[filtros.channel]}
-          seletorCanal={seletorCanal}
-          fotografia={fotografia}
-          visao={visao}
-          aoTrocarVisao={aoTrocarVisao}
-          definicao={definicaoDaFila(filtros.channel, fotografiaDoPrazo)}
-          controles={visao === "gestor" ? controlePeriodo : undefined}
-          filtroMarca={
-            aoTrocarMarca ? (
-              <SeletorMarca marca={marcaAtiva} marcasPresentes={marcasPresentes} aoTrocar={aoTrocarMarca} />
-            ) : undefined
-          }
-        />
-      }
+      moldura={moldura}
+      // 1-2. SELO, FILTROS E PROFUNDIDADE (compartilhado). O canal e' a aba
+      // marcada da moldura, logo abaixo do titulo.
+      cabecalho={cabecalhoExpedicao({
+        fotografia,
+        visao,
+        aoTrocarVisao,
+        definicao: definicaoDaFila(filtros.channel, fotografiaDoPrazo),
+        controles: visao === "gestor" ? controlePeriodo : undefined,
+        filtroMarca: aoTrocarMarca ? (
+          <SeletorMarca marca={marcaAtiva} marcasPresentes={marcasPresentes} aoTrocar={aoTrocarMarca} />
+        ) : undefined,
+        avisos: mostraCorpo && !recorte.semConta && visao === "gestor" ? avisoDeAlerta : undefined,
+      })}
       // 3. QUALIDADE DO DADO, CONSOLIDADA (compartilhada)
       qualidade={<BarraDeQualidade barra={qualidade} />}
       // Os estados sao os MESMOS componentes do TikTok (T-0010).
       estado={
         <>
           {estado === "carregando" && (
-            <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div role="status" aria-busy="true" className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
               <span className="sr-only">{TEXTO_ESTADO.carregando}</span>
               {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
             </div>
@@ -1955,20 +1972,12 @@ export default function ExpedicaoClient({
           // RISCO ATUAL -> PRAZO -> JORNADA -> EVOLUCAO -> CONCENTRACAO: a
           // ordem e' do esqueleto, a mesma dos tres canais.
           <CorpoGestor
-            heroi={heroi}
             faixa={faixa}
+            prazo={painelPrazo}
             atencao={filaDeAtencao}
             backlog={painelEvolucao}
             ldr={faixaTopo}
             maisDetalhes={maisDetalhes}
-            convite={
-              aoTrocarVisao && (
-                <ConviteAoDetalhe
-                  conteudo="Lista de pedidos, mais críticos e fonte por conta."
-                  aoAbrir={() => aoTrocarVisao("detalhe")}
-                />
-              )
-            }
           />
         ) : (
           <>
