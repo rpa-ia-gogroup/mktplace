@@ -82,13 +82,16 @@ import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import KpiDrilldownContent from "@/components/KpiDrilldownContent";
 import InsightDrilldownContent, { type PulseView } from "@/components/InsightDrilldownContent";
 import ChannelComparisonDialogContent from "@/components/ChannelComparisonDialogContent";
-import GerencialHeader from "@/components/gerencial/GerencialHeader";
+import { LayoutDashboard } from "lucide-react";
+import Aba from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
 import KpiBand from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
 import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
-import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
+import BrandChannelMatrix, { type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
 import CxResumo, { notasDoTile } from "@/components/gerencial/CxResumo";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
@@ -293,16 +296,6 @@ function GerencialComGrandes() {
   const brands = sources.brands.data ?? [];
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
   const concentration = useMemo(() => buildConcentration(brands), [brands]);
-
-  // Task B.4 / C — sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV
-  // (que vem de `/brands`) nao depende deles para existir.
-  const signalsByCell = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    for (const row of sources.canais.data?.channelRows ?? []) {
-      if (row.signals.length > 0) map[cellKey(row.brand, row.channel)] = row.signals;
-    }
-    return map;
-  }, [sources.canais.data]);
 
   // ---- metas (GERENCIAL-METAS-1 + METAS-DIARIAS-1) -----------------------
   // Fonte PROPRIA (`useMetasDoMes`), fora do hook das fontes do Data Mart: a
@@ -601,6 +594,18 @@ function GerencialComGrandes() {
           : sources.brands.status.error
             ? "error"
             : "loading";
+  const marcasEmRisco = useMemo(
+    () =>
+      Object.entries(progressoPorMarca)
+        .flatMap(([id, p]) => {
+          const tende = tendenciaDoMes?.[id];
+          return p && tende != null && (p.status === "abaixo" || p.status === "atencao")
+            ? [{ id, pct: tende / p.meta, critico: p.status === "abaixo" }]
+            : [];
+        })
+        .sort((a, b) => a.pct - b.pct),
+    [progressoPorMarca, tendenciaDoMes],
+  );
   const mesDasMetas = mesMeta ?? diaMeta?.slice(0, 7) ?? null;
   const avisoDeDado = avisoQueAfetaOGmv(queue.dataConfidence);
 
@@ -716,18 +721,43 @@ function GerencialComGrandes() {
   // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
   const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
 
-  return (
-    <div className="w-full px-4 py-4 flex flex-col gap-3">
-      <GerencialHeader
-        periodLabel={periodLabel}
-        refreshedAt={sources.overview.refreshedAt}
-        live={headerLive}
-        loading={sources.anyLoading}
-      >
-        <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />
-        <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
-      </GerencialHeader>
+  const sinalTopo = queue.commercial.find((i) => i.severity !== "info") ?? null;
+  const atencao = marcasEmRisco[0] ? (
+    <AtencaoLinha
+      severidade={marcasEmRisco[0].critico ? "critico" : "atencao"}
+      href={brandHref(marcasEmRisco[0].id)}
+      outros={marcasEmRisco.length - 1 + queue.commercial.length}
+      onVerTodos={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
+    >
+      <b className="font-semibold capitalize">{(brands.find((b) => b.brand === marcasEmRisco[0].id)?.label ?? marcasEmRisco[0].id).toLowerCase()}</b> tende a{" "}
+      {Math.round(marcasEmRisco[0].pct * 100)}% da meta
+    </AtencaoLinha>
+  ) : sinalTopo ? (
+    <AtencaoLinha
+      severidade={sinalTopo.severity === "critical" ? "critico" : "atencao"}
+      outros={queue.commercial.length - 1}
+      onVerTodos={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
+    >
+      {sinalTopo.title}
+    </AtencaoLinha>
+  ) : null;
 
+  return (
+    <Aba
+      icone={LayoutDashboard}
+      titulo="Visão Gerencial"
+      // refreshed_at e selo saem SO' da resposta compativel com o filtro atual
+      // — nunca da requisicao anterior (`headerLive` e' null ate' la').
+      selo={<SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />}
+      filtros={
+        <>
+          <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />
+          <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
+        </>
+      }
+      atencao={atencao}
+      faixa={
+        <>
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </span>
@@ -785,6 +815,9 @@ function GerencialComGrandes() {
         semGmv
         tendencias={tendencias}
       />
+        </>
+      }
+    >
 
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
@@ -841,8 +874,6 @@ function GerencialComGrandes() {
         matrix={matrix}
         loading={sources.brands.status.loading}
         error={sources.brands.status.error}
-        signalsByCell={signalsByCell}
-        signalsState={signalsState}
         onOpenCell={(brand, channel) => {
           if (!MARCAS_MENORES_KEYS.includes(brand)) setDialog({ kind: "matrix", brand, channel });
         }}
@@ -1126,7 +1157,7 @@ function GerencialComGrandes() {
           />
         )}
       </KpiDrilldownDialog>
-    </div>
+    </Aba>
   );
 }
 

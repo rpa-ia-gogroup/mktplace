@@ -16,8 +16,7 @@
  * mensal ganha a marca de onde o plano esperava estar ate' o ultimo dia com dado.
  */
 import Link from "next/link";
-import { useState } from "react";
-import { ArrowDownRight, ArrowUpRight, Target, TriangleAlert } from "lucide-react";
+import { Target, TriangleAlert } from "lucide-react";
 
 import type { Marketplace } from "@/lib/mock-data";
 import { CHANNEL_DOT as PONTO } from "@/lib/gerencial/channel-colors";
@@ -109,8 +108,8 @@ interface Props {
 export default function MetaHero(props: Props) {
   const { gmv, loading, error } = props;
   return (
-    <section aria-labelledby="meta-hero-titulo" className="rounded-xl border border-kpi-gmv/30 bg-surface">
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr_auto] lg:items-center lg:gap-6">
+    <section aria-labelledby="meta-hero-titulo" className="rounded-xl border border-line bg-surface">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr] lg:items-center lg:gap-6">
         <Resultado {...props} />
         <div className="min-w-0">
           {loading && gmv == null ? (
@@ -130,11 +129,6 @@ export default function MetaHero(props: Props) {
             total={gmv}
           />
         </div>
-        {props.semMetaDaMarca ? null : props.diaMeta ? (
-          <SeloDoDia progressoDia={props.progressoDia} metasHref={props.metasHref} />
-        ) : (
-          <Selo progresso={props.progresso} metasHref={props.metasHref} mesMeta={props.mesMeta} />
-        )}
       </div>
     </section>
   );
@@ -161,7 +155,7 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
       ) : (
         <>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <NumeroAnimado texto={fmtCompacto(gmv)} className="text-3xl font-bold tracking-tight text-ink tabular-nums" />
+            <NumeroAnimado texto={fmtCompacto(gmv)} className="text-[2rem] font-bold leading-tight tracking-tight text-ink tabular-nums" />
             {/* UI-DENSIDADE-1: o aviso de dado vira um SELO colado no numero,
                 onde a duvida nasce; o texto inteiro esta' no detalhe. */}
             {aviso && <SeloAviso aviso={aviso} />}
@@ -170,20 +164,15 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
             <p className={`mt-1 text-xs ${linhaMenores.aviso ? "font-semibold text-warn-ink" : "text-ink-muted"}`}>{linhaMenores.texto}</p>
           )}
           {compareActive && momPct != null && (
-            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted tabular-nums">
+            <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs tabular-nums">
               <span
-                className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold ${
+                title={prevGmv != null ? `Antes: ${fmtCompacto(prevGmv)}` : undefined}
+                className={`inline-flex items-center rounded-full px-2 py-0.5 font-semibold ${
                   momPct >= 0 ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink"
                 }`}
               >
-                {momPct >= 0 ? (
-                  <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5" />
-                ) : (
-                  <ArrowDownRight aria-hidden="true" className="h-3.5 w-3.5" />
-                )}
-                {fmtPctBr(momPct)}
+                {fmtPctBr(momPct)} {prevGmv != null ? "vs anterior" : rotuloComparacao ?? "vs anterior"}
               </span>
-              {prevGmv != null ? `antes ${fmtCompacto(prevGmv)}` : rotuloComparacao ?? "vs anterior"}
               {prevGmv == null && detalheComparacao && <InfoDica texto={detalheComparacao} />}
             </p>
           )}
@@ -215,7 +204,7 @@ function ForaDaMeta({ canais }: { canais: Marketplace[] }) {
   );
 }
 
-function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta }: Props & { progresso: ProgressoMeta }) {
+function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta, metasHref }: Props & { progresso: ProgressoMeta }) {
   // A escala vai ate' o maior entre meta, realizado e projecao: passar da meta
   // tem que aparecer como passar do traco, nao como barra cheia.
   const escala = Math.max(1, p.atingimento, p.projecaoSobreMeta ?? 0);
@@ -226,17 +215,44 @@ function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta }: Prop
   const doPlano = Math.round(p.atingimentoDoPlano * 100);
   const fimDoMes = mesMeta ? `${mesMeta}-${String(p.diasNoMes).padStart(2, "0")}` : "";
 
+  // Menos legendas: realizado, plano, projecao e ritmo necessario saem da vista e vao para o (i).
+  const detalhe = [
+    `Realizado ${fmtCompacto(p.realizado)}${
+      p.encerrado ? " (mês encerrado)" : mostraPlano ? `, ${doPlano > 100 ? "acima do plano" : doPlano < 100 ? "abaixo do plano" : "no plano"} (${doPlano}%)` : ""
+    }.`,
+    !p.encerrado && p.projecao != null ? `Projeção pelo ritmo: ${fmtCompacto(p.projecao)} (${pct0(p.projecaoSobreMeta!)} da meta).` : null,
+    p.porDiaNecessario != null
+      ? `Faltam ${fmtCompacto(p.porDiaNecessario)} por dia${comCurva ? " normal" : ""}${fimDoMes ? ` até ${ddmm(fimDoMes)}` : ""}.`
+      : null,
+    canaisForaDaMeta.length ? `${canaisForaDaMeta.map((c) => CHANNEL_LABEL[c]).join(" e ")} não tem meta: o GMV fica fora do atingimento.` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div>
-      <div className="mb-2 flex items-end justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Meta de {mesMeta ? rotuloMes(mesMeta) : "o mês"} ·{" "}
-          <span className="tabular-nums text-ink-muted">{fmtCompacto(p.meta)}</span>
-          <ForaDaMeta canais={canaisForaDaMeta} />
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+          <span>
+            Meta de {mesMeta ? rotuloMes(mesMeta) : "o mês"} ·{" "}
+            <span className="tabular-nums text-ink-muted">{fmtCompacto(p.meta)}</span>
+          </span>
+          <span className="normal-case tracking-normal">
+            <InfoDica texto={detalhe} />
+          </span>
         </p>
-        <p className="text-2xl font-bold leading-none text-accent tabular-nums">
-          {pct0(p.atingimento)}
-          <span className="sr-only"> da meta atingidos</span>
+        <p className="flex items-center gap-2">
+          <b className="text-base font-bold text-ink tabular-nums">
+            {pct0(p.atingimento)}
+            <span className="sr-only"> da meta atingidos</span>
+          </b>
+          <Link
+            href={metasHref}
+            title="Editar metas"
+            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${SELO[p.status]}`}
+          >
+            {ROTULO_STATUS[p.status]}
+          </Link>
         </p>
       </div>
       <div
@@ -266,46 +282,11 @@ function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta }: Prop
         )}
         <div className="absolute -inset-y-1 w-0.5 bg-ink" style={{ left: larg(1) }} aria-hidden="true" />
       </div>
-      <div className="mt-2 flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-ink-muted tabular-nums">
-        <span>
-          <b className="font-semibold text-ink">{fmtCompacto(p.realizado)}</b>
-          {p.encerrado ? (
-            " · mês encerrado"
-          ) : mostraPlano ? (
-            <span
-              className={doPlano > 100 ? "text-ok-ink" : doPlano < 100 ? "text-crit-ink" : ""}
-              title={`Plano até ${ddmm(`${mesMeta}-${String(p.diasComDado).padStart(2, "0")}`)}: ${fmtCompacto(p.planoAteData)}. Plano = meta acumulada pela curva de dias (dia da semana, 11/11, semana Black).`}
-            >
-              {" · "}
-              {doPlano > 100 ? "acima do plano" : doPlano < 100 ? "abaixo do plano" : "no plano"} ({doPlano}%)
-            </span>
-          ) : null}
-        </span>
-        {!p.encerrado && p.projecao != null && (
-          <span title={`Projeção pelo ritmo dos dias com dado: ${pct0(p.projecaoSobreMeta!)} da meta`}>
-            projeção <b className="font-semibold text-ink">{fmtCompacto(p.projecao)}</b>
-          </span>
-        )}
-      </div>
-      {p.porDiaNecessario != null && (
-        <p
-          className="mt-1.5 text-xs text-ink-muted tabular-nums"
-          title={
-            comCurva
-              ? `Faltam ${fmtCompacto(p.falta)} em ${p.diasRestantes} ${p.diasRestantes === 1 ? "dia" : "dias"}. Dia normal = o que falta ÷ peso dos dias que restam na curva; dias de evento pedem mais.`
-              : `Faltam ${fmtCompacto(p.falta)} em ${p.diasRestantes} ${p.diasRestantes === 1 ? "dia" : "dias"}`
-          }
-        >
-          faltam <b className="font-semibold text-ink">{fmtCompacto(p.porDiaNecessario)}</b> por dia
-          {comCurva ? " normal" : ""}
-          {fimDoMes ? ` até ${ddmm(fimDoMes)}` : ""}
-        </p>
-      )}
     </div>
   );
 }
 
-function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenciaDoDia: t }: Props & { progressoDia: ProgressoDia }) {
+function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenciaDoDia: t, metasHref }: Props & { progressoDia: ProgressoDia }) {
   const titulo = p.dia === hoje ? "Meta de hoje" : "Meta do dia";
   const escala = Math.max(1, p.atingimento ?? 0);
   const larg = (f: number) => `${(Math.min(f, escala) / escala) * 100}%`;
@@ -324,9 +305,18 @@ function BarraDoDia({ progressoDia: p, hoje, semDado, canaisForaDaMeta, tendenci
           <ForaDaMeta canais={canaisForaDaMeta} />
         </p>
         {p.atingimento != null && (
-          <p className="text-2xl font-bold leading-none text-accent tabular-nums">
-            {pct0(p.atingimento)}
-            <span className="sr-only"> da meta do dia</span>
+          <p className="flex items-center gap-2">
+            <b className="text-base font-bold text-ink tabular-nums">
+              {pct0(p.atingimento)}
+              <span className="sr-only"> da meta do dia</span>
+            </b>
+            <Link
+              href={metasHref}
+              title="Meta por dia"
+              className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${SELO_DIA[p.status]}`}
+            >
+              {ROTULO_DIA[p.status]}
+            </Link>
           </p>
         )}
       </div>
@@ -432,42 +422,9 @@ function SemMeta({ mesMeta, diaMeta, metasStatus, metasHref, onRetryMetas, semMe
   );
 }
 
-function SeloDoDia({ progressoDia, metasHref }: { progressoDia: ProgressoDia | null; metasHref: string }) {
-  return (
-    <div className="flex flex-row items-center justify-between gap-3 border-t border-line pt-4 lg:flex-col lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-      <div className="text-left lg:text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Dia</p>
-        {progressoDia && progressoDia.atingimento != null ? (
-          <p
-            className={`mt-1.5 inline-flex rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${SELO_DIA[progressoDia.status]}`}
-          >
-            {ROTULO_DIA[progressoDia.status]}
-          </p>
-        ) : (
-          <p className="mt-1.5 text-xs text-ink-faint">{progressoDia ? "sem venda ainda" : "sem meta"}</p>
-        )}
-      </div>
-      <Link
-        href={metasHref}
-        className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        Meta por dia →
-      </Link>
-    </div>
-  );
-}
-
-/** Classe literal por canal (o Tailwind so' gera classes escritas por extenso). */
-const TRACO: Record<Marketplace, string> = {
-  tiktok: "stroke-canal-tiktok",
-  ml: "stroke-canal-ml",
-  shopee: "stroke-canal-shopee",
-};
-
 /**
- * Rosca da fatia de cada canal no GMV; ao lado, por canal: a fatia (numero
- * grande), o valor, a variacao e quanto dele foi Full. Sem a medida de Full
- * (TikTok, ou fato indisponivel), o canal aparece sem a linha de Full.
+ * Participacao de cada canal no GMV, numa linha (era uma rosca). O valor, a
+ * variacao e a parte Full de cada canal ficam no title e no "Detalhar".
  */
 function Divisao({
   channels,
@@ -482,141 +439,28 @@ function Divisao({
   shareFull: Partial<Record<Marketplace, number | null>> | null;
   total: number | null;
 }) {
-  // Canal sob o mouse (ou foco do teclado): destaca a fatia e mostra o valor no centro.
-  // Antes de qualquer return: hook nunca fica atras de condicao.
-  const [ativo, setAtivo] = useState<Marketplace | null>(null);
   const partes = channels
     .map((c) => ({ c, v: gmvByChannel[c], s: c === "tiktok" ? null : shareFull?.[c] ?? null }))
     .filter((x): x is { c: Marketplace; v: number; s: number | null } => x.v != null && x.v > 0);
-  if (!total || partes.length === 0 || (partes.length < 2 && partes[0].s == null)) return null;
+  if (!total || partes.length < 2) return null;
   const pct = (x: number) => Math.round(x * 100);
-  const realce = (c: Marketplace) => ({
-    onMouseEnter: () => setAtivo(c),
-    onMouseLeave: () => setAtivo(null),
-  });
-  const doAtivo = partes.find((p) => p.c === ativo) ?? null;
-  // Circunferencia 100 (pathLength): cada fatia e' o proprio %, com uma folga entre elas.
-  const folga = partes.length > 1 ? 1 : 0;
-  let inicio = 0;
-  const arcos = partes.map(({ c, v }) => {
-    const tam = (v / total) * 100;
-    const arco = { c, tam: Math.max(tam - folga, 0), inicio };
-    inicio += tam;
-    return arco;
-  });
   return (
-    <div className="mt-4 flex items-center gap-4 text-xs text-ink-muted tabular-nums">
-      <div className="relative h-[84px] w-[84px] shrink-0">
-      <svg
-        viewBox="0 0 42 42"
-        className="h-full w-full -rotate-90"
-        role="img"
-        aria-label={partes.map(({ c, v }) => `${CHANNEL_LABEL[c]} ${pct(v / total)}% do GMV`).join("; ")}
-      >
-        <circle cx="21" cy="21" r="17" fill="none" className="stroke-raised" strokeWidth="4.5" />
-        {arcos.map(({ c, tam, inicio: ini }) => (
-          <circle
-            key={c}
-            cx="21"
-            cy="21"
-            r="17"
-            fill="none"
-            pathLength={100}
-            className={`${TRACO[c]} cursor-pointer transition-opacity duration-150 ${ativo && ativo !== c ? "opacity-25" : ""}`}
-            strokeWidth={ativo === c ? 6 : 4.5}
-            strokeDasharray={`${tam} ${100 - tam}`}
-            strokeDashoffset={-ini}
-            {...realce(c)}
-          />
-        ))}
-      </svg>
-        {doAtivo && (
-          <span className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center leading-none">
-            <span className="text-sm font-bold text-ink">{pct(doAtivo.v / total)}%</span>
-            <span className="mt-0.5 text-xs text-ink-muted">{fmtCompacto(doAtivo.v).replace(/^R\$\s*/, "")}</span>
-          </span>
-        )}
-      </div>
-      <ul className="flex min-w-0 flex-wrap gap-x-6 gap-y-2">
-        {partes.map(({ c, v, s }) => (
+    <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted tabular-nums" aria-label="Participação de cada canal no GMV">
+      {partes.map(({ c, v, s }) => {
+        const variacao = varGmvByChannel?.[c];
+        return (
           <li
             key={c}
-            tabIndex={0}
-            onFocus={() => setAtivo(c)}
-            onBlur={() => setAtivo(null)}
-            {...realce(c)}
-            className={`min-w-0 cursor-default rounded leading-snug transition-opacity duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-              ativo && ativo !== c ? "opacity-40" : ""
-            }`}
-            title={
-              c === "shopee" && s != null
-                ? "Full = FBS. A proporção é medida nas contas da Shopee (API) e aplicada ao GMV do canal."
-                : undefined
-            }
+            title={[fmtCompacto(v), variacao != null ? `${fmtPctBr(variacao)} vs anterior` : null, s != null ? `${pct(s)}% Full` : null]
+              .filter(Boolean)
+              .join(" · ")}
           >
-            <p>
-              <span aria-hidden="true" className={`mr-1.5 inline-block h-2 w-2 rounded-full ${PONTO[c]}`} />
-              <span className="text-sm font-bold text-ink">{pct(v / total)}%</span>{" "}
-              <span className="font-semibold text-ink">{CHANNEL_LABEL[c]}</span>
-            </p>
-            <p className="pl-3.5">
-              {fmtCompacto(v)} <Variacao pct={varGmvByChannel?.[c] ?? null} />
-              {s != null && (
-                <>
-                  {" "}
-                  · <span className="font-semibold text-ink">{pct(s)}% Full</span>
-                </>
-              )}
-            </p>
+            <span aria-hidden="true" className={`mr-1.5 inline-block h-2 w-2 rounded-full ${PONTO[c]}`} />
+            {CHANNEL_LABEL[c]} <b className="font-semibold text-ink">{pct(v / total)}%</b>
           </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/** "▲ 12%" contra a referencia; sem base, nada. */
-function Variacao({ pct }: { pct: number | null }) {
-  if (pct == null) return null;
-  return (
-    <span className={`font-semibold ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
-      {pct >= 0 ? "▲" : "▼"} {fmtPctBr(Math.abs(pct)).replace("+", "")}
-    </span>
-  );
-}
-
-function Selo({
-  progresso,
-  metasHref,
-  mesMeta,
-}: {
-  progresso: ProgressoMeta | null;
-  metasHref: string;
-  mesMeta: string | null;
-}) {
-  return (
-    <div className="flex flex-row items-center justify-between gap-3 border-t border-line pt-4 lg:flex-col lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-      <div className="text-left lg:text-center">
-        <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">Fechamento</p>
-        {progresso ? (
-          <p
-            className={`mt-1.5 inline-flex rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-wide ${SELO[progresso.status]}`}
-          >
-            {ROTULO_STATUS[progresso.status]}
-          </p>
-        ) : (
-          <p className="mt-1.5 text-xs text-ink-faint">sem meta</p>
-        )}
-      </div>
-      {mesMeta && (
-        <Link
-          href={metasHref}
-          className="inline-flex min-h-11 items-center text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-        >
-          {progresso ? "Editar metas →" : "Ir para Metas →"}
-        </Link>
-      )}
-    </div>
+        );
+      })}
+    </ul>
   );
 }
 
