@@ -19,11 +19,13 @@
  * e nao filtro.
  */
 import { useId, useState } from "react";
+import { X } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
-import { resumoDosFiltros } from "@/lib/filters/summary";
+import { DATE_PRESET_OPTIONS, intervaloCurto, resolveActivePreset } from "@/lib/filters/presets";
+import { filtrosForaDoPadrao, resumoCanais, resumoMarcas } from "@/lib/filters/summary";
 import type { GlobalFilters } from "@/lib/filters/types";
 
 interface Props {
@@ -33,12 +35,26 @@ interface Props {
   hideCompare?: boolean;
   /** Indicador discreto de requisicao em voo, junto dos controles. */
   loading?: boolean;
+  /** FILTROS-PADRAO: o padrao da aba (3º item do `useGlobalFilters`). Com ele, aparece "Limpar". */
+  padrao?: GlobalFilters;
 }
 
-export default function GlobalFilterControls({ filters, onChange, hideCompare = false, loading = false }: Props) {
+/** Botao discreto de "Limpar" e contagem do "Filtros" no celular: mesmas classes nas barras. */
+export const CLASSE_LIMPAR =
+  "inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-semibold text-ink-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+export const CLASSE_CONTAGEM =
+  "ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1.5 text-[11px] font-semibold tabular-nums text-accent-ink";
+
+export default function GlobalFilterControls({ filters, onChange, hideCompare = false, loading = false, padrao }: Props) {
   const [aberto, setAberto] = useState(false);
   const id = useId();
-  const resumo = resumoDosFiltros(filters, { semComparacao: hideCompare });
+  // Celular: o periodo tem linha propria e nunca corta (o chip do cabecalho saiu);
+  // canal e marca vem embaixo e podem cortar.
+  // Mesmo texto do gatilho de Periodo ("Mês atual · 01–11/11").
+  const preset = DATE_PRESET_OPTIONS.find((o) => o.value === resolveActivePreset(filters.dateFrom, filters.dateTo, filters.periodo));
+  const resumoPeriodo = `${preset?.label ?? "Personalizado"} · ${intervaloCurto(filters.dateFrom, filters.dateTo)}${filters.compare && !hideCompare ? " · vs anterior" : ""}`;
+  const resumoEscopo = `${resumoCanais(filters.channels)} · ${resumoMarcas(filters.brands)}`;
+  const fora = padrao ? filtrosForaDoPadrao(filters, padrao) : [];
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -50,8 +66,17 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
         className="inline-flex min-h-11 w-full items-center justify-between gap-2 rounded-lg border border-line bg-surface px-3 text-left text-sm sm:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span className="min-w-0">
-          <span className="block text-xs font-semibold text-ink">Filtros</span>
-          <span className="block truncate text-xs text-ink-muted">{resumo}</span>
+          <span className="flex items-center text-xs font-semibold text-ink">
+            Filtros
+            {fora.length > 0 && (
+              <span className={CLASSE_CONTAGEM}>
+                {fora.length}
+                <span className="sr-only"> fora do padrão</span>
+              </span>
+            )}
+          </span>
+          <span className="block text-xs tabular-nums text-ink">{resumoPeriodo}</span>
+          <span className="block truncate text-xs text-ink-muted">{resumoEscopo}</span>
         </span>
         <svg
           viewBox="0 0 16 16"
@@ -71,7 +96,7 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
           painel. A barra passou de duas linhas (~100px) para uma (~52px). */}
       <div
         id={id}
-        className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-start gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
+        className={`${aberto ? "flex" : "hidden"} min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 pb-1 sm:flex sm:pb-0`}
       >
         <MarketplaceFilter value={filters.channels} onChange={(channels) => onChange({ channels })} />
         <BrandFilter value={filters.brands} onChange={(brands) => onChange({ brands })} variante="menu" />
@@ -85,6 +110,17 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
           hideCompare={hideCompare}
           variante="menu"
         />
+        {padrao && fora.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onChange({ channels: padrao.channels, brands: padrao.brands, dateFrom: padrao.dateFrom, dateTo: padrao.dateTo, periodo: padrao.periodo })}
+            aria-label="Limpar filtros (volta ao padrão da aba)"
+            className={CLASSE_LIMPAR}
+          >
+            <X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
+            Limpar
+          </button>
+        )}
         {loading && (
           <span className="inline-flex min-h-11 shrink-0 items-center text-xs text-ink-faint animate-pulse">
             Atualizando…

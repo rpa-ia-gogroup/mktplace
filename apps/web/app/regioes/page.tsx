@@ -14,7 +14,7 @@ import CartoesRegioes, { GRADE_REGIOES, TOTAL_DE_CARTOES_REGIOES, VISUAL_REGIOES
 import RegioesDrilldownContent from "@/components/regioes/RegioesDrilldownContent";
 import { TITULO_DETALHE, type ChaveRegioes } from "@/lib/regioes-cartoes";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import Freshness, { PeriodChip } from "@/components/ui/Freshness";
+import Freshness from "@/components/ui/Freshness";
 import { MapPinned } from "lucide-react";
 import PageContainer from "@/components/layout/PageContainer";
 import PageHeader from "@/components/layout/PageHeader";
@@ -64,7 +64,7 @@ function CoverageBadge({ level }: { level: RegiaoUfRow["coverage_level"] }) {
 }
 
 function RegioesPageInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "mes_anterior", defaultCompare: false });
+  const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "mes_anterior", defaultCompare: false });
   // Filtro local de UF — nao faz parte do contrato de filtros globais/URL
   // (por design: e' especifico desta tela, ver docs/filtros_globais_contrato.md).
   const [ufFilter, setUfFilter] = useState<string>("");
@@ -242,7 +242,6 @@ function RegioesPageInner() {
         icon={MapPinned}
         meta={
           <>
-            <PeriodChip label={periodLabel} />
             {linhaTemporal && (
               <span data-testid="regioes-linha-atualizacao" className={`text-xs ${canaisComAtraso.length > 0 ? "font-medium text-warn-ink" : "text-ink-muted"}`}>
                 {linhaTemporal}
@@ -252,7 +251,7 @@ function RegioesPageInner() {
         }
         filters={
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
-            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />
+            <GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />
             {/* A UF e' filtro/acao DESTA pagina: fica na barra, entra na
                 identidade da requisicao local e nao vira filtro global. */}
             <div className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm">

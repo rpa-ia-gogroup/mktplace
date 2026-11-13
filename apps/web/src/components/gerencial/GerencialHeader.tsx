@@ -48,10 +48,10 @@ export default function GerencialHeader({ periodLabel, refreshedAt, live, loadin
             <span className="sr-only"> · {periodLabel}</span>
           </h1>
           {/* Titulo + filtros (~1.200px) + selo so' cabem numa linha a partir de
-              ~1.800px. Abaixo disso os filtros descem INTEIROS para uma linha
+              ~1.920px (com o "Limpar"). Abaixo disso os filtros descem INTEIROS para uma linha
               propria (order-last + basis-full), em vez de espremer o canal com
               rolagem e empilhar marca e periodo um em cada linha. */}
-          <div className="order-last flex min-w-0 basis-full items-start gap-x-3 gap-y-1.5 flex-wrap min-[1800px]:order-none min-[1800px]:basis-0 min-[1800px]:flex-1">
+          <div className="order-last flex min-w-0 basis-full items-start gap-x-3 gap-y-1.5 flex-wrap min-[1920px]:order-none min-[1920px]:basis-0 min-[1920px]:flex-1">
             {children}
           </div>
           {/* refreshed_at e selo saem SO' da resposta compativel com o filtro

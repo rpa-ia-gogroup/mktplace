@@ -18,7 +18,6 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { FaixaTotais, GrupoCanal, VISUAL_DETALHE } from "@/components/pedidos/PedidosCartoes";
 import PedidosDrilldownContent from "@/components/pedidos/PedidosDrilldownContent";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
-import { PeriodChip } from "@/components/ui/Freshness";
 import { ShoppingBag } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
@@ -161,7 +160,7 @@ function BrandTable({ rows, showTiktok, showMl, loading }: { rows: PedidosBrandR
 }
 
 function PedidosPageInner() {
-  const [filters, setFilters] = useGlobalFilters({ defaultPreset: "30d" });
+  const [filters, setFilters, padrao] = useGlobalFilters({ defaultPreset: "30d" });
   const [data, setData] = useState<PedidosData | null>(null);
   const [loading, setLoading] = useState(true);
   const [isLive, setIsLive] = useState(false);
@@ -271,7 +270,6 @@ function PedidosPageInner() {
         icon={ShoppingBag}
         meta={
           <>
-            <PeriodChip label={periodLabel} />
             {dataIsFresh && displayData?.refreshed_at && (
               <span className="text-xs text-ink-muted tabular-nums">Atualizado em {fmtRefreshedAt(displayData.refreshed_at)}</span>
             )}
@@ -291,7 +289,7 @@ function PedidosPageInner() {
             <LiveStatusBadge live={displayIsLive} offlineLabel="Sem dados · API offline" />
           ) : null
         }
-        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} />}
+        filters={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
       />
 
         {/* Shopee isolada: o selo do cabecalho e o estado vazio abaixo ja dizem
