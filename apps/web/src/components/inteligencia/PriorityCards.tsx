@@ -67,7 +67,8 @@ export default function PriorityCards({ priorities, onOpen, disabled, extra }: P
             cor={`rgb(var(--tc-kpi-${identidade}))`}
             ajuda={<InfoDica texto={p.limitation} emControle />}
             valor={fmtBrlCurto(p.amount)}
-            legenda={`${p.amountLabel} · ${p.received} registro${p.received === 1 ? "" : "s"} exibido${p.received === 1 ? "" : "s"}`}
+            // Com "top N" no rotulo, a legenda nao repete a contagem.
+            legenda={p.kind === "parar" ? `${p.amountLabel} · ${p.received} registro${p.received === 1 ? "" : "s"} exibido${p.received === 1 ? "" : "s"}` : p.amountLabel}
             onAbrir={disabled ? undefined : () => onOpen(p)}
           />
         );
