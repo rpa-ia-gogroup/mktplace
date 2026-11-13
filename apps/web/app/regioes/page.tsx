@@ -254,6 +254,17 @@ function RegioesPageInner() {
   const coberturaUnicaUf = nivelUnico(displayByUf, (r) => r.coverage_level);
   const coberturaUnicaMarca = nivelUnico(displayByBrand, (r) => (r.coverage_warning ? r.coverage_level : "sem-alerta"));
   const ausenteUnicoTendencia = nivelUnico(displayTrend, (p) => marcaPontoAusente(p.canais_ausentes) ?? "");
+  const dicaDoAviso = (
+                  <InfoDica
+                    texto={[
+                      avisoCobertura?.mensagem,
+                      ...(avisoCobertura?.detalhes ?? []),
+                      regionalScope?.scopeNote,
+                      regionalScope?.ufFillCaveat,
+                      aviso,
+                    ].filter(Boolean).join(" ")}
+                  />
+  );
   const naoSeAplicaUf = ufFilter ? (
     <span className="rounded-md bg-warn-soft px-2 py-1 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
       Nacional · filtro de UF ({ufFilter}) não se aplica
@@ -309,10 +320,11 @@ function RegioesPageInner() {
                   }`}
                 >
                   {/* REGIONAL-SOURCE-RECOVERY-2 / T-0088: quais canais e ate quando, em TEXTO VISIVEL. */}
+                  {/* o ⓘ vai colado no ULTIMO trecho de texto, para nunca cair sozinho na linha de baixo */}
                   {avisoCobertura && (
                     <>
                       <span className="font-semibold">{avisoCobertura.titulo}:</span>
-                      <span data-testid="aviso-cobertura-resumo">{avisoCobertura.resumo}</span>
+                      <span data-testid="aviso-cobertura-resumo">{avisoCobertura.resumo}{!regionalScope && <> {dicaDoAviso}</>}</span>
                     </>
                   )}
                   {/* Gate DQ2: escopo do que esta sendo medido, SEMPRE visivel com dado fresco. */}
@@ -323,18 +335,9 @@ function RegioesPageInner() {
                         : regionalScope.status === "partial_channels"
                           ? `Só ${regionalScope.channelsInScope.join(" + ")} · ${regionalScope.channelsOutOfScope.join(", ")} fora · não comparável ao GMV total`
                           : `Escopo regional: ${regionalScope.channelsInScope.join(" + ")} · não comparável ao GMV total`}
-                      {regionalScope.ufFillCaveat && " · UF 100% só no escopo regional"}
+                      {regionalScope.ufFillCaveat && " · UF 100% só no escopo regional"} {dicaDoAviso}
                     </span>
                   )}
-                  <InfoDica
-                    texto={[
-                      avisoCobertura?.mensagem,
-                      ...(avisoCobertura?.detalhes ?? []),
-                      regionalScope?.scopeNote,
-                      regionalScope?.ufFillCaveat,
-                      aviso,
-                    ].filter(Boolean).join(" ")}
-                  />
                 </p>
               )}
 
