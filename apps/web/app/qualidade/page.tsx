@@ -383,15 +383,15 @@ function QualityPageInner() {
                       {showTiktok && <SortableHeader label="TikTok · Entrega" column="tk_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
                       {showMl && (
                         <>
-                          <SortableHeader label="ML · Cancel." column="ml_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          <SortableHeader label="ML · Cancelamento" column="ml_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
                           <SortableHeader label="ML · Não entregue" column="ml_not_delivered" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
                           <SortableHeader label="ML · Entrega" column="ml_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
                         </>
                       )}
                       {showShopee && (
                         <>
-                          <SortableHeader label="Shopee · Cancel." column="sh_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
-                          {temShDevolucao && <SortableHeader label="Shopee · Devol." column="sh_return" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
+                          <SortableHeader label="Shopee · Cancelamento" column="sh_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          {temShDevolucao && <SortableHeader label="Shopee · Devolução" column="sh_return" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
                         </>
                       )}
                     </tr>
