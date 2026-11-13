@@ -404,7 +404,9 @@ Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
 5. Panels and tables.
 
 - Freshness reads "Atualizado HH:MM" (another day: "dd/mm HH:MM"). The live
-  dot is green; demo mode stays written out; no time means "—".
+  dot is green; demo mode stays written out; no time means "—". Past the
+  source's SLA (each tab decides) it reads "Desatualizado · HH:MM" in warning
+  tone — written, never colour only.
 - Loading uses `Esqueleto` in the shape of the content, never a spinner in an
   empty box. Empty, error and unavailable use `StateBlock`.
 - A route outside the skeleton fails `tests/ui-fundacao.test.ts` unless it is
@@ -436,10 +438,12 @@ Every tab is built from the same parts, in the same order (`layout/Aba.tsx`):
 - Head on `raised`, using the label style.
 - Rows are 13–14px with no zebra striping and a hover tint.
 - Numbers are right-aligned and tabular.
-- Sorting: the arrow shows only on the active column (and on hover or focus of
-  the others).
+- Sorting: ▲/▼ in accent only on the active column; the others keep a faded ↕
+  (40%) that turns full on hover or focus, so touch users still see it sorts.
 - Empty is "—" (`ouVazio`), never 0 and never a blank cell.
-- The total row is the `<tfoot>` (`LinhaTotal`), with a 2px top border.
+- The total row is the `<tfoot>` (`LinhaTotal`), with a 2px top border. Sum
+  only what adds up: GMV and orders do; potential impact in R$ across channels
+  never does (that total cell is "—").
 - Wide tables scroll inside the panel, with a visible hint.
 
 ### Charts

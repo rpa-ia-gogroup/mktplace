@@ -22,7 +22,11 @@ export function ouVazio<T>(valor: T | null | undefined, formatar: (v: T) => stri
   return formatar(valor);
 }
 
-/** Total da tabela: rotulo na 1ª coluna, numeros alinhados a' direita. */
+/**
+ * Total da tabela: rotulo na 1ª coluna, numeros alinhados a' direita.
+ * So' some o que se soma: GMV e pedidos somam entre canais; impacto POTENCIAL
+ * em R$ nunca (cada canal estima do seu jeito) — ai a celula do total e' "—".
+ */
 export function LinhaTotal({ rotulo = "Total", celulas }: { rotulo?: string; celulas: ReactNode[] }) {
   return (
     <tfoot>

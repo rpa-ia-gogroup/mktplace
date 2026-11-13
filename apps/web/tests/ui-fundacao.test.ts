@@ -40,6 +40,9 @@ test("SeloAtualizado: 'Atualizado HH:MM', demonstracao escrita e ausencia como '
   assert.match(renderToStaticMarkup(h(SeloAtualizado, { em: null, aoVivo: false })), /Demonstração · API offline/);
   assert.match(renderToStaticMarkup(h(SeloAtualizado, { em: null })), /Atualizado <span[^>]*>—<\/span>/);
   assert.match(renderToStaticMarkup(h(SeloAtualizado, { em: null, carregando: true })), /Atualizando…/);
+  const velho = renderToStaticMarkup(h(SeloAtualizado, { em: new Date().toISOString(), aoVivo: true, atrasado: true }));
+  assert.match(velho, /Desatualizado · <span[^>]*>\d{2}:\d{2}<\/span>/, "atrasado e' escrito, nao so' cor");
+  assert.match(velho, /bg-warn-soft/);
 });
 
 test("Esqueleto: no formato do conteudo e anunciado como carregando", () => {
@@ -72,9 +75,10 @@ test("Painel: um unico 'ⓘ' colado ao titulo e a acao a' direita", () => {
   assert.match(html, /Ver todos/);
 });
 
-test("SortHeader: seta so' na coluna ativa; nas outras, so' no hover/foco", () => {
+test("SortHeader: seta cheia so' na coluna ativa; nas outras, apagada e cheia no hover/foco", () => {
   const c = ler("src/components/ui/SortHeader.tsx");
-  assert.match(c, /opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100/);
+  // ↕ apagado (nao some): a pista de que a coluna ordena fica, inclusive no toque
+  assert.match(c, /opacity-40 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100/);
 });
 
 test("movimento: 120/180/240 ms, utilitarios novos e tudo sob prefers-reduced-motion", () => {

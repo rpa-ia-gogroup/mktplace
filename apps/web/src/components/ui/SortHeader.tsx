@@ -48,10 +48,11 @@ export default function SortHeader({
         } ${ativo ? "text-accent" : "text-ink-faint"}`}
       >
         <span>{rotulo}</span>
-        {/* UI-FUNDACAO (F1): a seta so' na coluna ativa; nas outras, so' no hover/foco. */}
+        {/* UI-FUNDACAO (F1): seta cheia so' na coluna ativa; nas outras, o ↕ apagado
+            (a pista de que ordena continua, inclusive no toque) e cheio no hover/foco. */}
         <span
           aria-hidden="true"
-          className={`text-xs leading-none ${ativo ? "" : "opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"}`}
+          className={`text-xs leading-none ${ativo ? "" : "opacity-40 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"}`}
         >
           {ativo ? (sort.direction === "asc" ? "▲" : "▼") : "↕"}
         </span>

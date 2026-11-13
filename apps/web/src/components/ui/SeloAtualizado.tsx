@@ -7,7 +7,9 @@
  *     com o ponto verde quando a fonte esta' ao vivo;
  *   - carregando sem horario ainda: "Atualizando…";
  *   - demonstracao (API offline): o aviso continua ESCRITO, nunca so' cor;
- *   - sem horario publicado: "Atualizado —" (ausencia nunca vira um horario).
+ *   - sem horario publicado: "Atualizado —" (ausencia nunca vira um horario);
+ *   - atrasado (pelo SLA da fonte, calculado pela aba): "Desatualizado · 06:10",
+ *     em tom de alerta e ESCRITO — nunca so' cor nem so' `title`.
  * O detalhe (fonte, idade) vai no `title`, nao em texto na tela.
  */
 import { rotuloAtualizado } from "@/lib/atualizado";
@@ -19,6 +21,7 @@ export default function SeloAtualizado({
   em,
   aoVivo = null,
   carregando = false,
+  atrasado = false,
   detalhe,
 }: {
   /** ISO do horario dos dados na tela (nunca o da requisicao anterior). */
@@ -26,6 +29,8 @@ export default function SeloAtualizado({
   /** `true` ao vivo, `false` demonstracao, `null` ainda nao se sabe. */
   aoVivo?: boolean | null;
   carregando?: boolean;
+  /** O dado passou do prazo de atualizacao da fonte (cada aba sabe o seu). */
+  atrasado?: boolean;
   /** Fonte, idade, ressalva: vai no `title`. */
   detalhe?: string;
 }) {
@@ -45,6 +50,14 @@ export default function SeloAtualizado({
     return (
       <span role="status" className={`${BASE} bg-raised text-ink-muted ring-line`}>
         Atualizando…
+      </span>
+    );
+  }
+  if (atrasado) {
+    return (
+      <span title={detalhe} className={`${BASE} bg-warn-soft text-warn-ink ring-warn/30`} data-testid="selo-atualizado">
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-warn" />
+        Desatualizado · <span className="tabular-nums">{hora ?? "—"}</span>
       </span>
     );
   }
