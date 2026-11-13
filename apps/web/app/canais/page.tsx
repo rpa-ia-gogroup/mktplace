@@ -653,12 +653,16 @@ function CanaisPageInner() {
                   ["Pedidos", (c: ColunaCanal) => c.pedidos],
                 ] as const).map(([rotulo, f]) => {
                   const soma = colunasCanal.reduce((s, c) => s + (f(c) ?? 0), 0);
+                  const pct = (c: ColunaCanal) => (f(c) != null && soma > 0 ? fmtPctSimples((f(c)! / soma) * 100) : "sem dado");
                   return (
                     <div key={rotulo} className="flex flex-col gap-1.5">
-                      <span className="text-xs font-medium text-ink-muted">{rotulo}</span>
+                      <span className="flex items-baseline justify-between gap-3 text-xs">
+                        <span className="font-medium text-ink-muted">{rotulo}</span>
+                        <span aria-hidden="true" className="tabular-nums text-ink-faint">{colunasCanal.map(pct).join(" · ")}</span>
+                      </span>
                       <div
                         role="img"
-                        aria-label={`Participação em ${rotulo}: ${colunasCanal.map((c) => `${c.rotulo} ${f(c) != null && soma > 0 ? fmtPctSimples((f(c)! / soma) * 100) : "sem dado"}`).join(", ")}`}
+                        aria-label={`${rotulo}: ${colunasCanal.map((c) => `${c.rotulo} ${pct(c)}`).join(", ")}`}
                         className="tc-barra flex h-3 gap-0.5 overflow-hidden rounded-full"
                       >
                         {colunasCanal.map((c) => (
