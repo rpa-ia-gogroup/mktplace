@@ -20,7 +20,7 @@ import {
   CORPORATE_ACCESS_CLAIM, CORPORATE_ACCESS_VALUE, createAuth0Verifier,
   effectiveScopes,
   hasRequiredScope, normalizeIssuer, parseOAuthConfig, protectedResourceMetadata,
-  protectedResourceMetadataUrl, pseudonymizeSubject,
+  protectedResourceMetadataUrl, pseudonymizeSubject, OFFLINE_ACCESS_SCOPE,
 } from "../src/server/oracle/oauth.ts";
 import { protectedResourceMetadataResponse } from "../src/server/oracle/metadata-route.ts";
 
@@ -172,13 +172,15 @@ test("metadata: documento tem exatamente os quatro campos do contrato", () => {
   ]);
   assert.equal(doc.resource, "https://mktplace-ten.vercel.app/api/mcp");
   assert.deepEqual(doc.authorization_servers, [ISSUER]);
-  assert.deepEqual(doc.scopes_supported, [SCOPE]);
+  assert.deepEqual(doc.scopes_supported, [SCOPE, "offline_access"]);
   assert.deepEqual(doc.bearer_methods_supported, ["header"]);
 });
 
-test("metadata: scopes_supported tem UM unico scope", () => {
+test("metadata: scopes_supported anuncia oracle:read e offline_access, e so' eles", () => {
   const cfg = parseOAuthConfig(OAUTH_ENV);
-  assert.equal(protectedResourceMetadata(cfg!).scopes_supported.length, 1);
+  const scopes = protectedResourceMetadata(cfg!).scopes_supported;
+  assert.equal(OFFLINE_ACCESS_SCOPE, "offline_access");
+  assert.deepEqual(scopes, ["oracle:read", "offline_access"]);
 });
 
 test("metadata: URL e' a forma path-specific do RFC 9728", () => {
@@ -557,7 +559,16 @@ test("401: WWW-Authenticate traz Bearer, resource_metadata e scope", async () =>
     /resource_metadata="https:\/\/mktplace-ten\.vercel\.app\/\.well-known\/oauth-protected-resource\/api\/mcp"/,
     "resource_metadata aponta para a forma path-specific",
   );
-  assert.match(h, /scope="oracle:read"/, "scope guia o cliente");
+  assert.match(h, /scope="oracle:read offline_access"/, "scope guia o cliente, com offline_access");
+});
+
+test("401: scope do desafio e scopes_supported do PRM anunciam o mesmo conjunto", async () => {
+  const { res } = await call(undefined);
+  const h = res.headers.get("www-authenticate") ?? "";
+  const m = /scope="([^"]*)"/.exec(h);
+  assert.ok(m, "scope presente no desafio");
+  const cfg = parseOAuthConfig(OAUTH_ENV);
+  assert.deepEqual(m[1].split(" "), protectedResourceMetadata(cfg!).scopes_supported);
 });
 
 test("403: WWW-Authenticate traz insufficient_scope, scope e resource_metadata", async () => {
@@ -568,7 +579,7 @@ test("403: WWW-Authenticate traz insufficient_scope, scope e resource_metadata",
   assert.equal(res.status, 403);
   assert.match(h, /^Bearer/);
   assert.match(h, /error="insufficient_scope"/);
-  assert.match(h, /scope="oracle:read"/);
+  assert.match(h, /scope="oracle:read offline_access"/);
   assert.match(h, /resource_metadata="https:\/\/mktplace-ten\.vercel\.app\//);
 });
 
@@ -630,6 +641,29 @@ test("200: token valido com a permission alcanca o MCP", async () => {
 
   assert.equal(res.status, 200);
   assert.ok(body.includes("torre_desempenho_marketplaces"), "as tools ficam alcancaveis");
+});
+
+test("200: token SEM offline_access continua aceito (offline_access e' so' anunciado)", async () => {
+  // O refresh token nunca chega a esta rota; o access token renovado traz o
+  // mesmo `oracle:read`. Exigir `offline_access` derrubaria tokens validos.
+  for (const scope of [SCOPE, `openid ${SCOPE}`, null]) {
+    const token = await mintToken({ scope, permissions: [SCOPE] });
+    const { res } = await call(`Bearer ${token}`);
+    assert.equal(res.status, 200, `scope=${String(scope)}`);
+  }
+});
+
+test("200: token COM offline_access no scope continua aceito", async () => {
+  const token = await mintToken({ scope: `openid ${SCOPE} offline_access` });
+  const { res } = await call(`Bearer ${token}`);
+  assert.equal(res.status, 200);
+});
+
+test("403: offline_access sozinho NAO autoriza", async () => {
+  const token = await mintToken({ permissions: [], scope: "openid offline_access" });
+  const { res, calls } = await call(`Bearer ${token}`);
+  assert.equal(res.status, 403);
+  assert.equal(calls.length, 0);
 });
 
 test("200: permission vinda SO da claim `permissions` autoriza", async () => {
