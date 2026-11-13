@@ -1,5 +1,5 @@
 """
-Loader operacional da Gold regional (`gold.marketplace_region_daily`) —
+Loader operacional da Gold regional (`gold.fct_marketplace_region_daily`) —
 carga inicial (Gate 6A.3) e refresh incremental (Gate 6C).
 
 `execute_first_load()` é a carga ÚNICA original: recalcula o histórico
@@ -11,7 +11,7 @@ refresh. Mantida intacta, sem alterações de comportamento.
 
 `execute_incremental_load()` (Gate 6C) é o caminho de refresh recorrente:
 para cada marketplace suportado (ML, Shopee — TikTok nunca tem regional),
-calcula o `MAX(date)` já carregado em `gold.marketplace_region_daily` e só
+calcula o `MAX(date)` já carregado em `gold.fct_marketplace_region_daily` e só
 recalcula/insere linhas com `date` posterior a esse valor. Nunca usa
 TRUNCATE/DELETE/UPDATE — só INSERT das linhas novas. Se nenhum marketplace
 tiver data nova na fonte, retorna `no_op` sem tocar em staging/insert. Um
@@ -27,7 +27,7 @@ rodar `--incremental`.
 A carga inteira (em ambos os modos) roda em UMA transação: staging temporário (`TEMP TABLE ...
 ON COMMIT DROP`, nunca fica para trás) → validações RECALCULADAS a partir
 da fonte (nunca contra uma constante histórica fixa — a fonte cresce todo
-dia) → INSERT final em `gold.marketplace_region_daily` → validação
+dia) → INSERT final em `gold.fct_marketplace_region_daily` → validação
 pós-insert → commit. Qualquer falha de validação levanta
 `LoadValidationError`, que aciona ROLLBACK completo (nenhuma linha fica
 parcialmente inserida). Sem retry automático.
@@ -84,6 +84,7 @@ import psycopg2
 
 from pipelines.common.config import settings
 from pipelines.common.operational_calendar import last_closed_date
+from pipelines.ingestion.gold_regional import GOLD_REGION_TABLE
 from pipelines.ingestion.gold_regional import window_write_conn
 from pipelines.ingestion.gold_regional import write_conn
 from pipelines.ingestion.gold_regional.write_conn import (
@@ -479,10 +480,10 @@ SQL_ML_GMV_STAGING = f"SELECT COALESCE(SUM(gmv), 0) FROM stg_marketplace_region_
 # Idem — recalculado da fonte, nunca constante fixa.
 SQL_ML_GMV_SOURCE_RECALC = "SELECT COALESCE(SUM(total_amount), 0) FROM raw.ml_orders WHERE status = 'paid'"
 
-SQL_TIKTOK_ROWS_CHECK = f"SELECT COUNT(*) FROM gold.marketplace_region_daily WHERE marketplace_id = {TIKTOK_MARKETPLACE_ID}"
+SQL_TIKTOK_ROWS_CHECK = f"SELECT COUNT(*) FROM {GOLD_REGION_TABLE} WHERE marketplace_id = {TIKTOK_MARKETPLACE_ID}"
 
 SQL_INSERT_FINAL = f"""
-    INSERT INTO gold.marketplace_region_daily ({_STAGING_INSERT_COLUMNS})
+    INSERT INTO {GOLD_REGION_TABLE} ({_STAGING_INSERT_COLUMNS})
     SELECT {_STAGING_INSERT_COLUMNS}
     FROM stg_marketplace_region_daily
 """
@@ -589,7 +590,7 @@ def execute_first_load(write_url: str) -> LoadResult:
 
 # ---------------------------------------------------------------------------
 # Refresh incremental (Gate 6C) — só linhas com `date` posterior ao que já
-# está em gold.marketplace_region_daily, por marketplace. Duplica
+# está em gold.fct_marketplace_region_daily, por marketplace. Duplica
 # deliberadamente a lógica de transform de SQL_INSERT_SHOPEE_STAGING/
 # SQL_INSERT_ML_STAGING (que ficam INTACTAS, usadas só por
 # execute_first_load) — reaproveitar via refactor acoplaria o caminho de
@@ -607,7 +608,7 @@ def execute_first_load(write_url: str) -> LoadResult:
 # ---------------------------------------------------------------------------
 
 SQL_MAX_DATE_GOLD_BY_MARKETPLACE = (
-    "SELECT marketplace_id, MAX(date) AS max_date FROM gold.marketplace_region_daily GROUP BY marketplace_id"
+    f"SELECT marketplace_id, MAX(date) AS max_date FROM {GOLD_REGION_TABLE} GROUP BY marketplace_id"
 )
 # Cada consulta devolve DOIS maximos numa unica ida ao banco:
 #
@@ -902,7 +903,7 @@ def resolve_incremental_date_to(date_to: Optional[date] = None,
     `incremental_select` filtravam apenas `date > max_date_gold`, com fronteira
     superior ABERTA. Medido em 08/09/2026, `gold.ml_gestao_diaria` alcancava
     08/09 e a carga teria publicado o dia corrente parcial em
-    `gold.marketplace_region_daily`.
+    `gold.fct_marketplace_region_daily`.
 
     O default vem de `last_closed_date()` — o MESMO calendario operacional que
     ML, TikTok e Shopee Daily ja usam, em America/Sao_Paulo. Nao e'
@@ -942,7 +943,7 @@ def diagnose_incremental_load(read_url: str,
     nunca insere. Sessão explicitamente `readonly=True` (mesmo padrão de
     `write_conn._connect_readonly`), então mesmo um bug aqui não conseguiria
     escrever. Para cada marketplace suportado, calcula o `MAX(date)` já
-    carregado em `gold.marketplace_region_daily` vs. o `MAX(date)`
+    carregado em `gold.fct_marketplace_region_daily` vs. o `MAX(date)`
     disponível na fonte, e uma estimativa de quantas linhas de grão
     (date x marketplace x loja x uf) a carga incremental inseriria.
 
@@ -1175,7 +1176,7 @@ def execute_incremental_load(write_url: str,
 # DDL/DML. Recalcula o MESMO dedup "arquivo vencedor" de
 # SQL_INSERT_SHOPEE_STAGING/_shopee_incremental_select, escopado a uma
 # janela [date_from, date_to] arbitrária (não só "> MAX(date)"), e compara
-# com o que já está em gold.marketplace_region_daily para Shopee na mesma
+# com o que já está em gold.fct_marketplace_region_daily para Shopee na mesma
 # janela. Existe para decidir SE um `--refresh-shopee-window` (Gate S3,
 # ainda não implementado — sem DELETE/INSERT neste gate) seria seguro.
 #
@@ -1202,7 +1203,7 @@ def execute_incremental_load(write_url: str,
 
 SQL_SHOPEE_WINDOW_GOLD_AGGREGATES = f"""
     SELECT COUNT(*), COALESCE(SUM(gmv), 0), COALESCE(SUM(orders), 0)
-    FROM gold.marketplace_region_daily
+    FROM {GOLD_REGION_TABLE}
     WHERE marketplace_id = {SHOPEE_MARKETPLACE_ID}
       AND date BETWEEN %(date_from)s AND %(date_to)s
 """
@@ -1313,7 +1314,7 @@ WHERE uf_known_orders > uf_eligible_orders
 # propósito: o diagnose responde "os DADOS mudariam", não "a linha foi
 # reingerida". A ordem/lista espelha exatamente as colunas produzidas pelo
 # recálculo Shopee (SQL_SHOPEE_WINDOW_RECALC_ROWS) e presentes em
-# gold.marketplace_region_daily.
+# gold.fct_marketplace_region_daily.
 _WINDOW_BUSINESS_COLUMNS = (
     "gmv", "orders", "units_sold", "canceled_orders", "returned_orders",
     "seller_shipping_cost", "buyer_shipping_fee", "estimated_shipping_fee", "reverse_shipping_fee",
@@ -1346,7 +1347,7 @@ WITH shopee_window_recalc AS (
 ),
 gold_window AS (
     SELECT {_WINDOW_GOLD_SELECT_COLUMNS}
-    FROM gold.marketplace_region_daily
+    FROM {GOLD_REGION_TABLE}
     WHERE marketplace_id = {SHOPEE_MARKETPLACE_ID}
       AND date BETWEEN %(date_from)s AND %(date_to)s
 )
@@ -1390,7 +1391,7 @@ def diagnose_shopee_window(read_url: str, date_from: date, date_to: date) -> Sho
     `diagnose_incremental_load`/`write_conn._connect_readonly`). Recalcula,
     a partir de `silver.stg_shopee_order_item_snapshots`, o mesmo dedup
     "arquivo vencedor" da carga, escopado à janela [date_from, date_to], e
-    compara com o que já está em `gold.marketplace_region_daily` para
+    compara com o que já está em `gold.fct_marketplace_region_daily` para
     Shopee na mesma janela — para avaliar se um `--refresh-shopee-window`
     (Gate S3, ainda NÃO implementado) seria seguro."""
     _validate_shopee_window(date_from, date_to)
@@ -1494,7 +1495,7 @@ def diagnose_shopee_window(read_url: str, date_from: date, date_to: date) -> Sho
 # executado minutos antes pode estar desatualizado.
 # =============================================================================
 
-_GOLD_TABLE_QUALIFIED = "gold.marketplace_region_daily"
+_GOLD_TABLE_QUALIFIED = GOLD_REGION_TABLE
 _RE_SHA256_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 WINDOW_BACKUP_SCHEMA_VERSION = 1
@@ -2229,20 +2230,20 @@ SQL_REFRESH_NAN_NEGATIVE_CHECK = """
 # (ML/TikTok inalterados E Shopee fora da janela inalterada) numa única
 # query, porque `NOT (marketplace_id=SHOPEE AND date BETWEEN...)` é
 # exatamente a união dos dois casos.
-SQL_REFRESH_OUT_OF_SCOPE_FINGERPRINT = """
+SQL_REFRESH_OUT_OF_SCOPE_FINGERPRINT = f"""
     SELECT COUNT(*), COALESCE(SUM(gmv), 0), COALESCE(SUM(orders), 0), COALESCE(SUM(units_sold), 0),
            COALESCE(SUM(canceled_orders), 0), COALESCE(SUM(returned_orders), 0),
            COALESCE(SUM(seller_shipping_cost), 0), COALESCE(SUM(buyer_shipping_fee), 0),
            COALESCE(SUM(estimated_shipping_fee), 0), COALESCE(SUM(reverse_shipping_fee), 0),
            COALESCE(SUM(uf_known_orders), 0), COALESCE(SUM(uf_eligible_orders), 0),
            COALESCE(SUM(shipping_cost_covered_orders), 0), COALESCE(SUM(shipping_cost_eligible_orders), 0)
-    FROM gold.marketplace_region_daily
+    FROM {GOLD_REGION_TABLE}
     WHERE NOT (marketplace_id = %(shopee_marketplace_id)s AND date BETWEEN %(date_from)s AND %(date_to)s)
 """
 
 SQL_SELECT_GOLD_WINDOW_ROWS = f"""
     SELECT {_STAGING_INSERT_COLUMNS}
-    FROM gold.marketplace_region_daily
+    FROM {GOLD_REGION_TABLE}
     WHERE marketplace_id = %(shopee_marketplace_id)s
       AND date BETWEEN %(date_from)s AND %(date_to)s
     ORDER BY date, loja_id, uf
@@ -2264,7 +2265,7 @@ SQL_SELECT_STAGING_ROWS = f"""
 SQL_REFRESH_KEY_DIFF = f"""
     WITH gold_window AS (
         SELECT {_WINDOW_GOLD_SELECT_COLUMNS}
-        FROM gold.marketplace_region_daily
+        FROM {GOLD_REGION_TABLE}
         WHERE marketplace_id = %(shopee_marketplace_id)s
           AND date BETWEEN %(date_from)s AND %(date_to)s
     )
@@ -2287,8 +2288,8 @@ SQL_REFRESH_KEY_DIFF = f"""
 # marketplace_id = Shopee AND date BETWEEN date_from AND date_to. Datas e
 # marketplace_id SEMPRE bind parameters (entrada de usuário/backup — nunca
 # interpolados como literal de string).
-SQL_REFRESH_DELETE = """
-    DELETE FROM gold.marketplace_region_daily
+SQL_REFRESH_DELETE = f"""
+    DELETE FROM {GOLD_REGION_TABLE}
     WHERE marketplace_id = %(shopee_marketplace_id)s
       AND date BETWEEN %(date_from)s AND %(date_to)s
 """
@@ -2299,7 +2300,7 @@ SQL_REFRESH_DELETE = """
 # um hot path — o custo de N INSERTs individuais é aceitável em troca de um
 # rowcount==1 por linha sempre confiável. Colunas explícitas, nunca `id`.
 SQL_RESTORE_INSERT_ROW = (
-    f"INSERT INTO gold.marketplace_region_daily ({_STAGING_INSERT_COLUMNS}) "
+    f"INSERT INTO {GOLD_REGION_TABLE} ({_STAGING_INSERT_COLUMNS}) "
     f"VALUES ({', '.join(['%s'] * len(_STAGING_INSERT_COLUMNS_LIST))})"
 )
 
@@ -3122,7 +3123,7 @@ def run_incremental_cli(secret_path: Path = DEFAULT_WRITE_SECRET_PATH,
         return 2
 
     report = write_conn.run_preflight(write_url, settings.datamart_url, expect_table_exists=True)
-    _print_write_preflight(report, "antes da carga incremental — gold.marketplace_region_daily deve existir")
+    _print_write_preflight(report, "antes da carga incremental — gold.fct_marketplace_region_daily deve existir")
     if not report.ok:
         print("CARGA INCREMENTAL NÃO executada — preflight bloqueado.", file=sys.stderr)
         return 3
@@ -3140,7 +3141,7 @@ def run_incremental_cli(secret_path: Path = DEFAULT_WRITE_SECRET_PATH,
         print(
             "NO_OP: nenhum marketplace tem data nova na fonte ATE o teto "
             f"{result.date_to.isoformat()} além do que já está em "
-            "gold.marketplace_region_daily."
+            "gold.fct_marketplace_region_daily."
         )
         return 0
 
@@ -3438,26 +3439,26 @@ def main(argv: Optional[list[str]] = None) -> int:
     load_dotenv(dotenv_path=str(REPO_ROOT / ".env"))
 
     parser = argparse.ArgumentParser(
-        description="Gold regional (gold.marketplace_region_daily) — diagnose read-only e refresh incremental"
+        description="Gold regional (gold.fct_marketplace_region_daily) — diagnose read-only e refresh incremental"
     )
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--diagnose", action="store_true", help="Somente leitura: MAX(date) por marketplace (gold vs. fonte) e estimativa de linhas novas.")
-    mode.add_argument("--incremental", action="store_true", help="Escreve em gold.marketplace_region_daily — só linhas novas. Requer .env.gold-write.local.")
+    mode.add_argument("--incremental", action="store_true", help="Escreve em gold.fct_marketplace_region_daily — só linhas novas. Requer .env.gold-write.local.")
     mode.add_argument(
         "--diagnose-shopee-window", action="store_true",
         help="Somente leitura (Gate S2): recalcula a janela Shopee [--date-from, --date-to] a partir da "
-             "fonte (mesmo dedup arquivo-vencedor da carga) e compara com gold.marketplace_region_daily. "
+             "fonte (mesmo dedup arquivo-vencedor da carga) e compara com gold.fct_marketplace_region_daily. "
              "Nunca escreve.",
     )
     mode.add_argument(
         "--refresh-shopee-window", action="store_true",
-        help="Gate S3: substitui gold.marketplace_region_daily para Shopee na janela [--date-from, --date-to] "
+        help="Gate S3: substitui gold.fct_marketplace_region_daily para Shopee na janela [--date-from, --date-to] "
              "(DELETE + INSERT restritos ao escopo, backup atômico obrigatório via --audit-path). "
              "Requer .env.gold-window-write.local.",
     )
     mode.add_argument(
         "--restore-shopee-window", action="store_true",
-        help="Gate S3: restaura gold.marketplace_region_daily a partir de um backup de --refresh-shopee-window "
+        help="Gate S3: restaura gold.fct_marketplace_region_daily a partir de um backup de --refresh-shopee-window "
              "(compare-and-swap — --audit-path + --expected-backup-sha256). Requer .env.gold-window-write.local.",
     )
     mode.add_argument(

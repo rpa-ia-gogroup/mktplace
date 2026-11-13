@@ -1,5 +1,5 @@
 """
-Conexão de escrita para o Gate 6A — aplicação de `gold.marketplace_region_daily`
+Conexão de escrita para o Gate 6A — aplicação de `gold.fct_marketplace_region_daily`
 no Data Mart primary.
 
 Este é o ÚNICO módulo que abre uma conexão de escrita no Data Mart para a
@@ -22,7 +22,7 @@ Guardrails aplicados aqui:
   - antes de qualquer DDL/INSERT, um preflight somente-leitura confirma
     host/database esperados (via `system_identifier`, mais confiável que
     hostname em texto), `rolsuper=false`, permissões mínimas no schema
-    `gold`, e o estado esperado de `gold.marketplace_region_daily`
+    `gold`, e o estado esperado da TABELA `gold.fct_marketplace_region_daily`
     (inexistente antes do DDL, existente antes da carga);
   - nenhuma mensagem de erro pode conter usuário/senha — todo texto de
     exceção passa por `sanitize_error_message` antes de virar log/print.
@@ -40,6 +40,14 @@ from typing import Optional
 import psycopg2
 from dotenv import dotenv_values
 
+from pipelines.ingestion.gold_regional import (
+    GOLD_REGION_ID_SEQUENCE,
+    GOLD_REGION_ID_SEQUENCE_NAME,
+    GOLD_REGION_SCHEMA,
+    GOLD_REGION_TABLE,
+    GOLD_REGION_TABLE_NAME,
+)
+
 EXPECTED_SECRET_KEYS = frozenset({"DATAMART_GOLD_WRITE_URL", "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"})
 
 # T-0109: origem explícita do segredo. Só com GOLD_WRITE_SECRET_SOURCE=env
@@ -54,7 +62,9 @@ SECRET_SOURCE_ENV = "env"
 # para impedir duas execuções concorrentes de DDL/carga da Gold regional.
 ADVISORY_LOCK_KEY = 564738291056
 
-_GOLD_TABLES = ("marketplace_region_daily",)
+# T-0109c: o nome da TABELA real. `gold.marketplace_region_daily` virou view
+# de compatibilidade e não pode responder pela existência da tabela.
+_GOLD_TABLES = (GOLD_REGION_TABLE_NAME,)
 
 _CREDENTIAL_IN_MESSAGE_RE = re.compile(r"//[^/\s@]+:[^/\s@]+@")
 
@@ -90,17 +100,17 @@ def _table_priv_expr(schema: str, table: str, privilege: str) -> str:
     )
 
 
-# Sequence(s) dona(s) da tabela (serial = deptype 'a', identity = 'i').
-# bool_and sobre zero linhas = NULL = tabela sem sequence (nada a exigir).
+# T-0109c: a sequence do `id` pelo NOME REAL. O rename da gold (airflow #1939)
+# levou a tabela para `fct_marketplace_region_daily` mas deixou a sequence em
+# `gold.marketplace_region_daily_id_seq`. A sequence é obrigatória (o INSERT
+# consome o default `nextval` do `id BIGSERIAL`): ausente pelo nome = estado
+# que este código não conhece, e bloqueia — mesmo critério do preflight da
+# janela Shopee (`window_write_conn`).
 _GOLD_SEQUENCE_USAGE_EXPR = (
-    "(SELECT bool_and(has_sequence_privilege(current_user, s.oid, 'USAGE')) "
-    "FROM pg_depend d "
-    "JOIN pg_class s ON s.oid = d.objid AND s.relkind = 'S' "
-    "JOIN pg_class t ON t.oid = d.refobjid "
-    "JOIN pg_namespace n ON n.oid = t.relnamespace "
-    "WHERE d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass "
-    "AND d.deptype IN ('a', 'i') "
-    "AND n.nspname = 'gold' AND t.relname = 'marketplace_region_daily')"
+    "(SELECT has_sequence_privilege(current_user, c.oid, 'USAGE') "
+    "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+    f"WHERE n.nspname = '{GOLD_REGION_SCHEMA}' AND c.relname = '{GOLD_REGION_ID_SEQUENCE_NAME}' "
+    "AND c.relkind = 'S')"
 )
 
 # (rótulo seguro, expressão SQL, objeto ausente (NULL) bloqueia?)
@@ -109,12 +119,13 @@ INCREMENTAL_PRIVILEGE_CHECKS: tuple[tuple[str, str, bool], ...] = (
     ("SELECT em raw.ml_orders", _table_priv_expr("raw", "ml_orders", "SELECT"), True),
     ("SELECT em raw.ml_shipments", _table_priv_expr("raw", "ml_shipments", "SELECT"), True),
     ("SELECT em raw.ml_shipment_costs", _table_priv_expr("raw", "ml_shipment_costs", "SELECT"), True),
-    ("SELECT em gold.marketplace_region_daily",
-     _table_priv_expr("gold", "marketplace_region_daily", "SELECT"), True),
-    ("INSERT em gold.marketplace_region_daily",
-     _table_priv_expr("gold", "marketplace_region_daily", "INSERT"), True),
+    # T-0109c: na TABELA real, não na view de compatibilidade do nome antigo.
+    (f"SELECT em {GOLD_REGION_TABLE}",
+     _table_priv_expr(GOLD_REGION_SCHEMA, GOLD_REGION_TABLE_NAME, "SELECT"), True),
+    (f"INSERT em {GOLD_REGION_TABLE}",
+     _table_priv_expr(GOLD_REGION_SCHEMA, GOLD_REGION_TABLE_NAME, "INSERT"), True),
     ("TEMP no banco", "has_database_privilege(current_user, current_database(), 'TEMP')", True),
-    ("USAGE na sequence de gold.marketplace_region_daily", _GOLD_SEQUENCE_USAGE_EXPR, False),
+    (f"USAGE na sequence {GOLD_REGION_ID_SEQUENCE}", _GOLD_SEQUENCE_USAGE_EXPR, True),
     ("USAGE no schema silver (fonte Shopee)", _schema_usage_expr("silver"), False),
     ("SELECT em silver.stg_shopee_order_item_snapshots",
      _table_priv_expr("silver", "stg_shopee_order_item_snapshots", "SELECT"), False),
@@ -403,8 +414,11 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
             can_create_in_gold, can_use_gold = cur.fetchone()
 
             cur.execute(
+                # T-0109c: só TABELA conta; uma view de mesmo nome não prova
+                # que a tabela existe.
                 "SELECT table_name FROM information_schema.tables "
-                "WHERE table_schema = 'gold' AND table_name = ANY(%s) ORDER BY 1",
+                "WHERE table_schema = 'gold' AND table_type = 'BASE TABLE' "
+                "AND table_name = ANY(%s) ORDER BY 1",
                 (list(_GOLD_TABLES),),
             )
             existing_gold_objects = [r[0] for r in cur.fetchall()]
