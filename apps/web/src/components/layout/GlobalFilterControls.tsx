@@ -19,11 +19,13 @@
  * e nao filtro.
  */
 import { useId, useState } from "react";
+import { X } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import MarketplaceFilter from "@/components/MarketplaceFilter";
-import { filtrosForaDoPadrao, resumoDosFiltros } from "@/lib/filters/summary";
+import { DATE_PRESET_OPTIONS, intervaloCurto, resolveActivePreset } from "@/lib/filters/presets";
+import { filtrosForaDoPadrao, resumoCanais, resumoMarcas } from "@/lib/filters/summary";
 import type { GlobalFilters } from "@/lib/filters/types";
 
 interface Props {
@@ -46,7 +48,12 @@ export const CLASSE_CONTAGEM =
 export default function GlobalFilterControls({ filters, onChange, hideCompare = false, loading = false, padrao }: Props) {
   const [aberto, setAberto] = useState(false);
   const id = useId();
-  const resumo = resumoDosFiltros(filters, { semComparacao: hideCompare });
+  // Celular: o periodo tem linha propria e nunca corta (o chip do cabecalho saiu);
+  // canal e marca vem embaixo e podem cortar.
+  // Mesmo texto do gatilho de Periodo ("Mês atual · 01–11/11").
+  const preset = DATE_PRESET_OPTIONS.find((o) => o.value === resolveActivePreset(filters.dateFrom, filters.dateTo, filters.periodo));
+  const resumoPeriodo = `${preset?.label ?? "Personalizado"} · ${intervaloCurto(filters.dateFrom, filters.dateTo)}${filters.compare && !hideCompare ? " · vs anterior" : ""}`;
+  const resumoEscopo = `${resumoCanais(filters.channels)} · ${resumoMarcas(filters.brands)}`;
   const fora = padrao ? filtrosForaDoPadrao(filters, padrao) : [];
 
   return (
@@ -68,7 +75,8 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
               </span>
             )}
           </span>
-          <span className="block truncate text-xs text-ink-muted">{resumo}</span>
+          <span className="block text-xs tabular-nums text-ink">{resumoPeriodo}</span>
+          <span className="block truncate text-xs text-ink-muted">{resumoEscopo}</span>
         </span>
         <svg
           viewBox="0 0 16 16"
@@ -106,8 +114,10 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
           <button
             type="button"
             onClick={() => onChange({ channels: padrao.channels, brands: padrao.brands, dateFrom: padrao.dateFrom, dateTo: padrao.dateTo, periodo: padrao.periodo })}
+            aria-label="Limpar filtros (volta ao padrão da aba)"
             className={CLASSE_LIMPAR}
           >
+            <X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
             Limpar
           </button>
         )}

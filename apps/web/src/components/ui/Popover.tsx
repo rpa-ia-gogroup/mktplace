@@ -22,6 +22,7 @@ export default function Popover({
   valor,
   ativo = false,
   sufixo,
+  rotuloSoNoLargo = false,
   icone,
   children,
   largura = "w-64",
@@ -35,6 +36,8 @@ export default function Popover({
   ativo?: boolean;
   /** Complemento discreto do valor, fora do truncamento ("vs anterior"). */
   sufixo?: ReactNode;
+  /** Rotulo visivel so' a partir de 2xl (o icone diz o que e'); antes, so' para leitor de tela. */
+  rotuloSoNoLargo?: boolean;
   icone?: ReactNode;
   children: (fechar: () => void) => ReactNode;
   largura?: string;
@@ -92,11 +95,11 @@ export default function Popover({
         }`}
       >
         {icone}
-        <span className="text-ink-muted">{rotulo}</span>
+        <span className={rotuloSoNoLargo ? "sr-only 2xl:not-sr-only 2xl:text-ink-muted" : "text-ink-muted"}>{rotulo}</span>
         <span className={`max-w-[11rem] truncate font-semibold ${ativo ? "text-accent-ink" : "text-ink"}`}>
           {valor}
         </span>
-        {sufixo ? <span className="whitespace-nowrap text-xs text-ink-faint">{sufixo}</span> : null}
+        {sufixo ? <span className="whitespace-nowrap text-xs text-ink-muted">{sufixo}</span> : null}
         <ChevronDown
           aria-hidden="true"
           className={`h-4 w-4 shrink-0 text-ink-faint transition-transform ${aberto ? "rotate-180" : ""}`}

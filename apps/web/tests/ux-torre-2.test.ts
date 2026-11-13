@@ -116,7 +116,9 @@ test("o recolhivel declara aria-expanded e aponta para um alvo que existe", () =
   assert.match(c, /\$\{aberto \? "flex" : "hidden"\}[^`]*sm:flex/);
   assert.match(c, /sm:hidden/, "o botao some quando os controles ja cabem");
   // o resumo vem da MESMA GlobalFilters que vai para a API
-  assert.match(c, /resumoDosFiltros\(filters/);
+  // (FILTROS-PADRAO: periodo numa linha propria, canal e marca na de baixo)
+  assert.match(c, /intervaloCurto\(filters\.dateFrom, filters\.dateTo\)/);
+  assert.match(c, /resumoCanais\(filters\.channels\)/);
   // o botao tambem cumpre 44px
   assert.match(c, /min-h-11 w-full/);
   // nenhum estado de filtro paralelo: so' aberto/fechado

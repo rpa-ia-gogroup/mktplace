@@ -180,6 +180,7 @@ export default function DateRangeFilter({
         rotulo="Período"
         valor={presetAtivo}
         sufixo={!hideCompare && compare ? "vs anterior" : undefined}
+        rotuloSoNoLargo
         icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
         largura="w-60"
       >

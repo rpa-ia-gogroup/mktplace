@@ -18,7 +18,7 @@
  */
 import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Check } from "lucide-react";
+import { CalendarDays, Check, X } from "lucide-react";
 
 import BrandFilter from "@/components/BrandFilter";
 import Popover from "@/components/ui/Popover";
@@ -138,7 +138,8 @@ export default function FiltrosCx({ f, canal }: { f: Filtros; canal: CanalCx }) 
         </Popover>
 
         {fora > 0 && (
-          <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO }, "shopee")} className={CLASSE_LIMPAR}>
+          <button type="button" onClick={() => ir({ ...f, marca: null, dias: JANELA_PADRAO }, "shopee")} aria-label="Limpar filtros (volta ao padrão da aba)" className={CLASSE_LIMPAR}>
+            <X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
             Limpar
           </button>
         )}

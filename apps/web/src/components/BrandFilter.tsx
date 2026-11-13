@@ -31,11 +31,11 @@ const BASE_BTN =
 const ACTIVE_BTN = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const INACTIVE_BTN = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
-/** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada ("Marca: 3"). */
+/** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada ("Ápice +1"). */
 export function resumoMarcaMenu(value: readonly string[]): string {
   if (value.length === 0 || value.length === FILTER_BRAND_OPTIONS.length) return "Todas";
   if (value.length === 1) return brandLabel(value[0]);
-  return String(value.length);
+  return `${brandLabel(value[0])} +${value.length - 1}`;
 }
 
 export default function BrandFilter({ value, onChange, variante = "faixa" }: Props) {
@@ -66,7 +66,8 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
             type="button"
             aria-pressed={active}
             onClick={() => onChange(toggleMultiSelect(value, opt.value))}
-            className={`${BASE_BTN} ${menu ? "min-w-0 flex-1 justify-between" : alinhamento} ${active ? ACTIVE_BTN : INACTIVE_BTN}`}
+            // No menu o realce de ativo vai na LINHA inteira (com o "só esta"), nao so' no botao.
+            className={`${BASE_BTN} ${menu ? "min-w-0 flex-1 justify-between" : alinhamento} ${active ? (fechar ? "font-semibold text-ink" : ACTIVE_BTN) : INACTIVE_BTN}`}
           >
             {opt.label}
             {menu && active && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
@@ -74,7 +75,7 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
         );
         if (!fechar) return botao;
         return (
-          <div key={opt.value} className="group flex items-center gap-0.5">
+          <div key={opt.value} className={`group flex items-center gap-0.5 rounded-md ${active ? ACTIVE_BTN : ""}`}>
             {botao}
             <button
               type="button"
