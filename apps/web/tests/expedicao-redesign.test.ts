@@ -529,9 +529,11 @@ test("todo seletor da Expedicao usa o MESMO componente", () => {
     assert.doesNotMatch(codigo, /GrupoRadio/, `${nome} ainda usa GrupoRadio`);
   }
   // UI-EXPEDICAO-1: a janela da tendencia virou o "Período" do topo da pagina.
-  assert.match(CLIENTE, /<Segmented\s+rotulo="Período"/);
+  // FILTROS-PADRAO: nos tres canais, o MESMO gatilho de Periodo (`SeletorPeriodo`).
+  assert.match(CLIENTE, /<SeletorPeriodo\b/);
+  assert.match(TIKTOK, /<SeletorPeriodo\b/);
   assert.match(CABECALHO, /<Segmented\s+rotulo="Profundidade"/);
-  assert.equal((TIKTOK.match(/<Segmented\b/g) ?? []).length, 2, "evento e janela");
+  assert.equal((TIKTOK.match(/<Segmented\b/g) ?? []).length, 1, "so' o evento");
 });
 
 test("disclosure diz QUAL regiao controla", () => {

@@ -530,7 +530,7 @@ test("prazo reconstruido e vencimentos parciais nao viram chip: a metodologia mo
 test("filtros do TikTok numa linha: Evento curto e 'Período' como nos outros canais", () => {
   assert.deepEqual(ROTULO_EVENTO_CURTO, { coleta: "Coleta", despacho: "Despacho" });
   const tk = lerFonte(juntar(import.meta.dirname, "..", "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
-  assert.match(tk, /rotulo="Período"/);
+  assert.match(tk, /<SeletorPeriodo\b/); // o gatilho "Período" comum (FILTROS-PADRAO)
   assert.doesNotMatch(tk, /rotulo="Janela"/);
 });
 

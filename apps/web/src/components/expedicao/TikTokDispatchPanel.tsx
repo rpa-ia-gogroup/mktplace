@@ -60,7 +60,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
-import CabecalhoExpedicao, { SeletorMarca } from "@/components/expedicao/CabecalhoExpedicao";
+import CabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
 import JanelaPersonalizada from "@/components/expedicao/JanelaPersonalizada";
 import JornadaPedidos, { useJornada } from "@/components/expedicao/JornadaPedidos";
 import {
@@ -419,6 +419,13 @@ export default function TikTokDispatchPanel({
   // linha), e a janela se chama "Período", como na Shopee e no ML.
   const controles = (
     <>
+      <SeletorPeriodo
+        opcoes={opcoesDoSeletor(REGRA)}
+        valor={seletor}
+        dias={dias}
+        aoEscolher={escolherJanela}
+        personalizado={<JanelaPersonalizada max={REGRA.max} diasAplicados={dias} aoAplicar={aplicarJanela} />}
+      />
       <div className="flex flex-wrap items-center gap-2">
         <span id="tk-evento" className="text-xs text-ink-faint">
           Evento
@@ -429,18 +436,6 @@ export default function TikTokDispatchPanel({
           opcoes={EVENTOS.map((e) => ({ valor: e, texto: ROTULO_EVENTO_CURTO[e] }))}
           valor={evento}
           aoEscolher={setEvento}
-        />
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span id="tk-janela" className="text-xs text-ink-faint">
-          Período
-        </span>
-        <Segmented
-          rotulo="Período"
-          rotuladoPor="tk-janela"
-          opcoes={opcoesDoSeletor(REGRA)}
-          valor={seletor}
-          aoEscolher={escolherJanela}
         />
       </div>
     </>
@@ -876,9 +871,6 @@ export default function TikTokDispatchPanel({
       }
       avisos={
         <>
-          {seletor === OPCAO_PERSONALIZADA ? (
-            <JanelaPersonalizada max={REGRA.max} diasAplicados={dias} aoAplicar={aplicarJanela} />
-          ) : null}
           {janelaDescartada ? (
             <Note tom="atencao" papel="status">
               Janela do link inválida; usando a padrão.

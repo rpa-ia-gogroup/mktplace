@@ -19,6 +19,8 @@ interface Props {
    * alvo de 44px, mesma regra "vazio = todas". Muda so' onde eles moram.
    */
   variante?: "faixa" | "menu";
+  /** Lista propria (Expedicao: as marcas do payload tambem). Padrao: o filtro global. */
+  opcoes?: readonly { value: string; label: string }[];
 }
 
 /**
@@ -38,7 +40,7 @@ export function resumoMarcaMenu(value: readonly string[]): string {
   return `${brandLabel(value[0])} +${value.length - 1}`;
 }
 
-export default function BrandFilter({ value, onChange, variante = "faixa" }: Props) {
+export default function BrandFilter({ value, onChange, variante = "faixa", opcoes = FILTER_BRAND_OPTIONS }: Props) {
   const allActive = value.length === 0;
   const menu = variante === "menu";
   // Na lista do menu o rotulo encosta a esquerda e o check marca a selecao;
@@ -58,7 +60,7 @@ export default function BrandFilter({ value, onChange, variante = "faixa" }: Pro
         Todas
         {menu && allActive && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
       </button>
-      {FILTER_BRAND_OPTIONS.map((opt) => {
+      {opcoes.map((opt) => {
         const active = value.includes(opt.value);
         const botao = (
           <button

@@ -230,8 +230,9 @@ test("tela: 'desatualizada' uma vez (cabecalho) e no ⓘ do heroi; 'inclui FBS' 
 
 test("tela: o periodo fica no topo, so' na visao do gestor", () => {
   assert.match(CLIENTE, /controles=\{visao === "gestor" \? controlePeriodo : undefined\}/);
-  assert.match(CLIENTE, /const controlePeriodo = \([\s\S]*?<Segmented\s+rotulo="Período"/);
-  assert.match(CLIENTE, /periodoConsultado \? <InfoDica texto=\{periodoConsultado\} \/> : null/);
+  // FILTROS-PADRAO: o Periodo e' o gatilho comum (`SeletorPeriodo`), com o "ⓘ" do periodo consultado.
+  assert.match(CLIENTE, /const controlePeriodo = \([\s\S]*?<SeletorPeriodo\b/);
+  assert.match(CLIENTE, /periodoConsultado \? <InfoDica texto=\{periodoConsultado\} \/> : undefined/);
 });
 
 test("LDR: trocar o periodo nao apaga a divisao da fila de agora; trocar a marca, sim", () => {
