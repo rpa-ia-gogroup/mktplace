@@ -10,7 +10,7 @@ import { fetchBrandDetail, type BrandDetail, type BrandDetailChannelRow, type Br
 import { isMarketplaceSelected, serializeMarketplaceSelection } from "@/lib/marketplace-filter";
 import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { previousEquivalentRange } from "@/lib/filters/presets";
-import { mergeFilteredHref } from "@/lib/filters/nav-links";
+import { mergeFilteredHref, temHistoricoNaTorre } from "@/lib/filters/nav-links";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { summarize, isOrdersReliable, projectDailyRowsBySelection } from "@/lib/brand-daily-summary";
@@ -220,7 +220,8 @@ function BrandPageInner() {
   // sobrescreve `brands=` atual, para nunca navegar para uma marca com a
   // querystring apontando para a marca anterior (Gate U3, Task 6).
   const buildHref = (href: string) => mergeFilteredHref(href, searchParams);
-  const backToCanais = mergeFilteredHref("/canais", searchParams);
+  // Sem historico (link direto, aba nova), "Voltar" cai na Gerencial com os filtros da URL.
+  const voltarPara = mergeFilteredHref("/", searchParams);
 
   // Contexto de chegada "quente" (Gate G3, estendido no V3-2 para a origem
   // `inteligencia`): validado contra a marca da rota e o canal filtrado.
@@ -504,10 +505,17 @@ function BrandPageInner() {
       }
       direita={
         <Link
-          href={backToCanais}
+          href={voltarPara}
+          onClick={(e) => {
+            // Volta para a tela de onde a pessoa veio (com os filtros que ela tinha la').
+            if (temHistoricoNaTorre(window.history.length, document.referrer, window.location.origin)) {
+              e.preventDefault();
+              router.back();
+            }
+          }}
           className="inline-flex min-h-11 items-center rounded px-2 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
-          ← Voltar para Canais
+          ← Voltar
         </Link>
       }
     >
