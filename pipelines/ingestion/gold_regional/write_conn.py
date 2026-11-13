@@ -42,6 +42,11 @@ from dotenv import dotenv_values
 
 EXPECTED_SECRET_KEYS = frozenset({"DATAMART_GOLD_WRITE_URL", "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"})
 
+# T-0109: origem explícita do segredo. Só com GOLD_WRITE_SECRET_SOURCE=env
+# (definida pela DAG) as variáveis de ambiente acima valem.
+SECRET_SOURCE_KEY = "GOLD_WRITE_SECRET_SOURCE"
+SECRET_SOURCE_ENV = "env"
+
 # Chave fixa e exclusiva desta ingestão — nunca reaproveitar para outra
 # finalidade em outro módulo (em particular, nunca a mesma chave usada por
 # pipelines/ingestion/shopee_raw/write_conn.py). Usada com
@@ -100,21 +105,33 @@ def _load_write_secret_from_environ(environ: Mapping[str, str]) -> Optional[dict
     """T-0109 — via do Airflow: o segredo chega como variáveis de ambiente
     do subprocesso (Connection injetada), não como arquivo local.
 
+    A origem é EXPLÍCITA (revisão R193): o loader faz `load_dotenv(.env)` no
+    import, então a mera presença das 2 variáveis não prova que vieram da
+    DAG — podem ter vazado do `.env` principal. Por isso as variáveis só
+    valem com `GOLD_WRITE_SECRET_SOURCE=env`, que quem define é a DAG.
+
     Fail-closed:
-      - as 2 chaves presentes (não vazias) → usa, sem ler arquivo;
-      - só 1 presente → recusa (nunca cai para o arquivo em silêncio);
-      - nenhuma → devolve None e o chamador segue para o arquivo local;
+      - `GOLD_WRITE_SECRET_SOURCE` ausente → devolve None e o chamador segue
+        para o arquivo local, IGNORANDO as 2 variáveis mesmo que existam;
+      - `GOLD_WRITE_SECRET_SOURCE` com valor diferente de `env` → recusa;
+      - `env` + as 2 chaves presentes (não vazias) → usa, sem ler arquivo;
+      - `env` + alguma chave faltando/vazia → recusa (nunca cai para o arquivo);
       - consentimento != '1' → recusa.
     Só lê; nunca escreve em `os.environ`. As mensagens citam só NOMES de
     chave, nunca valores."""
-    present = frozenset(k for k in EXPECTED_SECRET_KEYS if environ.get(k) not in (None, ""))
-    if not present:
+    if SECRET_SOURCE_KEY not in environ:
         return None
+    if environ[SECRET_SOURCE_KEY] != SECRET_SOURCE_ENV:
+        raise SecretLoadError(
+            f"{SECRET_SOURCE_KEY} definida com valor não suportado — o único valor aceito é "
+            f"'{SECRET_SOURCE_ENV}' (sem a variável, vale o arquivo local)"
+        )
+    present = frozenset(k for k in EXPECTED_SECRET_KEYS if environ.get(k) not in (None, ""))
     if present != EXPECTED_SECRET_KEYS:
         missing = sorted(EXPECTED_SECRET_KEYS - present)
         raise SecretLoadError(
-            f"segredo de escrita da gold parcial nas variáveis de ambiente (faltando: {missing}) — "
-            "defina as 2 chaves ou nenhuma (o arquivo local não é usado como complemento)"
+            f"{SECRET_SOURCE_KEY}={SECRET_SOURCE_ENV}, mas o segredo de escrita da gold está incompleto nas "
+            f"variáveis de ambiente (faltando: {missing}) — o arquivo local não é usado como complemento"
         )
     if environ["I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"] != "1":
         raise SecretLoadError("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD != '1' (variável de ambiente)")
@@ -124,11 +141,11 @@ def _load_write_secret_from_environ(environ: Mapping[str, str]) -> Optional[dict
 def load_write_secret(env_path: Path, repo_root: Path) -> dict[str, str]:
     """Carrega o segredo de escrita da gold para um dict local.
 
-    Ordem (T-0109): primeiro as variáveis de ambiente
-    `DATAMART_GOLD_WRITE_URL` + `I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD`
-    (via Airflow; ver `_load_write_secret_from_environ`); sem nenhuma delas,
-    lê `.env.gold-write.local` (ou caminho equivalente) com as checagens de
-    sempre. Nunca escreve em `os.environ`. Levanta SecretLoadError com uma
+    Origem (T-0109): com `GOLD_WRITE_SECRET_SOURCE=env`, usa as variáveis de
+    ambiente `DATAMART_GOLD_WRITE_URL` + `I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD`
+    (via Airflow; ver `_load_write_secret_from_environ`); sem essa flag, lê
+    `.env.gold-write.local` (ou caminho equivalente) com as checagens de
+    sempre, ignorando as variáveis. Nunca escreve em `os.environ`. Levanta SecretLoadError com uma
     mensagem que NUNCA contém valores do segredo."""
     from_env = _load_write_secret_from_environ(os.environ)
     if from_env is not None:
