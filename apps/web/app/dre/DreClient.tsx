@@ -29,10 +29,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Calculator, Filter, ShieldCheck, TrendingUp } from "lucide-react";
 
-import PageContainer from "@/components/layout/PageContainer";
+import Aba from "@/components/layout/Aba";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DreDetalheConta, { TITULO_DETALHE_DRE, type ChaveDetalheDre } from "@/components/dre/DreDetalheConta";
-import PageHeader from "@/components/layout/PageHeader";
 import Chip from "@/components/ui/Chip";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
@@ -44,7 +43,6 @@ import DreVertical, { type OpcaoRecorte } from "@/components/dre/DreVertical";
 import DreCanais from "@/components/dre/DreCanais";
 import { DreMarcaCanalMatriz, DreMarcasTabela } from "@/components/dre/DreMarcas";
 import CmvCobertura from "./CmvCobertura";
-import Segmented from "@/components/ui/Segmented";
 import {
   ComparacaoCenarios,
   DreVerticalEstimada,
@@ -165,19 +163,25 @@ export default function DreClient() {
   const insumoEm = resp?.fontes.insumos_dre.publicado_em ?? null;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="DRE"
-        subtitle={
-          cenario === "estimada"
-            ? "Margem de contribuição estimada com premissas."
-            : estimadaEmDestaque
-              ? "Prévia: margem de contribuição estimada com premissas em destaque; a conhecida fica como detalhe."
-              : "Margem de contribuição conhecida por canal e marca."
-        }
-        icon={Calculator}
-        meta={
-          resp ? (
+    <Aba<Cenario>
+      titulo="DRE"
+      // DRE-UX-3: cenario e' VISAO (vai para a URL), nao recorte (nao refaz a busca). Aqui, as abas sob o titulo.
+      visoes={[
+        { id: "conhecida", rotulo: "Conhecida" },
+        { id: "estimada", rotulo: "Estimada com premissas" },
+      ]}
+      visao={cenario}
+      onVisao={(c) => aplicar({ cenario: c })}
+      selo={
+        <>
+          <InfoDica
+            texto={
+              cenario === "conhecida"
+                ? "Margem de contribuição conhecida: só componentes realizados (oficiais)."
+                : "Margem estimada: realizado + premissas de orçamento por marca. Nunca somada à conhecida."
+            }
+          />
+          {resp ? (
             <>
               <PeriodChip label={`Competência ${competencia}${mesPadrao ? " · madura" : ""}`} />
               {seloPrevia && (
@@ -200,35 +204,11 @@ export default function DreClient() {
                 {aviso ? aviso.curto : `Fotografia ${insumoEm ? fmtInstanteBrt(insumoEm) : "ok"}`}
               </Chip>
             </>
-          ) : undefined
-        }
-        filters={<DreFiltros filtros={filtros} mesPadrao={mesPadrao} onChange={aplicar} carregando={carregando} />}
-      />
-
-      {/* DRE-UX-3: cenario e' VISAO (vai para a URL), nao recorte (nao refaz a busca). */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span id="dre-cenario-rotulo" className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          Cenário
-        </span>
-        <Segmented<Cenario>
-          rotulo="Cenário da DRE"
-          rotuladoPor="dre-cenario-rotulo"
-          opcoes={[
-            { valor: "conhecida", texto: "Conhecida", descricao: "Conhecida: só componentes realizados (oficiais)" },
-            { valor: "estimada", texto: "Estimada com premissas", descricao: "Estimada: realizado mais premissas de orçamento por marca" },
-          ]}
-          valor={cenario}
-          aoEscolher={(c) => aplicar({ cenario: c })}
-        />
-        <InfoDica
-          texto={
-            cenario === "conhecida"
-              ? "Só componentes realizados (oficiais)."
-              : "Realizado + premissas de orçamento por marca. Nunca somada à conhecida."
-          }
-        />
-      </div>
-
+          ) : null}
+        </>
+      }
+      filtros={<DreFiltros filtros={filtros} mesPadrao={mesPadrao} onChange={aplicar} carregando={carregando} />}
+    >
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {carregando ? "Carregando a DRE…" : falha ? `Falha: ${falha.titulo}` : vazio ? "Sem dados para a seleção." : "DRE carregada."}
       </span>
@@ -324,7 +304,7 @@ export default function DreClient() {
           <DreDetalheConta chave={detalhe} total={resp.total} competencia={competencia ?? ""} bloqueadores={bloqueadores} />
         )}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
 
