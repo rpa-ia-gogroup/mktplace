@@ -14,7 +14,7 @@ import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import FaixaQualidade, { CARTOES_DA_FAIXA, GRADE_QUALIDADE, VISUAL_QUALIDADE } from "@/components/qualidade/QualidadeCartoes";
 import QualidadeDrilldownContent from "@/components/qualidade/QualidadeDrilldownContent";
-import { DEF_QUALIDADE, fmtDias, linhasPorMarca, tituloDoDetalhe, type ChaveQualidade, type LinhaMarca } from "@/lib/qualidade-cartoes";
+import { DEF_QUALIDADE, fmtDias, linhasPorMarca, textoDoCartao, tituloDoDetalhe, type ChaveQualidade, type LinhaMarca } from "@/lib/qualidade-cartoes";
 import { fmtPctBr, fmtPctSimples } from "@/lib/formatters";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
 import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
@@ -63,6 +63,15 @@ function pesos(valores: (number | null)[]): (number | null)[] {
 
 type VisaoQualidade = "geral" | "fidelizacao" | "shopee";
 
+/** As ancoras de antes das abas continuam valendo: o link antigo abre a aba certa. */
+const VISAO_DA_ANCORA: Record<string, VisaoQualidade> = {
+  "#resumo": "geral",
+  "#qualidade-marca": "geral",
+  "#qualidade-produtos-shopee": "geral",
+  "#fidelizacao-ml": "fidelizacao",
+  "#qualidade-shopee": "shopee",
+};
+
 /** Cor do canal para a barrinha da tabela (token do tema). */
 const COR_CANAL = { ml: "rgb(var(--tc-canal-ml))", shopee: "rgb(var(--tc-canal-shopee))" } as const;
 
@@ -88,6 +97,15 @@ function QualityPageInner() {
   // Cartao aberto no detalhe (dialogo unico da pagina).
   const [detalhe, setDetalhe] = useState<ChaveQualidade | null>(null);
   const [visao, setVisao] = useState<VisaoQualidade>("geral");
+  useEffect(() => {
+    const daAncora = () => {
+      const v = VISAO_DA_ANCORA[window.location.hash];
+      if (v) setVisao(v);
+    };
+    daAncora();
+    window.addEventListener("hashchange", daAncora);
+    return () => window.removeEventListener("hashchange", daAncora);
+  }, []);
   const [canalPrazo, setCanalPrazo] = useState<"tiktok" | "ml">("tiktok");
   const [canalCancelamento, setCanalCancelamento] = useState<"ml" | "shopee">("ml");
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null);
@@ -162,7 +180,9 @@ function QualityPageInner() {
   const showTiktok = isMarketplaceSelected(filter, "tiktok");
   const showMl = isMarketplaceSelected(filter, "ml");
   const showShopee = isMarketplaceSelected(filter, "shopee");
-  const qualityColSpan = 1 + (showTiktok ? 1 : 0) + (showMl ? 3 : 0) + (showShopee ? 2 : 0);
+  // Coluna sem dado de NENHUMA marca sai da tabela (o motivo fica no ⓘ do painel); com dado parcial, fica com "—".
+  const temShDevolucao = displayBrands.some((b) => b.shopee_return_rate_pct != null);
+  const qualityColSpan = 1 + (showTiktok ? 1 : 0) + (showMl ? 3 : 0) + (showShopee ? (temShDevolucao ? 2 : 1) : 0);
 
   const qualityColumnTypes = useMemo(() => ({
     brand: "text" as const, tk_delivery: "numeric" as const, ml_cancel: "numeric" as const,
@@ -186,9 +206,10 @@ function QualityPageInner() {
     const cols = ["brand"];
     if (showTiktok) cols.push("tk_delivery");
     if (showMl) cols.push("ml_cancel", "ml_not_delivered", "ml_delivery");
-    if (showShopee) cols.push("sh_cancel", "sh_return");
+    if (showShopee) cols.push("sh_cancel");
+    if (showShopee && temShDevolucao) cols.push("sh_return");
     return cols;
-  }, [showTiktok, showMl, showShopee]);
+  }, [showTiktok, showMl, showShopee, temShDevolucao]);
   useEffect(() => {
     qualitySort.resetSortIfColumnMissing(qualityVisibleColumns);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,6 +268,7 @@ function QualityPageInner() {
   // Paineis da Visao geral: cada um com o seu seletor de canal (so' os canais do filtro).
   const canaisDoPrazo = PRAZO.filter((p) => (p.canal === "tiktok" ? showTiktok : showMl));
   const prazoAtivo = canaisDoPrazo.find((p) => p.canal === canalPrazo) ?? canaisDoPrazo[0];
+  const mediaDoPrazo = textoDoCartao(prazoAtivo?.chave ?? "ml_entrega", displayKpis);
   const canaisDoCancelamento = CANCELAMENTO.filter((p) => (p.canal === "ml" ? showMl : showShopee));
   const cancelamentoAtivo = canaisDoCancelamento.find((p) => p.canal === canalCancelamento) ?? canaisDoCancelamento[0];
 
@@ -320,7 +342,14 @@ function QualityPageInner() {
                 acao={canaisDoPrazo.length > 1 ? <Segmented rotulo="Canal do prazo de entrega" opcoes={canaisDoPrazo.map((p) => ({ valor: p.canal, texto: p.texto }))} valor={prazoAtivo.canal} aoEscolher={setCanalPrazo} /> : undefined}
               >
                 {prazoAtivo ? (
-                  <BarrasPorMarca linhas={linhasPorMarca(prazoAtivo.chave, displayBrands)} cor={CHANNEL_DOT[prazoAtivo.canal]} carregando={isLoadingState} />
+                  <div className="flex flex-col gap-3">
+                    {/* a media do canal (o numero que era cartao) antes das marcas */}
+                    <p className="flex items-baseline justify-between gap-3 border-b border-line pb-2.5 text-sm">
+                      <span className="text-ink-muted">Média do canal · {prazoAtivo.texto}</span>
+                      <span className={`text-xl font-bold tabular-nums ${mediaDoPrazo.ausente ? "text-ink-faint" : "text-ink"}`}>{mediaDoPrazo.valor}</span>
+                    </p>
+                    <BarrasPorMarca linhas={linhasPorMarca(prazoAtivo.chave, displayBrands)} cor={CHANNEL_DOT[prazoAtivo.canal]} carregando={isLoadingState} />
+                  </div>
                 ) : (
                   <StateBlock tipo="indisponivel" compacto titulo="A Shopee não publica prazo de entrega nesta fonte" />
                 )}
@@ -344,25 +373,25 @@ function QualityPageInner() {
               titulo="Qualidade por marca"
               aria-label="Qualidade por marca"
               semPadding
-              ajuda={`Taxas: abaixo de 2% em verde, de 2% a 5% em âmbar, acima de 5% em vermelho.${showMl ? " ML N. Entregue é proxy: pagos − entregues." : ""}${showTiktok ? " Entrega do TikTok: dados a partir de abr/26." : ""}`}
+              ajuda={`Taxas: abaixo de 2% em verde, de 2% a 5% em âmbar, acima de 5% em vermelho.${showMl ? " ML · Não entregue é proxy: pagos − entregues." : ""}${showTiktok ? " Entrega do TikTok: dados a partir de abr/26." : ""}${showShopee && !temShDevolucao ? " Shopee · Devolução: nenhuma marca com dado no período, por isso a coluna não aparece." : ""}`}
             >
               <TableScrollHint>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-raised text-left">
                       <SortableHeader label="Marca" column="brand" sort={qualitySort.sort} onSort={qualitySort.toggleSort} align="left" />
-                      {showTiktok && <SortableHeader label="TK Entrega" column="tk_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
+                      {showTiktok && <SortableHeader label="TikTok · Entrega" column="tk_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
                       {showMl && (
                         <>
-                          <SortableHeader label="ML Cancel." column="ml_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
-                          <SortableHeader label="ML N. Entregue" column="ml_not_delivered" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
-                          <SortableHeader label="ML Entrega" column="ml_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          <SortableHeader label="ML · Cancel." column="ml_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          <SortableHeader label="ML · Não entregue" column="ml_not_delivered" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          <SortableHeader label="ML · Entrega" column="ml_delivery" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
                         </>
                       )}
                       {showShopee && (
                         <>
-                          <SortableHeader label="SH Cancel." column="sh_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
-                          <SortableHeader label="SH Devol." column="sh_return" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          <SortableHeader label="Shopee · Cancel." column="sh_cancel" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />
+                          {temShDevolucao && <SortableHeader label="Shopee · Devol." column="sh_return" sort={qualitySort.sort} onSort={qualitySort.toggleSort} />}
                         </>
                       )}
                     </tr>
@@ -389,7 +418,7 @@ function QualityPageInner() {
                         {showShopee && (
                           <>
                             <CelulaTaxa texto={fmtRate(b.shopee_cancel_rate_pct ?? null)} valor={b.shopee_cancel_rate_pct ?? null} peso={pesoShCancel[k]} cor={COR_CANAL.shopee} />
-                            <CelulaTaxa texto={fmtRate(b.shopee_return_rate_pct ?? null)} valor={b.shopee_return_rate_pct ?? null} peso={pesoShDevol[k]} cor={COR_CANAL.shopee} />
+                            {temShDevolucao && <CelulaTaxa texto={fmtRate(b.shopee_return_rate_pct ?? null)} valor={b.shopee_return_rate_pct ?? null} peso={pesoShDevol[k]} cor={COR_CANAL.shopee} />}
                           </>
                         )}
                       </tr>
