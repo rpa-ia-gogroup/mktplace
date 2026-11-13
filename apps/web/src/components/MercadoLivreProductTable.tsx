@@ -2,7 +2,7 @@ import type { ProdutoMLRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
 
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
@@ -89,18 +89,18 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
           </td>
           <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink font-medium">{fmtBrl(p.gross_revenue)}</p>
+            <p className="tabular-nums text-ink font-medium">{fmtBrlCurto(p.gross_revenue)}</p>
             {p.revenue_share_pct != null && (
               <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.revenue_share_pct.toFixed(1)}% do total</p>
             )}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-ink-muted">
-            {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-ink-faint">—</span>}
+            {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink-muted">{fmtNumber(p.units_sold)}</p>
+            <p className="tabular-nums text-ink-muted">{fmtNumCurto(p.units_sold)}</p>
             {p.unique_buyers != null && (
-              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.unique_buyers)} compr.</p>
+              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.unique_buyers)} compr.</p>
             )}
           </td>
           <td className="px-4 py-3 text-center">
@@ -134,7 +134,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
               <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">
                 {[
                   p.ad_acos_pct != null && `ACOS ${p.ad_acos_pct.toFixed(1)}%`,
-                  p.ad_spend != null && `Spend ${fmtBrl(p.ad_spend)}`,
+                  p.ad_spend != null && `Spend ${fmtBrlCurto(p.ad_spend)}`,
                 ].filter(Boolean).join(" · ")}
               </p>
             )}

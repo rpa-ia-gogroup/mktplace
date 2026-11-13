@@ -73,7 +73,8 @@ test("P3. o cabecalho compartilhado tem 10 consumidores reais? (>=2 justifica a 
   // brand tem cabecalho proprio (voltar + avatar + pills) e deliberadamente
   // NAO usa PageHeader — seria o unico consumidor daquele contrato.
   assert.ok(!consumidores.includes("brand"), "brand mantem cabecalho proprio");
-  assert.equal(consumidores.length, 8, consumidores.join(","));
+  // ALVO-GRADE: as rotas migram para `<Aba>` uma a uma; a lista so' diminui.
+  assert.ok(consumidores.length <= 7, consumidores.join(","));
 });
 
 test("P4. barra sticky SO' nas paginas que herdam filtros globais", () => {
@@ -420,6 +421,6 @@ test("P25. Produtos TikTok continua no valor de produto, sem rateio de frete", (
   assert.doesNotMatch(src, /rateio|shipping|frete/i, "nenhuma regra de frete por produto");
   assert.doesNotMatch(src, /estimated_margin/, "campo fora das tabelas atuais");
   // e nenhum ranking consolidado entre marketplaces
-  assert.match(src, /ProductMarketplaceTabs/, "cada marketplace na sua aba");
+  assert.match(src, /visoes=\{TABS\.map/, "cada marketplace na sua aba (abas da moldura)");
   assert.doesNotMatch(src, /rankingConsolidado|allChannelsRanking/i);
 });

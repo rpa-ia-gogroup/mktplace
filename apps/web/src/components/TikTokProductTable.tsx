@@ -2,7 +2,7 @@ import type { ProdutoTikTokRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
-import { fmtBrl, fmtNumber } from "@/lib/formatters";
+import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
 
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
@@ -66,14 +66,14 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
             <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.product_id}</p>
           </td>
           <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand}</td>
-          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrl(p.gmv)}</td>
+          <td className="px-4 py-3 text-right tabular-nums text-ink font-medium whitespace-nowrap">{fmtBrlCurto(p.gmv)}</td>
           <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums text-ink-muted">
-            {p.avg_price != null ? fmtBrl(p.avg_price) : <span className="text-ink-faint">—</span>}
+            {p.avg_price != null ? fmtBrlCurto(p.avg_price) : <span className="text-ink-faint">—</span>}
           </td>
           <td className="px-4 py-3 text-right whitespace-nowrap">
-            <p className="tabular-nums text-ink-muted">{p.orders != null ? `${fmtNumber(p.orders)} ped.` : <span className="text-ink-faint">—</span>}</p>
+            <p className="tabular-nums text-ink-muted">{p.orders != null ? `${fmtNumCurto(p.orders)} ped.` : <span className="text-ink-faint">—</span>}</p>
             {p.items_sold != null && p.items_sold !== p.orders && (
-              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.items_sold)} unid.</p>
+              <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.items_sold)} unid.</p>
             )}
           </td>
           <td className="px-4 py-3 text-center">
@@ -107,7 +107,7 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
               <>
                 <p className="tabular-nums text-ink-muted">{p.rating_avg.toFixed(1)}</p>
                 {p.total_ratings != null && (
-                  <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumber(p.total_ratings)} aval.</p>
+                  <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{fmtNumCurto(p.total_ratings)} aval.</p>
                 )}
               </>
             ) : <span className="text-ink-faint">—</span>}

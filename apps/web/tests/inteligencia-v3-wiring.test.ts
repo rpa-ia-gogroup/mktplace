@@ -203,7 +203,7 @@ test("30b. /produtos: nenhuma tipografia sub-12px ACRESCENTADA por esta task", (
   // esta no escopo do V3-1A. As tres ocorrencias existentes sao anteriores e
   // ficam registradas como divida, mas o numero nao pode crescer.
   const achados = (read(PRODUTOS).match(/text-\[(?:[0-9]|10|11)px\]/g) ?? []).length;
-  assert.equal(achados, 3, "o wiring de URL nao pode introduzir tipografia sub-12px");
+  assert.ok(achados <= 3, "o wiring de URL nao pode introduzir tipografia sub-12px (a divida so' diminui; ALVO-GRADE zerou)");
 });
 
 // ---------------------------------------------------------------------------

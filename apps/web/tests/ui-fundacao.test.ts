@@ -124,7 +124,6 @@ const AINDA_FORA_DO_ESQUELETO = new Set([
   "/operacoes",
   "/pedidos",
   "/performance-contas",
-  "/produtos",
   "/qualidade",
   "/referencias-externas/avoe",
   "/regioes",

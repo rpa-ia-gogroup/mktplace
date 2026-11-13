@@ -4,8 +4,9 @@ interface Props {
   children: ReactNode;
 }
 
+// ALVO-GRADE: o seletor em pilula da barra de filtros (token do tema: claro e escuro).
 const SELECT_CLASS =
-  "text-sm border border-line rounded-lg px-3 py-1.5 text-ink-muted bg-surface focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent";
+  "min-h-11 rounded-full border border-line bg-surface px-4 text-sm font-medium text-ink hover:border-line-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 
 /**
  * Container padrao da barra de filtros das 3 abas de Produtos. Nao conhece
