@@ -361,7 +361,7 @@ function PedidosPageInner() {
                   <BarChart data={chartData} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barSize={chartData.length > 14 ? 8 : 14}>
                     <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 12, fill: tema.eixo }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={16} />
-                    <YAxis tick={{ fontSize: 12, fill: tema.eixo }} tickLine={false} axisLine={false} tickFormatter={(v) => fmtNumCurto(v)} width={56} />
+                    <YAxis tick={{ fontSize: 12, fill: tema.eixo }} tickLine={false} axisLine={false} tickFormatter={(v) => fmtNumCurto(v)} width={68} />
                     <Tooltip
                       cursor={{ fill: tema.grade, opacity: 0.45 }}
                       contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 12, fontSize: 12, color: tema.tooltipTinta }}
