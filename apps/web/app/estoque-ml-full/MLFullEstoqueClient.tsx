@@ -182,7 +182,9 @@ function notaMarcaML(m: MarcaML): string | null {
     return `Sem fotografia no dia${m.ultima_fotografia ? ` (última: ${fmtData(m.ultima_fotografia)})` : " (nunca publicada)"}`;
   }
   if (estadoExibicaoMarcaML(m) === "sem_estoque_full") return ROTULO_SEM_ESTOQUE_FULL_ML;
-  return subtextoSaldoZeroML(m);
+  // Leitura parcial: o disponivel soma menos; dito no cabecalho, nunca calado.
+  const semLeitura = m.leitura && m.leitura.inventarios_sem_leitura > 0 ? `${fmtInt(m.leitura.inventarios_sem_leitura)} sem leitura` : null;
+  return [semLeitura, subtextoSaldoZeroML(m)].filter(Boolean).join(" · ") || null;
 }
 
 /** Classe da grade curva x marca: as mesmas dos cartoes Ruptura, Estoque baixo e Excesso. */
@@ -605,7 +607,7 @@ export default function MLFullEstoqueClient() {
             parcial={!!parcial}
           />
 
-          {comCurva && (
+          {(
             <GradeCurvaMarca
               grade={montarGrade(
                 payload.inventarios.filter((i) => i.eh_full && !i.situacao).map((i) => ({
@@ -618,6 +620,7 @@ export default function MLFullEstoqueClient() {
               rotuloMarca={tituloMarca}
               notaMarca={(b) => { const m = payload.marcas.find((x) => x.brand === b); return m ? notaMarcaML(m) : null; }}
               item="inventários"
+              comCurva={comCurva}
               ressalva={payload.truncado ? "Lista truncada: grade parcial" : null}
             />
           )}

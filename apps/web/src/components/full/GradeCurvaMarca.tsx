@@ -78,7 +78,7 @@ function CelulaResumo({ c, forte = false }: { c: CelulaGrade; forte?: boolean })
 }
 
 export default function GradeCurvaMarca({
-  grade, marcas, rotuloMarca, notaMarca, item = "itens", ressalva,
+  grade, marcas, rotuloMarca, notaMarca, item = "itens", ressalva, comCurva = true,
 }: {
   grade: Grade;
   marcas: readonly string[];
@@ -89,6 +89,8 @@ export default function GradeCurvaMarca({
   item?: string;
   /** Chip curto quando o recorte muda a leitura (lista truncada, filtro). */
   ressalva?: string | null;
+  /** Curva nao lida: so' a linha Total marca (o estado das marcas continua no cabecalho). */
+  comCurva?: boolean;
 }) {
   const [curva, setCurva] = useState<LinhaCurva>("aa_a");
   const colunas = [...marcas, TOTAL];
@@ -99,13 +101,13 @@ export default function GradeCurvaMarca({
 
   return (
     <Panel
-      titulo="Estoque por curva e marca"
+      titulo={comCurva ? "Estoque por curva e marca" : "Estoque por marca"}
       icone={Grid3x3}
       ajuda={AJUDA_GRADE}
       acao={
         <>
           {ressalva && <span className="rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn-ink">{ressalva}</span>}
-          <Segmented rotulo="Curva" opcoes={LINHAS_CURVA.map((l) => ({ valor: l.chave, texto: l.rotulo }))} valor={curva} aoEscolher={setCurva} />
+          {comCurva && <Segmented rotulo="Curva" opcoes={LINHAS_CURVA.map((l) => ({ valor: l.chave, texto: l.rotulo }))} valor={curva} aoEscolher={setCurva} />}
         </>
       }
       semPadding
@@ -130,14 +132,14 @@ export default function GradeCurvaMarca({
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b border-line align-top">
+              {comCurva && <tr className="border-b border-line align-top">
                 <th scope="row" className="sticky left-0 z-10 bg-surface px-4 py-3 text-left font-semibold text-ink">{rotuloCurva}</th>
                 {colunas.map((m) => (
                   <td key={m} className={`px-4 py-3 ${m === TOTAL ? "bg-raised/50" : ""}`}>
                     <CelulaAberta c={celulas[m]} maximo={m === TOTAL ? celulas[TOTAL].disponivel ?? 0 : maximo} />
                   </td>
                 ))}
-              </tr>
+              </tr>}
               <tr className="border-t-2 border-line-strong bg-raised align-top">
                 <th scope="row" className="sticky left-0 z-10 bg-raised px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-ink-muted">Total marca</th>
                 {colunas.map((m) => (
