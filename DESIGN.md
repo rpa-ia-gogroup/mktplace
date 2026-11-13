@@ -416,7 +416,7 @@ The owner approved one composition for **every** tab (artifact "Torre em grade
   direita={<Segmented rotulo="Visão" … />}
   faixa={
     <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
-      <CartaoIndicador rotulo="Vencidos" icone={TriangleAlert} cor="#ef4444" valor="8,6%"
+      <CartaoIndicador rotulo="Vencidos" icone={TriangleAlert} cor="rgb(var(--tc-crit))" valor="8,6%"
         pilula={{ texto: "Com atraso", tom: "crit" }} legenda="100 de 1.162 na fila" serie={serie} onAbrir={abrir} />
       {/* …mais três, sempre quatro */}
     </div>
@@ -430,9 +430,11 @@ The owner approved one composition for **every** tab (artifact "Torre em grade
 </Aba>
 ```
 
-Rules: always **four** cards in the strip, same anatomy; identity colours are
-`#8b5cf6` violet, `#f59e0b` amber, `#3b82f6` blue, `#ec4899` pink, `#10b981`
-green, `#ef4444` red (state lives in the pill, never in the card colour); no
+Rules: always **four** cards in the strip, same anatomy; identity colours come from the
+`--tc-kpi-*` tokens, written `cor="rgb(var(--tc-kpi-gmv))"` (`gmv` violet,
+`pedidos` amber, `ticket` indigo, `ads` magenta, `roas` green, `prazo` blue,
+`atendimento` teal), never a hex literal, so the dark theme follows (state
+lives in the pill, never in the card colour); no
 trend line without a real series; absence is "—" or "N/D", never zero; cleaning
 means less **text**, never less visual richness.
 

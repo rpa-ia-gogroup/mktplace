@@ -299,13 +299,13 @@ test("rotas antigas redirecionam para a sub-aba certa", () => {
   assert.ok(shopeePage.indexOf("notFound()") < shopeePage.indexOf("redirect("));
 });
 
-test("menu: uma entrada 'Full' em Operações, sem as quatro antigas", () => {
+test("menu: uma entrada 'Full' em Operação, sem as quatro antigas", () => {
   const hrefs = navSections({ expedicao: true, performanceContas: true }).flatMap((s) => s.pages.map((p) => p.href));
   assert.ok(hrefs.includes("/full"));
   for (const antiga of ["/full-ml", "/full-shopee", "/estoque-full", "/estoque-ml-full"]) {
     assert.ok(!hrefs.includes(antiga), antiga);
   }
-  const ops = NAV_SECTIONS.find((s) => s.label === "Operações")!;
+  const ops = NAV_SECTIONS.find((s) => s.label === "Operação")!;
   assert.ok(ops.pages.some((p) => p.href === "/full" && p.label === "Full"));
   assert.equal(getRouteTitle("/full"), "Full");
   assert.equal(isNavItemActive("/full", "/full"), true);

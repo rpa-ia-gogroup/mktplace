@@ -604,8 +604,8 @@ test("nada na tela se chama lucro ou margem liquida (exceto a negacao explicita)
 });
 
 test("/dre esta na navegacao, com titulo proprio, e e' rota tematizada", () => {
-  const cockpits = NAV_SECTIONS.find((s) => s.label === "Cockpits")!;
-  assert.ok(cockpits.pages.some((p) => p.href === "/dre" && p.label === "DRE" && !p.disabled));
+  const visao = NAV_SECTIONS.find((s) => s.label === "Visão")!;
+  assert.ok(visao.pages.some((p) => p.href === "/dre" && p.label === "DRE" && !p.disabled));
   assert.equal(getRouteTitle("/dre"), "DRE");
   assert.ok((ROTAS_TEMATIZADAS as readonly string[]).includes("/dre"));
   assert.ok(rotaTematizada("/dre"));

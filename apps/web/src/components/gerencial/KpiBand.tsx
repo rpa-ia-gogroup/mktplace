@@ -22,6 +22,11 @@ export interface GmvDoCartao {
   /** Atingimento da meta (0..1); `null` = recorte sem meta. */
   progresso: number | null;
   legenda: string;
+  /** Com meta: o selo do fechamento projetado ("No caminho") e a projecao, na linha da meta. */
+  status?: { texto: string; tom: TomPilula } | null;
+  projecao?: string | null;
+  /** Contra o que a variacao compara, quando nao e' o periodo anterior ("vs ontem até 14h"). */
+  referencia?: string | null;
   /** Dado incompleto: a legenda vira aviso. */
   aviso?: string | null;
   dica?: string;
@@ -42,11 +47,12 @@ interface Props {
 }
 
 const CARTAO: Record<Exclude<KpiKey, "roas">, { icone: LucideIcon; cor: string }> = {
-  gmv: { icone: CircleDollarSign, cor: "#8b5cf6" },
-  orders: { icone: ShoppingBag, cor: "#f59e0b" },
-  avg_ticket: { icone: Receipt, cor: "#3b82f6" },
-  ad_spend: { icone: Megaphone, cor: "#ec4899" },
+  gmv: { icone: CircleDollarSign, cor: "rgb(var(--tc-kpi-gmv))" },
+  orders: { icone: ShoppingBag, cor: "rgb(var(--tc-kpi-pedidos))" },
+  avg_ticket: { icone: Receipt, cor: "rgb(var(--tc-kpi-ticket))" },
+  ad_spend: { icone: Megaphone, cor: "rgb(var(--tc-kpi-ads))" },
 };
+const DIRECAO = { up: "tende a subir", down: "tende a descer", flat: "estável" } as const;
 const ORDEM = ["gmv", "orders", "avg_ticket", "ad_spend"] as const;
 const CANAL_CURTO: Record<string, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
 
@@ -74,7 +80,7 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
     );
   }
   const de = (k: KpiKey) => kpis.find((x) => x.key === k);
-  const acos = (de("roas")?.channelValues ?? []).filter((c) => c.value).map((c) => `${CANAL_CURTO[c.channel] ?? c.label} ${c.value}`);
+  const acos = de("roas")?.channelValues ?? [];
   return (
     <section aria-label="Indicadores do período">
       <h2 className="sr-only">Indicadores do período</h2>
@@ -95,16 +101,31 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
               const valor = eGmv ? gmv.valor : kpi.value;
               const delta = eGmv ? gmv.deltaPct : kpi.deltaPct;
               const legenda = eGmv && gmv ? (
-                gmv.aviso ? <span className="font-semibold text-warn-ink">{gmv.aviso}</span> : gmv.legenda
+                gmv.aviso ? (
+                  <span className="font-semibold text-warn-ink">{gmv.aviso}</span>
+                ) : (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {gmv.legenda}
+                    {gmv.status && (
+                      <span className={`rounded-full px-2 py-0.5 font-semibold whitespace-nowrap ${gmv.status.tom === "ok" ? "bg-ok-soft text-ok-ink" : gmv.status.tom === "crit" ? "bg-crit-soft text-crit-ink" : gmv.status.tom === "warn" ? "bg-warn-soft text-warn-ink" : "bg-raised text-ink-muted"}`}>
+                        {gmv.status.texto}
+                      </span>
+                    )}
+                    {gmv.projecao && (
+                      <span className="whitespace-nowrap">
+                        projeção <b className="font-semibold text-ink">{gmv.projecao}</b>
+                      </span>
+                    )}
+                  </span>
+                )
               ) : !valor ? (
                 kpi.unavailableReason
-              ) : k === "ad_spend" && acos.length ? (
-                `ACOS ${acos.join(" · ")}`
-              ) : delta != null ? (
-                kpi.reference?.startsWith("vs") ? kpi.reference : "vs anterior"
-              ) : (
+              ) : delta != null ? null : (
                 kpi.comparisonNote
               );
+              // A referencia vai DENTRO da pilula ("+42,4% vs anterior"): o numero nunca fica sem dizer contra o que.
+              const ref = kpi.reference?.startsWith("vs") ? kpi.reference : "vs anterior";
+              const p = valor ? pilulaDe(delta, kpi.deltaTone) : null;
               const t = tendencias?.[k];
               return (
                 <CartaoIndicador
@@ -113,10 +134,23 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
                   icone={CARTAO[k].icone}
                   cor={CARTAO[k].cor}
                   valor={valor}
-                  pilula={valor ? pilulaDe(delta, kpi.deltaTone) : null}
+                  pilula={p && { ...p, texto: `${p.texto} ${eGmv && gmv ? gmv.referencia ?? "vs anterior" : ref}` }}
+                  rodape={
+                    k === "ad_spend" && acos.length ? (
+                      <span className="grid gap-0.5 tabular-nums">
+                        {acos.map((c) => (
+                          <span key={c.channel} className="flex items-baseline justify-between gap-3">
+                            <span>ACOS {CANAL_CURTO[c.channel] ?? c.label}</span>
+                            <b className={c.value ? "font-semibold text-ink" : "font-normal text-ink-faint"}>{c.value ?? "—"}</b>
+                          </span>
+                        ))}
+                      </span>
+                    ) : null
+                  }
                   progresso={eGmv ? gmv.progresso : null}
                   legenda={legenda}
-                  serie={eGmv ? gmv.serie : t ? suavizar(t.pontos) : null}
+                  serie={!valor ? null : eGmv ? gmv.serie : t ? suavizar(t.pontos) : null}
+                  tendencia={t?.direcao ? `Tendência: ${DIRECAO[t.direcao]}${t.variacaoPct != null ? ` (${t.rotulo}: ${fmtPctBr(t.variacaoPct)})` : ""}` : null}
                   ajuda={dica ? <InfoDica emControle texto={dica} /> : null}
                   onAbrir={() => onOpen(k)}
                 />
