@@ -5,8 +5,10 @@
  * painel, pedido da Nathalia em 13/11) + linha "Total marca". Regra em
  * `lib/estoque-grade-curva.ts`.
  */
-import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Grid3x3, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Grid3x3 } from "lucide-react";
+
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 
 import TableScrollHint from "@/components/TableScrollHint";
 import CelulaBarra from "@/components/ui/CelulaBarra";
@@ -47,12 +49,12 @@ function Pilula({ rotulo, valor, tom }: { rotulo: string; valor: string; tom: st
 }
 
 /** Pilula com itens: clica e abre a lista embaixo da grade (pedido da Nathalia). */
-function PilulaBotao({ rotulo, valor, tom, ativa, controla, aoClicar }: {
-  rotulo: string; valor: string; tom: string; ativa: boolean; controla: string; aoClicar: (b: HTMLButtonElement) => void;
+function PilulaBotao({ rotulo, valor, tom, ativa, aoClicar }: {
+  rotulo: string; valor: string; tom: string; ativa: boolean; aoClicar: () => void;
 }) {
-  // Disclosure: abre a lista embaixo da grade (aria-expanded + aria-controls).
+  // Abre o pop-up com a lista (padrao das outras abas: KpiDrilldownDialog).
   return (
-    <button type="button" aria-expanded={ativa} aria-controls={controla} onClick={(e) => aoClicar(e.currentTarget)}
+    <button type="button" aria-haspopup="dialog" onClick={aoClicar}
       className={`${PILULA} ${tom} cursor-pointer text-left transition-shadow hover:ring-1 hover:ring-current focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${ativa ? "ring-2 ring-current" : ""}`}>
       <span>{rotulo}</span>
       <span className="font-semibold tabular-nums">{valor} <span aria-hidden="true">›</span></span>
@@ -63,8 +65,8 @@ function PilulaBotao({ rotulo, valor, tom, ativa, controla, aoClicar }: {
 /** Barra do disponivel na cor de identidade (ALVO-GRADE: nunca mapa de calor). */
 const COR_DISPONIVEL = "rgb(var(--tc-kpi-gmv))";
 
-function CelulaAberta({ c, maximo, ativa, controla, aoAbrir }: {
-  c: CelulaGrade; maximo: number; ativa: Classe | null; controla: string; aoAbrir: (k: Classe, b: HTMLButtonElement) => void;
+function CelulaAberta({ c, maximo, ativa, aoAbrir }: {
+  c: CelulaGrade; maximo: number; ativa: Classe | null; aoAbrir: (k: Classe) => void;
 }) {
   if (c.itens === 0) return <SemItens />;
   return (
@@ -76,7 +78,7 @@ function CelulaAberta({ c, maximo, ativa, controla, aoAbrir }: {
           : <CelulaBarra valor={fmt(c.disponivel)} peso={maximo > 0 ? c.disponivel / maximo : 0} cor={COR_DISPONIVEL} />}
       </div>
       {PILULAS.map((p) => c[p.chave] > 0
-        ? <PilulaBotao key={p.chave} rotulo={p.rotulo} valor={itens(c[p.chave])} tom={p.tom} ativa={ativa === p.chave} controla={controla} aoClicar={(b) => aoAbrir(p.chave, b)} />
+        ? <PilulaBotao key={p.chave} rotulo={p.rotulo} valor={itens(c[p.chave])} tom={p.tom} ativa={ativa === p.chave} aoClicar={() => aoAbrir(p.chave)} />
         : <Pilula key={p.chave} rotulo={p.rotulo} valor={itens(0)} tom="bg-raised text-ink-faint" />)}
       <Pilula rotulo="Permanência" valor={fmtPermanencia(c.permanencia)} tom="bg-raised text-ink-muted" />
     </div>
@@ -124,16 +126,8 @@ export default function GradeCurvaMarca({
   const [aberta, setAberta] = useState<{ marca: string; classe: Classe } | null>(null);
   const setCurva = (c: LinhaCurva) => { setCurvaBruta(c); setAberta(null); };
   const grade = useMemo(() => montarGrade(lista, marcas), [lista, marcas]);
-  const idLista = useId();
-  const listaRef = useRef<HTMLDivElement | null>(null);
-  const origemRef = useRef<HTMLButtonElement | null>(null);
-  const alternar = (marca: string, classe: Classe, b: HTMLButtonElement) => {
-    origemRef.current = b;
-    setAberta((a) => (a && a.marca === marca && a.classe === classe ? null : { marca, classe }));
-  };
-  const fechar = () => { setAberta(null); origemRef.current?.focus(); };
-  // No celular a lista nasce no pe' da tela: traz para a vista ao abrir.
-  useEffect(() => { if (aberta) listaRef.current?.scrollIntoView({ block: "nearest" }); }, [aberta]);
+  // O dialogo devolve o foco a' pilula que abriu ao fechar.
+  const alternar = (marca: string, classe: Classe) => setAberta({ marca, classe });
   const daLista = aberta ? itensDaCelula(lista, marcas, aberta.marca, curva, aberta.classe) : [];
   const colunas = [...marcas, TOTAL];
   const celulas = grade.celulas[curva];
@@ -179,7 +173,7 @@ export default function GradeCurvaMarca({
                 {colunas.map((m) => (
                   <td key={m} className={`px-4 py-3 ${m === TOTAL ? "bg-raised/50" : ""}`}>
                     <CelulaAberta c={celulas[m]} maximo={m === TOTAL ? celulas[TOTAL].disponivel ?? 0 : maximo}
-                      ativa={aberta?.marca === m ? aberta.classe : null} controla={idLista} aoAbrir={(k, b) => alternar(m, k, b)} />
+                      ativa={aberta?.marca === m ? aberta.classe : null} aoAbrir={(k) => alternar(m, k)} />
                   </td>
                 ))}
               </tr>}
@@ -193,36 +187,33 @@ export default function GradeCurvaMarca({
           </table>
         </div>
       </TableScrollHint>
-      {aberta && comCurva && (
-        <div id={idLista} ref={listaRef} role="region" aria-label="Produtos da célula escolhida" className="border-t border-line px-4 py-3">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold text-ink">
-              {PILULAS.find((p) => p.chave === aberta.classe)!.rotulo} · {aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · curva {rotuloCurva}
-              <span className="ml-2 font-normal text-ink-muted">{itens(daLista.length)}</span>
-            </p>
-            <button type="button" onClick={fechar} aria-label="Fechar lista"
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-ink-muted hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-8 sm:min-w-8">
-              <X aria-hidden="true" className="h-4 w-4" />
-            </button>
-          </div>
-          <ul className="divide-y divide-line text-sm">
-            {daLista.map((i, n) => (
-              <li key={n} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2">
-                <span className="min-w-0 flex-1 text-ink">
-                  {aberta.marca === TOTAL && <span className="mr-2 text-xs font-semibold uppercase text-ink-faint">{rotuloMarca(i.brand)}</span>}
-                  {i.rotulo ?? "sem identificação"}
-                </span>
-                {/* Ruptura: "0 un. · 0 d" repetiria o obvio; basta o produto. */}
-                {aberta.classe !== "ruptura" && (
-                  <span className="whitespace-nowrap text-xs tabular-nums text-ink-muted">
-                    {i.disponivel === null ? "—" : fmt(i.disponivel)} un. · {fmtCobertura(i.cobertura)}
+      <KpiDrilldownDialog
+        open={!!aberta && comCurva}
+        onClose={() => setAberta(null)}
+        title={aberta ? `${PILULAS.find((p) => p.chave === aberta.classe)!.rotulo} · ${aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · curva ${rotuloCurva}` : ""}
+      >
+        {aberta && (
+          <>
+            <p className="mb-2 text-sm text-ink-muted">{itens(daLista.length)}</p>
+            <ul className="divide-y divide-line text-sm">
+              {daLista.map((i, n) => (
+                <li key={n} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 py-2">
+                  <span className="min-w-0 flex-1 text-ink">
+                    {aberta.marca === TOTAL && <span className="mr-2 text-xs font-semibold uppercase text-ink-faint">{rotuloMarca(i.brand)}</span>}
+                    {i.rotulo ?? "sem identificação"}
                   </span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+                  {/* Ruptura: "0 un. · 0 d" repetiria o obvio; basta o produto. */}
+                  {aberta.classe !== "ruptura" && (
+                    <span className="whitespace-nowrap text-xs tabular-nums text-ink-muted">
+                      {i.disponivel === null ? "—" : fmt(i.disponivel)} un. · {fmtCobertura(i.cobertura)}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </KpiDrilldownDialog>
     </Panel>
   );
 }
