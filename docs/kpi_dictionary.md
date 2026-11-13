@@ -543,3 +543,30 @@ Limitacoes conhecidas:
 - Se a API passar a mandar liquido, o desconto do web tem de sair (risco de descontar duas vezes). O ideal e'
   alinhar a API e remover `paraPedidosLiquidos`.
 - A **taxa de cancelamento continua sobre o bruto**, como a API calcula.
+
+## Sem dado ≠ 0 (T-0111, validação da Torre de 13/11/2026)
+
+Regra da API (mesmo padrão do C2-01 e da T-0085):
+
+- **Sem linha na fonte** para o recorte pedido (canal × marca × período): o valor sai `null`, nunca `0`. Onde a
+  resposta já tem campo de aviso, ele traz o motivo começando por `sem_dado`.
+- **Total com parte ausente:** soma só quem tem linha. Onde o schema já tem `parcial`/lista de ausentes, ele é usado;
+  nenhuma estrutura nova foi criada.
+- **0 só quando a fonte tem linha com 0.** Média ou share sem base (denominador 0) é `null`.
+- **Delta de comparação:** base `null` ou `0` → delta `null`.
+
+Campos afetados:
+
+| Rota | Campos que passam a poder vir `null` | Quando | Aviso |
+|---|---|---|---|
+| `GET /api/v1/performance/overview` | `current.gmv`, `current.orders`, `current.avg_ticket`, `previous.gmv`, `previous.orders`, `previous.avg_ticket` (e `gmv_mom_pct`, que já era opcional) | nenhum canal pedido tem linha na `fact_marketplace_daily_performance`; `previous` também sem `compare=true`; `avg_ticket` também quando `orders = 0` | — |
+| `GET /api/v1/regioes/summary` | `gmv`, `orders`, `units_sold`, `ufs_com_venda` | `COUNT(*) = 0` na `fact_marketplace_region_daily` para o escopo | `cobertura_por_canal` (já existente) |
+| `GET /api/v1/performance/ml-fulfillment` | `paid_gmv_total`, `paid_orders_total`, `paid_units_total` | nenhuma linha na `fact_ml_fulfillment_daily` no recorte (marca sem conta ML, D0) | `quality.limitations` ganha `sem_dado: …` |
+| `GET /api/v1/performance/shopee-fbs` | `totals.gross_gmv`, `gross_units`, `created_orders`, `eligible_orders`, `cancelled_orders`, `to_return_orders`, `to_return_gmv`, `unpaid_orders`, `unpaid_gmv` | nenhuma linha na `fact_shopee_fbs_daily` no recorte | `meta.warnings` ganha `sem_dado: …` |
+
+`/performance/shopee-fbs` com `brands=`: `meta.expected_accounts` e `meta.missing_accounts` passam a considerar só as
+contas das marcas pedidas (mapa `ACCOUNT_BRAND` no serviço). Antes, `brands=apice` listava as outras 4 contas como
+"sem linha na janela" (B2-10).
+
+O `/performance/executive-summary` mantém o contrato (`health.gmv`/`orders`/`avg_ticket` numéricos): ausência
+continua virando `status = critical` com risco `missing_data`.
