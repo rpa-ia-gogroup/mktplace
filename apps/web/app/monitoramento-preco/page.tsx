@@ -79,8 +79,8 @@ import {
   canalDaUrl,
   searchComCanal,
 } from "@/lib/monitoramento-preco";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import TableScrollHint from "@/components/TableScrollHint";
 import { AlertTriangle, ArrowUpRight, Boxes, CircleSlash, Clock, History, PauseCircle, Scale, TrendingDown, TrendingUp, type LucideIcon } from "lucide-react";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
@@ -95,6 +95,9 @@ import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import { computeRequestStatus } from "@/lib/request-freshness";
 
 const LIMITE = MONITORAMENTO_PRECO_MAX_LIMIT;
+
+/** Ponto na cor do canal no seletor (mesma pele da barra de filtros das outras abas). */
+const PONTO_DO_CANAL: Record<string, string> = { ml: "bg-canal-ml", shopee: "bg-canal-shopee", tiktok: "bg-canal-tiktok" };
 
 const GRADE_KPIS = "grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6";
 
@@ -468,70 +471,72 @@ export default function MonitoramentoPrecoPage() {
   const tiposDoCanal = PRODUCT_TYPE_ORDER;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title={`Monitoramento de preços — ${canalLabel(marketplace)}`}
-        subtitle="Lojas próprias: preço anunciado × preço sugerido (PDV)."
-        meta={
-          // A ressalva de escopo (observacional, sem frete/cupom, sem vigencia)
-          // fica no "ⓘ" do selo: continua existindo, fora do caminho do olho.
+    <Aba
+      titulo="Monitoramento de preços"
+      selo={
+        // A ressalva de escopo (observacional, sem frete/cupom, sem vigencia)
+        // fica num "ⓘ" so', na pilula: continua existindo, fora do caminho do olho.
+        <>
+          <SeloAtualizado em={meta?.refreshed_at ?? null} carregando={meta == null} atrasado={meta?.freshness_status === "stale"} detalhe="Sync executado em" />
           <span className="inline-flex items-center gap-1 text-xs font-semibold border border-warn/30 bg-warn-soft text-warn-ink rounded-full px-2 py-0.5">
             Modo observacional
             <InfoDica
               texto={[
+                "Lojas próprias: preço anunciado × preço sugerido (PDV).",
                 ...AVISO_OBSERVACIONAL,
                 "Cobertura: apenas anúncios das lojas próprias — nenhum vendedor terceiro.",
                 "Comparação histórica indisponível: a referência não tem vigência declarada.",
               ].join(" ")}
             />
           </span>
-        }
-      />
-
-      {/* ---------------- seletor de canal ----------------
-          So' aparece quando ha mais de um canal habilitado. Com Shopee e
-          TikTok desligados — o padrao — a tela fica exatamente como estava. */}
-      {canais.length > 1 && (
-        <section
-          aria-label="Canal"
-          className="bg-surface border border-line rounded-2xl shadow-sm p-3 mb-4"
-        >
-          <div
-            role="group"
-            aria-labelledby={canalId}
-            className="flex flex-wrap items-center gap-2"
-          >
-            <span id={canalId} className="text-xs text-ink-muted mr-1">
-              Canal
-            </span>
-            {canais.map((c) => {
-              const ativo = c.id === marketplace;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => trocaCanal(c.id)}
-                  // `aria-pressed` e nao `aria-current`: os tres sao botoes de
-                  // alternancia, e o leitor de tela precisa saber o estado dos
-                  // TRES, nao so' do ativo. Com `aria-current`, o inativo nao
-                  // carregava atributo nenhum — "Shopee, botao" nao diz se esta
-                  // ligado ou desligado. Com `aria-pressed`, cada um anuncia
-                  // pressionado ou nao, e o estado deixa de depender da cor.
-                  aria-pressed={ativo}
-                  className={`min-h-[44px] min-w-[44px] px-4 rounded-lg border text-sm font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                    ativo
-                      ? "bg-accent border-accent text-accent-on"
-                      : "bg-surface border-line-strong text-ink hover:bg-raised"
-                  }`}
-                >
-                  {c.rotulo}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
+        </>
+      }
+      filtros={
+        canais.length > 1 ? (
+          <>
+          {/* ---------------- seletor de canal ----------------
+              So' aparece quando ha mais de um canal habilitado. Com Shopee e
+              TikTok desligados — o padrao — a tela fica exatamente como estava. */}
+          <section aria-label="Canal">
+              <div
+                role="group"
+                aria-labelledby={canalId}
+                className="flex w-fit min-w-0 max-w-full gap-0.5 overflow-x-auto rounded-lg border border-line bg-raised p-0.5"
+              >
+                <span id={canalId} className="sr-only">
+                  Canal
+                </span>
+                {canais.map((c) => {
+                  const ativo = c.id === marketplace;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => trocaCanal(c.id)}
+                      // `aria-pressed` e nao `aria-current`: os tres sao botoes de
+                      // alternancia, e o leitor de tela precisa saber o estado dos
+                      // TRES, nao so' do ativo. Com `aria-current`, o inativo nao
+                      // carregava atributo nenhum — "Shopee, botao" nao diz se esta
+                      // ligado ou desligado. Com `aria-pressed`, cada um anuncia
+                      // pressionado ou nao, e o estado deixa de depender da cor.
+                      aria-pressed={ativo}
+                      className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
+                        ativo
+                          ? "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong"
+                          : "text-ink-muted hover:bg-surface/70 hover:text-ink"
+                      }`}
+                    >
+                      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${PONTO_DO_CANAL[c.id]}`} />
+                      {c.rotulo}
+                    </button>
+                  );
+                })}
+              </div>
+          </section>
+          </>
+        ) : undefined
+      }
+    >
       {/* ---------------- contexto e frescor ---------------- */}
       <section
         aria-label="Contexto dos dados"
@@ -1506,6 +1511,6 @@ export default function MonitoramentoPrecoPage() {
           </div>
         )}
       </KpiDrilldownDialog>
-    </PageContainer>
+    </Aba>
   );
 }
