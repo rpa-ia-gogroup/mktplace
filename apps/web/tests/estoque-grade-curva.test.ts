@@ -64,3 +64,20 @@ test("as duas abas usam a grade com o recorte dos cartoes", () => {
   assert.match(sh, /<GradeCurvaMarca/);
   assert.match(sh, /!p\.situacao && !p\.is_kit/);
 });
+
+test("lista da pilula: marca/curva/classe; ruptura por menos cobertura, excesso por mais; TOTAL = todas as marcas", async () => {
+  const { itensDaCelula } = await import("../src/lib/estoque-grade-curva.ts");
+  const xs: ItemGrade[] = [
+    it({ rotulo: "r2", classe: "ruptura", cobertura: "2" }),
+    it({ rotulo: "r0", classe: "ruptura", cobertura: 0 }),
+    it({ rotulo: "rsem", classe: "ruptura", cobertura: null }),
+    it({ rotulo: "e5", classe: "excesso", cobertura: 95 }),
+    it({ rotulo: "e9", classe: "excesso", cobertura: 190 }),
+    it({ rotulo: "kB", brand: "kokeshi", classe: "ruptura", cobertura: 1 }),
+    it({ rotulo: "outraCurva", curva: "C", classe: "ruptura" }),
+  ];
+  const marcas = ["barbours", "kokeshi"];
+  assert.deepEqual(itensDaCelula(xs, marcas, "barbours", "aa_a", "ruptura").map((i) => i.rotulo), ["r0", "r2", "rsem"]);
+  assert.deepEqual(itensDaCelula(xs, marcas, "barbours", "aa_a", "excesso").map((i) => i.rotulo), ["e9", "e5"]);
+  assert.deepEqual(itensDaCelula(xs, marcas, TOTAL, "aa_a", "ruptura").map((i) => i.rotulo), ["r0", "kB", "r2", "rsem"]);
+});

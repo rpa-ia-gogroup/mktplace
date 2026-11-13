@@ -31,6 +31,10 @@ export interface ItemGrade {
   disponivel: number | null;
   mediaDiaria: number | string | null | undefined;
   classe: ClasseGrade;
+  /** "SKU · título" para a lista ao clicar na pilula. */
+  rotulo?: string;
+  /** Dias de cobertura da Torre (null = sem venda medida). */
+  cobertura?: number | string | null;
 }
 
 export interface CelulaGrade {
@@ -97,6 +101,23 @@ export function montarGrade(itens: readonly ItemGrade[], marcas: readonly string
     celulas: Object.fromEntries(LINHAS_CURVA.map((l) => [l.chave, fecharLinha(l.chave)])) as Grade["celulas"],
     totalMarca: fecharLinha("total"),
   };
+}
+
+/**
+ * Itens de uma celula (pilula clicada): marca (ou TOTAL), linha de curva e
+ * classe. Ruptura/baixo: menos cobertura primeiro; excesso: mais primeiro.
+ */
+export function itensDaCelula(
+  itens: readonly ItemGrade[], marcas: readonly string[], marca: string, linha: LinhaCurva, classe: Exclude<ClasseGrade, null>,
+): ItemGrade[] {
+  const dias = (v: ItemGrade["cobertura"]) => { const n = Number(v); return v === null || v === undefined || v === "" || !Number.isFinite(n) ? null : n; };
+  const sinal = classe === "excesso" ? -1 : 1;
+  return itens
+    .filter((i) => marcas.includes(i.brand) && (marca === TOTAL || i.brand === marca) && linhaDaCurva(i.curva) === linha && i.classe === classe)
+    .sort((a, b) => {
+      const da = dias(a.cobertura), db = dias(b.cobertura);
+      return (da === null ? 1 : 0) - (db === null ? 1 : 0) || sinal * ((da ?? 0) - (db ?? 0));
+    });
 }
 
 /** "38 d" / "—". Arredonda para dia inteiro. */

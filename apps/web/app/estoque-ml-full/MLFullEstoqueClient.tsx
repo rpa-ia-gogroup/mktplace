@@ -42,7 +42,7 @@ import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
-import { montarGrade, type ClasseGrade } from "@/lib/estoque-grade-curva";
+import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -609,13 +609,11 @@ export default function MLFullEstoqueClient() {
 
           {(
             <GradeCurvaMarca
-              grade={montarGrade(
-                payload.inventarios.filter((i) => i.eh_full && !i.situacao).map((i) => ({
-                  brand: i.brand, curva: i.curva, disponivel: i.disponivel,
-                  mediaDiaria: i.media_diaria_28d, classe: CLASSE_GRADE_ML[i.classificacao_torre] ?? null,
-                })),
-                payload.marcas.map((m) => m.brand),
-              )}
+              itens={payload.inventarios.filter((i) => i.eh_full && !i.situacao).map((i) => ({
+                brand: i.brand, curva: i.curva, disponivel: i.disponivel,
+                mediaDiaria: i.media_diaria_28d, classe: CLASSE_GRADE_ML[i.classificacao_torre] ?? null,
+                rotulo: identificacaoML(i).texto, cobertura: i.cobertura_torre_dias,
+              }))}
               marcas={payload.marcas.map((m) => m.brand)}
               rotuloMarca={tituloMarca}
               notaMarca={(b) => { const m = payload.marcas.find((x) => x.brand === b); return m ? notaMarcaML(m) : null; }}

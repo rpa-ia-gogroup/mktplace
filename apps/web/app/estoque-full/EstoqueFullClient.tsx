@@ -46,7 +46,7 @@ import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
-import { montarGrade, type ClasseGrade } from "@/lib/estoque-grade-curva";
+import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -622,14 +622,12 @@ export default function EstoqueFullClient() {
 
               {(
                 <GradeCurvaMarca
-                  grade={montarGrade(
-                    // Kit e' contexto (nao soma no disponivel operacional dos cartoes).
-                    payload.produtos.filter((p) => !p.situacao && !p.is_kit).map((p) => ({
-                      brand: p.brand, curva: p.curva, disponivel: p.full_stock_saleable,
-                      mediaDiaria: p.avg_daily_units_28d, classe: CLASSE_GRADE_SHOPEE[p.classificacao_torre] ?? null,
-                    })),
-                    marcasDaGrade,
-                  )}
+                  // Kit e' contexto (nao soma no disponivel operacional dos cartoes).
+                  itens={payload.produtos.filter((p) => !p.situacao && !p.is_kit).map((p) => ({
+                    brand: p.brand, curva: p.curva, disponivel: p.full_stock_saleable,
+                    mediaDiaria: p.avg_daily_units_28d, classe: CLASSE_GRADE_SHOPEE[p.classificacao_torre] ?? null,
+                    rotulo: [p.item_sku, p.item_name].filter(Boolean).join(" · ") || undefined, cobertura: p.cobertura_torre_dias,
+                  }))}
                   marcas={marcasDaGrade}
                   rotuloMarca={tituloMarca}
                   item="produtos"
