@@ -477,7 +477,7 @@ test("R7. o que e' novo fica ESCOPADO aos canais; o ML nao ganha nada", async ()
   // Abas objetivas: subtitulo curto e unico, sem citar canal.
   // ALVO-GRADE: o subtitulo virou o ⓘ ao lado do selo; continua curto e sem canal.
   assert.ok(codigo.includes(
-    '<InfoDica texto="Lojas próprias: preço anunciado × preço sugerido (PDV)." />'),
+    '"Lojas próprias: preço anunciado × preço sugerido (PDV).",'),
     "subtitulo curto, igual em todos os canais");
   // O chip de politica de data nao aparece no ML.
   assert.ok(codigo.includes('meta && marketplace !== "ml" &&'),
@@ -610,8 +610,9 @@ test("H1-2. exatamente um canal fica pressionado, e ele vem de `marketplace`", a
 test("H1-3. o estado nao depende so' de cor", async () => {
   const codigo = await ler(PAGE);
   const bloco = codigo.split("seletor de canal")[1].split("</section>")[0];
-  const temCor = /bg-accent /.test(bloco);
-  assert.ok(temCor, "a cor continua existindo — ela e' reforco, nao substituto");
+  // ALVO-GRADE: a pele da barra (relevo + anel no ativo, ponto na cor do canal) e' o reforco visual.
+  const temCor = /ring-line-strong/.test(bloco) && /PONTO_DO_CANAL\[c\.id\]/.test(bloco);
+  assert.ok(temCor, "o reforco visual continua existindo — ele e' reforco, nao substituto");
   assert.ok(bloco.includes("aria-pressed"),
     "mas precisa haver estado programatico ALEM da cor");
 });
