@@ -3,12 +3,13 @@
 /**
  * Faixa de indicadores da Gerencial — ALVO-GRADE (aprovado em 12/11/2026).
  *
- * Quatro cartoes IGUAIS (`CartaoIndicador`): GMV (com a meta dentro: barra de
- * progresso e "N% da meta de R$ X"), Pedidos, Ticket medio e Investimento em
- * ads (com o ACOS por canal na legenda). A logica de disponibilidade e
+ * Quatro cartoes IGUAIS (`CartaoIndicador`). Com `gmv`: GMV (com a meta
+ * dentro), Pedidos, Ticket medio e Investimento em ads (ACOS por canal no
+ * rodape). Com `acosProprio` (Gerencial: GMV e meta ficam no MetaHero, acima):
+ * ACOS por canal, Pedidos, Ticket medio e Investimento em ads. A logica de disponibilidade e
  * comparacao continua em `lib/gerencial/kpi-band.ts`; aqui so' apresentacao.
  */
-import { CircleDollarSign, Megaphone, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
+import { CircleDollarSign, Gauge, Megaphone, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
 import type { KpiDescriptor, KpiKey } from "@/lib/gerencial/kpi-band";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtPctBr } from "@/lib/formatters";
@@ -37,6 +38,8 @@ interface Props {
   kpis: KpiDescriptor[];
   /** Sem ele (so' marcas menores, onde o GMV e' o bloco principal), a faixa mostra so' os de apoio. */
   gmv?: GmvDoCartao;
+  /** ACOS por canal vira o 1o cartao (no lugar do GMV, que esta' no heroi). */
+  acosProprio?: boolean;
   loading: boolean;
   /** O bloco falha SOZINHO: `/overview` em erro nao apaga os demais blocos. */
   error: boolean;
@@ -46,14 +49,16 @@ interface Props {
   tendencias?: Partial<Record<KpiKey, TendenciaKpi | null>>;
 }
 
-const CARTAO: Record<Exclude<KpiKey, "roas">, { icone: LucideIcon; cor: string }> = {
+const CARTAO: Record<KpiKey, { icone: LucideIcon; cor: string }> = {
+  roas: { icone: Gauge, cor: "rgb(var(--tc-kpi-roas))" },
   gmv: { icone: CircleDollarSign, cor: "rgb(var(--tc-kpi-gmv))" },
   orders: { icone: ShoppingBag, cor: "rgb(var(--tc-kpi-pedidos))" },
   avg_ticket: { icone: Receipt, cor: "rgb(var(--tc-kpi-ticket))" },
   ad_spend: { icone: Megaphone, cor: "rgb(var(--tc-kpi-ads))" },
 };
 const DIRECAO = { up: "tende a subir", down: "tende a descer", flat: "estável" } as const;
-const ORDEM = ["gmv", "orders", "avg_ticket", "ad_spend"] as const;
+const ORDEM_GMV = ["gmv", "orders", "avg_ticket", "ad_spend"] as const;
+const ORDEM_ACOS = ["roas", "orders", "avg_ticket", "ad_spend"] as const;
 const CANAL_CURTO: Record<string, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
 
 function pilulaDe(pct: number | null, tom: KpiDescriptor["deltaTone"]): { texto: string; tom: TomPilula } | null {
@@ -61,7 +66,7 @@ function pilulaDe(pct: number | null, tom: KpiDescriptor["deltaTone"]): { texto:
   return { texto: fmtPctBr(pct), tom: tom === "neutral" ? "neutro" : (pct >= 0) !== (tom === "lower_is_better") ? "ok" : "crit" };
 }
 
-export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, tendencias }: Props) {
+export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen, onRetry, tendencias }: Props) {
   if (error) {
     return (
       <section aria-label="Indicadores do período" className="bg-raised border border-line rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
@@ -81,6 +86,7 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
   }
   const de = (k: KpiKey) => kpis.find((x) => x.key === k);
   const acos = de("roas")?.channelValues ?? [];
+  const ORDEM: readonly KpiKey[] = acosProprio && !gmv ? ORDEM_ACOS : ORDEM_GMV;
   return (
     <section aria-label="Indicadores do período">
       <h2 className="sr-only">Indicadores do período</h2>
@@ -100,7 +106,8 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
               const dica = eGmv ? gmv.dica : [kpi.subvalue, kpi.coverageNote, kpi.reference, kpi.comparisonNote].filter(Boolean).join(" · ");
               const valor = eGmv ? gmv.valor : kpi.value;
               const delta = eGmv ? gmv.deltaPct : kpi.deltaPct;
-              const legenda = eGmv && gmv ? (
+              const eAcos = k === "roas";
+              const legenda = eAcos ? (acos.some((c) => c.value) ? null : kpi.unavailableReason) : eGmv && gmv ? (
                 gmv.aviso ? (
                   <span className="font-semibold text-warn-ink">{gmv.aviso}</span>
                 ) : (
@@ -134,9 +141,10 @@ export default function KpiBand({ kpis, gmv, loading, error, onOpen, onRetry, te
                   icone={CARTAO[k].icone}
                   cor={CARTAO[k].cor}
                   valor={valor}
+                  valores={eAcos ? acos.map((c) => ({ rotulo: CANAL_CURTO[c.channel] ?? c.label, valor: c.value })) : null}
                   pilula={p && { ...p, texto: `${p.texto} ${eGmv && gmv ? gmv.referencia ?? "vs anterior" : ref}` }}
                   rodape={
-                    k === "ad_spend" && acos.length ? (
+                    k === "ad_spend" && acos.length && !acosProprio ? (
                       <span className="grid gap-0.5 tabular-nums">
                         {acos.map((c) => (
                           <span key={c.channel} className="flex items-baseline justify-between gap-3">

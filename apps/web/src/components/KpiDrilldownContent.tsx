@@ -211,9 +211,9 @@ const seg = (partes: FullDaMarca["full"]): Segmento[] =>
 const somaPartes = (partes: FullDaMarca["full"]) => CANAIS_FULL.reduce((a, c) => a + (partes[c] ?? 0), 0);
 
 const DICA_FULL_GMV =
-  "Estimativa: a % de Full medida até ontem, aplicada ao GMV do período. Full = ML Full + Shopee FBS. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+  "Estimativa: a % de Full medida até ontem, aplicada ao GMV do período. Full = ML Full + Shopee FBS. TikTok não tem Full.";
 const DICA_FULL_PEDIDOS =
-  "Full = pedidos enviados pelo ML Full e pela Shopee FBS, contados um a um. TikTok não tem Full. Kokeshi na Shopee não informa o tipo de envio e fica fora do %.";
+  "Full = pedidos enviados pelo ML Full e pela Shopee FBS, contados um a um. TikTok não tem Full.";
 const DICA_FULL_PEDIDOS_HOJE = `${DICA_FULL_PEDIDOS} Hoje ainda não tem tipo de envio: o dia usa a proporção até ontem (estimativa).`;
 
 function GmvBreakdown({
