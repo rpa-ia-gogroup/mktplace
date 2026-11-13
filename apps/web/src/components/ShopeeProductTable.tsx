@@ -4,6 +4,9 @@ import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
 
+/** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
+const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+
 const PARETO_LABEL: Record<string, string> = {
   A_top50: "A", B_next30: "B", C_next15: "C", D_tail: "D",
 };
@@ -72,7 +75,7 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
           <td className="px-4 py-3 text-right tabular-nums whitespace-nowrap">
             {p.cancel_rate_pct != null ? (
               <span className={p.cancel_rate_pct < 2 ? "text-ok-ink" : p.cancel_rate_pct < 5 ? "text-warn-ink font-semibold" : "text-crit-ink font-semibold"}>
-                {p.cancel_rate_pct.toFixed(1)}%
+                {dec(p.cancel_rate_pct, 1)}%
               </span>
             ) : <span className="text-ink-faint">—</span>}
           </td>

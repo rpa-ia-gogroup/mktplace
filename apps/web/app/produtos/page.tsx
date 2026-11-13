@@ -9,7 +9,6 @@ import {
   type ProdutosMLSummary, type ProdutosChannelSummary,
 } from "@/lib/api-client";
 import { scopeUnavailableReason } from "@/lib/scope-quality-display";
-import LiveStatusBadge from "@/components/LiveStatusBadge";
 import PageContainer from "@/components/layout/PageContainer";
 import Aba from "@/components/layout/Aba";
 import Panel from "@/components/ui/Panel";
@@ -19,7 +18,6 @@ import Segmented from "@/components/ui/Segmented";
 import { ProductSelect } from "@/components/ProductFilterBar";
 import ProductParetoSummary from "@/components/ProductParetoSummary";
 import ScopeQualityBanner from "@/components/ScopeQualityBanner";
-import ProductCount from "@/components/ProductCount";
 import InfoDica from "@/components/ui/InfoDica";
 import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { MARCAS_MENORES_KEYS, MARCAS_MENORES_OPTIONS } from "@/lib/filters/brands";
@@ -81,7 +79,7 @@ function paretoLinha(partes: (string | null | undefined)[]): string {
   return partes.filter(Boolean).join(" · ");
 }
 function semGmv(excluded: number | undefined): string | null {
-  return excluded ? `${excluded} sem GMV fora dos buckets` : null;
+  return excluded ? `${excluded} produtos sem venda no período (fora das curvas)` : null;
 }
 function precoMedio(avg: number | null | undefined): string | null {
   return avg == null ? null : `Preço médio ${fmtBrlExato(avg)}`;
@@ -504,25 +502,25 @@ function ProdutosPageInner() {
           <ProductSelect value={mlStatus} onChange={(e) => setMlStatus(e.target.value as ProductStatus)} aria-label="Status">
             <option value="">Todos os status</option>
             <option value="sells+advertised">Vende + anunciado</option>
-            <option value="sells_organic_only">Vende organico</option>
+            <option value="sells_organic_only">Vende orgânico</option>
             <option value="ad_spend_no_sales">Gasta ads, sem venda</option>
             <option value="inactive">Inativo</option>
           </ProductSelect>
           <ProductSelect value={mlVelocity} onChange={(e) => setMlVelocity(e.target.value as VelocityFilter)} aria-label="Velocidade">
             <option value="">Toda velocidade</option>
             <option value="high">Alta velocidade</option>
-            <option value="medium">Media velocidade</option>
+            <option value="medium">Média velocidade</option>
             <option value="low">Baixa velocidade</option>
             <option value="zero">Sem vendas</option>
           </ProductSelect>
-          <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de acao">
+          <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de ação">
             <option value="">Todos os sinais</option>
             <option value="ACAO: aumentar investimento (ROAS > 15x)">Aumentar investimento</option>
             <option value="ACAO: considerar pausar ads (ROAS &lt; 3x)">Considerar pausar ads</option>
             <option value="ALERTA: taxa cancelamento alta (> 10%)">Cancelamento alto</option>
-            <option value="OPORTUNIDADE: produto vende organico, considerar ads">Oportunidade organica</option>
-            <option value="REVIEW: spend sem vendas no período de orders">Review spend</option>
-            <option value="ATENCAO: grande variacao de preco">Variacao de preco</option>
+            <option value="OPORTUNIDADE: produto vende organico, considerar ads">Oportunidade orgânica</option>
+            <option value="REVIEW: spend sem vendas no período de orders">Investe sem vender</option>
+            <option value="ATENCAO: grande variacao de preco">Variação de preço</option>
           </ProductSelect>
         </>
       ) : (
@@ -533,20 +531,15 @@ function ProdutosPageInner() {
       )}
     </div>
   );
-  const contador =
-    tab === "ml" ? <ProductCount total={mlDisplayData?.total ?? null} />
-    : tab === "tiktok" ? <ProductCount total={tkDisplayData?.total ?? null} />
-    /* Ausencia nao vira "0 produtos": sem valor confiavel, o contador some. */
-    : <ProductCount total={shUnavailable ? null : shDisplayData?.total ?? null} />;
-
   // Selo: a hora publicada no resumo do canal ativo (nunca a de uma identidade antiga); sem hora, o estado da fonte.
   const refreshed = (tab === "ml" ? mlDisplaySummary : tab === "tiktok" ? tkDisplaySummary : shDisplaySummary)?.refreshed_at ?? null;
-  const selo = activeLoading ? (
-    <SeloAtualizado em={null} carregando />
-  ) : refreshed ? (
-    <SeloAtualizado em={refreshed} aoVivo={isLive} />
-  ) : (
-    <LiveStatusBadge live={isLive} />
+  const selo = (
+    <SeloAtualizado
+      em={activeLoading ? null : refreshed}
+      carregando={activeLoading}
+      aoVivo={activeLoading ? null : isLive}
+      detalhe={!activeLoading && !refreshed ? "A fonte deste canal não publica a hora da atualização" : undefined}
+    />
   );
 
   const faixa =
@@ -590,6 +583,7 @@ function ProdutosPageInner() {
         <ScopeQualityBanner
           quality={shDisplaySummary?.quality}
           loading={shSummaryAvail === "loading"}
+          naGrade
         />
         {progressoBling && <p className="px-1 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
         <ProductParetoSummary
@@ -640,7 +634,6 @@ function ProdutosPageInner() {
       visao={tab}
       onVisao={handleTabChange}
       filtros={filtros}
-      direita={contador}
       faixa={
         <>
           {/* Dados parciais (FINDING 3): so' quando exatamente UM dos dois (tabela, resumo) da aba falhou. */}
