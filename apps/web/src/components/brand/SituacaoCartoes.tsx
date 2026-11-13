@@ -23,9 +23,11 @@ export const VISUAL_SITUACAO: Record<ChaveSituacao, { icone: LucideIcon; identid
 const GRADE = "grid grid-cols-2 gap-3 md:grid-cols-4";
 
 export function FaixaSituacao({
-  cartoes, roas, aoAbrir,
+  cartoes, roas, aoAbrir, adsAusente = "N/D para TikTok Shop",
 }: {
   cartoes: readonly CartaoSituacao[];
+  /** T-0111: legenda do Ad Spend sem valor, do canal selecionado (`legendaAdsAusente`). */
+  adsAusente?: string;
   /** ROAS aproximado (GMV ÷ Ad Spend), so' quando ha Ad Spend. */
   roas: string | null;
   aoAbrir: (chave: ChaveSituacao) => void;
@@ -36,7 +38,7 @@ export function FaixaSituacao({
         const { icone, identidade } = VISUAL_SITUACAO[c.chave];
         const ausente = c.valor == null;
         const comparacao =
-          c.chave !== "adspend" ? undefined : ausente ? "N/D para TikTok Shop" : roas != null ? `ROAS ~${roas}` : undefined;
+          c.chave !== "adspend" ? undefined : ausente ? adsAusente : roas != null ? `ROAS ~${roas}` : undefined;
         return (
           <KpiTile
             key={c.chave}

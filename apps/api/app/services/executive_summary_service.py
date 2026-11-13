@@ -201,9 +201,12 @@ def _compose_executive_summary(
     now: datetime, brand_freshness: list[dict] | None = None,
 ) -> dict:
     cur = overview["current"]
-    gmv = cur["gmv"]
-    orders = cur["orders"]
-    avg_ticket = cur["avg_ticket"]
+    # T-0111: /overview passou a devolver None sem linha na fonte. O resumo
+    # executivo mantem o contrato dele (float/int) e trata None como antes
+    # tratava o 0: `no_data` -> status "critical" + risco missing_data.
+    gmv = cur["gmv"] if cur["gmv"] is not None else 0.0
+    orders = cur["orders"] if cur["orders"] is not None else 0
+    avg_ticket = cur["avg_ticket"] if cur["avg_ticket"] is not None else 0.0
     gmv_mom_pct = overview.get("gmv_mom_pct")
     no_data = gmv == 0 and orders == 0
 

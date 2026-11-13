@@ -95,15 +95,16 @@ export interface Meta {
 
 /** Dinheiro e' STRING. Nao trocar por `number`: ha teste que falha. */
 export interface Totals {
-  gross_gmv: string;
-  gross_units: number;
-  created_orders: number;
-  eligible_orders: number;
-  cancelled_orders: number;
-  to_return_orders: number;
-  to_return_gmv: string;
-  unpaid_orders: number;
-  unpaid_gmv: string;
+  // T-0111: todos podem vir `null` (sem linha no recorte; motivo em meta.warnings "sem_dado:").
+  gross_gmv: string | null;
+  gross_units: number | null;
+  created_orders: number | null;
+  eligible_orders: number | null;
+  cancelled_orders: number | null;
+  to_return_orders: number | null;
+  to_return_gmv: string | null;
+  unpaid_orders: number | null;
+  unpaid_gmv: string | null;
   handling: HandlingStat;
 }
 

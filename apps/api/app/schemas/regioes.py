@@ -38,10 +38,12 @@ class _CoberturaCampos(BaseModel):
 
 
 class RegioesSummaryResponse(_CoberturaCampos):
-    gmv: float
-    orders: int
-    units_sold: int
-    ufs_com_venda: int
+    #: T-0111: None quando o escopo nao tem nenhuma linha regional (ausencia,
+    #: nao venda zero). 0 so' quando ha' linha com 0.
+    gmv: Optional[float] = None
+    orders: Optional[int] = None
+    units_sold: Optional[int] = None
+    ufs_com_venda: Optional[int] = None
     uf_known_orders: int
     uf_eligible_orders: int
     uf_fill_pct: Optional[float] = None

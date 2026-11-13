@@ -23,8 +23,9 @@ import MarketplaceFilter from "@/components/MarketplaceFilter";
 import DateRangeFilter from "@/components/DateRangeFilter";
 import { fmtBrl, fmtNumber } from "@/lib/formatters";
 import {
-  cartoesSituacao, DICA_SITUACAO, ROTULO_SITUACAO, valorExato, type ChaveSituacao,
+  cartoesSituacao, DICA_SITUACAO, legendaAdsAusente, ROTULO_SITUACAO, valorExato, type ChaveSituacao,
 } from "@/lib/brand/situacao-cartoes";
+import { SEM_DADO_NO_RECORTE, SEM_DADO_NO_RECORTE_DICA } from "@/lib/overview-sem-dado";
 // Apresentacao decimal em pt-BR. O modulo nasceu no V3-1A, quando o QA visual
 // achou PONTO decimal em toda percentagem da Inteligencia, e e generico: cuida
 // so de formatacao, sem calculo, metrica nem arredondamento de negocio.
@@ -447,7 +448,10 @@ function BrandPageInner() {
   const mixCanais = channelTotals(projectedDaily, filter);
   // Periodo anterior REAL: comparacao ligada E janela anterior com linhas.
   const cartoesMarca = cartoesSituacao(cur, prev, projectedDaily, filters.compare && prevDaily.length > 0);
-  const roasMarca = cur.adSpend != null && cur.adSpend > 0 ? roasBr(cur.gmv / cur.adSpend) : null;
+  const roasMarca = cur.adSpend != null && cur.adSpend > 0 && cur.gmv != null ? roasBr(cur.gmv / cur.adSpend) : null;
+  // T-0111: a serie diaria veio sem linha para os canais selecionados (ex.: Apice so' no ML).
+  // GMV e Pedidos mostram "—" com este aviso; nunca a soma de uma lista vazia.
+  const semDadoMarca = isLive && cur.gmv == null;
   const periodoAnteriorLabel = filters.compare
     ? (() => { const r = previousEquivalentRange(filters.dateFrom, filters.dateTo); return fmtPeriodo(r.dateFrom, r.dateTo); })()
     : "";
@@ -568,7 +572,18 @@ function BrandPageInner() {
                 <InfoDica texto="Em modo demonstração, os dados de exemplo não separam pedidos por canal. GMV continua filtrável." />
               </p>
             )}
-            <FaixaSituacao cartoes={cartoesMarca} roas={roasMarca} aoAbrir={(chave) => setDialog({ kind: "kpi", chave })} />
+            {semDadoMarca && (
+              <p className="flex w-fit items-center gap-1.5 text-xs font-semibold text-warn-ink bg-warn-soft border border-warn/35 rounded-lg px-3 py-1.5">
+                {SEM_DADO_NO_RECORTE}
+                <InfoDica texto={SEM_DADO_NO_RECORTE_DICA} />
+              </p>
+            )}
+            <FaixaSituacao
+              cartoes={cartoesMarca}
+              roas={roasMarca}
+              adsAusente={legendaAdsAusente(filter, semDadoMarca)}
+              aoAbrir={(chave) => setDialog({ kind: "kpi", chave })}
+            />
           </div>
         )}
       </section>

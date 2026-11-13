@@ -99,23 +99,27 @@ class HandlingStat(BaseModel):
 
 
 class Totals(BaseModel):
-    """Medidas ADITIVAS do periodo. Razoes ficam em `shares` e `rates`."""
+    """Medidas ADITIVAS do periodo. Razoes ficam em `shares` e `rates`.
 
-    gross_gmv: Decimal = Field(
-        ..., description="GMV BRUTO de pedidos nao cancelados. Inclui "
-                         "to_return e unpaid. NAO e' receita liquida.")
-    gross_units: int
-    created_orders: int = Field(
-        ..., description="TODOS os pedidos criados. Denominador do cancelamento.")
-    eligible_orders: int = Field(
-        ..., description="order_status <> 'cancelled'. Populacao do GMV.")
-    cancelled_orders: int
-    to_return_orders: int
-    to_return_gmv: Decimal = Field(
-        ..., description="Parcela de to_return DENTRO do bruto. Nao e' deducao.")
-    unpaid_orders: int
-    unpaid_gmv: Decimal = Field(
-        ..., description="Parcela de unpaid DENTRO do bruto. Nao e' deducao.")
+    T-0111: todas as medidas abaixo (exceto `handling`) sao None quando a
+    janela nao tem nenhuma linha no recorte -- ausencia, nao venda zero.
+    """
+
+    gross_gmv: Optional[Decimal] = Field(
+        None, description="GMV BRUTO de pedidos nao cancelados. Inclui "
+                          "to_return e unpaid. NAO e' receita liquida.")
+    gross_units: Optional[int] = None
+    created_orders: Optional[int] = Field(
+        None, description="TODOS os pedidos criados. Denominador do cancelamento.")
+    eligible_orders: Optional[int] = Field(
+        None, description="order_status <> 'cancelled'. Populacao do GMV.")
+    cancelled_orders: Optional[int] = None
+    to_return_orders: Optional[int] = None
+    to_return_gmv: Optional[Decimal] = Field(
+        None, description="Parcela de to_return DENTRO do bruto. Nao e' deducao.")
+    unpaid_orders: Optional[int] = None
+    unpaid_gmv: Optional[Decimal] = Field(
+        None, description="Parcela de unpaid DENTRO do bruto. Nao e' deducao.")
     handling: HandlingStat
 
 

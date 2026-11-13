@@ -620,8 +620,12 @@ def get_overview(
         tk_gmv, tk_orders = _gmv_orders(tk, base)
         ml_gmv, ml_orders = _gmv_orders(ml, base)
         sh_gmv, sh_orders = _gmv_orders(sh, base)
-        gmv = tk_gmv + ml_gmv + sh_gmv
-        orders = tk_orders + ml_orders + sh_orders
+        # T-0111 (sem dado != 0): nenhum canal com linha no recorte -> GMV,
+        # pedidos e ticket saem None, nunca 0. Canal com linha (mesmo zerada)
+        # entra na soma; canal sem linha so' fica de fora dela.
+        sem_linha = not data
+        gmv = None if sem_linha else tk_gmv + ml_gmv + sh_gmv
+        orders = None if sem_linha else tk_orders + ml_orders + sh_orders
 
         ml_canceled = int(_f(ml.get("canceled_orders")))
         ml_total = ml_orders + ml_canceled
@@ -638,7 +642,8 @@ def get_overview(
             "ml_gmv": ml_gmv or None,
             "shopee_gmv": sh_gmv or None,
             "orders": orders,
-            "avg_ticket": gmv / orders if orders > 0 else 0.0,
+            # Ticket sem pedido e' media sem base: None, nunca 0.
+            "avg_ticket": gmv / orders if orders else None,
             "ad_spend": (ml_spend + sh_spend) or None,
             "ml_roas": round(ml_revenue / ml_spend, 2) if ml_spend > 0 else None,
             "ml_cancel_rate_pct": ml_cancel_rate,
@@ -651,7 +656,11 @@ def get_overview(
     cur = _assemble(_mkt_kpis(db, start, end, mkt_ids, brand_keys, base))
     if pstart is not None:
         prev = _assemble(_mkt_kpis(db, pstart, pend, mkt_ids, brand_keys, base))
-        mom = round((cur["gmv"] - prev["gmv"]) / prev["gmv"] * 100, 2) if prev["gmv"] > 0 else None
+        # Base None (sem linha) ou 0 -> delta None; atual None -> delta None.
+        mom = (
+            round((cur["gmv"] - prev["gmv"]) / prev["gmv"] * 100, 2)
+            if cur["gmv"] is not None and prev["gmv"] else None
+        )
     else:
         prev = _assemble({})
         mom = None

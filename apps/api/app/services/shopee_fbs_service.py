@@ -50,6 +50,14 @@ EXPECTED_ACCOUNTS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 #: funcionaria por acidente, e deixaria de funcionar no dia da divergencia.
 EXPECTED_BRANDS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
+#: Marca de cada conta da allowlist (T-0111). Mapeamento EXPLICITO, e nao
+#: "conta == marca": e' ele que diz quais contas o filtro `brands` pede. Conta
+#: nova entra aqui junto com EXPECTED_ACCOUNTS.
+ACCOUNT_BRAND = {
+    "apice": "apice", "barbours": "barbours", "kokeshi": "kokeshi",
+    "lescent": "lescent", "rituaria": "rituaria",
+}
+
 #: Marcas Shopee que NAO estao na esteira API (vazia desde 11/2026). Declaradas
 #: para que a ausencia viaje com o payload em vez de virar silencio.
 BRANDS_NOT_COVERED: tuple[str, ...] = ()
@@ -404,6 +412,14 @@ def get_shopee_fbs_block(
         "unpaid_gmv": sum((_dec(r["unpaid_gmv"]) for r in por_classe), Decimal(0)),
         "handling": _handling(h_sum, h_n, elig_total),
     }
+    # T-0111 (sem dado != 0): janela sem NENHUMA linha no recorte -> as
+    # medidas aditivas saem None. `_dec(None) -> 0` continua valendo para
+    # classe ausente quando a outra classe tem linha (zero medido).
+    sem_linha = not por_classe
+    if sem_linha:
+        for campo in totals:
+            if campo != "handling":
+                totals[campo] = None
     rates = {"cancellation_rate": _share(totals["cancelled_orders"], crea_total)}
     shares = {
         "share_fbs_gmv": _share(gmv_fbs, gmv_total),
@@ -481,6 +497,10 @@ def get_shopee_fbs_block(
     esperadas = list(EXPECTED_ACCOUNTS)
     if accounts:
         esperadas = [a for a in esperadas if a in accounts]
+    if brands:
+        # T-0111 (B2-10): conta de marca FORA do filtro nao foi pedida; ela
+        # nao e' "ausente". Conta sem mapeamento compara pelo proprio nome.
+        esperadas = [a for a in esperadas if ACCOUNT_BRAND.get(a, a) in brands]
     missing = [a for a in esperadas if a not in obs]
     unexpected = [a for a in obs if a not in EXPECTED_ACCOUNTS]
     covered = sorted({r["brand"] for r in observadas if r["brand"]})
@@ -494,6 +514,10 @@ def get_shopee_fbs_block(
         avisos.append(
             f"conta(s) FORA da allowlist observada(s): {', '.join(unexpected)}. "
             "O contrato da fonte mudou; investigue antes de usar o total.")
+    if sem_linha:
+        avisos.append(
+            "sem_dado: nenhuma linha na janela para o recorte pedido. Totais "
+            "null -- ausencia de dado, nao venda zero.")
     avisos.append(LIMITACAO_COBERTURA)
     avisos.append(LIMITACAO_REGIME_CARGA)
 

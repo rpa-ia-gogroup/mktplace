@@ -186,6 +186,26 @@ export function mlStockSourceFailed(categoria: string): Limitation {
   };
 }
 
+/**
+ * T-0111 — o recorte (canal x marca x periodo) NAO TEM LINHA na fonte. Mesmo
+ * padrao "sem_dado" do estoque e da C2-01/T-0085: o total sai nulo e o texto
+ * diz qual recorte; zero so' quando a fonte tem linha com zero. `alcance`
+ * separa o periodo atual do anterior (comparacao).
+ */
+export function semDadoNoRecorte(
+  recorte: string,
+  window: { start: string; end: string } | null,
+  alcance: "atual" | "anterior",
+): Limitation {
+  const quando = window ? `${window.start} a ${window.end}` : "periodo de comparacao";
+  const oque = alcance === "atual" ? "GMV, pedidos e ticket medio" : "GMV, pedidos e ticket do periodo anterior e a variacao";
+  return {
+    topic: "sem_dado",
+    scope: `Desempenho — ${recorte} (${alcance === "atual" ? "" : "anterior, "}${quando})`,
+    description: `Nao ha nenhuma linha na fonte para ${recorte} em ${quando}: ${oque} vem nulos. Isso e' AUSENCIA de dado (ex.: marca sem operacao no canal ou carga ausente), nunca venda zero — diga "sem dado", nao "R$ 0" nem "0 pedidos".`,
+  };
+}
+
 /** O dia corrente e' sempre parcial. */
 export const CURRENT_DAY_PARTIAL: Limitation = {
   topic: "dia_corrente",

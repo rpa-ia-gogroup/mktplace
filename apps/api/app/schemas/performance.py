@@ -22,12 +22,14 @@ class FiltersEcho(BaseModel):
 
 
 class KpiSummary(BaseModel):
-    gmv: float
+    #: T-0111: `gmv`/`orders`/`avg_ticket` sao None quando nenhum canal tem
+    #: linha no recorte (sem dado != 0). `avg_ticket` tambem e' None sem pedido.
+    gmv: Optional[float] = None
     tiktok_gmv: Optional[float] = None
     ml_gmv: Optional[float] = None
     shopee_gmv: Optional[float] = None
-    orders: int
-    avg_ticket: float
+    orders: Optional[int] = None
+    avg_ticket: Optional[float] = None
     ad_spend: Optional[float] = None
     ml_roas: Optional[float] = None
     ml_cancel_rate_pct: Optional[float] = None

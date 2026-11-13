@@ -158,7 +158,9 @@ export interface GmvBase {
  * Bling não tem hora); senão fica a base sem elas e `variacaoInclui` é false.
  */
 export function gmvComMenores(base: GmvBase, m: MenoresOk | null, comparavel: boolean): GmvBase & { variacaoInclui: boolean } {
-  if (!m || base.gmv == null || m.total <= 0) return { ...base, variacaoInclui: false };
+  if (!m || m.total <= 0) return { ...base, variacaoInclui: false };
+  // T-0111: as marcas grandes sem linha no recorte nao zeram o topo nem apagam as menores; sem base, sem variacao.
+  if (base.gmv == null) return { gmv: m.total, prevGmv: null, momPct: null, variacaoInclui: false };
   const gmv = base.gmv + m.total;
   if (comparavel && base.prevGmv != null && m.anterior != null) {
     const prev = base.prevGmv + m.anterior;
@@ -181,11 +183,13 @@ export function pedidosTicketComMenores(
   m: MenoresOk | null,
 ): KpiDescriptor[] {
   if (!m || !overview || topo.gmv == null || m.total <= 0) return [...kpis];
+  // T-0111: grandes sem linha no recorte entram como ausentes; os pedidos sao so' os das menores.
+  const pedidosGrandes = overview.orders ?? 0;
   if (m.pedidos == null) {
     const aviso = "Só marcas grandes: pedidos das menores não vieram";
     return kpis.map((k) => (k.key === "orders" || k.key === "avg_ticket" ? { ...k, subvalue: aviso } : k));
   }
-  const pedidos = overview.orders + m.pedidos;
+  const pedidos = pedidosGrandes + m.pedidos;
   const ticket = topo.gmv / pedidos;
   const prevPedidos = topo.variacaoInclui && topo.prevGmv != null && m.pedidosAnterior != null && overview.prev_orders != null ? overview.prev_orders + m.pedidosAnterior : null;
   const pedidosPct = prevPedidos != null ? deltaPct(pedidos, prevPedidos) : null;
