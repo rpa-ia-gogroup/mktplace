@@ -70,7 +70,7 @@ function CelulaResumo({ c, forte = false }: { c: CelulaGrade; forte?: boolean })
       </span>
       <span className="text-xs tabular-nums text-ink-muted">
         {partes.map((x) => <span key={x.txt}><span className={x.tom}>{fmt(x.n)} {x.txt}</span> · </span>)}
-        {fmtPermanencia(c.permanencia)} de permanência
+        {c.permanencia === null ? "sem venda para medir permanência" : `${fmtPermanencia(c.permanencia)} de permanência`}
       </span>
     </div>
   );
