@@ -1844,27 +1844,31 @@ export function fetchBrandDetail(
 
 // ---------- Pedidos ----------
 
+// T-0116 (sem dado != 0): canal sem linha na fonte vem com os campos null; os
+// totais vem null quando nenhum canal pedido tem linha. Null aparece como "—".
 export interface PedidosKpis {
-  total_orders: number;
-  total_gmv: number;
-  avg_ticket: number;
+  total_orders: number | null;
+  total_gmv: number | null;
+  avg_ticket: number | null;
   cancel_rate_pct: number | null;
 }
 
 export interface PedidosCanalKpis {
-  orders: number;
-  canceled: number;
-  gmv: number;
+  orders: number | null;
+  canceled: number | null;
+  gmv: number | null;
   cancel_rate_pct: number | null;
   delivered: number | null;
 }
 
 export interface PedidosDailyRow {
   date: string;
-  tiktok_orders: number;
-  tiktok_canceled: number;
-  ml_orders: number;
-  ml_canceled: number;
+  tiktok_orders: number | null;
+  tiktok_canceled: number | null;
+  ml_orders: number | null;
+  ml_canceled: number | null;
+  shopee_orders?: number | null;
+  shopee_canceled?: number | null;
   total_orders: number;
   total_gmv: number;
 }
@@ -1880,6 +1884,10 @@ export interface PedidosBrandRow {
   ml_canceled: number | null;
   ml_cancel_rate_pct: number | null;
   ml_gmv: number | null;
+  shopee_orders?: number | null;
+  shopee_canceled?: number | null;
+  shopee_cancel_rate_pct?: number | null;
+  shopee_gmv?: number | null;
   total_orders: number;
   total_gmv: number;
 }
@@ -1889,8 +1897,13 @@ export interface PedidosData {
   kpis: PedidosKpis;
   tiktok: PedidosCanalKpis;
   ml: PedidosCanalKpis;
+  shopee?: PedidosCanalKpis | null;
   daily: PedidosDailyRow[];
   by_brand: PedidosBrandRow[];
+  /** Canais pedidos sem linha na fonte no recorte ("tiktok" | "ml" | "shopee"). */
+  canais_sem_dado?: string[];
+  /** Avisos da API; o motivo de ausencia comeca por `sem_dado:`. */
+  warnings?: string[];
   date_from?: string | null;
   date_to?: string | null;
   refreshed_at?: string | null;

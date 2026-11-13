@@ -127,7 +127,7 @@ test("pagina de Pedidos: sem KpiCard legado nem CanalCard, formato da casa, dial
   assert.ok(pag.includes("{detalhe && dataIsFresh && ("), "detalhe so' com dado fresco");
   // ALVO-GRADE: uma faixa so' (a da aba ativa), um esqueleto so'.
   assert.equal((pag.match(/<FaixaCarregando/g) ?? []).length, 1);
-  for (const t of ['tipo="erro"', 'tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos."', 'tipo="indisponivel" titulo="API offline — pedidos indisponíveis."', 'tipo="vazio" titulo="Sem dados de canais disponíveis."']) {
+  for (const t of ['tipo="erro"', 'tipo="indisponivel" titulo="API offline — pedidos indisponíveis."', 'tipo="vazio" titulo="Sem dados de canais disponíveis."']) {
     assert.ok(pag.includes(t), t);
   }
   assert.ok(!pag.includes("bg-rose-50 border border-rose-200"), "sem a caixa de erro feita a mao");
@@ -205,5 +205,5 @@ test("B1-04: o cartao de pedidos e' LIQUIDO (sem cancelados), o mesmo do grafico
   assert.equal(TITULO_DETALHE.total_pedidos, "Pedidos (sem cancelados)");
   const cart = ler("src/components/pedidos/PedidosCartoes.tsx");
   assert.ok(!cart.includes('"Total de pedidos"') && cart.includes("rotulo={TITULO_DETALHE.total_pedidos}"));
-  assert.ok(ler("app/pedidos/page.tsx").includes("paraPedidosLiquidos({ kpis, tk, ml })"));
+  assert.ok(ler("app/pedidos/page.tsx").includes("paraPedidosLiquidos({ kpis, tk, ml, sh })"));
 });

@@ -330,13 +330,13 @@ test("P16. Qualidade nao cria ranking competitivo de cancelamento entre canais",
   assert.doesNotMatch(src, /melhor canal|pior canal|ranking de cancel/i);
 });
 
-test("P17. Pedidos: Shopee isolada e' ausencia de cobertura, nao API offline", () => {
+test("P17. Pedidos (T-0116): a Shopee tem dado; sem 'sem cobertura', ausencia vira aviso de parcial", () => {
   const src = read("app/pedidos/page.tsx");
-  assert.match(src, /Shopee sem cobertura nesta visão/);
+  assert.doesNotMatch(src, /Shopee sem cobertura nesta visão|Sem cobertura de Shopee em Pedidos/);
   // ALVO-GRADE: o selo da `Aba` faz o papel do antigo `status` do cabecalho.
   const statusBlock = src.slice(src.indexOf("        selo={"), src.indexOf("        filtros={"));
-  assert.ok(statusBlock.indexOf("showShopeeOnly") >= 0 && statusBlock.indexOf("showShopeeOnly") < statusBlock.indexOf("<SeloAtualizado"),
-    "a cobertura ausente e' checada antes do badge de rede");
+  assert.match(statusBlock, /<SeloAtualizado/);
+  assert.match(src, /avisoParcial\(canaisSemDado\(displayData, selecao\), selecao\)/, "canal sem linha -> aviso escrito, nunca zero");
 });
 
 test("P18. Financeiro: ROAS por canal, sem consolidacao", () => {
