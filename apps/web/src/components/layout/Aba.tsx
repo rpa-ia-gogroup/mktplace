@@ -138,11 +138,14 @@ export default function Aba<T extends string = string>({
                   href={`#${v.id}`}
                   aria-current={ativa ? "location" : undefined}
                   onClick={(e) => {
+                    // ctrl/cmd/shift/botao do meio: deixa o navegador abrir o link (nova aba/janela).
+                    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
                     e.preventDefault();
                     onVisao?.(v.id);
                   }}
                   className={classe}
                 >
+                  {v.ponto && <span aria-hidden="true" className={`h-2 w-2 rounded-full ${v.ponto}`} />}
                   {v.rotulo}
                 </a>
               );
