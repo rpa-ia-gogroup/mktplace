@@ -142,10 +142,10 @@ function Escondido({ texto, detalhe, className }: { texto: string; detalhe?: str
 }
 
 /** So' o %; "x de y" no title + sr-only. */
-function Fracao({ parte, base, motivo }: { parte: number | null; base: number | null; motivo?: string }) {
+function Fracao({ parte, base, motivo, critico = false }: { parte: number | null; base: number | null; motivo?: string; critico?: boolean }) {
   const f = fracao(parte, base);
   if (!f) return <Ausente motivo={motivo ?? (base === 0 ? "sem itens no Full" : undefined)} />;
-  return <Escondido texto={f.texto} detalhe={f.detalhe} className="font-semibold text-ink" />;
+  return <Escondido texto={f.texto} detalhe={f.detalhe} className={`font-semibold ${critico ? "text-crit-ink" : "text-ink"}`} />;
 }
 
 /** Segunda linha da celula de marca: so' o R$/dia; % do Full da marca e "sem preço" no title + sr-only. */
@@ -274,7 +274,7 @@ function DetalheCurva({ canal, impacto, abc }: { canal: Canal; impacto: ImpactoR
           )}
         </td>
         <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">
-          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} />}
+          {l.perda === null ? <Ausente motivo="sem preço nas rupturas" /> : <Escondido texto={l.vendedorCobre ? "sem perda" : fmtReais(l.perda)} detalhe={l.vendedorCobre ? "vendedor tem estoque: a venda segue fora do Full" : null} className={l.vendedorCobre ? "text-ink-faint" : undefined} />}
         </td>
         <td className="py-2.5 pl-2 text-right tabular-nums text-ink-muted">{fmtInt(l.rupturas)}</td>
       </tr>
@@ -436,7 +436,15 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
   const algumaIncompleta = ok.some((c) => !c.rupturasCompletas);
   const falhou = canais.some((c) => c.status === "erro");
 
-  const selo = <SeloAtualizado em={null} detalhe={fotosHeroi(canais) ?? undefined} />;
+  // A foto MAIS ANTIGA dos canais medidos: o selo nunca parece mais novo que o dado. Foto velha = "Desatualizado" escrito.
+  const horas = oks(canais).map((c) => c.atualizadoEm).filter((h): h is string => !!h).sort();
+  const selo = (
+    <SeloAtualizado
+      em={horas[0] ?? null}
+      atrasado={oks(canais).some((c) => c.frescorVelho)}
+      detalhe={[fotosHeroi(canais), ...oks(canais).map((c) => `${NOME_CANAL[c.canal]}: ${c.frescor}`)].filter(Boolean).join(" · ")}
+    />
+  );
   if (!ok.length || !heroi) {
     return (
       <Aba {...abas} selo={selo}>
@@ -454,12 +462,31 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
   const baseOk = ok.reduce((n, c) => n + c.base, 0);
   const rupturaOk = ok.reduce((n, c) => n + c.ruptura, 0);
   const maxVenda = Math.max(0, ...lista.map((t) => t.mediaDiaria));
-  const topo = doCanalEscolhido.slice(0, 5);
+  // So' o que pede acao: com perda medida (sem "sem perda"), do maior impacto potencial/dia para o menor.
+  const topo = doCanalEscolhido
+    .filter((t) => typeof t.perdaDia === "number" && t.perdaDia > 0 && !celulaImpacto(t).zeroMedido)
+    .sort((a, b) => (b.perdaDia as number) - (a.perdaDia as number))
+    .slice(0, 5);
   const paramVenda = kpiParamVenda(shopee);
   return (
     <Aba
       {...abas}
       selo={selo}
+      filtros={
+        <div className="flex min-w-0 flex-col gap-1 self-center">
+          {/* Canal sem foto ou com aviso: UMA linha cada, na linha dos filtros (era o meio do heroi). */}
+          {canais.map((c) =>
+            c.status !== "ok" ? (
+              <div key={c.canal} className="flex flex-wrap items-center gap-2">
+                <AvisoTopo texto={`${NOME_CANAL_LONGO[c.canal]} sem dado agora`} ajuda={c.motivo} />
+                {c.status === "erro" && <RetryButton onClick={recarregar} />}
+              </div>
+            ) : avisoCanal(c) ? (
+              <AvisoTopo key={c.canal} texto={`${NOME_CANAL_LONGO[c.canal]}: ${avisoCanal(c)}`} />
+            ) : null,
+          )}
+        </div>
+      }
       direita={
         // 390: a trilha rola sozinha (a opcao escolhida e' centralizada pelo efeito de [data-trilha]).
         <div data-trilha className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
@@ -478,17 +505,6 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
       }
       faixa={
         <>
-          {/* Canal sem foto ou com aviso: UMA linha cada, acima dos cartoes (era o meio do heroi). */}
-          {canais.map((c) =>
-            c.status !== "ok" ? (
-              <div key={c.canal} className="flex flex-wrap items-center gap-2">
-                <AvisoTopo texto={`${NOME_CANAL_LONGO[c.canal]} sem dado agora`} ajuda={c.motivo} />
-                {c.status === "erro" && <RetryButton onClick={recarregar} />}
-              </div>
-            ) : avisoCanal(c) ? (
-              <AvisoTopo key={c.canal} texto={`${NOME_CANAL_LONGO[c.canal]}: ${avisoCanal(c)}`} />
-            ) : null,
-          )}
           <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
             <CartaoIndicador
               rotulo="Produtos-chave sem estoque"
@@ -586,7 +602,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
           }
         >
           {topo.length === 0 ? (
-            <StateBlock tipo="vazio" titulo="Nenhuma ruptura no Full" compacto />
+            <StateBlock tipo="vazio" titulo="Nenhuma ruptura com perda no Full" compacto />
           ) : (
             <ul className="divide-y divide-line">
               {topo.map((t, i) => (
@@ -754,7 +770,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
               const ehPior = l === pior;
               const ft = colunas.length > 1 && colunas.every((c) => l.celulas[c]?.ruptura != null) ? fracao(l.ruptura, l.base) : null;
               return (
-                <tr key={l.marca} className={ehPior ? "bg-crit-soft" : undefined} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
+                <tr key={l.marca} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
                   <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
                     <Escondido texto={tituloMarca(l.marca)} detalhe={ft ? `Total: ${ft.texto} (${ft.detalhe})` : null} />
                     {/* A linha vermelha nao pode ser o unico sinal: leitor de tela ouve "pior". */}
@@ -764,8 +780,9 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
                     const cel: MarcaCanal | undefined = l.celulas[canal];
                     return (
                       <td key={canal} className="px-3 py-2 sm:px-4 text-right tabular-nums">
-                        {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} /> : <Ausente motivo="marca fora deste canal" />}
-                        {cel && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
+                        {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} critico={ehPior} /> : <Ausente motivo="marca fora deste canal" />}
+                        {/* Sem a fracao, o "—" de cima ja' diz a ausencia: nada de segundo "—". */}
+                        {cel && fracao(cel.ruptura, cel.base) && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
                       </td>
                     );
                   })}
