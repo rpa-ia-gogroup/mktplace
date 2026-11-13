@@ -73,6 +73,8 @@ export const DEF_QUALIDADE: Record<ChaveQualidade, Definicao> = {
 };
 
 export const NOME_DO_CANAL: Record<CanalQualidade, string> = { tiktok: "TikTok Shop", ml: "Mercado Livre", shopee: "Shopee" };
+/** Nome curto do canal, para rotulo de cartao e cabecalho de coluna. */
+export const CANAL_CURTO: Record<CanalQualidade, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
 
 /** Titulo do detalhe: "Cancelamento · Mercado Livre". */
 export function tituloDoDetalhe(chave: ChaveQualidade): string {
