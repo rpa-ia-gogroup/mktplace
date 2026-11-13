@@ -51,6 +51,35 @@ export interface VisaoDaAba<T extends string = string> {
   ponto?: string;
 }
 
+/** Rola a aba ativa para dentro da vista e esmaece a borda que esconde mais abas (390 com 4-5 abas). */
+function useAbasRolaveis(ativa: unknown) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [mais, setMais] = useState({ esq: false, dir: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const medir = () =>
+      setMais({ esq: el.scrollLeft > 1, dir: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
+    const alvo = el.querySelector<HTMLElement>('[aria-selected="true"]');
+    // So' o scroll horizontal da lista: scrollIntoView mexeria na pagina inteira.
+    if (alvo && (alvo.offsetLeft < el.scrollLeft || alvo.offsetLeft + alvo.offsetWidth > el.scrollLeft + el.clientWidth)) {
+      el.scrollLeft = alvo.offsetLeft - (el.clientWidth - alvo.offsetWidth) / 2;
+    }
+    medir();
+    el.addEventListener("scroll", medir, { passive: true });
+    window.addEventListener("resize", medir);
+    return () => {
+      el.removeEventListener("scroll", medir);
+      window.removeEventListener("resize", medir);
+    };
+  }, [ativa]);
+  const mascara =
+    mais.esq || mais.dir
+      ? `linear-gradient(to right, ${mais.esq ? "transparent, black 32px" : "black"}, ${mais.dir ? "black calc(100% - 32px), transparent" : "black"})`
+      : undefined;
+  return { ref, estilo: mascara ? { maskImage: mascara, WebkitMaskImage: mascara } : undefined };
+}
+
 export default function Aba<T extends string = string>({
   titulo,
   selo,
@@ -79,6 +108,7 @@ export default function Aba<T extends string = string>({
   atencao?: ReactNode;
   children?: ReactNode;
 }) {
+  const abas = useAbasRolaveis(visao);
   return (
     <div className="flex w-full flex-col gap-3.5 p-5" data-esqueleto="aba">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -87,7 +117,7 @@ export default function Aba<T extends string = string>({
         {selo ? <div className="flex flex-wrap items-center gap-1.5 pb-1">{selo}</div> : null}
       </header>
       {visoes && visoes.length > 1 ? (
-        <div role="tablist" aria-label={`Visões de ${titulo}`} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
+        <div ref={abas.ref} style={abas.estilo} role="tablist" aria-label={`Visões de ${titulo}`} className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
           {visoes.map((v) => {
             const ativa = v.id === visao;
             return (
