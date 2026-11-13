@@ -43,6 +43,7 @@ import {
   type OraclePhase,
 } from "./observability.ts";
 import {
+  advertisedScopes,
   createAuth0Verifier,
   protectedResourceMetadataUrl,
   type OAuthConfig,
@@ -90,13 +91,19 @@ export type HandleOptions = {
  * O `scope` no `WWW-Authenticate` e' o que controla quais scopes o cliente do
  * Claude solicita; sem ele, o cliente cai no `scopes_supported` do documento
  * PRM. Emitimos os dois — o desafio e o documento — em vez de depender de um.
+ *
+ * O valor e' `oracle:read offline_access` (RFC 6750 §3: lista separada por
+ * espaco). `offline_access` faz o cliente pedir refresh token ao Auth0; ele e'
+ * so' anunciado — o verificador continua exigindo apenas `oracle:read`.
+ * Hoje o SDK ja' escreve `scope` (a partir de `challengeOptions`, em
+ * `authenticate`); esta funcao fica como rede caso ele deixe de escrever.
  */
 function withScopeChallenge(response: Response, cfg: OAuthConfig): Response {
   const header = response.headers.get("www-authenticate");
   if (header === null || /(^|[,\s])scope=/.test(header)) return response;
 
   const headers = new Headers(response.headers);
-  headers.set("www-authenticate", `${header}, scope="${cfg.requiredScope}"`);
+  headers.set("www-authenticate", `${header}, scope="${advertisedScopes(cfg).join(" ")}"`);
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,
@@ -125,7 +132,11 @@ async function authenticate(
   try {
     return await verifyBearerToken(request.headers.get("authorization"), bearerOptions);
   } catch (err) {
-    return withScopeChallenge(bearerAuthChallengeResponse(err, bearerOptions), cfg);
+    // O SDK escreve no desafio os `requiredScopes` que recebe. A VERIFICACAO
+    // acima exige so' `oracle:read`; o DESAFIO anuncia `oracle:read
+    // offline_access`, para que o cliente peca refresh token.
+    const challengeOptions = { ...bearerOptions, requiredScopes: advertisedScopes(cfg) };
+    return withScopeChallenge(bearerAuthChallengeResponse(err, challengeOptions), cfg);
   }
 }
 
