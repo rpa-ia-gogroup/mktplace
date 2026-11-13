@@ -16,6 +16,7 @@
  * mensal ganha a marca de onde o plano esperava estar ate' o ultimo dia com dado.
  */
 import Link from "next/link";
+import { useState } from "react";
 import { Target, TriangleAlert } from "lucide-react";
 
 import type { Marketplace } from "@/lib/mock-data";
@@ -29,6 +30,7 @@ import { fmtPctBr } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
 import type { TendenciaConsolidada } from "@/lib/gerencial/hoje-por-hora";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
+import Sparkline from "@/components/ui/Sparkline";
 
 const SELO: Record<StatusMeta, string> = {
   atingida: "border-ok/40 bg-ok-soft text-ok-ink",
@@ -101,6 +103,8 @@ interface Props {
   notaVendas?: string;
   /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
   linhaMenores?: { texto: string; aviso: boolean } | null;
+  /** GMV de cada canal ao longo do periodo (os mesmos pontos do grafico de evolucao), para a mini tendencia. */
+  serieGmvPorCanal?: Partial<Record<Marketplace, number[]>> | null;
   /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
   tendenciaDoDia?: TendenciaConsolidada | null;
 }
@@ -108,8 +112,10 @@ interface Props {
 export default function MetaHero(props: Props) {
   const { gmv, loading, error } = props;
   return (
-    <section aria-labelledby="meta-hero-titulo" className="rounded-xl border border-line bg-surface">
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(220px,1fr)_2fr] lg:items-center lg:gap-6">
+    <section aria-labelledby="meta-hero-titulo" className="relative overflow-hidden rounded-xl border border-kpi-gmv/30 bg-surface">
+      {/* Halo do numero-heroi: identifica a peca principal da tela (DESIGN.md §4), nao colore dado. */}
+      <span aria-hidden="true" className="pointer-events-none absolute -left-20 -top-28 h-64 w-64 rounded-full bg-accent/15 blur-3xl" />
+      <div className="relative grid grid-cols-1 gap-5 p-5 lg:grid-cols-[minmax(240px,1fr)_2fr] lg:items-center lg:gap-8">
         <Resultado {...props} />
         <div className="min-w-0">
           {loading && gmv == null ? (
@@ -121,15 +127,16 @@ export default function MetaHero(props: Props) {
           ) : (
             <SemMeta {...props} />
           )}
-          <Divisao
-            channels={props.channels}
-            gmvByChannel={props.gmvByChannel}
-            varGmvByChannel={props.compareActive ? props.varGmvByChannel ?? null : null}
-            shareFull={props.shareFull ?? null}
-            total={gmv}
-          />
         </div>
       </div>
+      <Divisao
+        channels={props.channels}
+        gmvByChannel={props.gmvByChannel}
+        varGmvByChannel={props.compareActive ? props.varGmvByChannel ?? null : null}
+        shareFull={props.shareFull ?? null}
+        serie={props.serieGmvPorCanal ?? null}
+        total={gmv}
+      />
     </section>
   );
 }
@@ -155,7 +162,7 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
       ) : (
         <>
           <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <NumeroAnimado texto={fmtCompacto(gmv)} className="text-[2rem] font-bold leading-tight tracking-tight text-ink tabular-nums" />
+            <NumeroAnimado texto={fmtCompacto(gmv)} className="text-[2.5rem] font-bold leading-none tracking-tight text-ink tabular-nums" />
             {/* UI-DENSIDADE-1: o aviso de dado vira um SELO colado no numero,
                 onde a duvida nasce; o texto inteiro esta' no detalhe. */}
             {aviso && <SeloAviso aviso={aviso} />}
@@ -256,7 +263,7 @@ function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta, metasH
         </p>
       </div>
       <div
-        className="relative h-3.5 rounded-full bg-raised"
+        className="relative h-4 rounded-full bg-raised shadow-[inset_0_1px_2px_rgb(0_0_0/0.06)]"
         role="img"
         aria-label={`Realizado ${pct0(p.atingimento)} da meta${
           p.projecaoSobreMeta != null && !p.encerrado ? `; projeção ${pct0(p.projecaoSobreMeta)}` : ""
@@ -282,6 +289,32 @@ function BarraDaMeta({ progresso: p, mesMeta, comCurva, canaisForaDaMeta, metasH
         )}
         <div className="absolute -inset-y-1 w-0.5 bg-ink" style={{ left: larg(1) }} aria-hidden="true" />
       </div>
+      <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink-muted tabular-nums">
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-2 w-3.5 rounded-full bg-accent" />
+          realizado <b className="font-semibold text-ink">{fmtCompacto(p.realizado)}</b>
+        </li>
+        {mostraPlano && (
+          <li className="flex items-center gap-1.5">
+            <span aria-hidden="true" className="h-3 w-1 rounded-full bg-ink-muted" />
+            plano até hoje <b className="font-semibold text-ink">{fmtCompacto(p.planoAteData)}</b>
+          </li>
+        )}
+        {!p.encerrado && p.projecao != null && (
+          <li className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="h-2 w-3.5 rounded-full"
+              style={{ backgroundImage: "repeating-linear-gradient(135deg, rgb(var(--tc-accent) / 0.6) 0 3px, rgb(var(--tc-accent) / 0.15) 3px 6px)" }}
+            />
+            projeção <b className="font-semibold text-ink">{fmtCompacto(p.projecao)}</b>
+          </li>
+        )}
+        <li className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="h-3 w-0.5 bg-ink" />
+          meta
+        </li>
+      </ul>
     </div>
   );
 }
@@ -422,45 +455,98 @@ function SemMeta({ mesMeta, diaMeta, metasStatus, metasHref, onRetryMetas, semMe
   );
 }
 
+/** Classe literal por canal (o Tailwind so' gera classes escritas por extenso). */
+const TINTA_CANAL: Record<Marketplace, string> = {
+  tiktok: "text-canal-tiktok",
+  ml: "text-canal-ml",
+  shopee: "text-canal-shopee",
+};
+
 /**
- * Participacao de cada canal no GMV, numa linha (era uma rosca). O valor, a
- * variacao e a parte Full de cada canal ficam no title e no "Detalhar".
+ * Canais do GMV: uma barra empilhada com a fatia de cada canal e, embaixo, um
+ * bloco por canal com a fatia, o valor, a variacao, a parte Full e a mini
+ * tendencia do periodo. Passar o mouse (ou focar) num canal apaga os outros.
  */
 function Divisao({
   channels,
   gmvByChannel,
   varGmvByChannel,
   shareFull,
+  serie,
   total,
 }: {
   channels: Marketplace[];
   gmvByChannel: Record<Marketplace, number | null>;
   varGmvByChannel: Partial<Record<Marketplace, number | null>> | null;
   shareFull: Partial<Record<Marketplace, number | null>> | null;
+  serie: Partial<Record<Marketplace, number[]>> | null;
   total: number | null;
 }) {
+  const [ativo, setAtivo] = useState<Marketplace | null>(null);
   const partes = channels
     .map((c) => ({ c, v: gmvByChannel[c], s: c === "tiktok" ? null : shareFull?.[c] ?? null }))
     .filter((x): x is { c: Marketplace; v: number; s: number | null } => x.v != null && x.v > 0);
   if (!total || partes.length < 2) return null;
   const pct = (x: number) => Math.round(x * 100);
+  const apagado = (c: Marketplace) => (ativo && ativo !== c ? "opacity-30" : "");
   return (
-    <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted tabular-nums" aria-label="Participação de cada canal no GMV">
-      {partes.map(({ c, v, s }) => {
-        const variacao = varGmvByChannel?.[c];
-        return (
-          <li
-            key={c}
-            title={[fmtCompacto(v), variacao != null ? `${fmtPctBr(variacao)} vs anterior` : null, s != null ? `${pct(s)}% Full` : null]
-              .filter(Boolean)
-              .join(" · ")}
-          >
-            <span aria-hidden="true" className={`mr-1.5 inline-block h-2 w-2 rounded-full ${PONTO[c]}`} />
-            {CHANNEL_LABEL[c]} <b className="font-semibold text-ink">{pct(v / total)}%</b>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="relative border-t border-line px-5 pb-4 pt-3.5">
+      <div
+        className="flex h-2.5 gap-0.5 overflow-hidden rounded-full"
+        role="img"
+        aria-label={partes.map(({ c, v }) => `${CHANNEL_LABEL[c]} ${pct(v / total)}% do GMV`).join("; ")}
+      >
+        {partes.map(({ c, v }) => (
+          <span key={c} className={`tc-barra ${PONTO[c]} transition-opacity duration-200 ${apagado(c)}`} style={{ flex: v }} />
+        ))}
+      </div>
+      <ul className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-3">
+        {partes.map(({ c, v, s }) => {
+          const pontos = serie?.[c] ?? [];
+          return (
+            <li
+              key={c}
+              tabIndex={0}
+              onMouseEnter={() => setAtivo(c)}
+              onMouseLeave={() => setAtivo(null)}
+              onFocus={() => setAtivo(c)}
+              onBlur={() => setAtivo(null)}
+              title={c === "shopee" && s != null ? "Full = FBS, pela proporção medida nas contas da Shopee." : undefined}
+              className={`flex min-w-0 items-end justify-between gap-3 rounded-lg px-2 py-1.5 transition-[opacity,background-color] duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${apagado(c)}`}
+            >
+              <div className="min-w-0 tabular-nums">
+                <p className="flex items-center gap-1.5 text-xs font-medium text-ink-muted">
+                  <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />
+                  {CHANNEL_LABEL[c]}
+                </p>
+                <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2">
+                  <span className="text-xl font-semibold leading-tight text-ink">{pct(v / total)}%</span>
+                  <span className="text-xs text-ink-muted">
+                    {fmtCompacto(v)} <Variacao pct={varGmvByChannel?.[c] ?? null} />
+                    {s != null && <> · {pct(s)}% Full</>}
+                  </span>
+                </p>
+              </div>
+              {pontos.length >= 4 && (
+                <span className="w-24 shrink-0" aria-hidden="true">
+                  <Sparkline pontos={pontos} tinta={TINTA_CANAL[c]} />
+                </span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** "▲ 12%" contra a referencia; sem base, nada. */
+function Variacao({ pct }: { pct: number | null }) {
+  if (pct == null) return null;
+  return (
+    <span className={`font-semibold ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
+      {pct >= 0 ? "▲" : "▼"} {fmtPctBr(Math.abs(pct)).replace("+", "")}
+    </span>
   );
 }
 

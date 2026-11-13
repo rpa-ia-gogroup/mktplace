@@ -382,7 +382,7 @@ export default function EvolutionCard({
                 className="text-xs text-ink-faint tabular-nums"
                 title={showComparison ? "Alinhado ao período atual pela posição do ponto." : undefined}
               >
-                Anterior: {cmp.dateFrom} a {cmp.dateTo}
+                Anterior: {cmp.dateFrom.slice(8, 10)}/{cmp.dateFrom.slice(5, 7)} a {cmp.dateTo.slice(8, 10)}/{cmp.dateTo.slice(5, 7)}
               </p>
             )}
           </>

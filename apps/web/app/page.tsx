@@ -91,7 +91,7 @@ import KpiBand from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
 import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
-import BrandChannelMatrix, { type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
+import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
 import CxResumo, { notasDoTile } from "@/components/gerencial/CxResumo";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
@@ -248,6 +248,13 @@ function GerencialComGrandes() {
       ),
     [sources.series, filters.channels, granularity],
   );
+  // Mini tendencia por canal no heroi: SEMPRE em GMV (o grafico pode estar em Pedidos); dia sem dado fica fora.
+  const serieGmvPorCanal = useMemo(() => {
+    const m = mergeChannelSeries(sources.series, filters.channels, "gmv", granularity);
+    return Object.fromEntries(
+      filters.channels.map((c) => [c, m.buckets.map((b) => b.values[c]).filter((v): v is number => v != null)]),
+    );
+  }, [sources.series, filters.channels, granularity]);
   // GERENCIAL-D0 — hoje no grafico, com o numero do filtro "Hoje". Fica FORA de
   // `merged`: nao entra na soma, na reconciliacao, nas tendencias nem na meta.
   const hojeNoGrafico = useMemo(
@@ -296,6 +303,15 @@ function GerencialComGrandes() {
   const brands = sources.brands.data ?? [];
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
   const concentration = useMemo(() => buildConcentration(brands), [brands]);
+
+  // Sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV (de `/brands`) nao depende deles.
+  const signalsByCell = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const row of sources.canais.data?.channelRows ?? []) {
+      if (row.signals.length > 0) map[cellKey(row.brand, row.channel)] = row.signals;
+    }
+    return map;
+  }, [sources.canais.data]);
 
   // ---- metas (GERENCIAL-METAS-1 + METAS-DIARIAS-1) -----------------------
   // Fonte PROPRIA (`useMetasDoMes`), fora do hook das fontes do Data Mart: a
@@ -803,6 +819,7 @@ function GerencialComGrandes() {
         metasHref={mesDasMetas ? `/metas?mes=${mesDasMetas}` : "/metas"}
         onOpenGmv={() => setDialog({ kind: "kpi", key: "gmv" })}
         shareFull={shareFull}
+        serieGmvPorCanal={serieGmvPorCanal}
         tendenciaDoDia={tendenciaTopo}
       />
 
@@ -874,6 +891,8 @@ function GerencialComGrandes() {
         matrix={matrix}
         loading={sources.brands.status.loading}
         error={sources.brands.status.error}
+        signalsByCell={signalsByCell}
+        signalsState={signalsState}
         onOpenCell={(brand, channel) => {
           if (!MARCAS_MENORES_KEYS.includes(brand)) setDialog({ kind: "matrix", brand, channel });
         }}

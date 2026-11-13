@@ -20,8 +20,10 @@
 import Link from "next/link";
 import InfoDica from "@/components/ui/InfoDica";
 import TableScrollHint from "@/components/TableScrollHint";
+import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import type { BrandChannelMatrix as MatrixData, MatrixCell } from "@/lib/gerencial/brand-matrix";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
+import { signalLabel } from "@/lib/canais-channel-metrics";
 import { fmtBrlCurto, fmtPctBr } from "@/lib/formatters";
 
 /** Estado da fonte de sinais/referencias (`/canais`), independente de `/brands`. */
@@ -31,6 +33,9 @@ interface Props {
   matrix: MatrixData;
   loading: boolean;
   error: boolean;
+  /** Sinais por celula, chaveados por `${brand}:${channel}`. */
+  signalsByCell: Record<string, string[]>;
+  signalsState: SignalsState;
   onOpenCell: (brand: string, channel: MatrixCell["channel"]) => void;
   onOpenChannelHeader: (channel: MatrixCell["channel"]) => void;
   brandHref: (brand: string) => string;
@@ -41,16 +46,40 @@ export function cellKey(brand: string, channel: string): string {
   return `${brand}:${channel}`;
 }
 
-/** Nome acessivel da celula. Os sinais vivem no dialogo que ela abre. */
-function cellAriaLabel(brandLabel: string, cell: MatrixCell): string {
+/** Cor de identidade de cada canal (as mesmas dos pontos e do grafico), para o mapa de calor. */
+const RGB_DO_CANAL: Record<MatrixCell["channel"], string> = { tiktok: "139, 92, 246", ml: "6, 182, 212", shopee: "249, 115, 22" };
+
+/** Fundo na cor do canal, proporcional a' intensidade DENTRO do canal. Teto baixo: o texto segue em AA. */
+function cellBackground(channel: MatrixCell["channel"], intensity: number): string | undefined {
+  if (intensity <= 0) return undefined;
+  return `rgba(${RGB_DO_CANAL[channel]}, ${(0.03 + intensity * 0.13).toFixed(3)})`;
+}
+
+/** Nome acessivel da celula — inclui os sinais para que o foco os anuncie. */
+function cellAriaLabel(
+  brandLabel: string,
+  cell: MatrixCell,
+  signals: string[],
+  signalsState: SignalsState,
+): string {
   const base = `${brandLabel} em ${CHANNEL_LABEL[cell.channel]}`;
-  return cell.available ? `${base} — abrir explicação` : `${base} — sem dado no período, abrir explicação`;
+  if (!cell.available) return `${base} — sem dado no período, abrir explicação`;
+  const parts = [base];
+  if (signals.length > 0) {
+    parts.push(`sinais: ${signals.map(signalLabel).join(", ")}`);
+  } else if (signalsState === "error") {
+    parts.push("sinais indisponíveis nesta carga");
+  }
+  parts.push("abrir explicação");
+  return parts.join(" — ");
 }
 
 export default function BrandChannelMatrix({
   matrix,
   loading,
   error,
+  signalsByCell,
+  signalsState,
   onOpenCell,
   onOpenChannelHeader,
   brandHref,
@@ -112,8 +141,14 @@ export default function BrandChannelMatrix({
           <h2 id="matriz-heading" className="text-sm font-semibold text-ink-muted">
             Marca × Canal
           </h2>
-          <InfoDica texto="GMV de cada marca em cada canal. A célula abre a marca no canal, com sinais e referências; o nome do canal abre a distribuição entre as marcas." />
+          <InfoDica texto="A cor de cada célula é a participação da marca dentro do canal. A célula abre a marca no canal; o nome do canal abre a distribuição entre as marcas." />
         </div>
+        {Object.keys(signalsByCell).length > 0 && (
+          <p className="flex items-center gap-1.5 text-xs text-ink-muted">
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-warn" />
+            sinal de eficiência a olhar (passe o mouse)
+          </p>
+        )}
       </div>
 
       <TableScrollHint>
@@ -153,7 +188,7 @@ export default function BrandChannelMatrix({
           </thead>
           <tbody>
             {matrix.rows.map((row) => (
-              <tr key={row.brand} className="border-b border-line transition-colors duration-[120ms] hover:bg-raised">
+              <tr key={row.brand} className="border-b border-line">
                 <th scope="row" className="text-left py-1.5 pr-3 align-middle">
                   <Link
                     href={brandHref(row.brand)}
@@ -164,19 +199,46 @@ export default function BrandChannelMatrix({
                 </th>
 
                 {row.cells.map((cell) => {
+                  const signals = signalsByCell[cellKey(row.brand, cell.channel)] ?? [];
+                  const [main, ...rest] = signals;
                   return (
                     <td key={cell.channel} className="py-1.5 px-1 align-middle">
                       <button
                         type="button"
                         onClick={() => onOpenCell(row.brand, cell.channel)}
                         aria-haspopup="dialog"
-                        aria-label={cellAriaLabel(row.label, cell)}
-                        className="w-full min-w-0 min-h-11 rounded-lg px-2 py-1 text-right text-sm tabular-nums transition-colors hover:ring-1 hover:ring-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        aria-label={cellAriaLabel(row.label, cell, signals, signalsState)}
+                        style={{ background: cell.available ? cellBackground(cell.channel, cell.intensity) : undefined }}
+                        className={`w-full min-w-0 min-h-11 rounded-lg px-2 py-1 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                          cell.available ? "hover:ring-1 hover:ring-accent" : "hover:bg-raised"
+                        }`}
                       >
                         {cell.available ? (
-                          <span className="font-medium text-ink">{fmtBrlCurto(cell.gmv as number)}</span>
+                          <>
+                            {/* UI-DENSIDADE-1: mapa de calor limpo — valor curto e
+                                variacao. A participacao no canal ja' e' a cor da
+                                celula; o numero continua no detalhe. */}
+                            <span className="flex items-center justify-end gap-1.5">
+                              {/* Sinal vira um ponto pequeno: <span>, nunca <button>
+                                  aninhado. Rotulo humano do contrato de Canais no
+                                  `title` e no texto do leitor de tela. */}
+                              {main && (
+                                <span
+                                  title={signals.map(signalLabel).join(" · ")}
+                                  className="inline-flex shrink-0 items-center gap-0.5 text-xs text-warn-ink"
+                                >
+                                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-warn" />
+                                  <span className="sr-only">{signalLabel(main)}</span>
+                                  {rest.length > 0 && <span aria-hidden="true">+{rest.length}</span>}
+                                </span>
+                              )}
+                              <span className="text-sm font-semibold text-ink tabular-nums">
+                                {fmtBrlCurto(cell.gmv as number)}
+                              </span>
+                            </span>
+                          </>
                         ) : (
-                          <span className="text-ink-faint">—</span>
+                          <span className="block text-sm text-ink-faint">—</span>
                         )}
                       </button>
                     </td>
@@ -215,14 +277,24 @@ export default function BrandChannelMatrix({
         </table>
       </TableScrollHint>
 
+      {/* Estado PARCIAL: o GMV veio, os sinais nao. A matriz nao se apresenta
+          como completa. */}
+      {signalsState === "error" && (
+        <DataQualityNote note="Sinais de eficiência e referências comparativas (mediana e p75 do canal) indisponíveis nesta carga — a matriz mostra GMV, participação e variação, mas não está completa." />
+      )}
+      {signalsState === "loading" && (
+        <p className="text-xs text-ink-faint">Verificando sinais de eficiência e referências do canal…</p>
+      )}
     </section>
   );
 }
 
-/** Variacao contra o periodo anterior: uma coluna so', sinal e cor. Sem base, travessao. */
+/** Variacao contra o periodo anterior: uma coluna so', numa pilula. Sem base, travessao. */
 function Variacao({ pct }: { pct: number | null }) {
   if (pct == null) return <span className="text-sm text-ink-faint">—</span>;
   return (
-    <span className={`text-sm font-medium tabular-nums ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>{fmtPctBr(pct)}</span>
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${pct >= 0 ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink"}`}>
+      {fmtPctBr(pct)}
+    </span>
   );
 }
