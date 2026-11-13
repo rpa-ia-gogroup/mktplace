@@ -509,22 +509,22 @@ export default function OperacoesPage() {
                     <span className="block truncate text-ink">{r.creator}</span>
                     <span className="block text-xs font-semibold text-ink-faint">{BRAND_LABELS[r.brand] ?? r.brand}</span>
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink font-semibold text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink font-semibold text-sm">
                     {fmtBrlCurto(r.gmv)}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink-muted text-sm">
                     {r.videos > 0 ? fmtBrlCurto(r.gmv_video) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink-muted text-sm">
                     {r.lives > 0 ? fmtBrlCurto(r.gmv_live) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink-muted text-sm">
                     {r.views > 0 ? fmtNumCurto(r.views) : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink-muted text-sm">
                     {r.videos > 0 ? r.videos : <span className="text-ink-faint">—</span>}
                   </td>
-                  <td className="px-4 py-2 text-right tabular-nums text-ink-muted text-sm">
+                  <td className="px-4 py-2 text-right tabular-nums whitespace-nowrap text-ink-muted text-sm">
                     {r.lives > 0 ? r.lives : <span className="text-ink-faint">—</span>}
                   </td>
                   <td className="px-4 py-2 text-right">
