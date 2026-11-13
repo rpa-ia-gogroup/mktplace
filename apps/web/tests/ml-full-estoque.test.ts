@@ -345,7 +345,7 @@ test("QA7 (CARDS-CLICAVEIS): parcial e' UM aviso no topo; nos cards so' title + 
   assert.equal((CLIENT_SRC.match(/<AvisoTopo/g) ?? []).length, 1, "um aviso so'");
   const faixa = readFileSync(new URL("../src/components/full/CategoriasEstoque.tsx", import.meta.url), "utf-8");
   assert.match(faixa, /SR_PARCIAL = "parcial: veja o aviso no topo"/);
-  assert.match(faixa, /contexto=\{parcial \?/);
+  assert.match(faixa, /parcial && <span className="sr-only">; \{SR_PARCIAL\}<\/span>/);
 });
 
 test("D1: data parcial do input nao vira filtro; vazio limpa", () => {

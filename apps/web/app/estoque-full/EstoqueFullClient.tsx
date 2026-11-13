@@ -41,8 +41,9 @@ import { AlertCircle, Archive, Boxes, CheckCircle2, Layers, PackageX, Snowflake,
 import {
   AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
@@ -279,6 +280,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
 }
 
 export default function EstoqueFullClient() {
+  const abas = useVisoesFull();
   const [filtros, setFiltros] = useState<FiltrosEstoque>(FILTROS_VAZIOS);
   const [payload, setPayload] = useState<EstoqueFullResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -522,12 +524,11 @@ export default function EstoqueFullClient() {
       : "Estoque Full Shopee — cobertura API";
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Estoque Full Shopee"
-        scopeLine={escopo}
-        filters={filtrosUI}
-      />
+    <Aba
+      {...abas}
+      selo={<SeloAtualizado em={payload && !isIndisponivel(payload) ? payload.frescor.ingested_at : null} carregando={carregando} detalhe={escopo} />}
+      filtros={filtrosUI}
+    >
 
       {carregando && (
         <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -596,6 +597,7 @@ export default function EstoqueFullClient() {
               {/* Parcial: o aviso do topo; nos cards so' title + leitor de tela. */}
               <FaixaCategorias
                 cards={cardsShopee(payload)}
+                faixa={["exigem-acao", "ruptura", "baixo", "excesso"]}
                 ativa={chaveCategoria}
                 aoEscolher={escolherCategoria}
                 parcial={payload.marcas_nao_cobertas.length > 0 || contasSemFotografia.length > 0}
@@ -660,7 +662,7 @@ export default function EstoqueFullClient() {
           )}
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 

@@ -25,7 +25,8 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { janelaDaUrl, urlComJanela } from "@/lib/full-janela-url";
 import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
 import { Ban, CircleDollarSign, Package, ShoppingBag, Truck } from "lucide-react";
 import KpiTile from "@/components/ui/KpiTile";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
@@ -102,6 +103,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 }
 
 function FullMLPageInner() {
+  const abas = useVisoesFull();
   const hoje = useMemo(hojeIsoBrt, []);
   // B2-02: a janela vem da URL (`date_from`/`date_to`); sem ela, ou invalida, 30 dias.
   const busca = useSearchParams();
@@ -280,13 +282,11 @@ function FullMLPageInner() {
   );
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Full Mercado Livre"
-        scopeLine={escopo}
-        status={statusBadge}
-        filters={filtros}
-      />
+    <Aba
+      {...abas}
+      selo={<>{escopo}{statusBadge}</>}
+      filtros={filtros}
+    >
 
       {/* --- Alertas do payload (frescor, completude, unknown) ----------- */}
       {listaAlertas.length > 0 && (
@@ -543,7 +543,7 @@ function FullMLPageInner() {
           </section>
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 

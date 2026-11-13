@@ -37,8 +37,9 @@ import {
   AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
 import TableScrollHint from "@/components/TableScrollHint";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
+import { useVisoesFull } from "@/components/full/useVisoesFull";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
@@ -384,6 +385,7 @@ interface ErroML {
 }
 
 export default function MLFullEstoqueClient() {
+  const abas = useVisoesFull();
   const [filtros, setFiltros] = useState<FiltrosML>(FILTROS_ML_VAZIOS);
   const [payload, setPayload] = useState<MLFullEstoqueResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -586,19 +588,16 @@ export default function MLFullEstoqueClient() {
     payload !== null && !isIndisponivelML(payload) && payload.indicadores.total_parcial;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Estoque Full Mercado Livre"
-        scopeLine={
-          payload && !isIndisponivelML(payload) ? (
-            <span className="inline-flex items-center gap-1">
-              {escopo}
-              <InfoDica texto={diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))} />
-            </span>
-          ) : escopo
-        }
-        filters={filtrosUI}
-      />
+    <Aba
+      {...abas}
+      selo={
+        <>
+          <SeloAtualizado em={payload && !isIndisponivelML(payload) ? payload.frescor.published_at : null} carregando={carregando} detalhe={escopo} />
+          {payload && !isIndisponivelML(payload) && <InfoDica texto={diagnosticoML(payload.cobertura, marcasSemEstoqueFullML(payload.marcas))} />}
+        </>
+      }
+      filtros={filtrosUI}
+    >
 
       {carregando && (
         <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -659,6 +658,7 @@ export default function MLFullEstoqueClient() {
           {/* O aviso acima e' o UNICO; nos cards so' title + leitor de tela. */}
           <FaixaCategorias
             cards={cardsML(payload)}
+            faixa={["exigem-acao", "ruptura", "baixo", "excesso"]}
             ativa={chaveCategoria}
             aoEscolher={escolherCategoria}
             parcial={!!parcial}
@@ -717,7 +717,7 @@ export default function MLFullEstoqueClient() {
           )}
         </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
 
