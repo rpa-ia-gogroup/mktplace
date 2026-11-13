@@ -321,10 +321,12 @@ test("seletor de marca: 'Todas', o mapa canonico e marcas novas do payload", () 
   const html = renderToStaticMarkup(
     h(SeletorMarca, { marca: "kokeshi", marcasPresentes: ["marca-nova"], aoTrocar: () => {} }),
   );
-  assert.match(html, /<label[^>]*for="([^"]+)"[^>]*>Marca<\/label>/);
-  assert.match(html, /<option value="">Todas as marcas<\/option>/);
+  // FILTROS-PADRAO: o gatilho "Marca" das outras abas (sem <select> nativo).
+  assert.doesNotMatch(html, /<select/);
+  assert.match(html, /Marca<\/span>/);
+  assert.match(html, /aria-pressed="false"[^>]*>Todas/);
   for (const r of ["BARBOURS", "KOKESHI", "LESCENT", "RITUÁRIA", "ÁPICE", "MARCA-NOVA"]) {
-    assert.ok(html.includes(`>${r}</option>`), r);
+    assert.ok(html.includes(`>${r}`), r);
   }
   assert.match(html, /min-h-11/);
 });
@@ -771,4 +773,18 @@ test("heroi: sparkline so' com serie de >= 4 pontos; sem serie, o render de ante
   // O herói da fila recebe a MESMA serie dos cards (so' horas com todas as contas).
   const cliente = readFileSync(join(import.meta.dirname, "..", "app", "expedicao", "ExpedicaoClient.tsx"), "utf8");
   assert.match(cliente, /delta=\{deltaDoCard\(serieHeroi\)\}\s*serie=\{serieHeroi\.serie\}\s*granularidade="hour"/);
+});
+
+// FILTROS-PADRAO — o Periodo da Expedicao no gatilho comum: atalho pelo nome,
+// personalizado diz a janela em vigor e mostra o campo dentro do painel.
+test("SeletorPeriodo: gatilho com o atalho ou 'Últimos N dias'", async () => {
+  const { SeletorPeriodo } = await import("../src/components/expedicao/CabecalhoExpedicao.tsx");
+  const opcoes = [{ valor: "1", texto: "24 h" }, { valor: "7", texto: "7 dias" }, { valor: "personalizado", texto: "Personalizado" }];
+  const base = { opcoes, aoEscolher: () => {}, personalizado: h("span", null, "CAMPO") };
+  const atalho = renderToStaticMarkup(h(SeletorPeriodo, { ...base, valor: "7", dias: 7 }));
+  assert.match(atalho, /Período<\/span><span[^>]*>7 dias</);
+  assert.doesNotMatch(atalho, /CAMPO/);
+  const livre = renderToStaticMarkup(h(SeletorPeriodo, { ...base, valor: "personalizado", dias: 10 }));
+  assert.match(livre, />Últimos 10 dias</);
+  assert.match(livre, /CAMPO/);
 });

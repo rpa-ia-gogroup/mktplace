@@ -49,7 +49,7 @@ import {
   textoDaReconciliacao,
   type DivisaoDaFila,
 } from "@/lib/expedicao-shopee-ldr";
-import CabecalhoExpedicao, { SeletorMarca } from "@/components/expedicao/CabecalhoExpedicao";
+import CabecalhoExpedicao, { SeletorMarca, SeletorPeriodo } from "@/components/expedicao/CabecalhoExpedicao";
 import TabelaSeteDias, { type LinhaSeteDias } from "@/components/expedicao/TabelaSeteDias";
 import TravadosDialog from "@/components/expedicao/TravadosDialog";
 import {
@@ -1047,21 +1047,14 @@ export default function ExpedicaoClient({
   // visao do gestor — o detalhe operacional e' a fila de agora.
   const controlePeriodo = (
     <div className="flex flex-wrap items-center gap-2" data-testid="exp-periodo">
-      <span aria-hidden="true" className="text-xs text-ink-faint">
-        Período
-      </span>
-      <span className="inline-flex items-center gap-2">
-        <Segmented
-          rotulo="Período"
-          opcoes={opcoesDoSeletor(REGRA)}
-          valor={valorDoSeletor(janela, REGRA, personalizado)}
-          aoEscolher={escolherJanela}
-        />
-        {periodoConsultado ? <InfoDica texto={periodoConsultado} /> : null}
-      </span>
-      {valorDoSeletor(janela, REGRA, personalizado) === OPCAO_PERSONALIZADA && (
-        <JanelaPersonalizada max={REGRA.max} diasAplicados={janela} aoAplicar={aplicarJanela} />
-      )}
+      <SeletorPeriodo
+        opcoes={opcoesDoSeletor(REGRA)}
+        valor={valorDoSeletor(janela, REGRA, personalizado)}
+        dias={janela}
+        aoEscolher={escolherJanela}
+        personalizado={<JanelaPersonalizada max={REGRA.max} diasAplicados={janela} aoAplicar={aplicarJanela} />}
+        ajuda={periodoConsultado ? <InfoDica texto={periodoConsultado} /> : undefined}
+      />
       {janelaDescartada && (
         <Note tom="atencao" papel="status">
           Janela do link inválida; usando a padrão.
