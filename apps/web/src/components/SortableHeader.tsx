@@ -48,7 +48,7 @@ export default function SortableHeader({ label, column, sort, onSort, align = "r
         type="button"
         onClick={() => onSort(column)}
         className={`w-full h-full min-h-11 flex items-center gap-1 px-4 py-3 hover:text-accent-ink hover:bg-raised/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent ${
-          align === "right" ? "justify-end flex-row-reverse" : "justify-start"
+          align === "right" ? "flex-row-reverse justify-start" : "justify-start"
         } ${active ? "text-accent-ink" : ""}`}
       >
         <span>{label}</span>

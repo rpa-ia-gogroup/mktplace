@@ -5,7 +5,7 @@ import { fmtBrlCurto, fmtPctSimples } from "@/lib/formatters";
 import { toggleBucketSelection } from "@/lib/produtos-tab-transition";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
 import InfoDica from "@/components/ui/InfoDica";
-import KpiTile from "@/components/ui/KpiTile";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import StateBlock from "@/components/ui/StateBlock";
 
 interface Props {
@@ -32,11 +32,12 @@ interface Props {
  */
 const ICONE_DA_CURVA: Record<string, LucideIcon> = { A_top50: Trophy, B_next30: Medal, C_next15: Award, D_tail: Layers };
 
-const GRADE = "grid grid-cols-2 sm:grid-cols-4 gap-3";
+// ALVO-GRADE: a mesma faixa de 4 cartoes das outras abas.
+const GRADE = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
 
 /**
- * Cards A/B/C/D compartilhados pelas 3 abas de Produtos, no padrao da Gerencial
- * (`KpiTile` gerencial). Cada card e um filtro clicavel (toggle): clicar de novo no
+ * Cards A/B/C/D compartilhados pelas 3 abas de Produtos: o `CartaoIndicador` da
+ * grade unica (ALVO-GRADE), com a barra na fatia do GMV (valor e' fracao, sem serie). Cada card e um filtro clicavel (toggle): clicar de novo no
  * bucket ja ativo remove o filtro (equivalente a "Todos"); por isso e' botao de
  * alternar (`aria-pressed`, anel quando ativo) e NAO abre dialogo. Os percentuais
  * reais podem variar em torno de 50/30/15/5 por causa do produto que cruza a
@@ -57,7 +58,7 @@ function ScopeLine({ scopeNote, dica, className }: { scopeNote?: string; dica?: 
 export default function ProductParetoSummary({ buckets, loading, activeBucket, onSelectBucket, scopeNote, dica, unavailableReason }: Props) {
   if (loading && !buckets) {
     return (
-      <div className="border-b border-line px-6 py-4">
+      <div>
         <FaixaCarregando cartoes={4} className={GRADE} />
       </div>
     );
@@ -65,7 +66,7 @@ export default function ProductParetoSummary({ buckets, loading, activeBucket, o
 
   if (unavailableReason) {
     return (
-      <div className="border-b border-line px-6 py-4" data-testid="pareto-unavailable">
+      <div data-testid="pareto-unavailable">
         <StateBlock compacto tipo="indisponivel" titulo={unavailableReason} />
         <ScopeLine scopeNote={scopeNote} dica={dica} className="pt-2" />
       </div>
@@ -75,25 +76,25 @@ export default function ProductParetoSummary({ buckets, loading, activeBucket, o
   if (!buckets || buckets.length === 0) return null;
 
   return (
-    <div className="border-b border-line">
-      <div className={`${GRADE} px-6 py-4`}>
+    <div className="flex flex-col gap-2">
+      <div className={GRADE}>
         {buckets.map((b) => (
-          <KpiTile
+          <CartaoIndicador
             key={b.bucket}
-            variante="gerencial"
-            identidade="gmv"
-            icone={ICONE_DA_CURVA[b.bucket] ?? Layers}
             rotulo={`Curva ${b.label}`}
+            icone={ICONE_DA_CURVA[b.bucket] ?? Layers}
+            cor="rgb(var(--tc-kpi-gmv))"
             ajuda={<InfoDica emControle texto={b.description} />}
             valor={fmtPctSimples(b.gmv_pct)}
-            comparacao={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}
-            ativo={activeBucket === b.bucket}
-            acaoFalada="filtrar a tabela"
+            progresso={b.gmv_pct / 100}
+            legenda={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}
+            // Filtro, nao modal: o cartao escolhido diz que esta' filtrando a tabela.
+            pilula={activeBucket === b.bucket ? { texto: "Filtrando", tom: "neutro" } : null}
             onAbrir={() => onSelectBucket(toggleBucketSelection(activeBucket, b.bucket))}
           />
         ))}
       </div>
-      <ScopeLine scopeNote={scopeNote} dica={dica} className="px-6 pb-3" />
+      <ScopeLine scopeNote={scopeNote} dica={dica} className="px-1" />
     </div>
   );
 }

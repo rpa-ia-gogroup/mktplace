@@ -404,15 +404,13 @@ test("nenhum identificador de pedido e' renderizado", () => {
 // ---------------------------------------------------------------------------
 // 8. Acessibilidade do seletor
 // ---------------------------------------------------------------------------
-test("o seletor e' um radiogroup com nome acessivel", () => {
-  // EXPEDICAO-UX-UNIFICADA-1: o seletor unico mora na casca e e' o
-  // `Segmented` compartilhado. A garantia e' a mesma e o teste segue a
-  // garantia, nao o lugar dela.
-  assert.match(CASCA, /<Segmented\s+rotulo="Canal da Expedição"/);
-  assert.match(SEGMENTED, /role="radiogroup"/);
-  assert.match(SEGMENTED, /aria-label=\{rotuladoPor \? undefined : rotulo\}/);
-  assert.match(SEGMENTED, /role="radio"/);
-  assert.match(SEGMENTED, /aria-checked=\{ativo\}/);
+test("o seletor de canal sao abas com nome acessivel", () => {
+  // ALVO-GRADE: os canais viraram as ABAS da moldura (`Aba`), desenhada pela casca.
+  const ABA = readFileSync(join(RAIZ, "src/components/layout/Aba.tsx"), "utf8");
+  assert.match(CASCA, /<Aba\b[\s\S]*?visoes=\{visoes\}\s*visao=\{canal\}\s*onVisao=\{trocarCanal\}/);
+  assert.match(ABA, /role="tablist" aria-label=\{`Visões de \$\{titulo\}`\}/);
+  assert.match(ABA, /role="tab"\s*aria-selected=\{ativa\}/);
+  assert.match(ABA, /min-h-11/);
 });
 
 test("os alvos do seletor tem 44x44 e foco visivel", () => {
@@ -425,10 +423,9 @@ test("o seletor usa <button>, navegavel por teclado", () => {
 });
 
 test("o titulo reflete o canal e a tela nao ganha um segundo h1", () => {
-  // O titulo e' do cabecalho compartilhado; a fila passa o canal DOS DADOS
-  // (`filtros.channel`), nao o do seletor.
-  assert.match(CLIENTE, /canal=\{ROTULO_CANAL\[filtros\.channel\]\}/);
-  assert.match(CABECALHO, /Expedição — \{canal\}/);
+  // ALVO-GRADE: o canal e' a aba marcada da moldura; com um canal so' (sem
+  // abas), ele volta para o titulo.
+  assert.match(CASCA, /titulo=\{visoes\.length > 1 \? "Expedição" : `Expedição — \$\{ROTULO_CANAL_EXPEDICAO\[canal\]\}`\}/);
   assert.doesNotMatch(CLIENTE, /<h1/);
   assert.doesNotMatch(CABECALHO, /<h1/);
   assert.equal(ROTULO_CANAL.mercadolivre, "Mercado Livre");

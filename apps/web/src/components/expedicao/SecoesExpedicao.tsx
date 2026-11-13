@@ -12,8 +12,6 @@ import { useId, type ReactNode } from "react";
 
 import InfoDica from "@/components/ui/InfoDica";
 
-import { ID_FAIXA_DE_CONTROLES } from "./CabecalhoExpedicao";
-
 /**
  * Faixa de KPIs: quatro em destaque, seis (o "Risco atual" da Shopee) ou a
  * faixa secundaria densa.
@@ -39,50 +37,12 @@ export function FaixaKpis({
         ? "grid grid-cols-1 gap-2 sm:grid-cols-3"
         : colunas === 2
           ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
-          : "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4";
+          : // ALVO-GRADE: a faixa dos 4 cartoes, a mesma grade da Gerencial.
+            "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
   return (
     <section aria-label={rotulo} className={grade}>
       {children}
     </section>
-  );
-}
-
-/**
- * Fim da visao do gestor: o que existe no detalhe e o caminho ate' ele.
- *
- * Ao abrir, o foco vai para o seletor de profundidade, que agora diz
- * "Detalhe operacional": quem usa teclado ou leitor de tela fica no controle
- * que acabou de mudar, e a pagina rola ate' o topo do conteudo novo.
- */
-export function ConviteAoDetalhe({
-  conteudo,
-  aoAbrir,
-}: {
-  /** O que o detalhe tem NESTE canal. */
-  conteudo: string;
-  aoAbrir: () => void;
-}) {
-  const abrir = () => {
-    aoAbrir();
-    requestAnimationFrame(() => {
-      const faixa = document.getElementById(ID_FAIXA_DE_CONTROLES);
-      faixa?.scrollIntoView({ block: "start" });
-      faixa
-        ?.querySelector<HTMLButtonElement>('[role="radio"][aria-checked="true"]')
-        ?.focus({ preventScroll: true });
-    });
-  };
-  return (
-    <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 rounded-xl border border-dashed border-line-strong px-4 py-3">
-      <button
-        type="button"
-        onClick={abrir}
-        title={conteudo}
-        className="inline-flex min-h-11 items-center rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong"
-      >
-        Abrir detalhe operacional
-      </button>
-    </div>
   );
 }
 

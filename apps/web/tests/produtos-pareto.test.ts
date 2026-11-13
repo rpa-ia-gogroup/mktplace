@@ -12,9 +12,10 @@ import { fmtBrlCurto, fmtPctSimples } from "../src/lib/formatters.ts";
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
 const SRC = ler("src/components/ProductParetoSummary.tsx");
 
-test("cards A/B/C/D: KpiTile gerencial que FILTRA (ativo + aria-pressed), nao abre dialogo", () => {
-  assert.ok(SRC.includes('variante="gerencial"') && SRC.includes('identidade="gmv"'), "identidade unica gmv (composicao do GMV; cor nao diz bom/ruim)");
-  assert.ok(SRC.includes("ativo={activeBucket === b.bucket}") && SRC.includes('acaoFalada="filtrar a tabela"'));
+test("cards A/B/C/D: CartaoIndicador (ALVO-GRADE) que FILTRA, nao abre dialogo", () => {
+  assert.ok(SRC.includes("<CartaoIndicador") && SRC.includes('cor="rgb(var(--tc-kpi-gmv))"'), "identidade unica gmv (composicao do GMV; cor nao diz bom/ruim)");
+  assert.ok(SRC.includes('activeBucket === b.bucket ? { texto: "Filtrando"'), "o ativo diz que filtra");
+  assert.ok(SRC.includes("progresso={b.gmv_pct / 100}"), "barra na fatia do GMV; sem serie");
   assert.ok(SRC.includes("onAbrir={() => onSelectBucket(toggleBucketSelection(activeBucket, b.bucket))}"));
   assert.ok(!/KpiDrilldownDialog|aria-haspopup/.test(SRC), "filtro, nao modal");
   // o toggle continua o mesmo: clicar de novo no ativo remove o filtro
@@ -44,7 +45,7 @@ test("ausencia nunca vira venda zero; esqueleto no formato do cartao; piso de 12
 
 test("regra de produto: o PERCENTUAL abre o cartao e o R$ vem depois", () => {
   assert.ok(SRC.includes("valor={fmtPctSimples(b.gmv_pct)}"));
-  assert.ok(SRC.includes("comparacao={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}"));
+  assert.ok(SRC.includes("legenda={`${fmtBrlCurto(b.gmv)} · ${b.count} produtos`}"));
   assert.ok(!SRC.includes("valor={fmtBrlCurto(b.gmv)}"));
 });
 

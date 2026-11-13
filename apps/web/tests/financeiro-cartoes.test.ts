@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import { gmvExato } from "../src/lib/financeiro-cartoes.ts";
+import { serieQueConfere } from "../src/lib/serie-que-confere.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
 
@@ -16,13 +17,26 @@ test("GMV exato no topo do detalhe (o cartao mostra o curto); sem GMV, nada (nun
   assert.equal(gmvExato(null), null);
 });
 
-test("cartoes: KpiTile gerencial gmv, canal e' ponto, um por canal selecionado, sempre clicavel", () => {
+test("linha de tendencia so' quando a soma da serie confere com o numero do cartao (0,5%)", () => {
+  const dias = [100, 120, 90, 110, 80];
+  assert.deepEqual(serieQueConfere(dias, 500), dias);
+  assert.deepEqual(serieQueConfere(dias, 502), dias, "arredondamento");
+  assert.equal(serieQueConfere(dias, 560), null, "outra linhagem: sem linha");
+  assert.equal(serieQueConfere([200, 200, 100], 500), null, "menos de 4 pontos");
+  assert.equal(serieQueConfere(dias, null), null);
+  assert.equal(serieQueConfere([0, 0, 0, 0], 0), null, "sem receita, sem linha");
+});
+
+test("cartoes (ALVO-GRADE): sempre quatro CartaoIndicador, soma + um por canal; cor e' identidade em token", () => {
   const src = ler("src/components/financeiro/FinanceiroCartoes.tsx");
-  assert.ok(src.includes('variante="gerencial"') && src.includes('identidade="gmv"') && src.includes("icone={CircleDollarSign}"));
-  assert.ok(src.includes("${p.ponto}") && !/bg-canal-[a-z]+\/|border-canal/.test(src), "canal so' como ponto, nunca cor de cartao");
-  assert.ok(src.includes("onAbrir={() => onAbrir(p.canal)}"));
-  assert.ok(src.includes('comparacao={p.gmv != null ? "Ver custos conhecidos" : "Sem dado no período"}') && src.includes('tom={p.gmv != null ? "neutro" : "ausente"}'), "sem GMV: motivo visivel, nunca zero");
-  assert.ok(src.includes('"col-span-2 lg:col-span-1"') && src.includes("paineis.length % 2 === 1"), "cartao impar fecha a linha no celular");
+  assert.ok(src.includes("<CartaoIndicador") && !src.includes("KpiTile"));
+  assert.ok(src.includes('cor="rgb(var(--tc-kpi-gmv))"') && src.includes("cor={`rgb(var(--tc-canal-${canal}))`}"));
+  assert.doesNotMatch(src, /#[0-9a-fA-F]{6}/, "cor por token: vale no tema escuro");
+  assert.ok(src.includes("onAbrir={p ? () => onAbrir(canal) : undefined}"));
+  assert.ok(src.includes('"Fora do filtro"') && src.includes('"Sem dado no período"'), "ausencia tem motivo, nunca zero");
+  assert.ok(src.includes("valor={p?.gmv != null ? fmtBrlCurto(p.gmv) : null}"));
+  assert.ok(src.includes("serie={serieTotal}") && src.includes("serie={paineis.length === 1 ? serieTotal : null}") && (src.match(/serie=/g) ?? []).length === 2, "linha so' no cartao da soma, ou no do canal quando o filtro e' so' ele (taxa nao tem serie)");
+  assert.ok(src.includes("p.linhas.slice(0, 3)") && src.includes("daAba.linhas.slice(0, 3)") && !/reduce\(/.test(src), "rodape e aba do canal leem as linhas do detalhe; custos nunca somam");
   assert.ok(src.includes("<InfoDica emControle texto={p.aviso} />"), "ressalva de tarifa parcial no ⓘ do cartao");
 });
 
@@ -41,9 +55,13 @@ test("pagina: cartoes e dialogo unico; painel antigo e formatos ingleses fora; e
   const pag = ler("app/financeiro/page.tsx");
   assert.ok(!pag.includes("ChannelCostPanel") && !/\bfmtBrl\(/.test(pag) && !/\.toFixed\(/.test(pag));
   assert.equal((pag.match(/<KpiDrilldownDialog/g) ?? []).length, 1);
-  assert.ok(pag.includes("<FaixaGmvCanais paineis={paineis} onAbrir={setDetalhe} />") && pag.includes("<FaixaCarregando cartoes={paineis.length || 1}"));
+  assert.ok(pag.includes("<Aba<Visao>") && pag.includes("<FaixaFinanceiro") && pag.includes("<FaixaCarregando cartoes={4}"));
+  assert.ok(pag.includes("serieQueConfere(serie.pontos, receita)") && pag.includes("serie?.key === requestKey"), "linha so' do recorte atual e so' se confere");
+  assert.equal((pag.match(/fetchTrend\(/g) ?? []).length, 1, "uma chamada a mais, no maximo");
+  assert.ok(!pag.includes("recharts") && !pag.includes("FeeByBrandChart"));
+  for (const ancora of ['"#tiktok"', '"#mercado-livre"', '"#shopee"', '"/canais#afiliados"']) assert.ok(pag.includes(ancora), ancora);
   assert.ok(pag.includes('identidade="gmv"') && pag.includes("{painelAberto && dataIsFresh && ("), "detalhe so' com dado fresco");
-  assert.ok(pag.includes("Receita (GMV) por canal"));
+  assert.ok(pag.includes("Receita por canal") && pag.includes("Taxas por marca") && pag.includes("<CelulaBarra"));
   // a tela segue sem fechar margem: nenhum total de custos
   for (const rotulo of ["Taxas e encargos", "Repasse recebido", "Tarifa ML", "Ads + frete / GMV", "Frete do seller", "Competências podem divergir."]) assert.ok(pag.includes(rotulo), rotulo);
   assert.ok(pag.includes("Margem ainda não fechada."));
