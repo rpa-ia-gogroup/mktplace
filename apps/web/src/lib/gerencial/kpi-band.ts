@@ -18,6 +18,7 @@ import { isMarketplaceSelected } from "../marketplace-filter.ts";
 import type { Marketplace } from "../mock-data.ts";
 import { notaBase, notaSoPagos } from "../base-vendas.ts";
 import { fmtBrlFull, fmtNumber, fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "../formatters.ts";
+import { SEM_DADO_NO_RECORTE } from "../overview-sem-dado.ts";
 
 export type KpiKey = "gmv" | "orders" | "avg_ticket" | "ad_spend" | "roas";
 
@@ -159,10 +160,14 @@ function buyersSubvalue(overview: OverviewData): string | null {
  * ou valor nao finito nunca podem vazar como `NaN`/`Infinity` na interface.
  */
 export function avgTicketDisplay(overview: OverviewData): { value: string | null; reason: string | null } {
+  // T-0111: sem linha no recorte o ticket e' ausente, como o GMV e os pedidos.
+  if (overview.gmv == null || overview.orders == null) {
+    return { value: null, reason: `${SEM_DADO_NO_RECORTE}: ticket médio não definido.` };
+  }
   if (overview.orders === 0) {
     return { value: null, reason: "Sem pedidos no período — ticket médio não definido." };
   }
-  if (!Number.isFinite(overview.avg_ticket)) {
+  if (overview.avg_ticket == null || !Number.isFinite(overview.avg_ticket)) {
     return { value: null, reason: "Valor não disponível para o período e filtros selecionados." };
   }
   return { value: fmtBrlFull(overview.avg_ticket), reason: null };
@@ -179,22 +184,27 @@ export function buildKpiBand(
   const anyAdsChannel = mlSelected || shopeeSelected;
   // Pedidos, GMV e Ticket: o que contam (pagos ou realizados) vai no (i).
   const nota = notaBase(overview, channels);
+  // T-0111: sem linha na fonte, GMV e Pedidos ficam "—" com o motivo; nunca "R$ 0"/"0".
+  const gmvAtual = overview?.gmv ?? null;
+  const pedidosAtual = overview?.orders ?? null;
+  const semDado = overview != null && gmvAtual == null;
+  const prevGmv = overview?.prev_gmv ?? null;
 
   const gmv: KpiDescriptor = {
     key: "gmv",
     label: "GMV",
-    value: overview ? fmtBrlCurto(overview.gmv) : null,
-    exactValue: overview ? fmtBrlFull(overview.gmv) : null,
-    unavailableReason: null,
-    subvalue: overview ? splitByChannel(overview, channels) : null,
-    deltaPct: overview?.gmv_mom_pct ?? null,
+    value: gmvAtual != null ? fmtBrlCurto(gmvAtual) : null,
+    exactValue: gmvAtual != null ? fmtBrlFull(gmvAtual) : null,
+    unavailableReason: semDado ? SEM_DADO_NO_RECORTE : null,
+    subvalue: overview && !semDado ? splitByChannel(overview, channels) : null,
+    deltaPct: semDado ? null : overview?.gmv_mom_pct ?? null,
     deltaTone: "higher_is_better",
     reference:
-      overview && overview.prev_gmv > 0
-        ? `vs. período anterior: ${fmtBrlFull(overview.prev_gmv)}`
+      !semDado && prevGmv != null && prevGmv > 0
+        ? `vs. período anterior: ${fmtBrlFull(prevGmv)}`
         : null,
     comparisonNote:
-      overview && !(overview.prev_gmv > 0) ? COMPARISON_UNAVAILABLE : null,
+      overview && !semDado && !(prevGmv != null && prevGmv > 0) ? COMPARISON_UNAVAILABLE : null,
     coverageNote: nota,
     channelValues: null,
     highlightChannel: null,
@@ -205,14 +215,14 @@ export function buildKpiBand(
   const orders: KpiDescriptor = {
     key: "orders",
     label: "Pedidos",
-    value: overview ? fmtNumCurto(overview.orders) : null,
-    exactValue: overview ? overview.orders.toLocaleString("pt-BR") : null,
-    unavailableReason: null,
-    subvalue: overview ? buyersSubvalue(overview) : null,
+    value: pedidosAtual != null ? fmtNumCurto(pedidosAtual) : null,
+    exactValue: pedidosAtual != null ? pedidosAtual.toLocaleString("pt-BR") : null,
+    unavailableReason: overview && pedidosAtual == null ? SEM_DADO_NO_RECORTE : null,
+    subvalue: overview && pedidosAtual != null ? buyersSubvalue(overview) : null,
     deltaPct: ordersDelta,
     deltaTone: "higher_is_better",
     reference: ordersDelta != null ? `antes ${fmtNumCurto(overview!.prev_orders!)}` : null,
-    comparisonNote: compare && ordersDelta == null ? COMPARISON_UNAVAILABLE : null,
+    comparisonNote: compare && pedidosAtual != null && ordersDelta == null ? COMPARISON_UNAVAILABLE : null,
     coverageNote: nota,
     channelValues: null,
     highlightChannel: null,

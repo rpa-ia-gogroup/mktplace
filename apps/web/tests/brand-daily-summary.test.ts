@@ -61,12 +61,13 @@ test("todos os canais selecionados: soma bate com total_gmv das linhas", () => {
   assert.equal(result.gmv, expectedTotal);
 });
 
-test("Shopee selecionado mas sem dado no periodo (shopee_gmv null em todas as linhas): gmv fica 0, nao mascarado por outro canal", () => {
+test("Shopee selecionado mas sem dado no periodo (shopee_gmv null em todas as linhas): gmv fica null (T-0111), nao mascarado por outro canal", () => {
   const rowsNoShopee: DailyRow[] = [
     row({ tiktok_gmv: 1000, ml_gmv: 500, shopee_gmv: null, total_gmv: 1500, orders: 10 }),
   ];
   const result = summarize(rowsNoShopee, ["shopee"]);
-  assert.equal(result.gmv, 0); // zero real (canal sem venda no periodo), nao 1500 do total
+  // T-0111: canal sem linha em nenhum dia e' AUSENCIA ("—"), nao zero; e nunca os 1500 do total.
+  assert.equal(result.gmv, null);
 });
 
 test("ticket medio da selecao isolada de Shopee usa gmv/orders da propria selecao", () => {
