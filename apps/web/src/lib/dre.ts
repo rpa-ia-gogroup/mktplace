@@ -1093,11 +1093,27 @@ export function textoMargemPct(c: CelulaDRE): string {
 export const ROTULO_MARGEM_ESTIMADA_PREVIA = "Margem de contribuição estimada";
 
 /**
+ * T-0117 (A2-201) — o que a margem conhecida deixa de fora, lido de `faltam`
+ * da API (custos que nao entraram na conta). Nada de lista fixa: desde 13/11
+ * impostos e devolucoes entram na conhecida, e o texto fixo "sem impostos,
+ * devoluções e parte do CMV" passou a mentir. Num agregado `faltam` e'
+ * "ausente em ao menos uma celula" (ver `rotuloAusentes`) e a legenda diz
+ * isso. Nada faltando: string vazia, sem parentese.
+ * Ex.: " (sem devoluções e Ads em ao menos um canal)".
+ */
+export function legendaConhecida(c: CelulaDRE): string {
+  const faltam = custosAusentes(c);
+  if (faltam.length === 0) return "";
+  const escopo = c.canal && c.marca ? "" : c.canal ? " em ao menos uma marca" : " em ao menos um canal";
+  return ` (sem ${juntarNomes(faltam)}${escopo})`;
+}
+
+/**
  * T-0090 (supervisor, delegada pelo Mario) — qual margem e' o DESTAQUE.
  *
  * Na PREVIA com cenario estimado (premissa publicada e margem estimada com
- * numero), a ESTIMADA e' o numero principal: a conhecida, sem impostos,
- * devolucoes e parte do CMV, vira detalhe secundario. Mes maduro
+ * numero), a ESTIMADA e' o numero principal: a conhecida vira detalhe
+ * secundario, com o que ela deixa de fora (`legendaConhecida`). Mes maduro
  * (COMPLETA/PARCIAL) e PREVIA sem cenario: o destaque continua a conhecida.
  */
 export type MargemPrincipal =
@@ -1113,7 +1129,7 @@ export function margemPrincipal(c: CelulaDRE): MargemPrincipal {
     rotulo: ROTULO_MARGEM_ESTIMADA_PREVIA,
     valor: fmtReais(v),
     pct: fmtPctDre(cen.margem_contribuicao_estimada_pct) ?? "Sem %",
-    secundaria: `Conhecida: ${textoMargemPct(c)} (sem impostos, devoluções e parte do CMV)`,
+    secundaria: `Conhecida: ${textoMargemPct(c)}${legendaConhecida(c)}`,
   };
 }
 
