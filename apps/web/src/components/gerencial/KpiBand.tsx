@@ -1,222 +1,78 @@
 "use client";
 
 /**
- * Faixa de cinco KPIs da Gerencial V2 (Gate V2-1, Task D).
+ * Faixa de indicadores da Gerencial — ALVO-GRADE (aprovado em 12/11/2026).
  *
- * Componente NOVO em vez de estender `KpiCard`: aquele e' consumido por sete
- * outras rotas e este gate nao pode alterar a aparencia delas. A logica de
- * disponibilidade/comparacao vive em `lib/gerencial/kpi-band.ts` (pura e
- * testada); aqui so' existe apresentacao.
- *
- * Alturas iguais por construcao: cada card e' `h-full flex flex-col` dentro de
- * uma grade de uma linha, e o rodape (`mt-auto`) empurra a nota para a base.
+ * Quatro cartoes IGUAIS (`CartaoIndicador`). Com `gmv`: GMV (com a meta
+ * dentro), Pedidos, Ticket medio e Investimento em ads (ACOS por canal no
+ * rodape). Com `acosProprio` (Gerencial: GMV e meta ficam no MetaHero, acima):
+ * ACOS por canal, Pedidos, Ticket medio e Investimento em ads. A logica de disponibilidade e
+ * comparacao continua em `lib/gerencial/kpi-band.ts`; aqui so' apresentacao.
  */
-import {
-  CircleDollarSign,
-  Gauge,
-  Megaphone,
-  Receipt,
-  ShoppingBag,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleDollarSign, Gauge, Megaphone, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
 import type { KpiDescriptor, KpiKey } from "@/lib/gerencial/kpi-band";
-import type { TendenciaKpi } from "@/lib/gerencial/kpi-trend";
-import DeltaBadge from "@/components/ui/DeltaBadge";
+import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
+import { fmtPctBr } from "@/lib/formatters";
+import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
-import NumeroAnimado from "@/components/ui/NumeroAnimado";
-import { LinhaDeTendencia } from "@/components/ui/Sparkline";
+
+/** O que o cartao de GMV mostra alem do descritor: o numero do topo (com as demais marcas) e a meta. */
+export interface GmvDoCartao {
+  valor: string | null;
+  deltaPct: number | null;
+  /** Atingimento da meta (0..1); `null` = recorte sem meta. */
+  progresso: number | null;
+  legenda: string;
+  /** Com meta: o selo do fechamento projetado ("No caminho") e a projecao, na linha da meta. */
+  status?: { texto: string; tom: TomPilula } | null;
+  projecao?: string | null;
+  /** Contra o que a variacao compara, quando nao e' o periodo anterior ("vs ontem até 14h"). */
+  referencia?: string | null;
+  /** Dado incompleto: a legenda vira aviso. */
+  aviso?: string | null;
+  dica?: string;
+  serie?: number[];
+}
 
 interface Props {
   kpis: KpiDescriptor[];
+  /** Sem ele (so' marcas menores, onde o GMV e' o bloco principal), a faixa mostra so' os de apoio. */
+  gmv?: GmvDoCartao;
+  /** ACOS por canal vira o 1o cartao (no lugar do GMV, que esta' no heroi). */
+  acosProprio?: boolean;
   loading: boolean;
-  /** Task A — o bloco falha SOZINHO: `/overview` em erro nao apaga a evolucao,
-   * o Pulso, a matriz, os movimentos nem a fila, que tem fontes proprias. */
+  /** O bloco falha SOZINHO: `/overview` em erro nao apaga os demais blocos. */
   error: boolean;
   onOpen: (key: KpiKey) => void;
   onRetry: () => void;
-  /** KPIS-COMPARACAO-1 — tendencia dentro do periodo, so' para quem tem serie. */
+  /** Tendencia dentro do periodo, so' para quem tem serie. */
   tendencias?: Partial<Record<KpiKey, TendenciaKpi | null>>;
-  /** GERENCIAL-METAS-1 — o GMV ja' e' o numero do bloco principal; a faixa
-   * mostra so' os quatro de apoio, sem repetir. */
-  semGmv?: boolean;
 }
 
-/**
- * UX-TORRE-B2B-1 — um icone por INDICADOR (nao por estado).
- * VISUAL-PALETA-1 — cada KPI tem a PROPRIA cor de identidade (token
- * `kpi-*`): borda do card, ladrilho do icone e mini grafico, como na Torre do
- * Atacado. Ajuda a achar o numero de relance sem acrescentar significado de
- * bom/ruim — a variacao continua em ok/crit.
- */
-const ICONE_KPI: Record<KpiKey, { Icone: LucideIcon; tinta: string; borda: string; ladrilho: string }> = {
-  gmv: { Icone: CircleDollarSign, tinta: "text-kpi-gmv", borda: "border-kpi-gmv/30", ladrilho: "bg-kpi-gmv/10" },
-  orders: { Icone: ShoppingBag, tinta: "text-kpi-pedidos", borda: "border-kpi-pedidos/35", ladrilho: "bg-kpi-pedidos/10" },
-  avg_ticket: { Icone: Receipt, tinta: "text-kpi-ticket", borda: "border-kpi-ticket/30", ladrilho: "bg-kpi-ticket/10" },
-  ad_spend: { Icone: Megaphone, tinta: "text-kpi-ads", borda: "border-kpi-ads/30", ladrilho: "bg-kpi-ads/10" },
-  roas: { Icone: Gauge, tinta: "text-kpi-roas", borda: "border-kpi-roas/35", ladrilho: "bg-kpi-roas/10" },
+const CARTAO: Record<KpiKey, { icone: LucideIcon; cor: string }> = {
+  roas: { icone: Gauge, cor: "rgb(var(--tc-kpi-roas))" },
+  gmv: { icone: CircleDollarSign, cor: "rgb(var(--tc-kpi-gmv))" },
+  orders: { icone: ShoppingBag, cor: "rgb(var(--tc-kpi-pedidos))" },
+  avg_ticket: { icone: Receipt, cor: "rgb(var(--tc-kpi-ticket))" },
+  ad_spend: { icone: Megaphone, cor: "rgb(var(--tc-kpi-ads))" },
 };
+const DIRECAO = { up: "tende a subir", down: "tende a descer", flat: "estável" } as const;
+const ORDEM_GMV = ["gmv", "orders", "avg_ticket", "ad_spend"] as const;
+const ORDEM_ACOS = ["roas", "orders", "avg_ticket", "ad_spend"] as const;
+const CANAL_CURTO: Record<string, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
 
-/**
- * UX-TORRE-B2B-1 — ocupacao da grade por posicao (0 = GMV, 4 = ROAS).
- *
- * Medido: um GMV de oito digitos com centavos ("R$ 00.000.000,0") precisa de
- * ~180px, e o cartao tinha 107px
- * em 1024 e 131px no mobile — o numero era CORTADO em producao. Agora:
- *   mobile (2 col)  GMV ocupa a linha inteira; Ads e ROAS dividem a ultima.
- *   md/lg (3 col)   GMV, Pedidos, Ticket / Ads, ROAS (duas colunas).
- *   xl (5 col)      uma linha so'.
- * O tamanho do numero acompanha a largura real do cartao em cada faixa.
- */
-const SPAN_DO_KPI: Record<number, string | undefined> = {
-  0: "col-span-2 md:col-span-1",
-  4: "md:col-span-2 xl:col-span-1",
-};
-
-function KpiCardSkeleton() {
-  return (
-    <div
-      className="h-full bg-surface border border-line rounded-xl p-4 flex flex-col gap-3 animate-pulse"
-      role="status"
-      aria-busy="true"
-    >
-      <span className="sr-only">Carregando indicador…</span>
-      <div className="h-3 w-20 bg-raised rounded" />
-      <div className="h-7 w-32 bg-raised rounded" />
-      <div className="h-3 w-24 bg-raised rounded mt-auto" />
-    </div>
-  );
+function pilulaDe(pct: number | null, tom: KpiDescriptor["deltaTone"]): { texto: string; tom: TomPilula } | null {
+  if (pct == null) return null;
+  return { texto: fmtPctBr(pct), tom: tom === "neutral" ? "neutro" : (pct >= 0) !== (tom === "lower_is_better") ? "ok" : "crit" };
 }
 
-const SETA: Record<"up" | "down" | "flat", string> = { up: "▲", down: "▼", flat: "=" };
-
-function KpiCard({
-  kpi,
-  onOpen,
-  tendencia,
-}: {
-  kpi: KpiDescriptor;
-  onOpen: (key: KpiKey) => void;
-  tendencia?: TendenciaKpi | null;
-}) {
-  const hasChannelList = kpi.channelValues != null && kpi.channelValues.length > 0;
-  const { Icone, tinta, borda, ladrilho } = ICONE_KPI[kpi.key];
-
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen(kpi.key)}
-      aria-haspopup="dialog"
-      // `w-full min-w-0`: sem eles o <button> se dimensiona pelo conteudo e
-      // estoura a trilha da grade — era a origem de 5px de overflow horizontal
-      // no mobile (390px), medido no QA.
-      className={`card-hover group w-full min-w-0 h-full min-h-11 text-left bg-surface border rounded-xl p-3.5 flex flex-col gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${borda}`}
-    >
-      <span className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-          {kpi.label}
-          {/* VISUAL-PALETA-1: compradores e cobertura de Ads saem do corpo do
-              card para o "i" — o numero fala primeiro. */}
-          {(kpi.subvalue || kpi.coverageNote) && (
-            <InfoDica emControle texto={[kpi.subvalue, kpi.coverageNote].filter(Boolean).join(" · ")} />
-          )}
-          {/* KPIS-COMPARACAO-1: sem `aria-label` no botao, o nome acessivel e'
-              o proprio conteudo (valor, variacao, tendencia); a acao vai aqui. */}
-          <span className="sr-only"> (abrir decomposição)</span>
-        </span>
-        <span
-          aria-hidden="true"
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-transform duration-200 ease-out group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100 ${ladrilho} ${tinta}`}
-        >
-          <Icone className="h-4 w-4" strokeWidth={1.75} />
-        </span>
-      </span>
-
-      {/* ROAS nunca tem valor unico: renderiza a lista por canal. */}
-      {hasChannelList ? (
-        <span className="flex flex-col gap-0.5 mt-0.5">
-          {kpi.channelValues!.map((cv) => {
-            const highlighted = kpi.highlightChannel === cv.channel;
-            return (
-              <span key={cv.channel} className="flex items-baseline justify-between gap-2">
-                <span className="text-xs text-ink-faint truncate">{cv.label}</span>
-                {cv.value ? (
-                  <span className="flex shrink-0 items-baseline gap-1.5">
-                    {cv.direction && cv.previous && (
-                      <span
-                        className={`text-xs font-semibold tabular-nums ${
-                          cv.direction === "flat"
-                            ? "text-ink-muted"
-                            : (cv.direction === "up") !== (kpi.deltaTone === "lower_is_better")
-                              ? "text-ok-ink"
-                              : "text-crit-ink"
-                        }`}
-                      >
-                        {SETA[cv.direction]} de {cv.previous}
-                      </span>
-                    )}
-                    <span
-                      className={`tabular-nums ${
-                        highlighted ? "text-xl font-bold text-ink" : "text-sm font-semibold text-ink"
-                      }`}
-                    >
-                      {cv.value}
-                    </span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-ink-faint shrink-0">N/D</span>
-                )}
-              </span>
-            );
-          })}
-        </span>
-      ) : kpi.value ? (
-        <span className="text-lg md:text-xl lg:text-2xl xl:text-lg min-[1440px]:text-2xl font-semibold tracking-tight text-ink tabular-nums leading-tight">
-          <NumeroAnimado texto={kpi.value} />
-        </span>
-      ) : (
-        <span className="text-lg md:text-xl lg:text-2xl xl:text-lg min-[1440px]:text-2xl font-semibold tracking-tight text-ink-faint tabular-nums leading-tight">N/D</span>
-      )}
-
-      {/* UX-VIDRO-3 (print aprovado): rodape em duas colunas — variacao e
-          nota a' esquerda, mini grafico a' direita, alinhados pela base. */}
-      <span className="mt-auto flex items-end justify-between gap-3 pt-1">
-        <span className="flex min-w-0 flex-col gap-1">
-          {(kpi.deltaPct != null && kpi.value) || kpi.reference ? (
-            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              {kpi.deltaPct != null && kpi.value && <DeltaBadge pct={kpi.deltaPct} tone={kpi.deltaTone} />}
-              {kpi.reference && <span className="text-xs text-ink-faint tabular-nums">{kpi.reference}</span>}
-            </span>
-          ) : null}
-          {kpi.comparisonNote && <span className="text-xs text-ink-faint">{kpi.comparisonNote}</span>}
-          {kpi.unavailableReason && (
-            <span className="text-xs text-ink-faint leading-snug">{kpi.unavailableReason}</span>
-          )}
-        </span>
-        {tendencia && tendencia.pontos.length >= 4 && kpi.value && (
-          <LinhaDeTendencia t={tendencia} tinta={ICONE_KPI[kpi.key].tinta} />
-        )}
-      </span>
-    </button>
-  );
-}
-
-export default function KpiBand({ kpis: todos, loading, error, onOpen, onRetry, semGmv = false, tendencias }: Props) {
-  const kpis = semGmv ? todos.filter((k) => k.key !== "gmv") : todos;
-  // Com quatro cards a grade fecha sem celula vazia em 2 e 4 colunas, entao os
-  // spans da fileira de cinco nao se aplicam.
-  const span = (i: number) => (semGmv ? undefined : SPAN_DO_KPI[i]);
+export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen, onRetry, tendencias }: Props) {
   if (error) {
     return (
-      <section
-        aria-label="Indicadores do período"
-        className="bg-raised border border-line rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap"
-      >
+      <section aria-label="Indicadores do período" className="bg-raised border border-line rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-sm font-semibold text-ink-muted">Indicadores do período</h2>
-          <p className="text-xs text-ink-faint">
-            O agregado do período não respondeu nesta carga — GMV, Pedidos, Ticket, Investimento e ACOS ficam
-            indisponíveis. Os demais blocos abaixo seguem com as próprias fontes.
-          </p>
+          <p className="text-xs text-ink-faint">O agregado do período não respondeu nesta carga. Os demais blocos seguem com as próprias fontes.</p>
         </div>
         <button
           type="button"
@@ -228,30 +84,86 @@ export default function KpiBand({ kpis: todos, loading, error, onOpen, onRetry, 
       </section>
     );
   }
-
+  const de = (k: KpiKey) => kpis.find((x) => x.key === k);
+  const acos = de("roas")?.channelValues ?? [];
+  const ORDEM: readonly KpiKey[] = acosProprio && !gmv ? ORDEM_ACOS : ORDEM_GMV;
   return (
     <section aria-label="Indicadores do período">
       <h2 className="sr-only">Indicadores do período</h2>
-      {/* 2 / 3 / 5 colunas. O ROAS (indice 4) ocupa duas colunas fora do
-          desktop para que a fileira de cinco nunca deixe celula vazia — e ele
-          e' justamente o card que precisa de mais largura, por listar canais. */}
-      <div
-        className={semGmv ? "grid grid-cols-2 xl:grid-cols-4 gap-3" : "grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3"}
-        aria-busy={loading}
-      >
+      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4" aria-busy={loading}>
         {loading
-          ? Array.from({ length: semGmv ? 4 : 5 }, (_, i) => (
-              // O ROAS ocupa duas colunas no tablet para nao deixar celula
-              // vazia na fileira (grade de 5 em 2 colunas no mobile).
-              <div key={i} className={span(i)}>
-                <KpiCardSkeleton />
+          ? ORDEM.filter((k) => gmv || k !== "gmv").map((k) => (
+              <div key={k} className="h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4" role="status" aria-busy="true">
+                <span className="sr-only">Carregando indicador…</span>
+                <div className="h-3 w-24 rounded bg-raised" />
+                <div className="mt-3 h-8 w-36 rounded bg-raised" />
               </div>
             ))
-          : kpis.map((kpi, i) => (
-              <div key={kpi.key} className={span(i)}>
-                <KpiCard kpi={kpi} onOpen={onOpen} tendencia={tendencias?.[kpi.key]} />
-              </div>
-            ))}
+          : ORDEM.map((k) => {
+              const kpi = de(k);
+              if (!kpi || (k === "gmv" && !gmv)) return null;
+              const eGmv = k === "gmv" && gmv != null;
+              const dica = eGmv ? gmv.dica : [kpi.subvalue, kpi.coverageNote, kpi.reference, kpi.comparisonNote].filter(Boolean).join(" · ");
+              const valor = eGmv ? gmv.valor : kpi.value;
+              const delta = eGmv ? gmv.deltaPct : kpi.deltaPct;
+              const eAcos = k === "roas";
+              const legenda = eAcos ? (acos.some((c) => c.value) ? null : kpi.unavailableReason) : eGmv && gmv ? (
+                gmv.aviso ? (
+                  <span className="font-semibold text-warn-ink">{gmv.aviso}</span>
+                ) : (
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    {gmv.legenda}
+                    {gmv.status && (
+                      <span className={`rounded-full px-2 py-0.5 font-semibold whitespace-nowrap ${gmv.status.tom === "ok" ? "bg-ok-soft text-ok-ink" : gmv.status.tom === "crit" ? "bg-crit-soft text-crit-ink" : gmv.status.tom === "warn" ? "bg-warn-soft text-warn-ink" : "bg-raised text-ink-muted"}`}>
+                        {gmv.status.texto}
+                      </span>
+                    )}
+                    {gmv.projecao && (
+                      <span className="whitespace-nowrap">
+                        projeção <b className="font-semibold text-ink">{gmv.projecao}</b>
+                      </span>
+                    )}
+                  </span>
+                )
+              ) : !valor ? (
+                kpi.unavailableReason
+              ) : delta != null ? null : (
+                kpi.comparisonNote
+              );
+              // A referencia vai DENTRO da pilula ("+42,4% vs anterior"): o numero nunca fica sem dizer contra o que.
+              const ref = kpi.reference?.startsWith("vs") ? kpi.reference : "vs anterior";
+              const p = valor ? pilulaDe(delta, kpi.deltaTone) : null;
+              const t = tendencias?.[k];
+              return (
+                <CartaoIndicador
+                  key={k}
+                  rotulo={eGmv ? "GMV do período" : kpi.label}
+                  icone={CARTAO[k].icone}
+                  cor={CARTAO[k].cor}
+                  valor={valor}
+                  valores={eAcos ? acos.map((c) => ({ rotulo: CANAL_CURTO[c.channel] ?? c.label, valor: c.value })) : null}
+                  pilula={p && { ...p, texto: `${p.texto} ${eGmv && gmv ? gmv.referencia ?? "vs anterior" : ref}` }}
+                  rodape={
+                    k === "ad_spend" && acos.length && !acosProprio ? (
+                      <span className="grid gap-0.5 tabular-nums">
+                        {acos.map((c) => (
+                          <span key={c.channel} className="flex items-baseline justify-between gap-3">
+                            <span>ACOS {CANAL_CURTO[c.channel] ?? c.label}</span>
+                            <b className={c.value ? "font-semibold text-ink" : "font-normal text-ink-faint"}>{c.value ?? "—"}</b>
+                          </span>
+                        ))}
+                      </span>
+                    ) : null
+                  }
+                  progresso={eGmv ? gmv.progresso : null}
+                  legenda={legenda}
+                  serie={!valor ? null : eGmv ? gmv.serie : t ? suavizar(t.pontos) : null}
+                  tendencia={t?.direcao ? `Tendência: ${DIRECAO[t.direcao]}${t.variacaoPct != null ? ` (${t.rotulo}: ${fmtPctBr(t.variacaoPct)})` : ""}` : null}
+                  ajuda={dica ? <InfoDica emControle texto={dica} /> : null}
+                  onAbrir={() => onOpen(k)}
+                />
+              );
+            })}
       </div>
     </section>
   );

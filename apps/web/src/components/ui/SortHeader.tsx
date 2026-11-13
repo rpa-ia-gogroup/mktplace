@@ -43,12 +43,17 @@ export default function SortHeader({
         // UX-TORRE-2: em `flex-row-reverse` o inicio do eixo e' a DIREITA —
         // `justify-end` empurrava o rotulo para a esquerda, longe dos numeros
         // alinhados a direita na coluna. `justify-start` o encosta neles.
-        className={`flex min-h-11 w-full items-center gap-1 px-3 py-1.5 transition-colors hover:text-ink ${
+        className={`group flex min-h-11 w-full items-center gap-1 px-3 py-1.5 transition-colors hover:text-ink ${
           alinhamento === "right" ? "flex-row-reverse justify-start" : "justify-start"
         } ${ativo ? "text-accent" : "text-ink-faint"}`}
       >
         <span>{rotulo}</span>
-        <span aria-hidden="true" className="text-xs leading-none">
+        {/* UI-FUNDACAO (F1): seta cheia so' na coluna ativa; nas outras, o ↕ apagado
+            (a pista de que ordena continua, inclusive no toque) e cheio no hover/foco. */}
+        <span
+          aria-hidden="true"
+          className={`text-xs leading-none ${ativo ? "" : "opacity-40 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"}`}
+        >
           {ativo ? (sort.direction === "asc" ? "▲" : "▼") : "↕"}
         </span>
       </button>

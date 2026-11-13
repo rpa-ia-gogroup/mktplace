@@ -181,7 +181,7 @@ export default function GerencialMarcasMenores({
                   : null
             }
           />
-          <KpiBand kpis={kpis} loading={false} error={false} onOpen={abrirAbaMenores} onRetry={() => setRecarga((n) => n + 1)} semGmv />
+          <KpiBand kpis={kpis} loading={false} error={false} onOpen={abrirAbaMenores} onRetry={() => setRecarga((n) => n + 1)} />
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
             <div className="lg:col-span-7">
               <EvolutionCard

@@ -13,6 +13,7 @@
  * LACUNA e a linha se interrompe — nunca e' costurado como se houvesse dado.
  */
 import {
+  Area,
   Bar,
   CartesianGrid,
   Cell,
@@ -28,7 +29,7 @@ import type { MergedBucket } from "@/lib/gerencial/trend-series";
 import type { TrendMetric } from "@/lib/gerencial/request-key";
 import { CHANNEL_LABEL } from "@/lib/gerencial/kpi-band";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { fmtBrlFull, fmtNumber } from "@/lib/formatters";
+import { fmtBrlFull, fmtNumber, fmtPctBr } from "@/lib/formatters";
 import { temaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 
@@ -95,60 +96,59 @@ function ChartTooltip({
   // periodo anterior, nunca a data atual deslocada.
   const bucket = payload[0]?.payload;
   const cmp = bucket?.comparison ?? null;
+  const total = showTotal && totalRow?.value != null ? totalRow.value : null;
+  const delta = total != null && cmp?.total ? ((total - cmp.total) / cmp.total) * 100 : null;
+  const maior = Math.max(1, ...channelRows.map((r) => r.value ?? 0));
   return (
-    <div className="bg-surface border border-line rounded-xl shadow-lg px-3 py-2 text-xs min-w-[168px]">
-      <p className="font-semibold text-ink-muted">{label}</p>
-      {emAndamento && <p className="text-xs text-ink-faint mb-1">Dia em andamento · parcial</p>}
-      {showComparisonTotal && !emAndamento && (
-        <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide mb-1">Período atual</p>
+    <div className="min-w-[208px] rounded-xl border border-line bg-surface/95 px-3.5 py-3 text-xs shadow-[0_18px_40px_-18px_rgb(76_29_149/0.45)] backdrop-blur-md">
+      <p className="flex items-center justify-between gap-3 font-semibold text-ink-muted">
+        {label}
+        {emAndamento && <span className="rounded-full bg-accent-soft px-1.5 py-0.5 text-xs font-semibold text-accent-ink">parcial</span>}
+      </p>
+      {total != null && (
+        <p className="mt-1 flex items-baseline justify-between gap-3">
+          <span className="text-lg font-bold leading-tight text-ink tabular-nums">{formatValue(total, metric)}</span>
+          {delta != null && showComparisonTotal && !emAndamento && (
+            <span className={`rounded-full px-1.5 py-0.5 font-semibold tabular-nums ${delta >= 0 ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink"}`}>
+              {fmtPctBr(delta)}
+            </span>
+          )}
+        </p>
       )}
-      {(!showComparisonTotal || emAndamento) && <span className="block mb-1.5" />}
-      <ul className="flex flex-col gap-0.5">
+      <ul className="mt-2 flex flex-col gap-1.5">
         {channelRows.map((row) => {
           const channel = row.dataKey.replace("values.", "") as Marketplace;
           return (
-            <li key={channel} className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-1.5 text-ink-faint">
-                <span
-                  aria-hidden="true"
-                  className={`w-2 h-2 rounded-full shrink-0 ${CHANNEL_DOT[channel]}`}
-                />
-                {CHANNEL_LABEL[channel]}
+            <li key={channel}>
+              <span className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-1.5 text-ink-muted">
+                  <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${CHANNEL_DOT[channel]}`} />
+                  {CHANNEL_LABEL[channel]}
+                </span>
+                <span className="font-medium text-ink tabular-nums">
+                  {row.value == null ? <span className="text-ink-faint">sem dado</span> : formatValue(row.value, metric)}
+                </span>
               </span>
-              <span className="tabular-nums font-medium text-ink">
-                {row.value == null ? <span className="text-ink-faint">sem dado</span> : formatValue(row.value, metric)}
-              </span>
+              {row.value != null && (
+                <span aria-hidden="true" className="mt-0.5 block h-1 overflow-hidden rounded-full bg-raised">
+                  <span className={`block h-full rounded-full ${CHANNEL_DOT[channel]}`} style={{ width: `${(row.value / maior) * 100}%` }} />
+                </span>
+              )}
             </li>
           );
         })}
       </ul>
-      {showTotal && totalRow?.value != null && (
-        <p className="mt-1.5 pt-1.5 border-t border-line flex items-center justify-between gap-3">
-          <span className="text-ink-faint">Total</span>
-          <span className="tabular-nums font-semibold text-ink">{formatValue(totalRow.value, metric)}</span>
+      {showComparisonTotal && !emAndamento && !cmp && (
+        <p className="mt-2 border-t border-line pt-1.5 text-ink-faint">Sem ponto correspondente na janela anterior.</p>
+      )}
+      {showComparisonTotal && !emAndamento && cmp && (
+        <p title={`Período anterior: ${cmp.date}`} className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-1.5 text-ink-faint">
+          <span>{cmp.label} · anterior</span>
+          <span className="font-medium text-ink-muted tabular-nums">
+            {cmp.total != null ? formatValue(cmp.total, metric) : "incompleto"}
+          </span>
         </p>
       )}
-      {showComparisonTotal && !emAndamento && (
-        <div className="mt-1.5 pt-1.5 border-t border-line">
-          <p className="text-xs font-semibold text-ink-faint uppercase tracking-wide">Período anterior</p>
-          {cmp ? (
-            <>
-              <p className="text-xs text-ink-faint tabular-nums">{cmp.label} · {cmp.date}</p>
-              <p className="flex items-center justify-between gap-3">
-                <span className="text-ink-faint">Total anterior</span>
-                <span className="tabular-nums font-medium text-ink-muted">
-                  {cmp.total != null ? formatValue(cmp.total, metric) : <span className="text-ink-faint">incompleto</span>}
-                </span>
-              </p>
-            </>
-          ) : (
-            <p className="text-xs text-ink-faint">Sem ponto correspondente na janela anterior.</p>
-          )}
-        </div>
-      )}
-      <p className="mt-1.5 text-xs text-ink-faint">
-        {emAndamento ? "Clique para ver só hoje" : "Clique para abrir o detalhe do período"}
-      </p>
     </div>
   );
 }
@@ -207,6 +207,10 @@ export default function EvolutionChart({
             <stop offset="0" stopColor={tema.barraTopo} />
             <stop offset="1" stopColor={tema.barraBase} />
           </linearGradient>
+          <linearGradient id="evolucao-anterior" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor={tema.referencia} stopOpacity={0.28} />
+            <stop offset="1" stopColor={tema.referencia} stopOpacity={0} />
+          </linearGradient>
           <pattern id="evolucao-parcial" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="8" height="8" fill={tema.barraTopo} />
             <rect width="4" height="8" fill={tema.barraParcial} fillOpacity={0.55} />
@@ -237,6 +241,25 @@ export default function EvolutionChart({
             <ChartTooltip metric={metric} showTotal={showTotal} showComparisonTotal={showComparisonTotal} />
           }
         />
+        {/* Periodo anterior: uma AREA suave e neutra atras das barras, com a borda
+            tracejada (o tracejado distingue sem depender de cor). */}
+        {showComparisonTotal && (
+          <Area
+            type="monotone"
+            dataKey="comparison.total"
+            name="Total do período anterior"
+            stroke={tema.referencia}
+            strokeWidth={1.75}
+            strokeDasharray="6 4"
+            strokeOpacity={isolating ? 0.15 : 0.9}
+            fill="url(#evolucao-anterior)"
+            fillOpacity={isolating ? 0.2 : 1}
+            dot={false}
+            activeDot={{ r: 3 }}
+            connectNulls={false}
+            isAnimationActive={false}
+          />
+        )}
         {/* UX-VIDRO-5 (proposta aprovada): o TOTAL e' a leitura principal e
             vira BARRA arredondada em degrade violeta; o dia em andamento sai
             listrado. Isolar um canal recua o total (`isolating`), como antes.
@@ -251,6 +274,8 @@ export default function EvolutionChart({
             strokeOpacity={isolating ? 0.18 : 1}
             radius={[10, 10, 6, 6]}
             maxBarSize={56}
+            // A entrada e' CSS (`.tc-grafico-entra`), uma vez por barra criada. A animacao do
+            // Recharts recomecava do zero a cada fonte que chegava e deixava as barras achatadas.
             isAnimationActive={false}
           >
             {buckets.map((b) => (
@@ -261,21 +286,6 @@ export default function EvolutionChart({
         {/* Periodo anterior: UMA linha (o total), tracejada e neutra. Fica atras
             das series atuais na ordem de render e nao concorre com a leitura
             principal. O tracejado distingue sem depender de cor. */}
-        {showComparisonTotal && (
-          <Line animationDuration={450} animationEasing="ease-out"
-            type="monotone"
-            dataKey="comparison.total"
-            name="Total do período anterior"
-            stroke={tema.referencia}
-            strokeWidth={1.75}
-            strokeDasharray="6 4"
-            strokeOpacity={isolating ? 0.15 : 0.9}
-            dot={false}
-            activeDot={{ r: 3 }}
-            connectNulls={false}
-            isAnimationActive={false}
-          />
-        )}
         {channels.map((channel) => (
           <Line animationDuration={450} animationEasing="ease-out"
             key={channel}

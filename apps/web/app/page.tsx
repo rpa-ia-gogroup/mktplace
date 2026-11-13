@@ -47,13 +47,10 @@ import {
   buildConfidenceStrip,
   type ChannelSeriesState,
   type CommercialAttentionItem,
-  type DataConfidenceItem,
 } from "@/lib/gerencial/attention";
 import {
   buildBrandChannelMatrix,
-  buildConcentration,
   buildMovements,
-  type ConcentrationEntry,
   type Movement,
 } from "@/lib/gerencial/brand-matrix";
 import { mergeChannelSeries, reconcileSeriesTotal, type MergedBucket } from "@/lib/gerencial/trend-series";
@@ -82,11 +79,13 @@ import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import KpiDrilldownContent from "@/components/KpiDrilldownContent";
 import InsightDrilldownContent, { type PulseView } from "@/components/InsightDrilldownContent";
 import ChannelComparisonDialogContent from "@/components/ChannelComparisonDialogContent";
-import GerencialHeader from "@/components/gerencial/GerencialHeader";
+import { LayoutDashboard } from "lucide-react";
+import Aba from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
 import KpiBand from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
-import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
@@ -106,6 +105,7 @@ import {
   mesDaMeta,
   metaDoEscopo,
   progressoMeta,
+  ROTULO_STATUS,
   realizadoDoEscopo,
   ultimoDiaComDado,
 } from "@/lib/gerencial/meta-progress";
@@ -120,9 +120,7 @@ import { MARCAS, hojeBrt } from "@/lib/metas";
 import {
   ChannelSeriesDrilldownContent,
   CommercialAttentionDrilldownContent,
-  ConcentrationDrilldownContent,
   ConfidenceDrilldownContent,
-  DataWarningDrilldownContent,
   MatrixCellUnavailableContent,
   MatrixChannelDrilldownContent,
   MovementDrilldownContent,
@@ -148,9 +146,7 @@ type DialogView =
   | { kind: "matrix"; brand: string; channel: Marketplace }
   | { kind: "matrixChannel"; channel: Marketplace }
   | { kind: "movement"; movement: Movement }
-  | { kind: "concentration"; entry: ConcentrationEntry }
   | { kind: "commercial"; item: CommercialAttentionItem }
-  | { kind: "dataWarning"; item: DataConfidenceItem }
   | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
 
 function GerencialComGrandes() {
@@ -175,6 +171,8 @@ function GerencialComGrandes() {
   // serie dos canais selecionados e nao toca as outras cinco fontes.
   const [granularity, setGranularity] = useState<TrendGranularityRequest>("auto");
   const [dialog, setDialog] = useState<DialogView | null>(null);
+  // Sub-visao da aba (abas sob o titulo): estado local, nao muda requisicao nenhuma.
+  const [visao, setVisao] = useState<"geral" | "produtos" | "cx">("geral");
 
   const sources = useGerencialSources({
     channels: filters.channels,
@@ -245,6 +243,13 @@ function GerencialComGrandes() {
       ),
     [sources.series, filters.channels, granularity],
   );
+  // Mini tendencia por canal no heroi: SEMPRE em GMV (o grafico pode estar em Pedidos); dia sem dado fica fora.
+  const serieGmvPorCanal = useMemo(() => {
+    const m = mergeChannelSeries(sources.series, filters.channels, "gmv", granularity);
+    return Object.fromEntries(
+      filters.channels.map((c) => [c, m.buckets.map((b) => b.values[c]).filter((v): v is number => v != null)]),
+    );
+  }, [sources.series, filters.channels, granularity]);
   // GERENCIAL-D0 — hoje no grafico, com o numero do filtro "Hoje". Fica FORA de
   // `merged`: nao entra na soma, na reconciliacao, nas tendencias nem na meta.
   const hojeNoGrafico = useMemo(
@@ -292,10 +297,8 @@ function GerencialComGrandes() {
 
   const brands = sources.brands.data ?? [];
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
-  const concentration = useMemo(() => buildConcentration(brands), [brands]);
 
-  // Task B.4 / C — sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV
-  // (que vem de `/brands`) nao depende deles para existir.
+  // Sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV (de `/brands`) nao depende deles.
   const signalsByCell = useMemo(() => {
     const map: Record<string, string[]> = {};
     for (const row of sources.canais.data?.channelRows ?? []) {
@@ -601,6 +604,18 @@ function GerencialComGrandes() {
           : sources.brands.status.error
             ? "error"
             : "loading";
+  const marcasEmRisco = useMemo(
+    () =>
+      Object.entries(progressoPorMarca)
+        .flatMap(([id, p]) => {
+          const tende = tendenciaDoMes?.[id];
+          return p && tende != null && (p.status === "abaixo" || p.status === "atencao")
+            ? [{ id, pct: tende / p.meta, critico: p.status === "abaixo" }]
+            : [];
+        })
+        .sort((a, b) => a.pct - b.pct),
+    [progressoPorMarca, tendenciaDoMes],
+  );
   const mesDasMetas = mesMeta ?? diaMeta?.slice(0, 7) ?? null;
   const avisoDeDado = avisoQueAfetaOGmv(queue.dataConfidence);
 
@@ -680,12 +695,8 @@ function GerencialComGrandes() {
         return `${CHANNEL_LABEL[dialog.channel]} — distribuição por marca`;
       case "movement":
         return `${dialog.movement.brandLabel} — ${CHANNEL_LABEL[dialog.movement.channel]}`;
-      case "concentration":
-        return `${dialog.entry.label} — concentração`;
       case "commercial":
         return dialog.item.title;
-      case "dataWarning":
-        return "Aviso de confiança no dado";
       case "cx":
         return `${ROTULO_INDICADOR[dialog.indicador]} por marca · Shopee`;
       case "pulse": {
@@ -716,24 +727,66 @@ function GerencialComGrandes() {
   // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
   const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
 
-  return (
-    <div className="w-full px-4 py-4 flex flex-col gap-3">
-      <GerencialHeader
-        periodLabel={periodLabel}
-        refreshedAt={sources.overview.refreshedAt}
-        live={headerLive}
-        loading={sources.anyLoading}
-      >
-        <GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />
-        <SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />
-      </GerencialHeader>
+  const temCx = isMarketplaceSelected(filters.channels, "shopee");
+  const visoes = [
+    { id: "geral" as const, rotulo: "Visão geral" },
+    { id: "produtos" as const, rotulo: "Produtos" },
+    ...(temCx ? [{ id: "cx" as const, rotulo: "CX" }] : []),
+  ];
+  const visaoAtiva = visao === "cx" && !temCx ? "geral" : visao;
+  const sinalTopo = queue.commercial.find((i) => i.severity !== "info") ?? null;
+  const atencao = marcasEmRisco[0] ? (
+    <AtencaoLinha
+      severidade={marcasEmRisco[0].critico ? "critico" : "atencao"}
+      href={brandHref(marcasEmRisco[0].id)}
+      outros={marcasEmRisco.length - 1 + queue.commercial.length}
+      onVerTodos={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
+    >
+      <b className="font-semibold capitalize">{(brands.find((b) => b.brand === marcasEmRisco[0].id)?.label ?? marcasEmRisco[0].id).toLowerCase()}</b> tende a{" "}
+      {Math.round(marcasEmRisco[0].pct * 100)}% da meta
+    </AtencaoLinha>
+  ) : sinalTopo ? (
+    <AtencaoLinha
+      severidade={sinalTopo.severity === "critical" ? "critico" : "atencao"}
+      outros={queue.commercial.length - 1}
+      onVerTodos={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
+    >
+      {sinalTopo.title}
+    </AtencaoLinha>
+  ) : null;
 
+  return (
+    <Aba
+      icone={LayoutDashboard}
+      titulo="Visão Gerencial"
+      visoes={visoes}
+      visao={visaoAtiva}
+      onVisao={setVisao}
+      // refreshed_at e selo saem SO' da resposta compativel com o filtro atual
+      // — nunca da requisicao anterior (`headerLive` e' null ate' la').
+      selo={
+        <>
+          <SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />
+          {/* Confianca no dado: selo pequeno ao lado do Atualizado; o clique abre o detalhe de sempre. */}
+          {visaoAtiva === "geral" && (
+            <ConfidenceStrip
+              data={confidence}
+              loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
+              onOpen={() => setDialog({ kind: "confidence" })}
+            />
+          )}
+        </>
+      }
+      filtros={<GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />}
+      direita={<SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />}
+      atencao={visaoAtiva === "geral" ? atencao : null}
+      faixa={
+        <>
       <span className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnouncement}
       </span>
 
-      {/* ---- Dobra 1: vamos bater a meta? (GERENCIAL-METAS-1) ----
-          Nenhum gate global daqui para baixo: cada bloco decide sozinho. */}
+      {/* Dobra 1: vamos bater a meta? GMV, meta e a rosca de canais em largura total (pedido do usuario, 13/11). */}
       <MetaHero
         periodLabel={periodLabel}
         loading={overviewStatus.loading}
@@ -773,6 +826,7 @@ function GerencialComGrandes() {
         metasHref={mesDasMetas ? `/metas?mes=${mesDasMetas}` : "/metas"}
         onOpenGmv={() => setDialog({ kind: "kpi", key: "gmv" })}
         shareFull={shareFull}
+        serieGmvPorCanal={serieGmvPorCanal}
         tendenciaDoDia={tendenciaTopo}
       />
 
@@ -782,15 +836,20 @@ function GerencialComGrandes() {
         error={overviewStatus.error}
         onOpen={(key) => setDialog({ kind: "kpi", key })}
         onRetry={sources.retry}
-        semGmv
+        acosProprio
         tendencias={tendencias}
       />
+        </>
+      }
+    >
 
+      {visaoAtiva === "geral" && (
+        <>
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
           os dois itens esticam juntos. */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
-        <div className="lg:col-span-7">
+        <div className="lg:col-span-6">
           <EvolutionCard
             merged={merged}
             metric={metric}
@@ -806,7 +865,7 @@ function GerencialComGrandes() {
             highlightedChannel={highlightedChannel}
           />
         </div>
-        <div className="lg:col-span-5">
+        <div className="lg:col-span-6">
           <MarcasMeta
             brands={brandsComMenores}
             semMeta={menoresOk?.marcas.map((m) => m.brand)}
@@ -824,18 +883,6 @@ function GerencialComGrandes() {
         </div>
       </div>
 
-      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
-      {isMarketplaceSelected(filters.channels, "shopee") && (
-        <CxResumo
-          brands={filters.brands}
-          canais={filters.channels}
-          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
-        />
-      )}
-
       {/* ---- Dobra 3: marca x canal ---- */}
       <BrandChannelMatrix
         matrix={matrix}
@@ -851,6 +898,58 @@ function GerencialComGrandes() {
         onRetry={sources.retry}
       />
 
+      {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
+          Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
+          cada bloco com a propria fonte e o proprio erro. Fechado por padrao
+          para a primeira dobra responder sozinha. */}
+      <details className="group rounded-xl border border-line bg-surface">
+        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <span>
+            Mais detalhes
+            <span className="ml-2 font-normal text-ink-faint">
+              saúde do volume, maiores altas e quedas e fila de atenção
+            </span>
+          </span>
+          <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">
+            ▾
+          </span>
+        </summary>
+        <div className="flex flex-col gap-4 border-t border-line p-4">
+          <VolumeHealthCard
+            rows={volumeRows}
+            loading={sources.quality.status.loading}
+            error={sources.quality.status.error}
+            onOpenChannel={(channel) => setDialog({ kind: "volume", channel })}
+            onRetry={sources.retry}
+          />
+
+          <MovementsPanels
+            movements={movements}
+            loading={sources.brands.status.loading}
+            error={sources.brands.status.error}
+            onOpenMovement={(movement) => setDialog({ kind: "movement", movement })}
+            onRetry={sources.retry}
+          />
+
+          <AttentionQueue
+            commercial={queue.commercial}
+            commercialLoading={sources.executiveSummary.status.loading}
+            commercialError={sources.executiveSummary.status.error}
+            onOpenCommercial={(item) => setDialog({ kind: "commercial", item })}
+            health={sources.executiveSummary.data?.health ?? null}
+            dataUnavailable={pulse.dataUnavailable}
+            temSinais={pulse.commercial.length + pulse.dataConfidence.groups.length > 0}
+            onOpenAll={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
+            onRetry={sources.retry}
+          />
+        </div>
+      </details>
+
+        </>
+      )}
+
+      {visaoAtiva === "produtos" && (
+        <>
       <TopProdutosMarca
         channels={filters.channels}
         brands={filters.brands}
@@ -869,74 +968,20 @@ function GerencialComGrandes() {
         />
       )}
 
-      {/* ---- Mais detalhes (GERENCIAL-METAS-1) ----
-          Profundidade sob demanda: tudo o que a V2 mostrava continua aqui,
-          cada bloco com a propria fonte e o proprio erro. Fechado por padrao
-          para a primeira dobra responder sozinha. */}
-      <details className="group rounded-xl border border-line bg-surface">
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-          <span>
-            Mais detalhes
-            <span className="ml-2 font-normal text-ink-faint">
-              confiança no dado, pulso e canais, saúde do volume, movimentos e fila completa
-            </span>
-          </span>
-          <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">
-            ▾
-          </span>
-        </summary>
-        <div className="flex flex-col gap-4 border-t border-line p-4">
-          <ConfidenceStrip
-            data={confidence}
-            loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
-            onOpen={() => setDialog({ kind: "confidence" })}
-          />
+        </>
+      )}
 
-          <PulseChannelsColumn
-            pulse={pulse}
-            health={sources.executiveSummary.data?.health ?? null}
-            pulseLoading={sources.executiveSummary.status.loading}
-            pulseUnavailable={sources.executiveSummary.status.error}
-            onOpenInsight={(key) => setDialog({ kind: "pulse", view: { mode: "insight", key } })}
-            onOpenAllInsights={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
-            overview={overview}
-            channels={filters.channels}
-            channelsLoading={overviewStatus.loading}
-            channelsUnavailable={overviewStatus.error}
-            onOpenChannel={(channel) => setDialog({ kind: "volume", channel })}
-            channelsHref={buildHref("/canais")}
-          />
-
-          <VolumeHealthCard
-            rows={volumeRows}
-            loading={sources.quality.status.loading}
-            error={sources.quality.status.error}
-            onOpenChannel={(channel) => setDialog({ kind: "volume", channel })}
-            onRetry={sources.retry}
-          />
-
-          <MovementsPanels
-            movements={movements}
-            concentration={concentration}
-            loading={sources.brands.status.loading}
-            error={sources.brands.status.error}
-            onOpenMovement={(movement) => setDialog({ kind: "movement", movement })}
-            onOpenConcentration={(entry) => setDialog({ kind: "concentration", entry })}
-            produtosHref={buildHref("/produtos")}
-            onRetry={sources.retry}
-          />
-
-          <AttentionQueue
-            commercial={queue.commercial}
-            dataConfidence={queue.dataConfidence}
-            commercialLoading={sources.executiveSummary.status.loading}
-            commercialError={sources.executiveSummary.status.error}
-            onOpenCommercial={(item) => setDialog({ kind: "commercial", item })}
-            onOpenDataWarning={(item) => setDialog({ kind: "dataWarning", item })}
-            onRetry={sources.retry}
-          />
-        </div>
-      </details>
+      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
+      {visaoAtiva === "cx" && (
+        <CxResumo
+          brands={filters.brands}
+          canais={filters.channels}
+          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
+          dateFrom={filters.dateFrom}
+          dateTo={filters.dateTo}
+          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
+        />
+      )}
 
       {/* ---- Shell UNICO de dialogo, para todos os drill-downs ---- */}
       <KpiDrilldownDialog
@@ -1080,20 +1125,6 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "concentration" && (
-          <ConcentrationDrilldownContent
-            entry={dialog.entry}
-            position={concentration.entries.findIndex((e) => e.brand === dialog.entry.brand) + 1}
-            top1Pct={concentration.top1Pct}
-            top3Pct={concentration.top3Pct}
-            positiveBrands={concentration.positiveBrands}
-            ranking={concentration.entries}
-            periodLabel={periodLabel}
-            refreshedAt={sources.brands.refreshedAt}
-            brandHref={brandHref(dialog.entry.brand)}
-            produtosHref={buildHref("/produtos")}
-          />
-        )}
 
         {dialog?.kind === "commercial" && (
           <CommercialAttentionDrilldownContent
@@ -1117,16 +1148,8 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "dataWarning" && (
-          <DataWarningDrilldownContent
-            item={dialog.item}
-            periodLabel={periodLabel}
-            refreshedAt={sources.executiveSummary.refreshedAt}
-            href={dialog.item.href ? buildHref(dialog.item.href) : null}
-          />
-        )}
       </KpiDrilldownDialog>
-    </div>
+    </Aba>
   );
 }
 

@@ -19,6 +19,7 @@
  */
 import Link from "next/link";
 import InfoDica from "@/components/ui/InfoDica";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import TableScrollHint from "@/components/TableScrollHint";
 import DataQualityNote from "@/components/drilldown/DataQualityNote";
 import type { BrandChannelMatrix as MatrixData, MatrixCell } from "@/lib/gerencial/brand-matrix";
@@ -46,12 +47,8 @@ export function cellKey(brand: string, channel: string): string {
   return `${brand}:${channel}`;
 }
 
-/** Fundo violeta proporcional a intensidade dentro do canal. */
-function cellBackground(intensity: number): string | undefined {
-  if (intensity <= 0) return undefined;
-  // Teto em 0.16 de opacidade: mantem o texto em contraste AA sobre o violeta.
-  return `rgba(124, 58, 237, ${(intensity * 0.16).toFixed(3)})`;
-}
+/** Cor de identidade de cada canal (as mesmas dos pontos e do grafico), para o mapa de calor. */
+const RGB_DO_CANAL: Record<MatrixCell["channel"], string> = { tiktok: "139, 92, 246", ml: "6, 182, 212", shopee: "249, 115, 22" };
 
 /** Nome acessivel da celula — inclui os sinais para que o foco os anuncie. */
 function cellAriaLabel(
@@ -136,10 +133,10 @@ export default function BrandChannelMatrix({
     >
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-1.5">
-          <h2 id="matriz-heading" className="text-sm font-semibold text-ink-muted">
+          <h2 id="matriz-heading" className="text-[15px] font-semibold text-ink">
             Marca × Canal
           </h2>
-          <InfoDica texto="Intensidade e participação calculadas dentro de cada canal." />
+          <InfoDica texto="A barra sob cada valor é o peso da marca dentro do canal. A célula abre a marca no canal, com sinais e referências; o nome do canal abre a distribuição entre as marcas." />
         </div>
       </div>
 
@@ -167,25 +164,20 @@ export default function BrandChannelMatrix({
                     <span className="block text-xs font-semibold uppercase tracking-wide text-ink-faint">
                       {CHANNEL_LABEL[channel]}
                     </span>
-                    <span className="block text-xs font-medium text-ink-faint tabular-nums">
-                      {fmtBrlCurto(matrix.channelTotals[channel] ?? 0)}
-                    </span>
-                    <Variacao pct={matrix.channelMomPct[channel] ?? null} />
                   </button>
                 </th>
               ))}
-              <th scope="col" className="text-right py-2 pl-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                <span className="block">Total</span>
-                <span className="block font-medium normal-case tracking-normal text-ink-faint tabular-nums">
-                  {fmtBrlCurto(matrix.grandTotal)}
-                </span>
-                <Variacao pct={matrix.grandMomPct} />
+              <th scope="col" className="text-right py-2 px-3 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                Total
+              </th>
+              <th scope="col" className="text-right py-2 pl-3 text-xs font-semibold uppercase tracking-wide text-ink-faint whitespace-nowrap">
+                vs anterior
               </th>
             </tr>
           </thead>
           <tbody>
             {matrix.rows.map((row) => (
-              <tr key={row.brand} className="border-b border-line last:border-0">
+              <tr key={row.brand} className="border-b border-line transition-colors duration-[120ms] hover:bg-raised">
                 <th scope="row" className="text-left py-1.5 pr-3 align-middle">
                   <Link
                     href={brandHref(row.brand)}
@@ -197,7 +189,6 @@ export default function BrandChannelMatrix({
 
                 {row.cells.map((cell) => {
                   const signals = signalsByCell[cellKey(row.brand, cell.channel)] ?? [];
-                  const [main, ...rest] = signals;
                   return (
                     <td key={cell.channel} className="py-1.5 px-1 align-middle">
                       <button
@@ -205,56 +196,47 @@ export default function BrandChannelMatrix({
                         onClick={() => onOpenCell(row.brand, cell.channel)}
                         aria-haspopup="dialog"
                         aria-label={cellAriaLabel(row.label, cell, signals, signalsState)}
-                        style={{ background: cell.available ? cellBackground(cell.intensity) : undefined }}
-                        className={`w-full min-w-0 min-h-11 rounded-lg px-2 py-1 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                          cell.available ? "hover:ring-1 hover:ring-accent" : "bg-raised hover:bg-raised"
-                        }`}
+                        className="w-full min-w-0 min-h-11 rounded-lg px-2 py-1 text-right transition-colors hover:ring-1 hover:ring-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       >
                         {cell.available ? (
-                          <>
-                            {/* UI-DENSIDADE-1: mapa de calor limpo — valor curto e
-                                variacao. A participacao no canal ja' e' a cor da
-                                celula; o numero continua no detalhe. */}
-                            <span className="flex items-center justify-end gap-1.5">
-                              {/* Sinal vira um ponto pequeno: <span>, nunca <button>
-                                  aninhado. Rotulo humano do contrato de Canais no
-                                  `title` e no texto do leitor de tela. */}
-                              {main && (
-                                <span
-                                  title={signals.map(signalLabel).join(" · ")}
-                                  className="inline-flex shrink-0 items-center gap-0.5 text-xs text-warn-ink"
-                                >
-                                  <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-warn" />
-                                  <span className="sr-only">{signalLabel(main)}</span>
-                                  {rest.length > 0 && <span aria-hidden="true">+{rest.length}</span>}
-                                </span>
-                              )}
-                              <span className="text-sm font-semibold text-ink tabular-nums">
-                                {fmtBrlCurto(cell.gmv as number)}
-                              </span>
-                            </span>
-                            <Variacao pct={cell.momPct} />
-                          </>
+                          <CelulaBarra valor={fmtBrlCurto(cell.gmv as number)} peso={cell.intensity} cor={`rgb(${RGB_DO_CANAL[cell.channel]})`} />
                         ) : (
-                          <>
-                            <span className="block text-sm text-ink-faint">—</span>
-                            <span className="block text-xs text-ink-faint">sem dado</span>
-                          </>
+                          <span className="block text-sm text-ink-faint">—</span>
                         )}
                       </button>
                     </td>
                   );
                 })}
 
+                <td className="py-1.5 px-3 text-right align-middle text-sm font-semibold text-ink tabular-nums">
+                  {fmtBrlCurto(row.brandTotal)}
+                </td>
                 <td className="py-1.5 pl-3 text-right align-middle">
-                  <span className="text-sm font-semibold text-ink tabular-nums">
-                    {fmtBrlCurto(row.brandTotal)}
-                  </span>
                   <Variacao pct={row.brandMomPct} />
                 </td>
               </tr>
             ))}
           </tbody>
+          <tfoot>
+            <tr className="text-sm font-semibold text-ink tabular-nums">
+              <th scope="row" className="py-2.5 pr-3 text-left text-xs uppercase tracking-wide text-ink-faint">
+                Total
+              </th>
+              {matrix.channels.map((channel) => (
+                <td
+                  key={channel}
+                  className="py-2.5 px-3 text-right"
+                  title={matrix.channelMomPct[channel] != null ? `${fmtPctBr(matrix.channelMomPct[channel] as number)} vs anterior` : undefined}
+                >
+                  {fmtBrlCurto(matrix.channelTotals[channel] ?? 0)}
+                </td>
+              ))}
+              <td className="py-2.5 px-3 text-right">{fmtBrlCurto(matrix.grandTotal)}</td>
+              <td className="py-2.5 pl-3 text-right">
+                <Variacao pct={matrix.grandMomPct} />
+              </td>
+            </tr>
+          </tfoot>
         </table>
       </TableScrollHint>
 
@@ -270,13 +252,8 @@ export default function BrandChannelMatrix({
   );
 }
 
-/** Variacao contra o periodo anterior, com a mesma leitura em toda a matriz. */
+/** Variacao contra o periodo anterior: uma coluna so', sinal e cor. Sem base, travessao. */
 function Variacao({ pct }: { pct: number | null }) {
-  if (pct == null) return null;
-  return (
-    <span className={`block text-xs font-medium tabular-nums ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
-      {/* A seta ja' diz o sentido: o numero vai sem sinal. */}
-      {pct >= 0 ? "▲" : "▼"} {fmtPctBr(Math.abs(pct)).replace("+", "")}
-    </span>
-  );
+  if (pct == null) return <span className="text-sm text-ink-faint">—</span>;
+  return <span className={`text-sm font-medium tabular-nums ${pct >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>{fmtPctBr(pct)}</span>;
 }

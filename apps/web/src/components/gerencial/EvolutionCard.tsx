@@ -158,7 +158,7 @@ export default function EvolutionCard({
           {grainIssue && <p className="text-xs text-ink-faint">Granularidade inconsistente entre os canais</p>}
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap shrink-0">
+        <div className="flex max-w-full min-w-0 flex-wrap items-center gap-2">
           <div
             className="flex items-center gap-1 bg-accent-soft/70 rounded-lg p-0.5"
             role="group"
@@ -260,7 +260,7 @@ export default function EvolutionCard({
         </ul>
       )}
 
-      <div className="flex-1 min-h-[240px] lg:min-h-[280px]">
+      <div className="tc-grafico-entra flex-1 min-h-[240px] lg:min-h-[280px]">
         {loading ? (
           <div className="h-full w-full rounded-xl bg-accent-soft/60 animate-pulse" role="status" aria-busy="true">
             <span className="sr-only">Carregando série…</span>
@@ -382,7 +382,7 @@ export default function EvolutionCard({
                 className="text-xs text-ink-faint tabular-nums"
                 title={showComparison ? "Alinhado ao período atual pela posição do ponto." : undefined}
               >
-                Anterior: {cmp.dateFrom} a {cmp.dateTo}
+                Anterior: {cmp.dateFrom.slice(8, 10)}/{cmp.dateFrom.slice(5, 7)} a {cmp.dateTo.slice(8, 10)}/{cmp.dateTo.slice(5, 7)}
               </p>
             )}
           </>
