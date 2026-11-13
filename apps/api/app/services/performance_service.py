@@ -265,6 +265,47 @@ _ML_COST_MISSING_WARNING = (
     "Ver docs/margem_real_1_diagnostico.md secao 10.5."
 )
 
+# T-0115 (B1-07/A1-12): limiares de maturacao do repasse TikTok POR MARCA.
+# O repasse por pedido chega semanas depois do pedido; ate' la' a fato tem
+# `total_settlement`/`total_fees` quase zerados, e a razao sobre o GMV sai
+# como taxa "real" (nov/26: BARBOURS 0,01%, LESCENT 0,00%; out/26 maduro:
+# taxa 28-33% e repasse ~67% do GMV).
+#  - repasse < 30% do GMV: menos da metade do nivel maduro (~67%), ou seja, a
+#    maior parte dos pedidos do periodo ainda nao foi liquidada. E' o mesmo
+#    corte que a validacao usou para datar o ultimo dia maduro (VAL-B1 B1-07).
+#    Taxa e repasse vem do MESMO extrato por pedido: os dois saem.
+#  - taxa < 1% do GMV: implausivel para o TikTok (a comissao de plataforma
+#    sozinha e' ~6% da receita); so' a taxa sai.
+# Abaixo do limiar o valor vira ausente ("maturando"), nunca taxa real: sai
+# do numerador E do denominador do consolidado e nao alimenta `custo_alto`.
+_TIKTOK_REPASSE_MADURO_MIN_PCT = 30.0
+_TIKTOK_TAXA_PLAUSIVEL_MIN_PCT = 1.0
+
+_TIKTOK_COST_MATURANDO_WARNING = (
+    "Repasse do TikTok ainda nao consolidado para esta marca no periodo "
+    "(repasse abaixo de 30% do GMV ou taxa abaixo de 1%): o custo de "
+    "marketplace fica sem dado/maturando, nunca 0%. O repasse por pedido "
+    "chega semanas depois do pedido."
+)
+
+# T-0115 (B1-08/A1-14): o Ads da Shopee vem dos relatorios exportados por
+# marca; marca sem o relatorio carregado no periodo fica sem Ads (ausente).
+_SHOPEE_ADS_MISSING_REASON = (
+    "Ads da Shopee sem dado para esta marca no periodo: o relatorio de Ads "
+    "(exportado do Seller Center) nao foi carregado no mart — valor ausente, "
+    "nao zero. O total de Ads Shopee soma so' as marcas com o relatorio."
+)
+
+
+def _tiktok_repasse_maduro(settlement: float, gmv: float) -> bool:
+    """Repasse TikTok da marca no periodo atingiu o limiar de maturacao."""
+    return gmv > 0 and settlement / gmv * 100 >= _TIKTOK_REPASSE_MADURO_MIN_PCT
+
+
+def _tiktok_taxa_plausivel(fees: float, gmv: float) -> bool:
+    """Taxa TikTok (valor absoluto) da marca e' plausivel frente ao GMV."""
+    return gmv > 0 and fees / gmv * 100 >= _TIKTOK_TAXA_PLAUSIVEL_MIN_PCT
+
 
 def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
     """Monta uma linha da matriz comparativa marca x canal (Canais Gate 2).
@@ -285,8 +326,19 @@ def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
     cost_available = _COST_APPLICABLE[channel] and fees_n > 0
     shipping_available = _SHIPPING_APPLICABLE[channel] and shipping_n > 0
 
+    # T-0115 (A1-12): repasse TikTok imaturo ou taxa implausivel = sem dado,
+    # nunca 0,0% com `available true` (e fora de mediana/p75/`custo_alto`).
+    tiktok_maturando = channel == "tiktok" and cost_available and not (
+        _tiktok_repasse_maduro(_f(raw.get("total_settlement")), gmv)
+        and _tiktok_taxa_plausivel(fees, gmv)
+    )
+    if tiktok_maturando:
+        cost_available = False
+
     data_warning = None
-    if channel == "tiktok" and cost_available:
+    if tiktok_maturando:
+        data_warning = _TIKTOK_COST_MATURANDO_WARNING
+    elif channel == "tiktok" and cost_available:
         data_warning = _TIKTOK_COST_WARNING
     elif channel == "ml" and _COST_APPLICABLE[channel] and not cost_available:
         data_warning = _ML_COST_MISSING_WARNING
@@ -315,11 +367,13 @@ def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
         "ads_applicable": _ADS_APPLICABLE[channel],
         "marketplace_cost_applicable": _COST_APPLICABLE[channel],
         "seller_shipping_applicable": _SHIPPING_APPLICABLE[channel],
-        # Aditivo e opcional: so' o TikTok tem motivo fixo hoje (fonte nao
-        # integrada). ML/Shopee sem ad_spend no periodo seguem com None.
+        # Aditivo e opcional: TikTok (fonte nao integrada) e, desde a T-0115,
+        # Shopee (relatorio de Ads da marca nao carregado). ML sem ad_spend
+        # no periodo segue com None.
         "ads_missing_reason": (
-            _TIKTOK_ADS_MISSING_REASON
-            if channel == "tiktok" and not ads_available else None
+            _TIKTOK_ADS_MISSING_REASON if channel == "tiktok" and not ads_available
+            else _SHOPEE_ADS_MISSING_REASON if channel == "shopee" and not ads_available
+            else None
         ),
         "data_warning": data_warning,
         "signals": [],
@@ -572,6 +626,38 @@ def _brand_mkt_rows(
     return result
 
 
+def _shopee_ads_cobertura(
+    db: Session, start: date, end: date, brand_keys: list[str] | None = None,
+) -> dict | None:
+    """T-0115 (B1-08/A1-14): marcas Shopee com GMV no recorte que tem Ads.
+
+    O Ads Shopee vem do relatorio exportado por marca; sem ele, `ad_spend` e'
+    NULL na fato e o total do canal soma so' as marcas com relatorio. Mesmo
+    contrato de `_cobertura_marcas` (`None` = Shopee sem GMV no recorte).
+    """
+    params: dict = {"start": start, "end": end, "mkt_id": SHOPEE_ID}
+    brand_filter = _brand_filter_sql(brand_keys, params)
+    sql = text(f"""
+        -- shopee_ads_cobertura
+        SELECT
+            l.brand_key,
+            COALESCE(SUM(f.gmv), 0)       AS gmv,
+            COALESCE(SUM(f.ad_spend), 0)  AS ad_spend
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date BETWEEN :start AND :end
+          AND f.marketplace_id = :mkt_id
+          {brand_filter}
+        GROUP BY l.brand_key
+    """)
+    rows = [
+        {"brand": r["brand_key"], "shopee_gmv": _f(r.get("gmv")), "shopee_ad_spend": _f(r.get("ad_spend")) or None}
+        for r in db.execute(sql, params).mappings().all()
+        if r.get("brand_key")
+    ]
+    return _cobertura_marcas(rows, "shopee_ad_spend", "shopee_gmv")
+
+
 # ---------------------------------------------------------------------------
 # Overview
 # ---------------------------------------------------------------------------
@@ -664,6 +750,13 @@ def get_overview(
     else:
         prev = _assemble({})
         mom = None
+
+    # T-0115 (A1-14): o Ads Shopee do recorte pode cobrir so' parte das marcas.
+    # So' no periodo atual; consultado depois do anterior (ordem das consultas
+    # preservada para quem ja' as observa).
+    cur["shopee_ads_cobertura"] = (
+        _shopee_ads_cobertura(db, start, end, brand_keys) if SHOPEE_ID in mkt_ids else None
+    )
 
     ref_month_label = period.ref_month if period is not None else f"{year:04d}-{month:02d}"
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
@@ -1147,6 +1240,7 @@ def get_canais(
             COALESCE(SUM(f.ad_spend), 0)                 AS ad_spend,
             COALESCE(SUM(f.ad_revenue), 0)                AS ad_revenue,
             COALESCE(SUM(f.total_fees), 0)                AS total_fees,
+            COALESCE(SUM(f.total_settlement), 0)          AS total_settlement,
             COALESCE(SUM(f.seller_shipping_cost), 0)      AS seller_shipping_cost,
             COUNT(f.ad_spend)                             AS ad_spend_n,
             COUNT(f.total_fees)                           AS total_fees_n,
@@ -1394,11 +1488,16 @@ def _pct_coberto(brand_rows: list[dict], base_field: str, gmv_field: str) -> flo
     return _pct_da_marca(num, den)
 
 
-def _cobertura_marcas(brand_rows: list[dict], base_field: str, gmv_field: str) -> dict | None:
+def _cobertura_marcas(
+    brand_rows: list[dict], base_field: str, gmv_field: str, maturando_field: str | None = None,
+) -> dict | None:
     """Quantas marcas com GMV no canal entraram no % consolidado.
 
     `None` = canal sem GMV no recorte (nao ha' o que cobrir). `status`:
     `completa` (todas), `parcial` (algumas) ou `sem_dado` (nenhuma).
+    Com `maturando_field` (T-0115), publica tambem `marcas_maturando`: as
+    marcas sem dado cujo valor existia mas ficou abaixo do limiar de
+    maturacao (subconjunto de `marcas_sem_dado`).
     """
     marcas = _marcas_do_canal(brand_rows, gmv_field)
     if not marcas:
@@ -1406,7 +1505,12 @@ def _cobertura_marcas(brand_rows: list[dict], base_field: str, gmv_field: str) -
     sem = sorted(r["brand"] for r in marcas if r.get(base_field) is None)
     com = len(marcas) - len(sem)
     status = "completa" if not sem else ("parcial" if com else "sem_dado")
-    return {"status": status, "marcas_com_dado": com, "marcas_total": len(marcas), "marcas_sem_dado": sem}
+    out = {"status": status, "marcas_com_dado": com, "marcas_total": len(marcas), "marcas_sem_dado": sem}
+    if maturando_field is not None:
+        out["marcas_maturando"] = sorted(
+            r["brand"] for r in marcas if r.get(base_field) is None and r.get(maturando_field) == "maturando"
+        )
+    return out
 
 
 def get_financeiro(
@@ -1464,13 +1568,26 @@ def get_financeiro(
             tk_gmv = _f(tk["gmv"])
             tk_fees = abs(_f(tk["total_fees"]))
             tk_settlement = _f(tk["total_settlement"])
+            # T-0115 (B1-07): repasse abaixo do limiar = maturando. Taxa e
+            # repasse vem do mesmo extrato por pedido: os dois viram ausentes
+            # e saem do numerador e do denominador do consolidado. Taxa
+            # implausivel (< 1%) com repasse maduro tira so' a taxa.
+            maduro = _tiktok_repasse_maduro(tk_settlement, tk_gmv)
+            taxa_ok = maduro and _tiktok_taxa_plausivel(tk_fees, tk_gmv)
+            if maduro:
+                repasse_status = "maduro"
+            elif tk_settlement or tk_fees:
+                repasse_status = "maturando"
+            else:
+                repasse_status = "sem_dado"
             row.update({
                 "tiktok_gmv": tk_gmv or None,
-                "tiktok_settlement": tk_settlement or None,
-                "tiktok_fees": tk_fees or None,
+                "tiktok_settlement": (tk_settlement or None) if maduro else None,
+                "tiktok_fees": (tk_fees or None) if taxa_ok else None,
                 # T-0085: sem o valor-base, o % e' nulo (nunca 0,0%).
-                "tiktok_avg_fee_pct": _pct_da_marca(tk_fees, tk_gmv),
-                "tiktok_avg_settlement_pct": _pct_da_marca(tk_settlement, tk_gmv),
+                "tiktok_avg_fee_pct": _pct_da_marca(tk_fees, tk_gmv) if taxa_ok else None,
+                "tiktok_avg_settlement_pct": _pct_da_marca(tk_settlement, tk_gmv) if maduro else None,
+                "tiktok_repasse_status": repasse_status,
             })
 
         if ml:
@@ -1539,7 +1656,9 @@ def get_financeiro(
                 "shopee_avg_fee_pct": _pct_da_marca(sh_fees, sh_gmv),
                 "shopee_avg_settlement_pct": _pct_da_marca(sh_settlement, sh_gmv),
                 "shopee_ad_spend": sh_spend or None,
-                "shopee_ad_revenue": sh_revenue or None,
+                # T-0115 (B1-08): receita de Ads so' com investimento medido;
+                # assim o ROAS consolidado fica so' sobre as marcas com Ads.
+                "shopee_ad_revenue": (sh_revenue or None) if sh_spend else None,
                 "shopee_roas": round(sh_revenue / sh_spend, 2) if sh_spend > 0 else None,
                 "shopee_shipping_cost": sh_shipping or None,
                 "shopee_shipping_pct_of_gmv": round(sh_shipping / sh_gmv * 100, 2) if sh_gmv > 0 else None,
@@ -1578,8 +1697,13 @@ def get_financeiro(
         # cobertura (`*_cobertura`) diz quantas marcas entraram.
         "tiktok_avg_fee_pct": _pct_coberto(brand_rows, "tiktok_fees", "tiktok_gmv"),
         "tiktok_avg_settlement_pct": _pct_coberto(brand_rows, "tiktok_settlement", "tiktok_gmv"),
-        "tiktok_fee_cobertura": _cobertura_marcas(brand_rows, "tiktok_fees", "tiktok_gmv"),
-        "tiktok_settlement_cobertura": _cobertura_marcas(brand_rows, "tiktok_settlement", "tiktok_gmv"),
+        # T-0115: marca com repasse imaturo aparece em `marcas_maturando`.
+        "tiktok_fee_cobertura": _cobertura_marcas(
+            brand_rows, "tiktok_fees", "tiktok_gmv", "tiktok_repasse_status",
+        ),
+        "tiktok_settlement_cobertura": _cobertura_marcas(
+            brand_rows, "tiktok_settlement", "tiktok_gmv", "tiktok_repasse_status",
+        ),
         "ml_gmv": ml_gmv_t or None,
         "ml_ad_spend": ml_spend_t or None,
         "ml_ad_revenue": ml_rev_t or None,
@@ -1597,8 +1721,11 @@ def get_financeiro(
         "shopee_avg_settlement_pct": _pct_coberto(brand_rows, "shopee_settlement", "shopee_gmv"),
         "shopee_fee_cobertura": _cobertura_marcas(brand_rows, "shopee_fees", "shopee_gmv"),
         "shopee_settlement_cobertura": _cobertura_marcas(brand_rows, "shopee_settlement", "shopee_gmv"),
+        # T-0115 (B1-08): o total e o ROAS somam so' as marcas com Ads; a
+        # cobertura diz quantas (e quais faltam).
         "shopee_ad_spend": sh_spend_t or None,
         "shopee_roas": round(sh_rev_t / sh_spend_t, 2) if sh_spend_t > 0 else None,
+        "shopee_ads_cobertura": _cobertura_marcas(brand_rows, "shopee_ad_spend", "shopee_gmv"),
     }
 
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None

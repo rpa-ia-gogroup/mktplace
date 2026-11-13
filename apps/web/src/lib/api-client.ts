@@ -44,6 +44,8 @@ export interface OverviewData extends EcoBase {
   tiktok_customers: number | null;
   ml_unique_buyers: number | null;
   shopee_unique_buyers: number | null;
+  /** T-0115: marcas Shopee com Ads no recorte. Opcional: API antiga nao envia. */
+  shopee_ads_cobertura?: CoberturaMarcas | null;
   gmv_mom_pct: number | null;
   /** `null` = periodo anterior sem linha (ou comparacao nao pedida). */
   prev_gmv: number | null;
@@ -355,6 +357,7 @@ export function fetchOverview(
       tiktok_customers?: number | null;
       ml_unique_buyers?: number | null;
       shopee_unique_buyers?: number | null;
+      shopee_ads_cobertura?: CoberturaMarcas | null;
     };
     /** T-0111: `null` inteiro quando `compare` nao foi pedido. */
     previous: {
@@ -401,6 +404,7 @@ export function fetchOverview(
           tiktok_customers: raw.current.tiktok_customers ?? null,
           ml_unique_buyers: raw.current.ml_unique_buyers ?? null,
           shopee_unique_buyers: raw.current.shopee_unique_buyers ?? null,
+          shopee_ads_cobertura: raw.current.shopee_ads_cobertura ?? null,
           gmv_mom_pct: t.gmv_mom_pct,
           prev_gmv: t.prev_gmv,
           prev_orders: t.prev_orders,
@@ -1486,6 +1490,8 @@ export interface FinanceiroKpis {
   ml_fee_cobertura?: CoberturaMarcas | null;
   shopee_fee_cobertura?: CoberturaMarcas | null;
   shopee_settlement_cobertura?: CoberturaMarcas | null;
+  /** T-0115: marcas Shopee com Ads; total e ROAS so' sobre elas. */
+  shopee_ads_cobertura?: CoberturaMarcas | null;
 }
 
 /** T-0085: cobertura por marca de um % consolidado do Financeiro. */
@@ -1495,6 +1501,8 @@ export interface CoberturaMarcas {
   marcas_com_dado: number;
   marcas_total: number;
   marcas_sem_dado?: string[];
+  /** T-0115: sem dado porque o repasse ainda esta' maturando (subconjunto de marcas_sem_dado). */
+  marcas_maturando?: string[];
 }
 
 /** O texto "parcial (N de M marcas)" vem de `textoCoberturaFinanceiro` (src/lib/full-visao-geral.ts). */

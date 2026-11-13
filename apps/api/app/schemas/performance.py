@@ -37,6 +37,9 @@ class KpiSummary(BaseModel):
     ml_unique_buyers: Optional[int] = None
     shopee_unique_buyers: Optional[int] = None
     shopee_roas: Optional[float] = None
+    #: T-0115: marcas Shopee com GMV que tem Ads no recorte. So' no `current`;
+    #: `None` = Shopee fora do filtro ou sem GMV. Opcional e aditivo.
+    shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class OverviewResponse(BaseModel):
@@ -398,6 +401,8 @@ class FinanceiroKpis(BaseModel):
     ml_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_settlement_cobertura: Optional["CoberturaMarcas"] = None
+    # T-0115 (B1-08): marcas Shopee com Ads; total e ROAS so' sobre elas.
+    shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class CoberturaMarcas(BaseModel):
@@ -410,9 +415,15 @@ class CoberturaMarcas(BaseModel):
     marcas_com_dado: int
     marcas_total: int
     marcas_sem_dado: list[str] = []
+    #: T-0115: marcas sem dado porque o valor ficou abaixo do limiar de
+    #: maturacao (repasse TikTok). Subconjunto de `marcas_sem_dado`.
+    marcas_maturando: list[str] = []
 
 
 FinanceiroKpis.model_rebuild()
+# T-0115: o Overview tambem publica cobertura (Ads Shopee).
+KpiSummary.model_rebuild()
+OverviewResponse.model_rebuild()
 # T-0088: a Qualidade reusa o mesmo contrato de cobertura.
 QualityKpis.model_rebuild()
 QualityResponse.model_rebuild()
@@ -426,6 +437,8 @@ class FinanceiroBrandRow(BaseModel):
     tiktok_fees: Optional[float] = None
     tiktok_avg_fee_pct: Optional[float] = None
     tiktok_avg_settlement_pct: Optional[float] = None
+    #: T-0115: "maduro" | "maturando" (repasse < 30% do GMV) | "sem_dado".
+    tiktok_repasse_status: Optional[str] = None
     ml_gmv: Optional[float] = None
     ml_ad_spend: Optional[float] = None
     ml_ad_revenue: Optional[float] = None

@@ -85,6 +85,17 @@ export type DeltaTone = "higher_is_better" | "lower_is_better" | "neutral";
  * shortcut: derivado do ROAS ja' arredondado em 2 casas (erro < 0,01 p.p.);
  * se precisar exato, expor ad_revenue por canal no /overview.
  */
+/**
+ * T-0115 (A1-14): "Ads Shopee parcial (1 de 5 marcas)" quando so' parte das
+ * marcas Shopee com GMV tem Ads no recorte; senao `null`.
+ */
+export function notaAdsShopeeParcial(
+  c: { status: string; marcas_com_dado: number; marcas_total: number } | null | undefined,
+): string | null {
+  if (!c || c.status !== "parcial") return null;
+  return `Ads Shopee parcial (${c.marcas_com_dado} de ${c.marcas_total} ${c.marcas_total === 1 ? "marca" : "marcas"})`;
+}
+
 export function acosDoRoas(roas: number | null | undefined): number | null {
   return roas != null && roas > 0 ? 100 / roas : null;
 }
@@ -258,6 +269,8 @@ export function buildKpiBand(
     adsValue = fmtBrlCurto(overview.ad_spend);
   }
   const adsDelta = compare && adsValue ? deltaPct(overview?.ad_spend, overview?.prev_ad_spend) : null;
+  // T-0115 (A1-14): o Ads Shopee do recorte pode cobrir so' parte das marcas.
+  const adsShopeeParcial = shopeeSelected ? notaAdsShopeeParcial(overview?.shopee_ads_cobertura) : null;
   const adSpend: KpiDescriptor = {
     key: "ad_spend",
     label: "Investimento em Ads",
@@ -269,7 +282,7 @@ export function buildKpiBand(
     deltaTone: "neutral",
     reference: adsDelta != null ? `antes ${fmtBrlCurto(overview!.prev_ad_spend!)}` : null,
     comparisonNote: null,
-    coverageNote: [adsCoverageNote(channels), notaSoPagos(overview)].filter(Boolean).join(" · ") || null,
+    coverageNote: [adsCoverageNote(channels), adsShopeeParcial, notaSoPagos(overview)].filter(Boolean).join(" · ") || null,
     channelValues: null,
     highlightChannel: null,
     accent: "bg-chart-5",
