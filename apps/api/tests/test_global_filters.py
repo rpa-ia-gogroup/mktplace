@@ -592,13 +592,13 @@ def test_get_overview_periodo_customizado_parcial_com_compare_continua_usando_ja
     assert result["compare_date_from"] != date(2026, 2, 1)
 
 
-def test_get_pedidos_intersecta_canal_shopee_isolado_com_zero_honesto():
-    # Pedidos so cobre TikTok/ML na fonte atual; pedir so Shopee deve dar
-    # mkt_ids vazio (zero honesto), nao TK+ML.
+def test_get_pedidos_canal_shopee_isolado_consulta_so_a_shopee_e_sem_linha_e_null():
+    # T-0116: a Shopee entra em Pedidos. Pedir so Shopee consulta so a Shopee
+    # (nunca TK+ML); sem linha na fonte, o total e' null (sem dado), nao 0.
     db = FakeMappingSession([[], [], []])
     result = perf_svc.get_pedidos(db, 30, marketplace="shopee")
-    assert result["kpis"]["total_orders"] == 0
-    assert db.captured_params[0]["mkt_ids"] == []
+    assert result["kpis"]["total_orders"] is None
+    assert db.captured_params[0]["mkt_ids"] == [perf_svc.SHOPEE_ID]
 
 
 # ---------------------------------------------------------------------------

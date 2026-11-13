@@ -29,6 +29,9 @@ export const VISUAL_DETALHE: Record<ChaveDetalhe, { icone: LucideIcon; identidad
   ml_pedidos: { icone: ShoppingBag, identidade: "pedidos" },
   tk_cancelados: { icone: PackageX, identidade: "atendimento" },
   ml_cancelados: { icone: PackageX, identidade: "atendimento" },
+  sh_pedidos: { icone: ShoppingBag, identidade: "pedidos" },
+  sh_cancelados: { icone: PackageX, identidade: "atendimento" },
+  sh_gmv: { icone: CircleDollarSign, identidade: "gmv" },
   tk_gmv: { icone: CircleDollarSign, identidade: "gmv" },
   ml_gmv: { icone: CircleDollarSign, identidade: "gmv" },
 };
@@ -68,9 +71,10 @@ function Cartao({
 }
 
 /** Os 4 totais da Visao geral: pedidos, GMV, ticket e cancelamento. */
-export function FaixaTotais({ dados, series, onAbrir }: { dados: Dados; series: Series; onAbrir: (chave: ChaveDetalhe) => void }) {
+/** `consolidado`: "Consolidado (TikTok Shop + Mercado Livre + Shopee)", os canais do filtro (T-0116). */
+export function FaixaTotais({ dados, series, onAbrir, consolidado }: { dados: Dados; series: Series; onAbrir: (chave: ChaveDetalhe) => void; consolidado: string }) {
   const k = dados.kpis;
-  const canceladosTotal = (dados.tk?.canceled ?? 0) + (dados.ml?.canceled ?? 0);
+  const canceladosTotal = (dados.tk?.canceled ?? 0) + (dados.ml?.canceled ?? 0) + (dados.sh?.canceled ?? 0);
   const taxa = k?.cancel_rate_pct ?? null;
   return (
     <div className={GRADE_PEDIDOS}>
@@ -89,10 +93,10 @@ export function FaixaTotais({ dados, series, onAbrir }: { dados: Dados; series: 
         identidade="gmv"
         valor={k ? fmtBrlCurto(k.total_gmv) : null}
         serie={series.gmv}
-        ajuda={<InfoDica emControle texto="Só TikTok Shop + Mercado Livre" />}
+        ajuda={<InfoDica emControle texto={consolidado} />}
         onAbrir={() => onAbrir("total_gmv")}
       />
-      <Cartao rotulo="Ticket médio" icone={Receipt} identidade="ticket" valor={k ? fmtBrlCurto(k.avg_ticket) : null} serie={series.ticket} onAbrir={() => onAbrir("ticket")} />
+      <Cartao rotulo="Ticket médio" icone={Receipt} identidade="ticket" valor={k?.avg_ticket != null ? fmtBrlCurto(k.avg_ticket) : null} serie={series.ticket} onAbrir={() => onAbrir("ticket")} />
       <Cartao
         rotulo="Taxa de cancelamento"
         icone={PackageX}

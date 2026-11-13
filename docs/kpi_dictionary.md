@@ -554,6 +554,46 @@ Limitacoes conhecidas:
   alinhar a API e remover `paraPedidosLiquidos`.
 - A **taxa de cancelamento continua sobre o bruto**, como a API calcula.
 
+### Shopee em Pedidos e sem dado ≠ 0 (T-0116, B1-10, 2026-11-13)
+
+A Shopee entra na tela nos cartões (aba própria), na série diária e na tabela por marca. Antes, `get_pedidos`
+intersectava o filtro com TikTok/ML (commit b91f7861, quando a Shopee não tinha pedidos no mart) e `channels=shopee`
+devolvia zero.
+
+Fonte da Shopee: `marts.fact_marketplace_daily_performance` com `marketplace_id = SHOPEE_ID`, carregada pelo
+`daily_shopee` (API da Shopee), todas as contas. `orders` = pedidos **líquidos = pagos** (sem cancelados),
+`canceled_orders`, `delivered_orders` e `gmv`.
+
+| Campo (API) | Fórmula | Base |
+|---|---|---|
+| `shopee.orders` | `SUM(orders)` | líquido (pagos), como `tiktok.orders` |
+| `shopee.canceled` / `shopee.delivered` / `shopee.gmv` | `SUM(canceled_orders)` / `SUM(delivered_orders)` (0 vira null, como TK/ML) / `SUM(gmv)` | — |
+| `shopee.cancel_rate_pct` | `canceled / (paid + canceled) * 100` | mesmo denominador do ML; 0 real é 0 |
+| `daily[].shopee_orders`, `shopee_canceled` | por dia | líquido |
+| `by_brand[].shopee_orders`, `shopee_canceled`, `shopee_cancel_rate_pct`, `shopee_gmv` | por marca | líquido |
+| `kpis.total_orders` | `Σ (paid + canceled)` dos canais com linha | bruto (contrato existente; o web desconta os cancelados dos 3) |
+| `kpis.total_gmv` / `kpis.avg_ticket` | `Σ gmv` / `Σ gmv ÷ Σ paid` | ticket sobre pagos |
+| `kpis.cancel_rate_pct` | `Σ canceled / Σ (paid + canceled)` | — |
+| `by_brand[].total_orders` | `tiktok_orders + ml_orders + ml_canceled + shopee_orders` | o web desconta só `ml_canceled` |
+
+No web, `paraPedidosLiquidos` passa a descontar `tk.canceled + ml.canceled + sh.canceled` do total; o cartão da
+Shopee não é descontado (já é líquido). O texto de ajuda do GMV total diz os canais do filtro:
+"Consolidado (TikTok Shop + Mercado Livre + Shopee)".
+
+**Sem dado ≠ 0** (mesma regra da seção seguinte, T-0111):
+- canal pedido sem nenhuma linha no recorte: o bloco `tiktok`/`ml`/`shopee` vem com todos os campos `null`; na
+  marca, os campos do canal vêm `null`; na série, o canal sem linha naquele dia vem `null`;
+- nenhum canal pedido com linha: `kpis.total_orders`, `total_gmv`, `avg_ticket` e `cancel_rate_pct` vêm `null`
+  (antes: 0 e ticket 0,0 — B1-10, ÁPICE × ML);
+- `avg_ticket` `null` também quando há linha mas nenhum pedido pago;
+- total com canal ausente: soma só os presentes; a resposta traz `canais_sem_dado` (`"tiktok"`/`"ml"`/`"shopee"`)
+  e `warnings` com `sem_dado: … totais parciais (soma só de …)`. A tela mostra "<canal> sem dado no período ·
+  total parcial, só de …";
+- zero real (linha com 0) continua 0. Na tela, `null` aparece como "—", nunca "0" ou "R$ 0,00".
+
+Medição de referência (VAL-B1, out/26): TikTok + ML = 282.376 pagos (TikTok 223.761, ML 58.615); a Shopee tem
+94.568 pagos e 18.191 cancelados na fonte. Com a Shopee no filtro, o card de pedidos passa a somar os três.
+
 ## Sem dado ≠ 0 (T-0111, validação da Torre de 13/11/2026)
 
 Regra da API (mesmo padrão do C2-01 e da T-0085):
