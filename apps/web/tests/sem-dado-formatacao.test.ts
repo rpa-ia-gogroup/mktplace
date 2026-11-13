@@ -31,3 +31,18 @@ test("T-0111 Shopee FBS: total, contagem, share e media nulos viram '—'", () =
   assert.equal(fbs.fmtHandling({ sample_count: 3, hours_avg: null, days_avg: null } as never), "—");
   assert.equal(fbs.parseGmv(null), null);
 });
+
+// Contrato final (3324a490): /regioes/summary pode mandar gmv/orders/ufs_com_venda null.
+import { valorExato as valorExatoRegioes } from "../src/lib/regioes-cartoes.ts";
+import { fmtShareOfTotalPct } from "../src/lib/regioes-format.ts";
+import { readFileSync } from "node:fs";
+
+test("T-0111 Regioes: total null nao vira 'R$ 0'/'0' nem participacao", () => {
+  assert.equal(valorExatoRegioes("gmv", { gmv: null, orders: null }), null);
+  assert.equal(valorExatoRegioes("pedidos", { gmv: null, orders: null }), null);
+  assert.match(valorExatoRegioes("gmv", { gmv: 0, orders: 0 }) ?? "", /^R\$\s0$/, "zero medido continua zero");
+  assert.equal(fmtShareOfTotalPct(10, null), null);
+  const cartoes = readFileSync(new URL("../src/components/regioes/RegioesCartoes.tsx", import.meta.url), "utf8");
+  assert.match(cartoes, /valor=\{r\?\.ufs_com_venda != null \?/, "UFs com venda nulo nao vira 'null/27'");
+  assert.match(cartoes, /valor=\{r\?\.gmv != null \? fmtBrlCurto\(r\.gmv\) : null\}/);
+});

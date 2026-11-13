@@ -19,6 +19,8 @@ const optStamp = z.string().nullish();
 /** `Decimal` do FastAPI: chega como string decimal (ou numero). */
 const decimal = z.union([z.number().finite(), z.string().regex(/^-?\d+(\.\d+)?$/)]);
 const optDecimal = decimal.nullish();
+/** T-0111: contagem de TOTAL que vem `null` sem linha no recorte (nunca 0). */
+const optCount = count.nullish();
 
 // ---------------------------------------------------------------------------
 // Expedicao — Shopee e Mercado Livre (fotografia por conta)
@@ -187,9 +189,9 @@ export const mlFulfillmentContract = z.object({
   share_full_gmv: optNum,
   share_full_orders: optNum,
   share_full_units: optNum,
-  paid_gmv_total: decimal,
-  paid_orders_total: count,
-  paid_units_total: count,
+  paid_gmv_total: optDecimal,
+  paid_orders_total: optCount,
+  paid_units_total: optCount,
   by_class: z.array(
     z.object({
       fulfillment_class: z.enum(["full", "non_full", "unknown"]),
@@ -251,9 +253,9 @@ export const shopeeFbsContract = z.object({
   }),
   totals: z.object({
     gross_gmv: optDecimal,
-    created_orders: count,
-    eligible_orders: count,
-    cancelled_orders: count,
+    created_orders: optCount,
+    eligible_orders: optCount,
+    cancelled_orders: optCount,
   }),
   rates: z.object({ cancellation_rate: optNum }),
   shares: z.object({

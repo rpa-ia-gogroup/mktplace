@@ -110,3 +110,61 @@ test("T-0111 MCP-02 recorte com dado: nada muda", async () => {
   assert.equal(env.data.total.change_pct, 25);
   assert.equal(env.data.limitations.filter((l: any) => l.topic === "sem_dado").length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// Contrato FINAL da API (3324a490): `previous` null sem `compare`; totais do
+// /ml-fulfillment e do /shopee-fbs podem vir null. Nada pode quebrar nem virar 0.
+// ---------------------------------------------------------------------------
+import { FIXED_NOW } from "./oracle-fixtures.ts";
+import { ML_FULL, ML_FULL_ESTOQUE, ML_FULL_SEM_PEDIDO, SHOPEE_ESTOQUE, SHOPEE_FBS } from "./oracle-fixtures-operacional.ts";
+
+async function chamarTool(routes: Record<string, unknown>, nome: string, args: Record<string, unknown>, now = FIXED_NOW): Promise<Env> {
+  const server = buildOracleServer({
+    backendBaseUrl: "https://mktplace-api.onrender.com",
+    fetchImpl: jsonFetch(routes),
+    now: () => now,
+    rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
+  });
+  const [ct, st] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "t0111b", version: "0.0.0" });
+  await Promise.all([client.connect(ct), server.connect(st)]);
+  const res = await client.callTool({ name: nome, arguments: args });
+  assert.notEqual(res.isError, true, JSON.stringify(res.content));
+  return res.structuredContent as Env;
+}
+
+test("T-0111 contrato final: overview com `previous` null (sem compare) nao quebra", async () => {
+  const overview = { ...OVERVIEW, previous: null, gmv_mom_pct: null };
+  const env = await chamar(overview, BRANDS, { periodo: "mes_anterior" });
+  assert.equal(env.data.total.gmv, 1000);
+  assert.equal(env.data.total.gmv_previous, null);
+  const comComparar = await chamar(overview, BRANDS, { periodo: "mes_anterior", comparar: true });
+  assert.equal(comComparar.data.total.gmv_previous, null);
+  assert.equal(comComparar.data.total.change_pct, null);
+});
+
+const STOCK = {
+  "/api/v1/performance/ml-fulfillment": ML_FULL,
+  "/api/v1/performance/ml-full-estoque": ML_FULL_ESTOQUE,
+  "/api/v1/performance/shopee-fbs": SHOPEE_FBS,
+  "/api/v1/performance/shopee-fbs-estoque": SHOPEE_ESTOQUE,
+};
+
+test("T-0111 contrato final: /ml-fulfillment com totais null -> sem_dado, nao erro nem 0", async () => {
+  const ml = { ...ML_FULL_SEM_PEDIDO, paid_gmv_total: null, paid_orders_total: null, paid_units_total: null };
+  const env = await chamarTool({ ...STOCK, "/api/v1/performance/ml-fulfillment": ml }, "torre_estoque_full", { canais: ["ml"], marcas: ["apice"] });
+  assert.equal(env.data.ml_full.estado, "sem_dado");
+  assert.equal(env.data.ml_full.gmv_pago_total, null);
+  assert.equal(env.data.ml_full.pedidos_pagos, null);
+});
+
+test("T-0111 contrato final: /shopee-fbs com totais null -> sem_dado, nao erro nem 0", async () => {
+  const fbs = {
+    ...SHOPEE_FBS,
+    totals: { ...SHOPEE_FBS.totals, gross_gmv: null, created_orders: null, eligible_orders: null, cancelled_orders: null },
+  };
+  const env = await chamarTool({ ...STOCK, "/api/v1/performance/shopee-fbs": fbs }, "torre_estoque_full", { canais: ["shopee"] });
+  assert.equal(env.data.shopee_fbs.estado, "sem_dado");
+  assert.equal(env.data.shopee_fbs.gmv_bruto, null);
+  assert.equal(env.data.shopee_fbs.pedidos_criados, null);
+});

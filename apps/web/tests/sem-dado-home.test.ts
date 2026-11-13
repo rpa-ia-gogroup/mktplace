@@ -134,3 +134,11 @@ test("T-0111 home: o heroi recebe o aviso de sem dado e mostra o texto", () => {
   assert.match(hero, /\{semDadoNoRecorte && \(/);
   assert.match(hero, /SEM_DADO_NO_RECORTE_DICA/);
 });
+
+test("T-0111 contrato final: `previous` null (sem compare) nao quebra o normalizador nem a faixa", async () => {
+  const { totaisDoOverview } = await semDado();
+  const t = totaisDoOverview({ gmv: 1000, orders: 40, avg_ticket: 25 }, null, null, "2026-11-13T17:40:29Z");
+  assert.deepEqual([t.gmv, t.prev_gmv, t.prev_orders, t.gmv_mom_pct], [1000, null, null, null]);
+  const src = fonte("src/lib/api-client.ts");
+  assert.ok(!/raw\.previous\.[a-z_]+/.test(src), "todo acesso a `previous` usa `?.`");
+});

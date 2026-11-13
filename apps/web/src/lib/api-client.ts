@@ -356,6 +356,7 @@ export function fetchOverview(
       ml_unique_buyers?: number | null;
       shopee_unique_buyers?: number | null;
     };
+    /** T-0111: `null` inteiro quando `compare` nao foi pedido. */
     previous: {
       gmv: number | null;
       orders?: number | null;
@@ -366,7 +367,7 @@ export function fetchOverview(
       tiktok_gmv?: number | null;
       ml_gmv?: number | null;
       shopee_gmv?: number | null;
-    };
+    } | null;
     gmv_mom_pct: number | null;
     base?: EcoBase["base"];
     nao_pago_disponivel?: EcoBase["nao_pago_disponivel"];
@@ -405,12 +406,12 @@ export function fetchOverview(
           prev_orders: t.prev_orders,
           prev_avg_ticket: t.prev_avg_ticket,
           sem_dado: t.sem_dado,
-          prev_ad_spend: raw.previous.ad_spend ?? null,
-          prev_ml_roas: raw.previous.ml_roas ?? null,
-          prev_shopee_roas: raw.previous.shopee_roas ?? null,
-          prev_tiktok_gmv: raw.previous.tiktok_gmv ?? null,
-          prev_ml_gmv: raw.previous.ml_gmv ?? null,
-          prev_shopee_gmv: raw.previous.shopee_gmv ?? null,
+          prev_ad_spend: raw.previous?.ad_spend ?? null,
+          prev_ml_roas: raw.previous?.ml_roas ?? null,
+          prev_shopee_roas: raw.previous?.shopee_roas ?? null,
+          prev_tiktok_gmv: raw.previous?.tiktok_gmv ?? null,
+          prev_ml_gmv: raw.previous?.ml_gmv ?? null,
+          prev_shopee_gmv: raw.previous?.shopee_gmv ?? null,
           base: raw.base ?? null,
           nao_pago_disponivel: raw.nao_pago_disponivel ?? null,
         },
@@ -2173,10 +2174,11 @@ export interface RegioesCoberturaCampos {
 }
 
 export interface RegioesSummaryData extends RegioesCoberturaCampos {
-  gmv: number;
-  orders: number;
-  units_sold: number;
-  ufs_com_venda: number;
+  /** T-0111: `null` = sem linha na fonte no recorte (nunca 0). */
+  gmv: number | null;
+  orders: number | null;
+  units_sold: number | null;
+  ufs_com_venda: number | null;
   uf_known_orders: number;
   uf_eligible_orders: number;
   uf_fill_pct: number | null;

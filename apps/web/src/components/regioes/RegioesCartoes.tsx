@@ -47,19 +47,19 @@ export default function CartoesRegioes({ resumo, notaDoGmv, onAbrir }: Props) {
         icone={VISUAL_REGIOES.gmv.icone}
         cor={cor("gmv")}
         ajuda={notaDoGmv ? <InfoDica emControle texto={notaDoGmv} /> : undefined}
-        valor={r ? fmtBrlCurto(r.gmv) : null}
-        legenda={r ? undefined : AUSENTE}
-        onAbrir={r ? () => onAbrir("gmv") : undefined}
+        valor={r?.gmv != null ? fmtBrlCurto(r.gmv) : null}
+        legenda={r?.gmv != null ? undefined : AUSENTE}
+        onAbrir={r?.gmv != null ? () => onAbrir("gmv") : undefined}
       />
       <CartaoIndicador
         rotulo="Pedidos"
         icone={VISUAL_REGIOES.pedidos.icone}
         cor={cor("pedidos")}
-        valor={r ? fmtNumCurto(r.orders) : null}
-        legenda={r ? undefined : AUSENTE}
-        onAbrir={r ? () => onAbrir("pedidos") : undefined}
+        valor={r?.orders != null ? fmtNumCurto(r.orders) : null}
+        legenda={r?.orders != null ? undefined : AUSENTE}
+        onAbrir={r?.orders != null ? () => onAbrir("pedidos") : undefined}
       />
-      <CartaoIndicador rotulo="UFs com venda" icone={MapPin} cor={cor("ticket")} valor={r ? `${r.ufs_com_venda}/27` : null} legenda={r ? undefined : AUSENTE} />
+      <CartaoIndicador rotulo="UFs com venda" icone={MapPin} cor={cor("ticket")} valor={r?.ufs_com_venda != null ? `${r.ufs_com_venda}/27` : null} legenda={r?.ufs_com_venda != null ? undefined : AUSENTE} />
       <CartaoIndicador
         rotulo={UF_FILL_LABEL}
         icone={Percent}
