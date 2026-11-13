@@ -34,6 +34,9 @@ def _fonte(*, hoje: date, falhas=(), resposta=(), chat=(), pedidos=(), devolucoe
          "conversas_7d": 90, "conversas_30d": 300},
     ], falhas_coleta=falhas)
     fonte.po = _po(hoje)
+    # T-0114: carga da Silver em dia no `hoje` do cenario (carga velha corta a serie)
+    carga = datetime(hoje.year, hoje.month, hoje.day, 14, 0, tzinfo=timezone.utc)
+    fonte.cx.dados["shopee_marcas"] = [dict(r, atualizado_em=carga) for r in fonte.cx.dados["shopee_marcas"]]
     fonte.coleta.update(_rotas_comparacao(False, resposta=resposta, chat=chat, pedidos=pedidos,
                                           devolucoes=devolucoes))
     return fonte
@@ -163,25 +166,6 @@ def test_falha_na_comparacao_vira_fonte_indisponivel_sem_vazar_e_sem_derrubar_a_
     assert all(p.pedidos is None and p.devolucoes_aceitas is None for p in resp.serie_diaria)
     assert resp.sem_serie["cancelamento"].motivo == "fonte indisponível"
     assert base_cx.SEGREDO not in resp.model_dump_json()
-
-
-def test_kokeshi_sem_anterior_de_cancelamento_ate_o_export_cobrir():
-    torre = TorreCx(pedidos=[{"marca": "kokeshi", "pedidos": 100, "cancelados": 5, "cancelados_comprador": None,
-                              "nao_pagos": 2, "atualizado_em": None}])
-    torre.rotas.update(_rotas_comparacao(True))
-    fonte = _fonte(hoje=D(2026, 11, 9))
-    resp = _montar(fonte, datetime(2026, 11, 9, 15, 0, tzinfo=timezone.utc), 30, brands=("kokeshi",), torre=torre)
-    kok = resp.atendimento.marcas[0]
-    assert kok.pedidos == 100 and kok.pedidos_anterior is None
-    canc = resp.sem_anterior["cancelamento"]
-    assert (canc.motivo, canc.a_partir_de) == ("pedidos desde 04/10", D(2026, 12, 3))
-    # 7 dias: anterior 26/10..01/11, coberto pelo export (desde 04/10)
-    resp7 = _montar(_fonte(hoje=D(2026, 11, 9)), datetime(2026, 11, 9, 15, 0, tzinfo=timezone.utc), 7,
-                    brands=("kokeshi",), torre=torre)
-    assert resp7.atendimento.marcas[0].pedidos_anterior == 100
-    assert "cancelamento" not in resp7.sem_anterior
-    janelas = {(p["inicio"], p["fim"]) for nome, p in torre.chamadas if nome == "export_marcas"}
-    assert (D(2026, 10, 26), D(2026, 11, 1)) in janelas
 
 
 # ---------------------------------------------------------------------------

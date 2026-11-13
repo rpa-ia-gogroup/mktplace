@@ -23,7 +23,6 @@ from app.schemas.cx_avaliacoes import AvaliacoesMarca, AvaliacoesProduto, CxAval
 from app.services.cx_atendimento_service import (
     MARCAS_PERMITIDAS,
     MOTIVO_ERRO,
-    SHOPEE_EXPORT,
     SHOPEE_MARCAS,
     Consultar,
     _int,
@@ -120,7 +119,8 @@ def montar_avaliacoes(*, brands: Optional[list[str]] = None, consultar: Optional
     def sem(m: str, motivo: str) -> AvaliacoesMarca:
         return AvaliacoesMarca(marca=m, estado="sem_fonte", motivo=motivo)
 
-    # marca sem app (Kokeshi) nunca e' consultada: sem fonte com motivo
+    # marca fora de `SHOPEE_MARCAS` (fonte unica; Kokeshi inclusa desde T-0114)
+    # nunca e' consultada: sem fonte com motivo
     fora_do_app = {m: sem(m, MOTIVO_SEM_APP) for m in selecionadas if m not in SHOPEE_MARCAS}
     if not com_app:
         return _resposta(agora, "sem_fonte", list(fora_do_app.values()), motivo_indisponivel=MOTIVO_SEM_APP)
