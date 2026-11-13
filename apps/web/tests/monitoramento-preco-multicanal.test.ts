@@ -475,8 +475,9 @@ test("R5. toda dimensao visivel tem filtro correspondente", async () => {
 test("R7. o que e' novo fica ESCOPADO aos canais; o ML nao ganha nada", async () => {
   const codigo = await lerCodigo(PAGE);
   // Abas objetivas: subtitulo curto e unico, sem citar canal.
+  // ALVO-GRADE: o subtitulo virou o ⓘ ao lado do selo; continua curto e sem canal.
   assert.ok(codigo.includes(
-    'subtitle="Lojas próprias: preço anunciado × preço sugerido (PDV)."'),
+    '<InfoDica texto="Lojas próprias: preço anunciado × preço sugerido (PDV)." />'),
     "subtitulo curto, igual em todos os canais");
   // O chip de politica de data nao aparece no ML.
   assert.ok(codigo.includes('meta && marketplace !== "ml" &&'),

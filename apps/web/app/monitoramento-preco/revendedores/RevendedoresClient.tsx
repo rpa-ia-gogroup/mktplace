@@ -18,8 +18,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { AlertTriangle, Percent, Store, Tag, TrendingDown, Trophy, UserCheck } from "lucide-react";
 
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba from "@/components/layout/Aba";
 import TableScrollHint from "@/components/TableScrollHint";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
@@ -108,11 +107,10 @@ export default function RevendedoresClient({ modo }: { modo: "fixture" | "api" }
   const escopo = frescorOk?.escopo ?? null;
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Monitoramento de preços — B2B / Revendedores"
-        subtitle="Preço dos revendedores B2B × PMA do OctaPrice."
-      />
+    <Aba
+      titulo="Monitoramento de preços — B2B / Revendedores"
+      selo={<InfoDica texto="Preço dos revendedores B2B × PMA do OctaPrice." />}
+    >
 
       {modo === "fixture" && (
         <Note tom="atencao" papel="status">
@@ -148,7 +146,7 @@ export default function RevendedoresClient({ modo }: { modo: "fixture" | "api" }
         />
       )}
       {painel && <Conteudo painel={painel} filtros={filtros} />}
-    </PageContainer>
+    </Aba>
   );
 }
 
