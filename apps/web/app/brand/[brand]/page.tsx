@@ -722,7 +722,7 @@ function BrandPageInner() {
                 ) : (
                   last7.map((r) => (
                     <tr key={r.date}>
-                      <td className="px-5 py-3 text-sm text-gray-700 font-medium">
+                      <td className="px-5 py-3 text-sm text-gray-700 font-medium whitespace-nowrap">
                         {new Date(r.date + "T00:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
                       </td>
                       {hasTiktok && (
