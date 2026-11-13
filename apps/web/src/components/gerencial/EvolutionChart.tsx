@@ -257,8 +257,7 @@ export default function EvolutionChart({
             dot={false}
             activeDot={{ r: 3 }}
             connectNulls={false}
-            animationDuration={700}
-            animationEasing="ease-out"
+            isAnimationActive={false}
           />
         )}
         {/* UX-VIDRO-5 (proposta aprovada): o TOTAL e' a leitura principal e
@@ -275,9 +274,9 @@ export default function EvolutionChart({
             strokeOpacity={isolating ? 0.18 : 1}
             radius={[10, 10, 6, 6]}
             maxBarSize={56}
-            // Entrada: as barras crescem da base, uma vez por carga de dados.
-            animationDuration={700}
-            animationEasing="ease-out"
+            // A entrada e' CSS (`.tc-grafico-entra`), uma vez por barra criada. A animacao do
+            // Recharts recomecava do zero a cada fonte que chegava e deixava as barras achatadas.
+            isAnimationActive={false}
           >
             {buckets.map((b) => (
               <Cell key={b.date} fill={parcial(b) ? "url(#evolucao-parcial)" : "url(#evolucao-barra)"} />

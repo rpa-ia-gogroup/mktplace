@@ -260,7 +260,7 @@ export default function EvolutionCard({
         </ul>
       )}
 
-      <div className="flex-1 min-h-[240px] lg:min-h-[280px]">
+      <div className="tc-grafico-entra flex-1 min-h-[240px] lg:min-h-[280px]">
         {loading ? (
           <div className="h-full w-full rounded-xl bg-accent-soft/60 animate-pulse" role="status" aria-busy="true">
             <span className="sr-only">Carregando série…</span>
