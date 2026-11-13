@@ -90,7 +90,7 @@ export default function Popover({
         aria-expanded={aberto}
         aria-controls={id}
         onClick={() => setAberto((v) => !v)}
-        className={`inline-flex min-h-11 items-center gap-2 rounded-lg border bg-surface px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+        className={`inline-flex min-h-11 items-center gap-2 rounded-lg border bg-surface px-2.5 2xl:px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
           ativo || aberto ? "border-accent/50" : "border-line hover:border-line-strong"
         }`}
       >

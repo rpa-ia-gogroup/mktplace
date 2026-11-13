@@ -41,7 +41,7 @@ interface Props {
 
 /** Botao discreto de "Limpar" e contagem do "Filtros" no celular: mesmas classes nas barras. */
 export const CLASSE_LIMPAR =
-  "inline-flex min-h-11 shrink-0 items-center rounded-md px-2 text-xs font-semibold text-ink-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md px-2 text-xs font-semibold text-ink-muted underline-offset-4 hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
 export const CLASSE_CONTAGEM =
   "ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-accent-soft px-1.5 text-[11px] font-semibold tabular-nums text-accent-ink";
 
@@ -117,8 +117,8 @@ export default function GlobalFilterControls({ filters, onChange, hideCompare = 
             aria-label="Limpar filtros (volta ao padrão da aba)"
             className={CLASSE_LIMPAR}
           >
-            <X aria-hidden="true" className="mr-1 h-3.5 w-3.5" />
-            Limpar
+            <X aria-hidden="true" className="h-3.5 w-3.5 min-[1760px]:mr-1" />
+            <span className="sr-only min-[1760px]:not-sr-only">Limpar</span>
           </button>
         )}
         {loading && (
