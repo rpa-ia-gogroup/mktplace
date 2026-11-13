@@ -231,6 +231,13 @@ export default function MarcasMeta({
                     />
                   </span>
                 </Linha>
+                {/* Full x sem Full direto na linha (pedido da Nathalia 13/11), na mesma escala da barra da meta. */}
+                {d && soma(d.full) + soma(d.semFull) > 0 && (
+                  <div className="flex flex-col gap-1 px-2 pb-1.5 min-[480px]:pl-[calc(0.5rem+min(30%,9rem))]">
+                    <BarraFull rotulo="Full" partes={d.full} canais={canaisDaBarra(b)} escala={escala} />
+                    <BarraFull rotulo="Sem Full" partes={d.semFull} canais={canaisDaBarra(b)} escala={escala} />
+                  </div>
+                )}
               </li>
             );
           })}
