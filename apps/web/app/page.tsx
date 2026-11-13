@@ -51,9 +51,7 @@ import {
 } from "@/lib/gerencial/attention";
 import {
   buildBrandChannelMatrix,
-  buildConcentration,
   buildMovements,
-  type ConcentrationEntry,
   type Movement,
 } from "@/lib/gerencial/brand-matrix";
 import { mergeChannelSeries, reconcileSeriesTotal, type MergedBucket } from "@/lib/gerencial/trend-series";
@@ -89,7 +87,6 @@ import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
 import KpiBand from "@/components/gerencial/KpiBand";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
-import PulseChannelsColumn from "@/components/gerencial/PulseChannelsColumn";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
@@ -124,7 +121,6 @@ import { MARCAS, hojeBrt } from "@/lib/metas";
 import {
   ChannelSeriesDrilldownContent,
   CommercialAttentionDrilldownContent,
-  ConcentrationDrilldownContent,
   ConfidenceDrilldownContent,
   DataWarningDrilldownContent,
   MatrixCellUnavailableContent,
@@ -152,7 +148,6 @@ type DialogView =
   | { kind: "matrix"; brand: string; channel: Marketplace }
   | { kind: "matrixChannel"; channel: Marketplace }
   | { kind: "movement"; movement: Movement }
-  | { kind: "concentration"; entry: ConcentrationEntry }
   | { kind: "commercial"; item: CommercialAttentionItem }
   | { kind: "dataWarning"; item: DataConfidenceItem }
   | { kind: "cx"; indicador: IndicadorCx; resumo: ResumoCx; geradoEm: string; dias: JanelaDias };
@@ -305,7 +300,6 @@ function GerencialComGrandes() {
 
   const brands = sources.brands.data ?? [];
   const movements = useMemo(() => buildMovements(brands, filters.channels), [brands, filters.channels]);
-  const concentration = useMemo(() => buildConcentration(brands), [brands]);
 
   // Sinais vem de `/canais`, com estado PROPRIO: a matriz de GMV (de `/brands`) nao depende deles.
   const signalsByCell = useMemo(() => {
@@ -704,8 +698,6 @@ function GerencialComGrandes() {
         return `${CHANNEL_LABEL[dialog.channel]} — distribuição por marca`;
       case "movement":
         return `${dialog.movement.brandLabel} — ${CHANNEL_LABEL[dialog.movement.channel]}`;
-      case "concentration":
-        return `${dialog.entry.label} — concentração`;
       case "commercial":
         return dialog.item.title;
       case "dataWarning":
@@ -777,7 +769,19 @@ function GerencialComGrandes() {
       onVisao={setVisao}
       // refreshed_at e selo saem SO' da resposta compativel com o filtro atual
       // — nunca da requisicao anterior (`headerLive` e' null ate' la').
-      selo={<SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />}
+      selo={
+        <>
+          <SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />
+          {/* Confianca no dado: selo pequeno ao lado do Atualizado; o clique abre o detalhe de sempre. */}
+          {visaoAtiva === "geral" && (
+            <ConfidenceStrip
+              data={confidence}
+              loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
+              onOpen={() => setDialog({ kind: "confidence" })}
+            />
+          )}
+        </>
+      }
       filtros={<GlobalFilterControls filters={filtersRaw} onChange={setFilters} loading={sources.anyLoading} padrao={padrao} />}
       direita={<SeletorBase semRealizados={overview != null && sources.overview.status.fresh && overview.base !== "realizados"} />}
       atencao={visaoAtiva === "geral" ? atencao : null}
@@ -908,7 +912,7 @@ function GerencialComGrandes() {
           <span>
             Mais detalhes
             <span className="ml-2 font-normal text-ink-faint">
-              confiança no dado, pulso e canais, saúde do volume, movimentos e fila completa
+              saúde do volume, maiores altas e quedas e fila de atenção
             </span>
           </span>
           <span aria-hidden="true" className="text-ink-faint transition-transform group-open:rotate-180">
@@ -916,27 +920,6 @@ function GerencialComGrandes() {
           </span>
         </summary>
         <div className="flex flex-col gap-4 border-t border-line p-4">
-          <ConfidenceStrip
-            data={confidence}
-            loading={confidence.checkingCount === confidence.selectedCount && confidence.selectedCount > 0}
-            onOpen={() => setDialog({ kind: "confidence" })}
-          />
-
-          <PulseChannelsColumn
-            pulse={pulse}
-            health={sources.executiveSummary.data?.health ?? null}
-            pulseLoading={sources.executiveSummary.status.loading}
-            pulseUnavailable={sources.executiveSummary.status.error}
-            onOpenInsight={(key) => setDialog({ kind: "pulse", view: { mode: "insight", key } })}
-            onOpenAllInsights={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
-            overview={overview}
-            channels={filters.channels}
-            channelsLoading={overviewStatus.loading}
-            channelsUnavailable={overviewStatus.error}
-            onOpenChannel={(channel) => setDialog({ kind: "volume", channel })}
-            channelsHref={buildHref("/canais")}
-          />
-
           <VolumeHealthCard
             rows={volumeRows}
             loading={sources.quality.status.loading}
@@ -947,12 +930,9 @@ function GerencialComGrandes() {
 
           <MovementsPanels
             movements={movements}
-            concentration={concentration}
             loading={sources.brands.status.loading}
             error={sources.brands.status.error}
             onOpenMovement={(movement) => setDialog({ kind: "movement", movement })}
-            onOpenConcentration={(entry) => setDialog({ kind: "concentration", entry })}
-            produtosHref={buildHref("/produtos")}
             onRetry={sources.retry}
           />
 
@@ -963,6 +943,10 @@ function GerencialComGrandes() {
             commercialError={sources.executiveSummary.status.error}
             onOpenCommercial={(item) => setDialog({ kind: "commercial", item })}
             onOpenDataWarning={(item) => setDialog({ kind: "dataWarning", item })}
+            health={sources.executiveSummary.data?.health ?? null}
+            dataUnavailable={pulse.dataUnavailable}
+            groupedCount={pulse.commercial.length + pulse.dataConfidence.groups.length}
+            onOpenAll={() => setDialog({ kind: "pulse", view: { mode: "all", key: null } })}
             onRetry={sources.retry}
           />
         </div>
@@ -1148,20 +1132,6 @@ function GerencialComGrandes() {
           />
         )}
 
-        {dialog?.kind === "concentration" && (
-          <ConcentrationDrilldownContent
-            entry={dialog.entry}
-            position={concentration.entries.findIndex((e) => e.brand === dialog.entry.brand) + 1}
-            top1Pct={concentration.top1Pct}
-            top3Pct={concentration.top3Pct}
-            positiveBrands={concentration.positiveBrands}
-            ranking={concentration.entries}
-            periodLabel={periodLabel}
-            refreshedAt={sources.brands.refreshedAt}
-            brandHref={brandHref(dialog.entry.brand)}
-            produtosHref={buildHref("/produtos")}
-          />
-        )}
 
         {dialog?.kind === "commercial" && (
           <CommercialAttentionDrilldownContent

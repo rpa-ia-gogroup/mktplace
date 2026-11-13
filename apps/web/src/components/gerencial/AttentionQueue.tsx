@@ -11,7 +11,13 @@
  * de confianca no dado nunca compartilham lista, e um aviso de dado nunca
  * recebe severidade comercial "Critico" (o tipo `DataSeverity` nao tem esse
  * valor). Clicar abre a explicacao antes de navegar.
+ *
+ * O "Pulso do periodo" foi fundido aqui (13/11): os itens dele sao os mesmos
+ * insights do /executive-summary ja' listados abaixo, entao entram so' a saude
+ * do periodo (selo + resumo) no cabecalho e o atalho para a visao agrupada.
  */
+import type { ExecutiveHealth } from "@/lib/api-client";
+import { HEALTH_STATUS_LABEL, HEALTH_STATUS_TONE } from "@/lib/executive-summary";
 import type {
   CommercialAttentionItem,
   CommercialSeverity,
@@ -26,6 +32,13 @@ interface Props {
   commercialError: boolean;
   onOpenCommercial: (item: CommercialAttentionItem) => void;
   onOpenDataWarning: (item: DataConfidenceItem) => void;
+  /** Saude do periodo (ex-Pulso). */
+  health: ExecutiveHealth | null;
+  /** Ha `missing_data`: diz "Dados indisponíveis", nunca "Crítico". */
+  dataUnavailable: boolean;
+  /** Quantos grupos a visao agrupada mostra (0 = sem atalho). */
+  groupedCount: number;
+  onOpenAll: () => void;
   onRetry: () => void;
 }
 
@@ -59,16 +72,45 @@ export default function AttentionQueue({
   commercialError,
   onOpenCommercial,
   onOpenDataWarning,
+  health,
+  dataUnavailable,
+  groupedCount,
+  onOpenAll,
   onRetry,
 }: Props) {
+  const comSaude = !commercialLoading && !commercialError;
   return (
     <section
       aria-labelledby="fila-heading"
       className="bg-surface border border-line rounded-xl p-4 flex flex-col gap-4"
     >
-      <h2 id="fila-heading" className="text-sm font-semibold text-ink-muted">
-        Fila de atenção
-      </h2>
+      <div className="flex flex-col gap-1.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="fila-heading" className="text-sm font-semibold text-ink-muted">
+            Fila de atenção
+          </h2>
+          {comSaude && (dataUnavailable ? (
+            <span className="text-xs font-semibold rounded-lg px-2 py-1 shrink-0 text-ink-muted bg-raised border border-line">
+              Dados indisponíveis
+            </span>
+          ) : health ? (
+            <span className={`text-xs font-semibold rounded-lg px-2 py-1 shrink-0 ${HEALTH_STATUS_TONE[health.status]}`}>
+              {HEALTH_STATUS_LABEL[health.status]}
+            </span>
+          ) : null)}
+        </div>
+        {comSaude && health?.summary && <p className="text-xs text-ink-muted leading-snug">{health.summary}</p>}
+        {comSaude && groupedCount > 0 && (
+          <button
+            type="button"
+            onClick={onOpenAll}
+            aria-haspopup="dialog"
+            className="inline-flex items-center min-h-11 text-xs font-semibold text-accent hover:underline self-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+          >
+            Ver sinais agrupados ({groupedCount})
+          </button>
+        )}
+      </div>
 
       {/* Lista 1 — atencoes comerciais */}
       <div className="flex flex-col gap-2">
