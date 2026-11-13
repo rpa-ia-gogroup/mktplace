@@ -181,10 +181,11 @@ def test_comissao_ml_nao_carregada_e_nula_nao_zero():
     c = celula("ml", m=mart("ml", fees=None, fees_n=0))
     tx = c["componentes"]["taxas"]
     assert tx["valor"] is None and tx["status"] == dre.INDISPONIVEL
-    # T-0090: margem sem a taxa (nunca como se ela fosse zero de proposito: fica em `faltam`).
+    # T-0112 (A2-23): sem a taxa a margem SUSPENDE (antes saia sem ela, inflada; nunca zero).
     assert c["classificacao"] == dre.PARCIAL
     m = c["margem_contribuicao_conhecida"]
-    assert m["valor"] == pytest.approx(1_000_000 - 40_000 - 130_000 - 300_000)
+    assert m["valor"] is None and m["suspensa"] is True
+    assert m["motivo_suspensao"].startswith("taxa indisponível: ")
     assert "taxas" in m["faltam"] and "taxas" not in m["componentes_usados"]
 
 

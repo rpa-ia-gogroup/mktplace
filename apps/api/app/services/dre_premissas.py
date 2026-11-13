@@ -397,8 +397,9 @@ def montar_cenario(celula: dict, premissa: dict | None, *, mes: date, hoje: date
     elif not maduro:
         motivos_parcial.append("competencia ainda imatura pela regra M+2 da DRE realizada")
 
-    # T-0101: a mesma condicao que suspende a margem conhecida da celula (custo
-    # obrigatorio com insumo vencido/ausente, `dre_service._suspensao_da_celula`)
+    # T-0101/T-0112: a mesma condicao que suspende a margem conhecida da celula (custo
+    # obrigatorio com insumo vencido/ausente ou sem valor utilizavel,
+    # `dre_service._suspensao_da_celula`)
     # suspende a estimada: estimar sem CMV infla a margem do mesmo jeito. As
     # linhas seguem visiveis; so' subtotais e margem ficam sem calculo.
     conhecida = celula.get("margem_contribuicao_conhecida") or {}
@@ -584,10 +585,19 @@ def agregar_cenarios(cenarios: list[dict | None]) -> dict | None:
     suspensas = sum(c.get("celulas_suspensas", 0) for c in validos)
     motivo_suspensao = None
     if suspensas:
+        motivos_cel = [c.get("motivo_suspensao") or "" for c in validos if c.get("suspensa")]
+        # T-0112: o tipo vem do texto da celula (`dre_service._suspensao_da_celula`);
+        # sem texto reconhecivel, vale o da T-0101 (insumo vencido ou ausente).
+        sem_valor = any("indisponível" in t or "sinal inesperado" in t for t in motivos_cel)
+        velho = any("insumo " in t for t in motivos_cel) or not sem_valor
+        causas = ["insumo vencido ou ausente"] if velho else []
+        if sem_valor:
+            causas.append("taxa ou CMV sem valor utilizável")
+        fecho = "margem suspensa até a republicação" if velho else "margem suspensa"
         motivo_suspensao = (f"{suspensas} de {len(validos)} células com margem estimada suspensa "
-                            "(insumo vencido ou ausente); margem suspensa até a republicação")
-        desde = _publicado_mais_antigo(c.get("motivo_suspensao") for c in validos if c.get("suspensa"))
-        if desde is not None:
+                            f"({'; '.join(causas)}); {fecho}")
+        desde = _publicado_mais_antigo(motivos_cel)
+        if velho and desde is not None:
             motivo_suspensao += f" (publicado em {desde.strftime('%d/%m/%Y')})"
         motivos.insert(0, motivo_suspensao)
     for c in validos:
