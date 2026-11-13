@@ -40,6 +40,9 @@ const ROTAS = [
   ["brand", "app/brand/[brand]/page.tsx"],
 ] as const;
 
+/** ALVO-GRADE: rotas que ja' migraram para o esqueleto `Aba` (container, cabecalho e barra sticky vem dele). */
+const NO_ESQUELETO_ABA = new Set<string>(["brand"]);
+
 /** Paginas que herdam filtros globais — as unicas que podem ter barra sticky. */
 const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pedidos", "brand"];
 
@@ -50,6 +53,10 @@ const COM_FILTROS_GLOBAIS = ["canais", "regioes", "financeiro", "qualidade", "pe
 test("P1. as dez rotas usam o container compartilhado, e nenhuma mantem max-w-7xl", () => {
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
+    if (NO_ESQUELETO_ABA.has(nome)) {
+      assert.match(src, /<Aba[<\s]/, `${nome} usa o esqueleto Aba`);
+      continue;
+    }
     assert.match(src, /<PageContainer>/, `${nome} deve usar PageContainer`);
     assert.match(src, /<\/PageContainer>/, `${nome} deve fechar PageContainer`);
     assert.doesNotMatch(src, /max-w-7xl/, `${nome} nao pode mais fixar max-w-7xl`);
@@ -165,8 +172,8 @@ test("P6. titulo de pagina em text-xl nas dez rotas", () => {
   const header = codeOnly(read("src/components/layout/PageHeader.tsx"));
   // UX-TORRE-2: a cor virou token; nivel (`<h2>`) e escala (`text-xl`) seguem travados.
   assert.match(header, /<h2 className="text-xl font-bold text-ink">\{title\}<\/h2>/);
-  // brand tem titulo proprio, tambem em text-xl
-  assert.match(codeOnly(read("app/brand/[brand]/page.tsx")), /text-xl font-bold text-gray-900 leading-none/);
+  // brand: o titulo vem do esqueleto `Aba` (ALVO-GRADE)
+  assert.match(codeOnly(read("app/brand/[brand]/page.tsx")), /<Aba\s/);
   // e nenhuma rota mantem titulo de pagina em text-base/text-lg
   for (const [nome, arquivo] of ROTAS) {
     const src = codeOnly(read(arquivo));
@@ -374,7 +381,7 @@ test("P21. brand: banner de chegada e contexto preservados", () => {
   const src = codeOnly(read("app/brand/[brand]/page.tsx"));
   assert.match(src, /<BrandArrivalBanner/);
   assert.match(src, /ctx=\{arrivalCtx\}/);
-  assert.match(src, /PageContainer/, "container do V2 aplicado");
+  assert.match(src, /<Aba\s/, "esqueleto da grade unica aplicado");
   assert.doesNotMatch(src, /<PageHeader/, "cabecalho proprio: unico consumidor daquele contrato");
 });
 
