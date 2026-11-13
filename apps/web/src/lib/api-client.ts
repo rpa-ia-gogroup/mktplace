@@ -2131,6 +2131,14 @@ export interface OperacoesData {
   creators: CreatorRow[];
   lives: LiveRow[];
   tk_daily: TkDailyRow[];
+  /**
+   * T-0117 (C1-202): ultima data com dado por bloco ('YYYY-MM-DD'; `null` =
+   * sem linha no escopo). Ausente com API anterior. Grandeza distinta de
+   * `refreshed_at` (hora da carga).
+   */
+  dados_ate?: { ml: string | null; tiktok: string | null } | null;
+  /** T-0117: D-1 operacional (BRT), teto das janelas. Dado antes disso = atrasado. */
+  esperado_ate?: string | null;
 }
 
 export function fetchOperacoes(): Promise<{ data: OperacoesData | null; live: boolean }> {

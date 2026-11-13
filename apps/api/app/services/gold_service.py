@@ -2898,9 +2898,25 @@ def get_operacoes(db: Session) -> dict:
             (SELECT MAX(synced_at) FROM marts.fact_tiktok_brand_content_daily
               WHERE brand IN {_fmt_list(BRANDS_IN_SCOPE)}
                 AND date >= '{d30_start}' AND date <= '{d_fechado}')
-        ) AS frescor_refreshed_at
+        ) AS frescor_refreshed_at,
+        -- T-0117 (C1-202): ate que DIA o dado vai, por bloco, no mesmo escopo.
+        -- `refreshed_at` e' a hora da carga: uma carga recente com a gold um
+        -- dia atras ainda dizia "Atualizado 10:17".
+        (SELECT MAX(ref_date) FROM marts.fact_ml_gestao_diaria
+          WHERE brand IN {_fmt_list(ML_BRANDS)}
+            AND ref_date >= '{d7_start}' AND ref_date <= '{d_fechado}') AS dados_ate_ml,
+        LEAST(
+            (SELECT MAX(date) FROM marts.fact_tiktok_creator_daily
+              WHERE brand IN {_fmt_list(BRANDS_IN_SCOPE)}
+                AND date >= '{d7_start}' AND date <= '{d_fechado}'),
+            (SELECT MAX(date) FROM marts.fact_tiktok_brand_content_daily
+              WHERE brand IN {_fmt_list(BRANDS_IN_SCOPE)}
+                AND date >= '{d30_start}' AND date <= '{d_fechado}')
+        ) AS dados_ate_tiktok
     """
-    refreshed_at = _frescor_mais_antigo(_query(db, frescor_sql))
+    frescor_rows = _query(db, frescor_sql)
+    refreshed_at = _frescor_mais_antigo(frescor_rows)
+    frescor = frescor_rows[0] if frescor_rows else {}
 
     return {
         "alertas": alertas,
@@ -2909,7 +2925,25 @@ def get_operacoes(db: Session) -> dict:
         "lives": lives,
         "tk_daily": tk_daily,
         "refreshed_at": refreshed_at,
+        # T-0117 (C1-202): ultima data com dado, por bloco (ML = gestao diaria;
+        # TikTok = a mais atrasada de criadores e conteudo). `None` = sem linha
+        # no escopo, nunca hoje. `esperado_ate` = D-1 operacional (BRT), o teto
+        # das janelas: dado antes disso esta' atrasado.
+        "dados_ate": {
+            "ml": _data_iso(frescor.get("dados_ate_ml")),
+            "tiktok": _data_iso(frescor.get("dados_ate_tiktok")),
+        },
+        "esperado_ate": str(d_fechado),
     }
+
+
+def _data_iso(valor) -> str | None:
+    """`date`/`datetime` -> 'YYYY-MM-DD'; qualquer outra coisa -> None."""
+    if isinstance(valor, datetime):
+        return valor.date().isoformat()
+    if isinstance(valor, date):
+        return valor.isoformat()
+    return None
 
 
 
