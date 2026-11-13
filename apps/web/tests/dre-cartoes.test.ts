@@ -13,10 +13,10 @@ const ESTIMADA = ler("src/components/dre/DreEstimada.tsx");
 const DETALHE = ler("src/components/dre/DreDetalheConta.tsx");
 const PAG = ler("app/dre/DreClient.tsx");
 
-test("DreResumo: 4 cartoes gerenciais, so' as 7 identidades; so' Margem e Classificacao abrem detalhe", () => {
-  assert.equal((RESUMO.match(/<KpiTile/g) ?? []).length, 4);
-  assert.equal((RESUMO.match(/variante="gerencial"/g) ?? []).length, 4);
-  const usadas = [...RESUMO.matchAll(/identidade="([a-z]+)"/g)].map((m) => m[1]);
+test("DreResumo: 4 cartoes da grade unica, cor pelo token de identidade; so' Margem e Classificacao abrem detalhe", () => {
+  assert.equal((RESUMO.match(/<CartaoIndicador/g) ?? []).length, 4);
+  assert.ok(!RESUMO.includes("KpiTile"), "o cartao e' o CartaoIndicador (ALVO-GRADE)");
+  const usadas = [...RESUMO.matchAll(/cor="rgb\(var\(--tc-kpi-([a-z]+)\)\)"/g)].map((m) => m[1]);
   assert.deepEqual(usadas, ["gmv", "roas", "ticket", "atendimento"]);
   assert.equal((RESUMO.match(/onAbrir=/g) ?? []).length, 2);
   assert.ok(RESUMO.includes('onAbrir("margem")') && RESUMO.includes('onAbrir("classificacao")'));
@@ -25,15 +25,15 @@ test("DreResumo: 4 cartoes gerenciais, so' as 7 identidades; so' Margem e Classi
 
 test("DreResumo: valores, tons e textos de ausencia exatamente como antes (margem ausente nao vira R$ 0 nem travessao)", () => {
   for (const t of [
-    "textoMargem(total)", "textoMargemPct(total)", 'tom={sem ? "ausente" : "neutro"}', 'tom={receita.valor === null ? "ausente" : "neutro"}',
+    "textoMargem(total)", "textoMargemPct(total)", "ausente={sem}", "ausente={receita.valor === null}",
     "STATUS_CHIP[receita.status]?.rotulo", '"Depende da margem ao lado"', '"Margem conhecida ÷ receita"', "Bloqueado por ", "Todos os custos aplicáveis presentes",
   ]) assert.ok(RESUMO.includes(t), t);
 });
 
 test("ResumoEstimado: mesmo visual, sem clique; premissas e estado do cenario preservados", () => {
   const corpo = ESTIMADA.slice(ESTIMADA.indexOf("export function ResumoEstimado"), ESTIMADA.indexOf("// Conhecida x Estimada"));
-  assert.equal((corpo.match(/variante="gerencial"/g) ?? []).length, 4);
-  assert.deepEqual([...corpo.matchAll(/identidade="([a-z]+)"/g)].map((m) => m[1]), ["gmv", "roas", "ticket", "prazo"]);
+  assert.equal((corpo.match(/<CartaoIndicador/g) ?? []).length, 4);
+  assert.deepEqual([...corpo.matchAll(/cor="rgb\(var\(--tc-kpi-([a-z]+)\)\)"/g)].map((m) => m[1]), ["gmv", "roas", "ticket", "prazo"]);
   assert.ok(!corpo.includes("onAbrir"), "a visao Estimada nao abre detalhe");
   for (const t of ["textoMargemEstimada(cenario)", "<EstadoCenarioChip cenario={cenario} />", "cenario.fonte_premissas.rotulo", "Receita realizada; a mesma da visão Conhecida"]) assert.ok(corpo.includes(t), t);
 });

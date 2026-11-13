@@ -83,26 +83,30 @@ test("pagina de Qualidade: sem KpiCard legado, sem toFixed, dialogo unico, estad
   assert.equal((pag.match(/<KpiDrilldownDialog/g) ?? []).length, 1);
   assert.ok(pag.includes("icone={detalhe ?") && pag.includes("identidade={detalhe ?") && pag.includes("{detalhe && dataIsFresh && ("));
   assert.ok(pag.includes('tipo="erro"') && !pag.includes("bg-rose-50 border border-rose-200"), "erro via StateBlock, sem a caixa rosa a mao");
-  assert.ok(pag.includes("<FaixaCarregando cartoes={totalDeCartoes("));
-  assert.ok(pag.includes("showTiktok && <GrupoQualidade") && pag.includes("showMl && <GrupoQualidade") && pag.includes("showShopee && <GrupoQualidade"), "so' canais selecionados");
+  assert.ok(pag.includes("<FaixaCarregando cartoes={CARTOES_DA_FAIXA.length}"));
+  // ALVO-GRADE: esqueleto Aba, sempre quatro cartoes; canal fora do filtro fica sem numero (nunca zero)
+  assert.ok(pag.includes("<Aba") && pag.includes("<FaixaQualidade kpis={displayKpis}") && pag.includes("canais={{ tiktok: showTiktok, ml: showMl, shopee: showShopee }}"));
+  assert.ok(!/bg-(emerald|amber|rose)-50/.test(pag), "sem mapa de calor: a faixa da taxa pinta so' a tinta do numero");
+  assert.ok(pag.includes("<CelulaBarra"), "barrinha na cor do canal no lugar do fundo colorido");
 });
 
-test("cartoes de Qualidade: so' as 7 identidades; cartoes N/D do TikTok sem clique, com o motivo visivel (Gate DQ2)", () => {
+test("cartoes de Qualidade: so' as 7 identidades; quatro cartoes iguais, sem tendencia inventada; sem valor, sem clique e com o motivo escrito", () => {
   const src = ler("src/components/qualidade/QualidadeCartoes.tsx");
   const usadas = [...src.matchAll(/identidade[:=]\s*"([a-z]+)"/g)].map((m) => m[1]);
-  assert.ok(usadas.length >= 7);
+  assert.ok(usadas.length >= 6);
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
-  assert.ok(src.includes("TIKTOK_UNAVAILABLE_QUALITY_METRICS.map"), "os dois cartoes N/D do TikTok continuam");
-  const nd = src.slice(src.indexOf("TIKTOK_UNAVAILABLE_QUALITY_METRICS.map"));
-  assert.ok(nd.includes("valor={m.value}") && nd.includes("comparacao={m.subvalue}") && nd.includes('tom="ausente"') && !nd.includes("onAbrir"));
+  assert.ok(src.includes("<CartaoIndicador") && !src.includes("<KpiTile"), "o cartao unico da grade");
+  // a fonte nao traz serie nem periodo anterior: nada de linha nem de pilula de variacao
+  assert.ok(!/\bserie=|\bpilula=/.test(src), "tendencia e variacao nunca inventadas");
+  assert.ok(src.includes("valor={t.ausente ? null : t.valor}") && src.includes("sem dado no período") && src.includes("fora do filtro de canal"), "ausencia escrita, nunca zero");
+  assert.ok(src.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"), "cor pelo token do tema, nunca hex");
   assert.ok(src.includes("onAbrir={t.ausente ? undefined : () => onAbrir(chave)}"), "sem valor, sem clique");
 });
 
-test("ⓘ so' onde a ressalva muda a leitura (Entrega ML nao repete o valor); cartao impar nao fica sozinho em meia linha no celular", () => {
+test("ⓘ so' onde a ressalva muda a leitura (Entrega ML nao repete o valor); faixa na grade unica (1, 2 e 4 colunas)", () => {
   assert.equal(DEF_QUALIDADE.ml_entrega.dica, undefined);
   assert.ok(DEF_QUALIDADE.ml_nao_entregue.dica && DEF_QUALIDADE.tk_entrega.dica);
   const src = ler("src/components/qualidade/QualidadeCartoes.tsx");
-  assert.ok(src.includes('"col-span-2 md:col-span-1"') && src.includes("total % 2 === 1 && indice === total - 1"));
-  // o TikTok tem 1 + 2 cartoes (impar): o ultimo (Devolucao N/D) fecha a linha
-  assert.ok(src.includes("CARTOES_DO_CANAL.tiktok.length + i, CARTOES_DO_CANAL.tiktok.length + TIKTOK_UNAVAILABLE_QUALITY_METRICS.length"));
+  // quatro cartoes: 1 coluna no celular, 2 a partir de 480px, 4 a partir de xl (nunca um cartao sozinho em meia linha)
+  assert.ok(src.includes('"grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4"'));
 });

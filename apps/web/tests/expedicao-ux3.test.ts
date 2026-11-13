@@ -226,7 +226,7 @@ test("Shopee: a secao diz que NAO ha LDR e por que", () => {
   assert.match(SEM_LDR_SHOPEE, /só os\s+pedidos em aberto/);
   // IDENTIDADE-GERENCIAL: sem a LDR na tela, o aviso vai para o ⓘ do heroi.
   assert.match(CLIENTE, /!ldrNaSecao \? dicaDaSecaoPrazo\(filtros\.channel\) : null/);
-  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} \/>/);
+  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} emControle=\{Boolean\(abrirHeroi\)\} \/>/);
   assert.equal(dicaDaSecaoPrazo("shopee"), SEM_LDR_SHOPEE);
 });
 
@@ -243,7 +243,7 @@ test("Mercado Livre: prazo indisponivel pelo canal e envelhecimento da fila", ()
   assert.match(CLIENTE, /!temPrazo \? SEM_PRAZO_CANAL_ML :/);
   // O envelhecimento da fila: +48 h no heroi; o pedido mais antigo na faixa (ausente = "—").
   assert.match(CLIENTE, /rotulo=\{temPrazo \? "Vencidos" : "Acima de 48 h"\}/);
-  assert.match(CLIENTE, /rotulo="Pedido mais antigo em fila"\s*valor=\{envelhecimento\?\.maisAntigo \? formatarHoras\(envelhecimento\.maisAntigo\.horas\) : "—"\}/);
+  assert.match(CLIENTE, /rotulo="Pedido mais antigo"[\s\S]*?valor=\{envelhecimento\?\.maisAntigo \? formatarHoras\(envelhecimento\.maisAntigo\.horas\) : null\}/);
 });
 
 test("TikTok: a secao de prazo e' a LDR, com o evento (coleta/despacho) nomeado", () => {
@@ -258,12 +258,12 @@ test("os tres canais tem uma definicao curta da medicao", () => {
   assert.match(DEFINICAO_FILA.shopee, /ship_by_date/);
   assert.match(DEFINICAO_FILA.mercadolivre, /não publica prazo/);
   assert.match(DEFINICAO_TIKTOK, /coleta e despacho/);
-  assert.match(CLIENTE, /definicao=\{definicaoDaFila\(filtros\.channel, fotografiaDoPrazo\)\}/);
+  assert.match(CLIENTE, /definicao: definicaoDaFila\(filtros\.channel, fotografiaDoPrazo\),/);
   // Sem SLA na fotografia, a frase de sempre; com SLA, a do prazo do ML.
   assert.equal(definicaoDaFila("mercadolivre", null), DEFINICAO_FILA.mercadolivre);
   assert.equal(definicaoDaFila("shopee", null), DEFINICAO_FILA.shopee);
   assert.match(definicaoDaFila("mercadolivre", { deadline_published: true }), /SLA oficial do Mercado Livre/);
-  assert.match(TIKTOK, /definicao=\{DEFINICAO_TIKTOK\}/);
+  assert.match(TIKTOK, /definicao: DEFINICAO_TIKTOK,/);
 });
 
 test("as secoes tem o mesmo titulo nos tres canais", () => {
@@ -272,10 +272,10 @@ test("as secoes tem o mesmo titulo nos tres canais", () => {
   // IDENTIDADE-GERENCIAL: o "Risco atual" virou o heroi "Vencidos" nos tres.
   const ABERTOS = fonte("src/components/expedicao/TikTokPedidosAbertos.tsx");
   assert.match(CLIENTE, /rotulo=\{temPrazo \? "Vencidos" : "Acima de 48 h"\}/);
-  assert.match(ABERTOS, /<Heroi\s+rotulo="Vencidos"/);
+  assert.match(ABERTOS, /cartao\("overdue", "Vencidos"/);
   assert.match(CLIENTE, /titulo="Backlog por marca"/);
   assert.match(ABERTOS, /titulo="Backlog por marca"/);
-  assert.match(TIKTOK, /<HeroiTikTok abertos=\{abertos\}/);
+  assert.match(TIKTOK, /<PainelEtapasTikTok abertos=\{abertos\} \/>/);
   assert.match(TIKTOK, /<BacklogPorMarcaTikTok /);
   for (const f of [CLIENTE, TIKTOK]) {
     assert.match(f, /titulo="Prazo"/);
@@ -336,12 +336,12 @@ test("seletor de marca: 'Todas', o mapa canonico e marcas novas do payload", () 
 test("topo: so' 'Última atualização'; 'Desatualizada' escrito quando velha", () => {
   const base = { rotulo: "Fotografia", publicadaEm: "2026-10-21T12:00:00Z", idade: "1.2 h", fonteLidaAte: "2026-10-21T11:00:00Z" };
   const fresca = renderToStaticMarkup(h(ChipsFotografia, { fotografia: { ...base, desatualizada: false } }));
-  assert.match(fresca, /Última atualização <time dateTime="2026-10-21T12:00:00Z">\d{2}\/\d{2}, \d{2}:\d{2}<\/time>/);
-  assert.doesNotMatch(fresca, />Atualizada|>Fotografia|Fonte até|Desatualizada/);
+  assert.match(fresca, /Atualizado <span[^>]*>[\d\/ :]+<\/span>/);
+  assert.doesNotMatch(fresca, /Última atualização|>Fotografia|Fonte até<|Desatualizad/);
   // a idade e a fonte nao somem: vao para o hover do selo
   assert.match(fresca, /title="Publicada há 1\.2 h\. Fonte lida até/);
   const velha = renderToStaticMarkup(h(ChipsFotografia, { fotografia: { ...base, desatualizada: true } }));
-  assert.match(velha, />Desatualizada</);
+  assert.match(velha, /Desatualizado · /);
 });
 
 // ===========================================================================
@@ -610,7 +610,7 @@ test("ML Prazo: 'Indisponível neste canal: …' no ⓘ do heroi (a frase antiga
   // IDENTIDADE-GERENCIAL: a secao "Prazo" do ML (sem SLA) esvaziou — +48 h e'
   // o heroi e o pedido mais antigo e' a faixa —, e a frase foi para o ⓘ do heroi.
   assert.match(CLIENTE, /!temPrazo \? SEM_PRAZO_CANAL_ML :/);
-  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} \/>/);
+  assert.match(CLIENTE, /<Ajuda chave=\{chaveAjudaHeroi\} extras=\{extrasHeroi\} emControle=\{Boolean\(abrirHeroi\)\} \/>/);
   const html = renderToStaticMarkup(h(AjudaMetrica, { chave: "mercadolivre.over48h", extras: [SEM_PRAZO_CANAL_ML] }));
   // O leitor de tela le' a frase inteira pelo `aria-label` do ⓘ.
   assert.match(html, /aria-label="[^"]*Indisponível neste canal: o Mercado Livre não publica prazo de despacho na fonte atual\./);
@@ -772,7 +772,7 @@ test("heroi: sparkline so' com serie de >= 4 pontos; sem serie, o render de ante
   assert.match(com, /text-accent/);
   // O herói da fila recebe a MESMA serie dos cards (so' horas com todas as contas).
   const cliente = readFileSync(join(import.meta.dirname, "..", "app", "expedicao", "ExpedicaoClient.tsx"), "utf8");
-  assert.match(cliente, /delta=\{deltaDoCard\(serieHeroi\)\}\s*serie=\{serieHeroi\.serie\}\s*granularidade="hour"/);
+  assert.match(cliente, /serie=\{serieHeroi\.serie \?\? null\}/);
 });
 
 // FILTROS-PADRAO — o Periodo da Expedicao no gatilho comum: atalho pelo nome,

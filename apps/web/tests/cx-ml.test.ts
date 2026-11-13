@@ -307,26 +307,33 @@ test("ⓘ: a metodologia diz que e' calculo Torre, que a 1a acao e' parcial e qu
   assert.doesNotMatch(AJUDA_ML.resposta, /base diária/);
 });
 
-test("telas: a pagina escolhe o corpo pelo canal; o filtro tem os dois canais; sem legenda solta", () => {
+test("telas: a pagina escolhe o corpo pelo canal; os dois canais sao abas; sem legenda solta", () => {
   const pagina = readFileSync(new URL("../app/cx/page.tsx", import.meta.url), "utf8");
   assert.match(pagina, /lerCanalCx\(params\)/);
   assert.match(pagina, /canal === "ml" \? <CxMercadoLivre/);
   const filtros = readFileSync(new URL("../app/cx/FiltrosCx.tsx", import.meta.url), "utf8");
-  assert.match(filtros, /CANAIS_CX\.map/);
+  // ALVO-GRADE: o canal saiu da barra de filtros e virou aba (a mesma URL, `?canal=ml`)
+  assert.doesNotMatch(filtros, /CANAIS_CX/);
   assert.match(filtros, /aria-pressed=\{ativo\}/);
+  const shopee = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
+  assert.match(shopee, /const VISOES_CX = CANAIS_CX\.map/);
+  assert.match(shopee, /visoes=\{VISOES_CX\}/);
   const tela = readFileSync(new URL("../app/cx/CxMercadoLivre.tsx", import.meta.url), "utf8");
-  for (const peca of ["<Heroi", "<Faixa", "<FilaAtencao", "<Pareto", "<ProblemasPorMarca", "<AtendimentoPorLoja", "<MaisDetalhes"]) {
+  for (const peca of ["<AbaCx", "<Faixa", "<CartaoIndicador", "<PainelAtencao", "<PainelPareto", "<ProblemasPorMarca", "<AtendimentoPorLoja", "<MaisDetalhes"]) {
     assert.ok(tela.includes(peca), `falta ${peca}`);
   }
   assert.doesNotMatch(tela, /<StatCard|<SummaryPanel/);
   assert.match(tela, /torreFetch/);
   assert.doesNotMatch(tela, /cx-ml-fora/, "a Ápice nao vende no ML: sem linha na tela, so' no ⓘ do heroi");
   assert.match(tela, /fica fora dos números/);
-  // mesmo inicio da Shopee: heroi Taxa de resposta + Saude da Conta por marca + selo; cartoes Contact rate, Cancelamento, Reembolso
+  // mesmo inicio da Shopee: cartao Taxa de resposta com o selo da reputacao + Saude da Conta por marca; depois Cancelamento, Devolucao, Reembolso
   assert.match(tela, /rotulo=\{ROTULO_ML\.resposta\}/);
   assert.match(tela, /<SaudePorMarca itens=\{status\}/);
   assert.match(tela, /selo=\{heroi\.selo/);
-  const ordem = ['taxa("reclamacao"', 'taxa("cancelamento"', 'taxa("devolucao"', 'taxa("reembolso"'].map((x) => tela.indexOf(x));
+  // sempre quatro cartoes: a reclamacao (contact rate do ML) fica na tabela por marca
+  assert.doesNotMatch(tela, /taxa\("reclamacao"/);
+  assert.doesNotMatch(tela, /<Heroi|<KpiTile|<PageHeader/, "sem o visual antigo");
+  const ordem = ["rotulo={ROTULO_ML.resposta}", 'taxa("cancelamento"', 'taxa("devolucao"', 'taxa("reembolso"'].map((x) => tela.indexOf(x));
   assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "cartoes na ordem da Shopee");
   assert.doesNotMatch(tela, /MessageCircleQuestion|ShieldAlert/, "mediacoes e perguntas sairam da faixa");
   assert.doesNotMatch(tela, /Sem fonte/);

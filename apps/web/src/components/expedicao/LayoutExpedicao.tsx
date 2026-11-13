@@ -41,7 +41,7 @@ export const CLASSE_CABECALHO =
  * painel (com `aria-busy`), e nao deste componente: o `main` e' do
  * AppShell e o teste de landmarks ancora na raiz do componente do canal.
  */
-export const CLASSE_RAIZ_EXPEDICAO = "flex w-full flex-col gap-3 p-4";
+export const CLASSE_RAIZ_EXPEDICAO = "w-full tc-entrada";
 
 /**
  * QA T-0010 (M4): os MESMOS textos de estado nos tres canais.
@@ -52,7 +52,17 @@ export const TEXTO_ESTADO = {
   vazio: "Nenhum pedido aguardando expedição nesta publicação.",
 } as const;
 
+/** ALVO-GRADE: o que cada painel entrega a' moldura `Aba` (titulo e abas de canal sao da casca). */
+export interface PartesDaAba {
+  selo?: ReactNode;
+  filtros?: ReactNode;
+  direita?: ReactNode;
+  children?: ReactNode;
+}
+export type Moldura = (partes: PartesDaAba) => ReactNode;
+
 export default function LayoutExpedicao({
+  moldura,
   cabecalho,
   destaque,
   avisos,
@@ -60,7 +70,10 @@ export default function LayoutExpedicao({
   estado,
   children,
 }: {
-  cabecalho: ReactNode;
+  /** A casca desenha o `<Aba>`; o painel so' preenche. */
+  moldura: Moldura;
+  /** `cabecalhoExpedicao(...)`: selo, filtros e profundidade. */
+  cabecalho: Omit<PartesDaAba, "children">;
   /** CX-MKT-3: faixa de LDR logo abaixo do cabecalho, igual nos tres canais. */
   destaque?: ReactNode;
   avisos?: ReactNode;
@@ -70,12 +83,18 @@ export default function LayoutExpedicao({
 }) {
   return (
     <>
-      {cabecalho}
-      {destaque}
-      {avisos}
-      {qualidade}
-      {estado}
-      {children}
+      {moldura({
+        ...cabecalho,
+        children: (
+          <>
+            {destaque}
+            {avisos}
+            {qualidade}
+            {estado}
+            {children}
+          </>
+        ),
+      })}
     </>
   );
 }
@@ -84,24 +103,25 @@ export default function LayoutExpedicao({
  * A visao do gestor, na MESMA ordem nos tres canais. A ordem e' do
  * esqueleto, nao de quem chama: trocar as props de lugar nao muda a tela.
  *
- * IDENTIDADE-GERENCIAL (spec do Prumo, 08/11/2026) — o esqueleto da Gerencial:
- *   heroi -> faixa de KPIs -> "O que exige atenção agora" -> backlog por
- *   marca -> evolucao | concentracao (7/12 | 5/12, so' o TikTok) -> LDR 7 dias
- *   -> "Mais detalhes" (fechado) -> convite ao detalhe operacional.
+ * ALVO-GRADE (aprovado em 12/11/2026) — a grade unica das abas:
+ *   faixa de 4 cartoes -> fila por situacao de prazo | "O que exige atenção"
+ *   (lado a lado) -> backlog por marca (largura total) -> evolucao |
+ *   concentracao (7/12 | 5/12, so' o TikTok) -> LDR 7 dias -> "Mais detalhes".
+ * O heroi virou o 1o cartao; o convite ao detalhe saiu (o seletor da barra ja' leva la').
  */
 export function CorpoGestor({
-  heroi,
   faixa,
+  prazo,
   atencao,
   backlog,
   evolucao,
   concentracao,
   ldr,
   maisDetalhes,
-  convite,
 }: {
-  heroi: ReactNode;
-  faixa?: ReactNode;
+  faixa: ReactNode;
+  /** Painel da fila por situacao de prazo (o antigo meio do heroi). */
+  prazo?: ReactNode;
   atencao: ReactNode;
   backlog: ReactNode;
   /** TikTok: evolucao por dia de vencimento (7/12). */
@@ -112,13 +132,14 @@ export function CorpoGestor({
   ldr?: ReactNode;
   /** `MaisDetalhes` com o que nao responde a pergunta da dobra. */
   maisDetalhes?: ReactNode;
-  convite?: ReactNode;
 }) {
   return (
     <>
-      {heroi}
       {faixa}
-      {atencao}
+      <div className={`grid grid-cols-1 gap-3 ${prazo ? "lg:grid-cols-2" : ""}`}>
+        {prazo}
+        {atencao}
+      </div>
       {backlog}
       {evolucao || concentracao ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
@@ -128,7 +149,6 @@ export function CorpoGestor({
       ) : null}
       {ldr}
       {maisDetalhes}
-      {convite}
     </>
   );
 }

@@ -2,43 +2,42 @@
 
 import { Store, Target } from "lucide-react";
 
-import KpiTile from "@/components/ui/KpiTile";
-import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import { CANAIS, type Totais } from "@/lib/metas";
 import { cartoesMetas } from "@/lib/metas-cartoes";
 
+/** Cor de identidade: violeta para o global; em cada canal, a cor do proprio canal. */
+const COR = {
+  global: "rgb(var(--tc-kpi-gmv))",
+  tiktok: "rgb(var(--tc-canal-tiktok))",
+  ml: "rgb(var(--tc-canal-ml))",
+  shopee: "rgb(var(--tc-canal-shopee))",
+} as const;
+
 /**
- * Totais da grade no padrao da Gerencial (`KpiTile` gerencial, identidade `gmv`).
- * O canal e' so' o ponto no rotulo, nunca cor de cartao. Informativos: a tela e'
- * um formulario e o total acompanha o rascunho, como o rodape da grade.
+ * Totais da grade na faixa de 4 cartoes iguais (`CartaoIndicador`). Em cada
+ * canal, a barra e' a parte dele na meta global. Informativos: a tela e' um
+ * formulario e o total acompanha o rascunho, como o rodape da grade.
  */
 export default function MetasTotais({ totais }: { totais: Totais }) {
   // Sem nenhuma meta no mes a faixa seria so' "—": a Note da pagina ja' diz isso.
   if (totais.global == null) return null;
   const cartoes = cartoesMetas(totais);
   return (
-    <section aria-label="Totais das metas" className="grid grid-cols-2 gap-3 md:grid-cols-4">
+    <section aria-label="Totais das metas" className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
       {cartoes.map((c) => {
         const canal = CANAIS.find((x) => x.id === c.chave);
+        const v = canal ? totais.porCanal[canal.id] : null;
         return (
-          <KpiTile
+          <CartaoIndicador
             key={c.chave}
-            variante="gerencial"
-            identidade="gmv"
+            rotulo={canal ? canal.label : "Meta global"}
             icone={canal ? Store : Target}
-            rotulo={
-              canal ? (
-                <span className="inline-flex items-center gap-1.5">
-                  <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${CHANNEL_DOT[canal.id]}`} />
-                  {canal.label}
-                </span>
-              ) : (
-                "Meta global"
-              )
-            }
+            cor={COR[c.chave]}
             valor={c.ausente ? "—" : c.valor}
-            tom={c.ausente ? "ausente" : "neutro"}
-            comparacao={c.chave === "global" ? "Soma dos canais" : c.comparacao ?? undefined}
+            ausente={c.ausente}
+            progresso={canal && v != null && totais.global ? v / totais.global : null}
+            legenda={c.chave === "global" ? "Soma dos canais" : c.comparacao ?? undefined}
           />
         );
       })}

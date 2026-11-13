@@ -4,8 +4,8 @@
  * Faixa de confianca no dado (Gate V2-1, Task C; semantica corrigida na rodada
  * consolidada, Task F).
  *
- * Decisao do V2-0: confianca **NAO e' KPI**. Ela ocupa uma faixa horizontal
- * compacta entre os filtros e a faixa de KPIs, clicavel, que abre o drill-down.
+ * Decisao do V2-0: confianca **NAO e' KPI**. Desde 13/11 e' um selo pequeno
+ * ao lado do "Atualizado" no topo, clicavel, que abre o drill-down.
  *
  * O que a faixa afirma agora e' **disponibilidade de serie**, derivada dos
  * estados das series por canal ja carregadas — nao "cobertura" inferida de
@@ -26,77 +26,61 @@ interface Props {
   onOpen: () => void;
 }
 
+// Selo do topo (13/11): mesma altura e anel do SeloAtualizado, ao lado dele.
+const SELO =
+  "inline-flex min-h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium ring-1 ring-inset";
+
 export default function ConfidenceStrip({ data, loading, onOpen }: Props) {
   if (loading) {
     return (
-      <div
-        className="bg-surface border border-line rounded-xl px-4 py-2.5 flex items-center gap-2"
-        role="status"
-        aria-busy="true"
-      >
-        <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-line animate-pulse" />
-        <span className="text-xs text-ink-faint">Verificando disponibilidade das séries…</span>
-      </div>
+      <span role="status" aria-busy="true" className={`${SELO} bg-raised text-ink-faint ring-line`}>
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-line animate-pulse" />
+        Verificando dados…
+      </span>
     );
   }
 
   const { selectedCount, availableCount, noRecordsCount, unavailableCount } = data;
   const allAvailable = availableCount === selectedCount && selectedCount > 0;
+  const alerta = unavailableCount > 0 || (data.warningsChecked && data.warningCount > 0);
   const dotTone = unavailableCount > 0 ? "bg-warn" : allAvailable ? "bg-ok" : "bg-ink-faint";
+  // O resto do que a faixa escrevia (sem registros, defasagem, nao verificado) vai no title e no detalhe.
+  const detalhe = [
+    `Série disponível em ${availableCount} de ${selectedCount} ${selectedCount === 1 ? "canal" : "canais"}`,
+    noRecordsCount > 0 ? `${noRecordsCount} sem registros no período` : null,
+    unavailableCount > 0 ? `${unavailableCount} ${unavailableCount === 1 ? "indisponível" : "indisponíveis"}` : null,
+    data.warningsChecked
+      ? [
+          data.maxStalenessDays != null ? `defasagem máxima ${data.maxStalenessDays}d` : null,
+          data.warningCount > 0 ? `${data.warningCount} aviso${data.warningCount > 1 ? "s" : ""} de dado` : "sem avisos de dado",
+        ].filter(Boolean).join(" · ")
+      : "defasagem e avisos não verificados",
+  ].filter(Boolean).join(" · ");
 
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-haspopup="dialog"
-      aria-label="Confiança no dado — abrir disponibilidade das séries, defasagem e avisos"
-      className="w-full min-h-11 text-left bg-surface border border-line rounded-xl px-4 py-2.5 flex items-center gap-x-3 gap-y-1 flex-wrap hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors"
+      title={detalhe}
+      aria-label={`Confiança no dado: ${detalhe}. Abrir detalhe`}
+      className={`${SELO} ${alerta ? "bg-warn-soft text-warn-ink ring-warn/30" : "bg-surface text-ink-muted ring-line"} hover:bg-accent-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-colors`}
     >
-      <span className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
-        Confiança no dado
-      </span>
-
-      <span className="flex items-center gap-1.5 text-xs">
-        <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full ${dotTone}`} />
-        <span className="text-ink-muted tabular-nums">
-          Série disponível em {availableCount} de {selectedCount}{" "}
-          {selectedCount === 1 ? "canal" : "canais"}
+      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${dotTone}`} />
+      {/* Frase de gestor; contagem de series e defasagem ficam no title e no detalhe. */}
+      {unavailableCount > 0 ? (
+        <span className="tabular-nums">
+          {unavailableCount} {unavailableCount === 1 ? "canal sem dado" : "canais sem dado"}
         </span>
-      </span>
-
-      {noRecordsCount > 0 && (
-        <span className="text-xs text-ink-muted tabular-nums">
-          {noRecordsCount} sem registros no período
+      ) : data.warningsChecked && data.warningCount > 0 ? (
+        <span className="tabular-nums">
+          {data.warningCount} {data.warningCount === 1 ? "aviso" : "avisos"} no dado
         </span>
-      )}
-      {unavailableCount > 0 && (
-        <span className="text-xs text-warn-ink tabular-nums">
-          {unavailableCount} {unavailableCount === 1 ? "indisponível" : "indisponíveis"}
-        </span>
-      )}
-
-      {/* Defasagem e avisos vem do executive-summary. Se ele nao respondeu, o
-          texto diz que NAO foi verificado — nunca "sem avisos". */}
-      {data.warningsChecked ? (
-        <>
-          {data.maxStalenessDays != null && (
-            <span className="text-xs text-ink-muted tabular-nums">
-              defasagem máxima {data.maxStalenessDays}d
-            </span>
-          )}
-          <span className={`text-xs tabular-nums ${data.warningCount > 0 ? "text-warn-ink" : "text-ink-faint"}`}>
-            {data.warningCount > 0
-              ? `${data.warningCount} aviso${data.warningCount > 1 ? "s" : ""} de dado`
-              : "sem avisos de dado"}
-          </span>
-        </>
+      ) : data.warningsChecked && allAvailable ? (
+        "Dado ok"
       ) : (
-        <span className="text-xs text-ink-faint">defasagem e avisos não verificados</span>
+        "Dado não verificado"
       )}
-
-      <span aria-hidden="true" className="ml-auto text-xs font-semibold text-accent">
-        Detalhar
-      </span>
     </button>
   );
 }

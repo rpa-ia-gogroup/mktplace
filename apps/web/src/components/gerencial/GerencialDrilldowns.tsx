@@ -39,8 +39,7 @@ import { formatDeltaAbs, formatMetricByType, formatReferenceValue } from "@/lib/
 import type { MergedBucket, MergedSeries } from "@/lib/gerencial/trend-series";
 import { bucketRange } from "@/lib/gerencial/trend-series";
 import type { TrendMetric } from "@/lib/gerencial/request-key";
-import type { BrandChannelMatrix, ConcentrationEntry, MatrixRow, Movement } from "@/lib/gerencial/brand-matrix";
-import { PRODUCTS_SCOPE_NOTE } from "@/lib/gerencial/brand-matrix";
+import type { BrandChannelMatrix, MatrixRow, Movement } from "@/lib/gerencial/brand-matrix";
 import type { VolumeHealthRow } from "@/lib/gerencial/volume-health";
 import { CANCEL_RATE_FORMULA, NO_CROSS_CHANNEL_RANKING } from "@/lib/gerencial/volume-health";
 
@@ -756,91 +755,6 @@ export function MatrixChannelDrilldownContent({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Concentracao por marca (Task B.3)
-// ---------------------------------------------------------------------------
-
-export function ConcentrationDrilldownContent({
-  entry,
-  position,
-  top1Pct,
-  top3Pct,
-  positiveBrands,
-  ranking,
-  periodLabel,
-  refreshedAt,
-  brandHref,
-  produtosHref,
-}: {
-  entry: ConcentrationEntry;
-  position: number;
-  top1Pct: number | null;
-  top3Pct: number | null;
-  positiveBrands: number;
-  /** POPUPS-1 — as marcas do periodo ja' ordenadas (mesma base da faixa), para
-   * mostrar quem esta' a frente e atras desta marca. */
-  ranking?: ConcentrationEntry[];
-  periodLabel: string;
-  refreshedAt: string | null;
-  brandHref: string;
-  produtosHref: string;
-}) {
-  const lista = ranking ?? [];
-  return (
-    <div className="flex flex-col gap-4 text-sm">
-      <Topo
-        valor={fmtBrlFull(entry.gmv)}
-        extra={<Selo>{fmtPct1(entry.sharePct)} do total</Selo>}
-        leading={`${position}ª de ${positiveBrands} marcas`}
-        periodLabel={periodLabel}
-        refreshedAt={refreshedAt}
-        dica="Participação sobre o GMV total do escopo selecionado. Trocar canal ou período muda o denominador: o percentual não é comparável entre filtros. Top 3 exige pelo menos três marcas com GMV positivo — não se aproxima."
-      />
-
-      <DrilldownSecao
-        titulo="Concentração"
-        acao={
-          <span className="tabular-nums">
-            Top 1 {top1Pct != null ? fmtPct1(top1Pct) : "N/D"} · Top 3 {top3Pct != null ? fmtPct1(top3Pct) : "base insuficiente"}
-          </span>
-        }
-      >
-        {lista.length > 1 ? (
-          <ul className="flex flex-col">
-            {lista.map((e, i) => (
-              <EvidenceRow
-                key={e.brand}
-                label={`${i + 1}. ${e.label}`}
-                mutedLabel={e.brand !== entry.brand}
-                barra={e.brand === entry.brand ? "bg-accent" : "bg-line-strong"}
-                pct={e.sharePct}
-                value={`${fmtBrlFull(e.gmv)} · ${fmtPct1(e.sharePct)}`}
-                tone={e.brand === entry.brand ? "value" : "muted"}
-              />
-            ))}
-          </ul>
-        ) : (
-          <ul className="flex flex-col">
-            <EvidenceRow label={entry.label} pct={entry.sharePct} value={fmtPct1(entry.sharePct)} />
-          </ul>
-        )}
-      </DrilldownSecao>
-
-      <div className="flex flex-col gap-2">
-        <DrilldownCta href={brandHref}>Abrir visão completa da marca →</DrilldownCta>
-        <div className="flex flex-col gap-1">
-          <DrilldownCta href={produtosHref}>Ver produtos desta seleção →</DrilldownCta>
-          <p className="text-xs text-ink-faint">{PRODUCTS_SCOPE_NOTE}.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Saude do volume por canal
-// ---------------------------------------------------------------------------
-
 export function VolumeHealthDrilldownContent({
   row,
   periodLabel,
@@ -974,45 +888,6 @@ export function CommercialAttentionDrilldownContent({
       </DrilldownSecao>
 
       <DrilldownCta href={href}>Ver evidência →</DrilldownCta>
-    </div>
-  );
-}
-
-export function DataWarningDrilldownContent({
-  item,
-  periodLabel,
-  refreshedAt,
-  href,
-}: {
-  item: DataConfidenceItem;
-  periodLabel: string;
-  refreshedAt: string | null;
-  href: string | null;
-}) {
-  const acima = item.stalenessDays != null && item.thresholdDays != null && item.stalenessDays > item.thresholdDays;
-  return (
-    <div className="flex flex-col gap-4 text-sm">
-      <Topo
-        valor={item.stalenessDays != null ? `${item.stalenessDays} dia(s)` : null}
-        vazio="Defasagem não declarada"
-        tom={acima ? "text-warn-ink" : "text-ink"}
-        extra={item.thresholdDays != null && <Selo pele={acima ? "warn" : "neutro"}>limiar {item.thresholdDays} dia(s)</Selo>}
-        leading="Defasagem"
-        periodLabel={periodLabel}
-        refreshedAt={refreshedAt}
-        dica="Um aviso de dado descreve o que a fonte não sustenta neste período. Não é diagnóstico comercial e não deve ser lido como queda de desempenho."
-      />
-
-      <p className="text-ink-muted leading-snug">{item.message}</p>
-
-      <DrilldownSecao titulo="Evidência">
-        <ul className="flex flex-col">
-          <EvidenceRow label="Fonte" value={item.source ?? "Não declarada"} tone={item.source ? "value" : "muted"} />
-          <EvidenceRow label="Última data" value={item.lastDate ?? "Não declarada"} tone={item.lastDate ? "value" : "muted"} />
-        </ul>
-      </DrilldownSecao>
-
-      {href && <DrilldownCta href={href}>Entender esta limitação →</DrilldownCta>}
     </div>
   );
 }

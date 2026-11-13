@@ -386,9 +386,12 @@ test("tela de Qualidade: o selo nao depende de haver metrica operacional Shopee"
   // num mes sem nenhum cancelamento para exibir.
   const src = readSource("app", "qualidade", "page.tsx");
   const bloco = src.indexOf("{produtosShQuality && (");
-  const blocoOperacional = src.indexOf("{hasShQuality && (");
+  // ALVO-GRADE: o bloco operacional da Shopee virou a aba "Shopee" (que so' existe com `hasShQuality`);
+  // o selo mora na Visao geral, em "Mais detalhes", e nao depende dela.
+  const blocoOperacional = src.indexOf('titulo="Qualidade — Shopee"');
   assert.ok(bloco > 0, "secao do selo ausente");
-  assert.ok(bloco < blocoOperacional, "o selo nao pode estar aninhado no bloco operacional");
+  assert.ok(blocoOperacional > 0 && bloco < blocoOperacional, "o selo nao pode estar aninhado no bloco operacional");
+  assert.match(src, /\{\(showTiktok \|\| avisoDevolucao \|\| produtosShQuality\) && \(\s*<MaisDetalhes>/, "Mais detalhes aparece so' pelo selo, sem metrica operacional");
 });
 
 test("tela de Qualidade: falha de requisicao limpa o selo antigo", () => {
