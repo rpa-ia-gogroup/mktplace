@@ -371,9 +371,10 @@ function RegioesPageInner() {
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {/* Ranking por UF — usa o filtro local de UF */}
               <Panel titulo="Ranking por UF" semPadding>
-                <TableScrollHint>
+                {/* 27 UFs: rola dentro do painel (cabecalho fixo), como a Tendencia ao lado */}
+                <TableScrollHint className="max-h-[28rem] overflow-y-auto">
                   <table className="w-full text-sm">
-                    <thead>
+                    <thead className="sticky top-0 z-10 bg-raised">
                       <tr className="bg-raised text-left">
                         <SortableHeader label="UF" column="uf" sort={ufSort.sort} onSort={ufSort.toggleSort} align="left" />
                         <SortableHeader label="GMV" column="gmv" sort={ufSort.sort} onSort={ufSort.toggleSort} />
