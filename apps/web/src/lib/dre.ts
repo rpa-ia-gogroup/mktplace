@@ -1044,16 +1044,31 @@ export function cenarioSuspenso(c: object | null | undefined): { suspensa: boole
 export const ROTULO_MARGEM_SUSPENSA = "Margem suspensa";
 
 /**
- * "Margem suspensa: insumo vencido desde 09/11/2026" (ou "insumo ausente").
- * A data vem do motivo da API; sem ela, de `publicadoEm` (ex.:
+ * "Margem suspensa: insumo vencido desde 09/11/2026" (ou "insumo ausente",
+ * "taxa indisponível", "CMV indisponível", "taxa ou CMV indisponível").
+ * A causa sai do motivo da API; com mais de uma, vale a vencida (tem data).
+ * A data vem do motivo; sem ela, de `publicadoEm` (ex.:
  * `fontes.insumos_dre.publicado_em`); sem nenhuma, a frase sem data.
+ * Motivo sem causa reconhecida: so' "Margem suspensa" — nunca "insumo
+ * vencido" para o que nao venceu (T-0112: taxa/CMV indisponivel nao tem data).
  */
 export function textoSuspensao(motivo: string | null | undefined, publicadoEm?: string | null): string {
   const m = motivo ?? "";
-  if (/insumo ausente/.test(m) && !/vencido/.test(m)) return `${ROTULO_MARGEM_SUSPENSA}: insumo ausente`;
-  const doMotivo = /publicado em (\d{2}\/\d{2}\/\d{4})/.exec(m)?.[1] ?? null;
-  const data = doMotivo ?? (publicadoEm ? fmtInstanteBrt(publicadoEm).slice(0, 10) : null);
-  return `${ROTULO_MARGEM_SUSPENSA}: insumo vencido${data ? ` desde ${data}` : ""}`;
+  // "insumo vencido" cobre tambem o agregado "(insumo vencido ou ausente)".
+  if (/insumo vencido/.test(m)) {
+    const doMotivo = /publicado em (\d{2}\/\d{2}\/\d{4})/.exec(m)?.[1] ?? null;
+    const data = doMotivo ?? (publicadoEm ? fmtInstanteBrt(publicadoEm).slice(0, 10) : null);
+    return `${ROTULO_MARGEM_SUSPENSA}: insumo vencido${data ? ` desde ${data}` : ""}`;
+  }
+  // So' "insumo ausente": o motivo de um componente pode dizer "ausente no mart".
+  if (/insumo ausente/.test(m)) return `${ROTULO_MARGEM_SUSPENSA}: insumo ausente`;
+  // T-0112: celula "taxa indisponível: …" / "CMV indisponível: …"; agregado "(taxa ou CMV indisponível)".
+  const taxa = /taxa indisponível/.test(m);
+  const cmv = /CMV indisponível/.test(m);
+  if (/taxa ou CMV indisponível/.test(m) || (taxa && cmv)) return `${ROTULO_MARGEM_SUSPENSA}: taxa ou CMV indisponível`;
+  if (taxa) return `${ROTULO_MARGEM_SUSPENSA}: taxa indisponível`;
+  if (cmv) return `${ROTULO_MARGEM_SUSPENSA}: CMV indisponível`;
+  return ROTULO_MARGEM_SUSPENSA;
 }
 
 /** Celula sem margem: classificacao nao calculavel ou valor nulo. */

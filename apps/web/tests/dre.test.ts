@@ -775,6 +775,39 @@ test("T-0101: textoSuspensao — ausente sem data; data de publicado_em como res
   assert.equal(d.cenarioSuspenso({}).suspensa, false);
 });
 
+test("T-0112: textoSuspensao — taxa ou CMV indisponivel nunca vira 'insumo vencido'", async () => {
+  const d = await import("../src/lib/dre.ts");
+  const casos: Array<[string, string]> = [
+    // Celula: o motivo do componente pode ter "ausente" sem ser insumo ausente.
+    ["taxa indisponível: taxa da Shopee ausente no mart; margem suspensa", "Margem suspensa: taxa indisponível"],
+    ["CMV indisponível: sem NF de venda para marca x plataforma x mes na origem; margem suspensa",
+      "Margem suspensa: CMV indisponível"],
+    ["taxa indisponível: x; CMV indisponível: y; margem suspensa", "Margem suspensa: taxa ou CMV indisponível"],
+    // Agregado.
+    ["1 de 2 células com margem suspensa (taxa ou CMV indisponível); margem suspensa",
+      "Margem suspensa: taxa ou CMV indisponível"],
+    // Sem causa reconhecida: o generico, mesmo com `publicadoEm`.
+    ["taxa com sinal inesperado: CMV negativo; margem suspensa", "Margem suspensa"],
+    ["", "Margem suspensa"],
+  ];
+  for (const [motivo, esperado] of casos) {
+    const t = d.textoSuspensao(motivo, "2026-11-09T13:00:00+00:00");
+    assert.equal(t, esperado, motivo);
+    assert.doesNotMatch(t, /insumo vencido/, motivo);
+  }
+  assert.equal(d.textoSuspensao(null), "Margem suspensa");
+  // Vencido com data continua igual, e tem prioridade sobre a indisponivel.
+  assert.equal(
+    d.textoSuspensao("insumo vencido: cmv; taxa indisponível: x; margem suspensa até a republicação (publicado em 11/10/2026)"),
+    "Margem suspensa: insumo vencido desde 11/10/2026",
+  );
+  assert.equal(
+    d.textoSuspensao("1 de 3 células com margem suspensa (insumo vencido; taxa ou CMV indisponível); margem suspensa até a republicação (publicado em 09/11/2026)"),
+    "Margem suspensa: insumo vencido desde 09/11/2026",
+  );
+  assert.equal(d.textoSuspensao("insumo vencido: taxas; margem suspensa até a republicação"), "Margem suspensa: insumo vencido");
+});
+
 test("T-0101: resposta sem os campos novos mantem 'Não calculável'", async () => {
   const fx = await import("./dre-fixtures.ts");
   const d = await import("../src/lib/dre.ts");
