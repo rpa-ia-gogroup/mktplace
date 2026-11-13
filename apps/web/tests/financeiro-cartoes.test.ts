@@ -7,7 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { gmvExato, serieQueConfere } from "../src/lib/financeiro-cartoes.ts";
+import { gmvExato } from "../src/lib/financeiro-cartoes.ts";
+import { serieQueConfere } from "../src/lib/serie-que-confere.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
 

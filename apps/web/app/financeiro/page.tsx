@@ -40,7 +40,7 @@ import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import FaixaFinanceiro, { GRADE_FINANCEIRO, type PainelCanal } from "@/components/financeiro/FinanceiroCartoes";
-import { serieQueConfere } from "@/lib/financeiro-cartoes";
+import { serieQueConfere } from "@/lib/serie-que-confere";
 import FinanceiroDrilldownContent from "@/components/financeiro/FinanceiroDrilldownContent";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import FaixaCarregando from "@/components/ui/FaixaCarregando";
