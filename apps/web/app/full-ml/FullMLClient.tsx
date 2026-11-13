@@ -126,7 +126,7 @@ function FullMLPageInner() {
   const [from, setFrom] = useState(inicial.from);
   const [to, setTo] = useState(inicial.to);
   const [marca, setMarca] = useState("");
-  const [metrica, setMetrica] = useState<MetricaSerie>("gmv");
+  const [metrica, setMetrica] = useState<MetricaSerie>("units");
 
   const [dados, setDados] = useState<MLFulfillmentResponse | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -187,7 +187,7 @@ function FullMLPageInner() {
     setFrom(r.from);
     setTo(r.to);
     setMarca("");
-    setMetrica("gmv");
+    setMetrica("units");
   }, [hoje]);
 
   const full = byClass(dados, "full");
@@ -329,24 +329,12 @@ function FullMLPageInner() {
               <h2 id="full-ml-trend" className="text-sm font-semibold text-ink">
                 Participação diária do Full
               </h2>
-              <div className="flex gap-1" role="group" aria-label="Métrica da série">
-                {METRICAS.map((m) => (
-                  <button
-                    key={m.key}
-                    type="button"
-                    aria-pressed={metrica === m.key}
-                    onClick={() => setMetrica(m.key)}
-                    className={
-                      `${CONTROLE_BASE} font-medium ` +
-                      (metrica === m.key
-                        ? "border-accent bg-accent text-accent-on"
-                        : "border-line-strong bg-surface text-ink hover:bg-raised")
-                    }
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              <Segmented
+                rotulo="Métrica da série"
+                opcoes={METRICAS.map((m) => ({ valor: m.key, texto: m.label }))}
+                valor={metrica}
+                aoEscolher={setMetrica}
+              />
             </div>
             <MLFulfillmentTrend pontos={serie} metrica={metrica} />
           </section>

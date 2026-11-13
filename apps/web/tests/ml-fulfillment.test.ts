@@ -442,9 +442,9 @@ test("todo controle interativo declara alvo minimo de 44px", () => {
   // regex de atributos: arrow functions contem `>`, que truncaria `[^>]*` no
   // meio da tag e daria falso positivo.
   const blocos = PAGE.split("<button").slice(1);
-  // ALVO-GRADE: 2 literais `<button` (Limpar e o seletor de metrica, de `.map()`);
-  // marca e periodo sao o `Segmented` da casa, que ja' fixa o alvo de 44px.
-  assert.equal(blocos.length, 2, "a tela tem 2 literais de botao");
+  // ALVO-GRADE: 1 literal `<button` (Limpar); marca, periodo e metrica sao o
+  // `Segmented` da casa, que ja' fixa o alvo de 44px.
+  assert.equal(blocos.length, 1, "a tela tem 1 literal de botao");
   for (const b of blocos) {
     const tag = b.split(">")[0] + b.split(">").slice(1).join(">").split("</button>")[0];
     assert.ok(tag.includes("className="), "todo button precisa de className");
@@ -506,7 +506,9 @@ test("controle colorido nao sobrepoe cor a constante neutra", () => {
 
   // O ramo selecionado precisa declarar a paleta inteira, e nao herda-la.
   const ativo = PAGE.match(/\?\s*"([^"]*\bbg-accent\b[^"]*)"/);
-  assert.ok(ativo, "o estado selecionado precisa de um ramo explicito");
+  // ALVO-GRADE: os seletores viraram o `Segmented` da casa (sem ramo de cor proprio).
+  // Se um botao com estado selecionado voltar a tela, a paleta inteira continua exigida.
+  if (!ativo) return;
   for (const exigida of ["bg-accent", "text-accent-on", "border-accent"]) {
     assert.ok(ativo![1].includes(exigida),
       `o ramo selecionado precisa declarar ${exigida}`);
@@ -527,11 +529,12 @@ test("todo input e select tem label associado por id", () => {
 
 test("grupos de botoes sem label individual tem aria-label", () => {
   assert.ok(PAGE.includes('rotulo="Período"') && PAGE.includes('rotulo="Marca"'), "Segmented da casa: o rotulo vira o nome do grupo");
-  assert.ok(PAGE.includes('role="group" aria-label="Métrica da série"'));
+  assert.ok(PAGE.includes('rotulo="Métrica da série"'));
 });
 
 test("o seletor de metrica expoe o estado por aria-pressed", () => {
-  assert.ok(PAGE.includes("aria-pressed={metrica === m.key}"));
+  // Segmented da casa: radiogroup com aria-checked na opcao escolhida.
+  assert.ok(PAGE.includes("valor={metrica}") && PAGE.includes("aoEscolher={setMetrica}"));
 });
 
 test("o grafico tem alternativa textual e tabela navegavel", () => {
