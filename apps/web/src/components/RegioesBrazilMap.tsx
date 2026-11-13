@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { RegiaoUfRow } from "@/lib/api-client";
 import { BRAZIL_UF_PATHS, BRAZIL_MAP_VIEWBOX, UF_NAME } from "@/lib/brazil-uf-paths";
-import { computeGmvIntensity, coverageStrokeColor, topUfsByGmv } from "@/lib/regioes-map";
+import { computeGmvIntensity, topUfsByGmv } from "@/lib/regioes-map";
 import { fmtBrlCurto, fmtNumCurto, fmtPctSimples } from "@/lib/formatters";
 import { fmtPctOrNA, coverageLabel, coverageBadgeClass, fmtShareOfTotalPct } from "@/lib/regioes-format";
 import Panel from "@/components/ui/Panel";
@@ -99,7 +99,6 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
               const row = byUf.get(uf);
               const t = intensity.get(uf) ?? 0;
               const level = row?.coverage_level ?? "not_applicable";
-              const warnStroke = coverageStrokeColor(level);
               const isSelected = selectedUf === uf;
               const isActive = displayedUf === uf;
               const gmv = row?.gmv ?? 0;
@@ -110,8 +109,8 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                 <path
                   key={uf}
                   d={path}
-                  strokeWidth={isActive ? 2.5 : warnStroke ? 1.4 : 0.75}
-                  strokeDasharray={!isActive && level === "low" ? "3,2" : undefined}
+                  // contorno neutro: vermelho tracejado se lia como erro; a cobertura fica no aria-label e no painel ao lado
+                  strokeWidth={isActive ? 2.5 : 0.75}
                   strokeLinejoin="round"
                   role="button"
                   tabIndex={0}
@@ -120,7 +119,7 @@ export default function RegioesBrazilMap({ rows, totalGmv, loading }: Props) {
                   className="cursor-pointer outline-none transition-[filter] duration-100 focus-visible:brightness-95"
                   style={{
                     fill: preenchimento(t),
-                    stroke: isActive ? "rgb(var(--tc-accent-ink))" : warnStroke ?? "rgb(var(--tc-line-strong))",
+                    stroke: isActive ? "rgb(var(--tc-accent-ink))" : "rgb(var(--tc-line-strong))",
                     filter: isActive ? "brightness(1.05)" : undefined,
                   }}
                   onMouseEnter={() => setHoverUf(uf)}

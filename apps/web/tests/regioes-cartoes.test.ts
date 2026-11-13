@@ -58,7 +58,8 @@ test("cartoes: 4 na faixa (frete em Mais detalhes), so' as 7 identidades; so' GM
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
   assert.equal((src.match(/onAbrir=/g) ?? []).length, 2, "so' dois cartoes abrem detalhe");
   assert.ok(src.includes('onAbrir("gmv")') && src.includes('onAbrir("pedidos")'));
-  assert.ok(src.includes("tomDaCobertura(r?.coverage_level)") && src.includes("PILULA_DA_COBERTURA[coberturaTom]"), "nivel de cobertura na pilula");
+  // Revisor UX (#437): "100%" com pilula "Cobertura baixa" se lia como contradicao; o nivel fica no aviso da faixa
+  assert.ok(!src.includes("pilula="), "UF preenchida sem pilula de cobertura");
   assert.ok(src.includes("valor={r ? fmtBrlCurto(r.gmv) : null}") && src.includes('const AUSENTE = "sem dado no período"'), "ausencia = N/D com motivo, nunca zero");
   assert.ok(src.includes("rotulo={REGIONAL_GMV_LABEL}") && src.includes("rotulo={UF_FILL_LABEL}"), "rotulos do Gate DQ2 mantidos");
   assert.ok(src.includes('"N/A"') && src.includes("Shopee sem este dado"));

@@ -38,6 +38,9 @@ import {
 } from "@/lib/regioes-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
 
+/** Canal por extenso na tabela (a API manda o id curto). */
+const NOME_DO_CANAL: Record<string, string> = { ml: "Mercado Livre", shopee: "Shopee", tiktok: "TikTok Shop" };
+
 const ALL_UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
   "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO", "XX",
@@ -245,6 +248,12 @@ function RegioesPageInner() {
   const corpoOpaco = `divide-y divide-line transition-opacity duration-200 ${isLoadingState ? "opacity-50" : ""}`;
   const TH = "px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted";
   const TD = "px-4 py-3 text-right tabular-nums text-ink-muted";
+  // Mesmo nivel de cobertura em TODAS as linhas: o chip por linha vira ruido; diz-se uma vez, no canto do painel.
+  const nivelUnico = <T,>(rows: T[], f: (r: T) => string | null): string | null =>
+    rows.length > 0 && rows.every((r) => f(r) === f(rows[0])) ? f(rows[0]) : null;
+  const coberturaUnicaUf = nivelUnico(displayByUf, (r) => r.coverage_level);
+  const coberturaUnicaMarca = nivelUnico(displayByBrand, (r) => (r.coverage_warning ? r.coverage_level : "sem-alerta"));
+  const ausenteUnicoTendencia = nivelUnico(displayTrend, (p) => marcaPontoAusente(p.canais_ausentes) ?? "");
   const naoSeAplicaUf = ufFilter ? (
     <span className="rounded-md bg-warn-soft px-2 py-1 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
       Nacional · filtro de UF ({ufFilter}) não se aplica
@@ -256,16 +265,16 @@ function RegioesPageInner() {
       <Aba
         titulo="Regiões"
         selo={
-          linhaTemporal && canaisComAtraso.length > 0 ? (
-            // canal atrasado: "Dados completos até", escrito em tom de alerta (nunca so' o refreshed_at)
-            <span data-testid="regioes-linha-atualizacao" className="inline-flex min-h-8 items-center rounded-md bg-warn-soft px-2.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
-              {linhaTemporal}
-            </span>
-          ) : (
-            <span data-testid="regioes-linha-atualizacao">
-              <SeloAtualizado aoVivo={displaySummary ? true : null} em={displayRefreshedAt} carregando={isLoadingState} />
-            </span>
-          )
+          // Canal atrasado: "Desatualizado", escrito; a linha "Dados completos até…" vai no title (e o resumo, na faixa).
+          <span data-testid="regioes-linha-atualizacao">
+            <SeloAtualizado
+              aoVivo={displaySummary ? true : null}
+              em={displayRefreshedAt}
+              carregando={isLoadingState}
+              atrasado={canaisComAtraso.length > 0}
+              detalhe={linhaTemporal ?? undefined}
+            />
+          </span>
         }
         filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
         direita={
@@ -285,29 +294,49 @@ function RegioesPageInner() {
         }
         faixa={
           isErrorState ? undefined : (
-            // A ressalva de escopo e de atraso vai para o ⓘ do GMV; o aviso de canal parado vem ANTES dos cartoes
-            // (muda a leitura deles) e fica mesmo sem dado, porque explica o vazio.
+            // Um aviso so', ANTES dos cartoes (muda a leitura deles) e mesmo sem dado (explica o vazio):
+            // canal com fonte regional parado + escopo do que se mede. Metodologia e detalhes no ⓘ.
             <div className="flex flex-col gap-3" aria-busy={isLoadingState}>
-            {/* REGIONAL-SOURCE-RECOVERY-2: canal com fonte regional parado — muda a leitura dos cartoes. */}
-            {avisoCobertura && (
-              <div
-                role="status"
-                data-testid="aviso-cobertura-canal"
-                className={`rounded-2xl p-4 ring-1 ring-inset ${avisoCobertura.severidade === "critico" ? "bg-crit-soft ring-crit/30" : "bg-warn-soft ring-warn/30"}`}
-              >
-                <p className={`flex items-center gap-1.5 text-sm font-semibold ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>
-                  {avisoCobertura.titulo}
-                  <InfoDica texto={[avisoCobertura.mensagem, ...avisoCobertura.detalhes].join(" ")} />
+              {(avisoCobertura || regionalScope) && (
+                <p
+                  role="status"
+                  data-testid="aviso-cobertura-canal"
+                  className={`flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-lg px-3 py-2 text-xs ring-1 ring-inset ${
+                    avisoCobertura?.severidade === "critico" ? "bg-crit-soft text-crit-ink ring-crit/30"
+                      : avisoCobertura || regionalScope?.status === "partial_channels" ? "bg-warn-soft text-warn-ink ring-warn/30"
+                      : regionalScope?.status === "not_applicable" ? "bg-raised text-ink-muted ring-line"
+                      : "bg-accent-soft text-accent-ink ring-accent/20"
+                  }`}
+                >
+                  {/* REGIONAL-SOURCE-RECOVERY-2 / T-0088: quais canais e ate quando, em TEXTO VISIVEL. */}
+                  {avisoCobertura && (
+                    <>
+                      <span className="font-semibold">{avisoCobertura.titulo}:</span>
+                      <span data-testid="aviso-cobertura-resumo">{avisoCobertura.resumo}</span>
+                    </>
+                  )}
+                  {/* Gate DQ2: escopo do que esta sendo medido, SEMPRE visivel com dado fresco. */}
+                  {regionalScope && (
+                    <span className={avisoCobertura ? "before:mr-1.5 before:content-['·']" : "font-medium"}>
+                      {regionalScope.status === "not_applicable"
+                        ? "Sem cobertura regional na seleção · não é venda zero"
+                        : regionalScope.status === "partial_channels"
+                          ? `Só ${regionalScope.channelsInScope.join(" + ")} · ${regionalScope.channelsOutOfScope.join(", ")} fora · não comparável ao GMV total`
+                          : `Escopo regional: ${regionalScope.channelsInScope.join(" + ")} · não comparável ao GMV total`}
+                      {regionalScope.ufFillCaveat && " · UF 100% só no escopo regional"}
+                    </span>
+                  )}
+                  <InfoDica
+                    texto={[
+                      avisoCobertura?.mensagem,
+                      ...(avisoCobertura?.detalhes ?? []),
+                      regionalScope?.scopeNote,
+                      regionalScope?.ufFillCaveat,
+                      aviso,
+                    ].filter(Boolean).join(" ")}
+                  />
                 </p>
-                {/* T-0088: quais canais e ate quando, em TEXTO VISIVEL — antes so' no ⓘ. */}
-                <p data-testid="aviso-cobertura-resumo" className={`mt-1 text-sm ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>
-                  {avisoCobertura.resumo}
-                </p>
-                {avisoCobertura.detalhes.map((d) => (
-                  <p key={d} className={`mt-1 text-xs ${avisoCobertura.severidade === "critico" ? "text-crit-ink" : "text-warn-ink"}`}>{d}</p>
-                ))}
-              </div>
-            )}
+              )}
 
               {/* Cartoes no padrao da Gerencial. ALVO-GRADE: quatro CartaoIndicador. */}
               {isLoadingState ? (
@@ -319,20 +348,8 @@ function RegioesPageInner() {
           )
         }
         atencao={
-          regionalScope || (dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial")) || partialWarning ? (
+          (dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial")) || partialWarning ? (
             <div className="flex flex-col gap-2">
-              {/* Gate DQ2: escopo do que esta sendo medido, SEMPRE visivel com dado fresco. O texto completo fica no ⓘ. */}
-              {regionalScope && (
-                <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset ${regionalScope.status === "not_applicable" ? "bg-raised text-ink-muted ring-line" : regionalScope.status === "partial_channels" ? "bg-warn-soft text-warn-ink ring-warn/30" : "bg-accent-soft text-accent-ink ring-accent/20"}`}>
-                  {regionalScope.status === "not_applicable"
-                    ? "Sem cobertura regional na seleção · não é venda zero"
-                    : regionalScope.status === "partial_channels"
-                      ? `Só ${regionalScope.channelsInScope.join(" + ")} · ${regionalScope.channelsOutOfScope.join(", ")} fora · não comparável ao GMV total`
-                      : `Escopo regional: ${regionalScope.channelsInScope.join(" + ")} · não comparável ao GMV total`}
-                  {regionalScope.ufFillCaveat && <span className="text-warn-ink">· UF 100% só no escopo regional</span>}
-                  <InfoDica texto={[regionalScope.scopeNote, regionalScope.ufFillCaveat, aviso].filter(Boolean).join(" ")} />
-                </p>
-              )}
 
               {dataIsFresh && displaySummary && (nivelSoUf === "low" || nivelSoUf === "partial") && (
                 <p className={`flex w-fit flex-wrap items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs ring-1 ring-inset ${nivelSoUf === "low" ? "bg-crit-soft text-crit-ink ring-crit/30" : "bg-warn-soft text-warn-ink ring-warn/30"}`}>
@@ -370,7 +387,7 @@ function RegioesPageInner() {
 
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
               {/* Ranking por UF — usa o filtro local de UF */}
-              <Panel titulo="Ranking por UF" semPadding>
+              <Panel titulo="Ranking por UF" semPadding acao={coberturaUnicaUf ? <CoverageBadge level={coberturaUnicaUf as RegiaoUfRow["coverage_level"]} /> : undefined}>
                 {/* 27 UFs: rola dentro do painel (cabecalho fixo), como a Tendencia ao lado */}
                 <TableScrollHint className="max-h-[28rem] overflow-y-auto">
                   <table className="w-full text-sm">
@@ -380,13 +397,13 @@ function RegioesPageInner() {
                         <SortableHeader label="GMV" column="gmv" sort={ufSort.sort} onSort={ufSort.toggleSort} />
                         <SortableHeader label="Pedidos" column="orders" sort={ufSort.sort} onSort={ufSort.toggleSort} />
                         <SortableHeader label="Participação" column="share" sort={ufSort.sort} onSort={ufSort.toggleSort} />
-                        <th className={TH}>Cobertura</th>
+                        {!coberturaUnicaUf && <th className={TH}>Cobertura</th>}
                       </tr>
                     </thead>
                     <tbody className={corpoOpaco}>
                       {displayByUf.length === 0 && dataIsFresh && (
                         <tr>
-                          <td colSpan={5} className="px-4 py-8 text-center text-sm text-ink-faint">
+                          <td colSpan={coberturaUnicaUf ? 4 : 5} className="px-4 py-8 text-center text-sm text-ink-faint">
                             {unavailableSections.includes("byUf")
                               ? "Dados indisponíveis para o Ranking por UF neste momento."
                               : "Sem dados por UF para o período e filtros selecionados."}
@@ -402,7 +419,7 @@ function RegioesPageInner() {
                             <td className="px-4 py-3 text-right">{peso == null ? <span className="text-ink-faint">{fmtBrlCurto(row.gmv)}</span> : <CelulaBarra valor={fmtBrlCurto(row.gmv)} peso={peso} cor="rgb(var(--tc-kpi-gmv))" />}</td>
                             <td className={TD}>{fmtNumCurto(row.orders)}</td>
                             <td className={TD}>{share != null ? fmtPctSimples(share) : "N/A"}</td>
-                            <td className="px-4 py-3 text-right"><CoverageBadge level={row.coverage_level} /></td>
+                            {!coberturaUnicaUf && <td className="px-4 py-3 text-right"><CoverageBadge level={row.coverage_level} /></td>}
                           </tr>
                         );
                       })}
@@ -418,6 +435,11 @@ function RegioesPageInner() {
                 acao={
                   <>
                     {naoSeAplicaUf}
+                    {ausenteUnicoTendencia && (
+                      <span className="rounded-full bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink ring-1 ring-inset ring-warn/30">
+                        {ausenteUnicoTendencia} no período todo
+                      </span>
+                    )}
                     <span className="text-xs font-semibold uppercase tracking-widest text-ink-faint">
                       Granularidade {trendGranularity === "day" ? "diária" : "mensal"}
                     </span>
@@ -450,7 +472,7 @@ function RegioesPageInner() {
                           <tr key={p.date} className="transition-colors hover:bg-raised/60">
                             <td className="whitespace-nowrap px-4 py-3 font-medium text-ink">
                               {p.label}
-                              {ausente && (
+                              {ausente && !ausenteUnicoTendencia && (
                                 <span data-testid="tendencia-canal-ausente" className="ml-2 rounded-full bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink ring-1 ring-inset ring-warn/30">
                                   {ausente}
                                 </span>
@@ -473,7 +495,12 @@ function RegioesPageInner() {
               titulo="Cobertura por Marca × Canal"
               semPadding
               ajuda={displaySemCobertura.length > 0 ? `${displaySemCobertura.map((c) => (c === "tiktok" ? "TikTok Shop" : c)).join(", ")} fora: sem dado regional.` : undefined}
-              acao={naoSeAplicaUf}
+              acao={
+                <>
+                  {naoSeAplicaUf}
+                  {coberturaUnicaMarca && coberturaUnicaMarca !== "sem-alerta" && <CoverageBadge level={coberturaUnicaMarca as RegiaoUfRow["coverage_level"]} />}
+                </>
+              }
             >
               <TableScrollHint>
                 <table className="w-full text-sm">
@@ -485,13 +512,13 @@ function RegioesPageInner() {
                       <SortableHeader label="Pedidos" column="orders" sort={brandSort.sort} onSort={brandSort.toggleSort} />
                       <SortableHeader label="Cobertura UF" column="uf_fill_pct" sort={brandSort.sort} onSort={brandSort.toggleSort} />
                       <SortableHeader label="Cobertura Frete" column="shipping_pct" sort={brandSort.sort} onSort={brandSort.toggleSort} />
-                      <th className={TH}>Alerta</th>
+                      {!coberturaUnicaMarca && <th className={TH}>Alerta</th>}
                     </tr>
                   </thead>
                   <tbody className={corpoOpaco}>
                     {displayByBrand.length === 0 && dataIsFresh && (
                       <tr>
-                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-ink-faint">
+                        <td colSpan={coberturaUnicaMarca ? 6 : 7} className="px-4 py-8 text-center text-sm text-ink-faint">
                           {unavailableSections.includes("byBrand")
                             ? "Dados indisponíveis para Cobertura por Marca × Canal neste momento."
                             : "Sem dados por marca/canal para o período e filtros selecionados."}
@@ -503,16 +530,18 @@ function RegioesPageInner() {
                       return (
                         <tr key={`${row.brand}-${row.marketplace_id}`} className="transition-colors hover:bg-raised/60">
                           <td className="whitespace-nowrap px-4 py-3 font-semibold text-ink">{row.label}</td>
-                          <td className="whitespace-nowrap px-4 py-3 capitalize text-ink-muted">{row.marketplace}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-ink-muted">{NOME_DO_CANAL[row.marketplace] ?? row.marketplace}</td>
                           <td className="px-4 py-3 text-right">{peso == null ? <span className="text-ink-faint">{fmtBrlCurto(row.gmv)}</span> : <CelulaBarra valor={fmtBrlCurto(row.gmv)} peso={peso} cor="rgb(var(--tc-kpi-gmv))" />}</td>
                           <td className={TD}>{fmtNumCurto(row.orders)}</td>
                           <td className={TD}>{fmtPctOrNA(row.uf_fill_pct)}</td>
                           <td className={TD}>{fmtPctOrNA(row.shipping_cost_coverage_pct)}</td>
-                          <td className="px-4 py-3 text-right">
-                            {row.coverage_warning
-                              ? <CoverageBadge level={row.coverage_level} />
-                              : <span className="text-xs text-ink-faint">—</span>}
-                          </td>
+                          {!coberturaUnicaMarca && (
+                            <td className="px-4 py-3 text-right">
+                              {row.coverage_warning
+                                ? <CoverageBadge level={row.coverage_level} />
+                                : <span className="text-xs text-ink-faint">—</span>}
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

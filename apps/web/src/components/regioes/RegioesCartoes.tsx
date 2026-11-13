@@ -2,20 +2,20 @@
 
 import { CircleDollarSign, MapPin, Percent, ShieldCheck, ShoppingBag, Truck, type LucideIcon } from "lucide-react";
 
-import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
+import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
 import type { IdentidadeKpi } from "@/components/ui/KpiTile";
 import type { RegioesSummaryData } from "@/lib/api-client";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
-import { coverageLabel, fmtPctOrNA } from "@/lib/regioes-format";
-import { tomDaCobertura, type ChaveRegioes } from "@/lib/regioes-cartoes";
+import { fmtPctOrNA } from "@/lib/regioes-format";
+import type { ChaveRegioes } from "@/lib/regioes-cartoes";
 import { REGIONAL_GMV_LABEL, UF_FILL_LABEL } from "@/lib/regioes-scope";
 
 /**
  * ALVO-GRADE (12/11/2026) — a faixa de Regioes: SEMPRE quatro `CartaoIndicador`.
  * GMV regional (`gmv`), Pedidos (`pedidos`), UFs com venda (`ticket`) e UF
- * preenchida (`roas`, com o nivel de cobertura que ja' existia — OK, parcial,
- * baixa — escrito na pilula). So' GMV e Pedidos abrem detalhe. Sem periodo
+ * preenchida (`roas`; o nivel de cobertura fica no aviso da faixa, nao no
+ * cartao). So' GMV e Pedidos abrem detalhe. Sem periodo
  * anterior e a serie de tendencia e' nacional (ignora o filtro de UF): nenhuma
  * linha nem variacao no cartao. Os dois indicadores de frete saem da faixa e
  * vao para `FreteRegioes` ("Mais detalhes").
@@ -30,7 +30,6 @@ export const TOTAL_DE_CARTOES_REGIOES = 4;
 
 const AUSENTE = "sem dado no período";
 const cor = (id: IdentidadeKpi) => `rgb(var(--tc-kpi-${id}))`;
-const PILULA_DA_COBERTURA: Record<"bom" | "atencao" | "critico", TomPilula> = { bom: "ok", atencao: "warn", critico: "crit" };
 
 interface Props {
   resumo: RegioesSummaryData | null;
@@ -41,7 +40,6 @@ interface Props {
 
 export default function CartoesRegioes({ resumo, notaDoGmv, onAbrir }: Props) {
   const r = resumo;
-  const coberturaTom = tomDaCobertura(r?.coverage_level);
   return (
     <div className={GRADE_REGIOES}>
       <CartaoIndicador
@@ -67,7 +65,7 @@ export default function CartoesRegioes({ resumo, notaDoGmv, onAbrir }: Props) {
         icone={Percent}
         cor={cor("roas")}
         valor={r ? fmtPctOrNA(r.uf_fill_pct) : null}
-        pilula={r && coberturaTom !== "ausente" ? { texto: coverageLabel(r.coverage_level), tom: PILULA_DA_COBERTURA[coberturaTom] } : null}
+        // sem pilula: "100%" ao lado de "Cobertura baixa" se lia como contradicao; o nivel ja' esta' no aviso da faixa
         legenda={r ? "dentro dos pedidos elegíveis" : AUSENTE}
       />
     </div>
