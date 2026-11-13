@@ -109,6 +109,7 @@ import {
   mesDaMeta,
   metaDoEscopo,
   progressoMeta,
+  ROTULO_STATUS,
   realizadoDoEscopo,
   ultimoDiaComDado,
 } from "@/lib/gerencial/meta-progress";
@@ -748,7 +749,15 @@ function GerencialComGrandes() {
       ? `${pct0(progresso.atingimento)} da meta de ${fmtCompacto(progresso.meta)}`
       : progressoDia?.atingimento != null
         ? `${pct0(progressoDia.atingimento)} da meta de hoje`
-        : compHoje?.rotuloCurto ?? "vs anterior",
+        : "",
+    status: progresso
+      ? {
+          texto: ROTULO_STATUS[progresso.status],
+          tom: progresso.status === "atencao" ? "warn" : progresso.status === "abaixo" || progresso.status === "nao_atingida" ? "crit" : "ok",
+        }
+      : null,
+    projecao: progresso && !progresso.encerrado && progresso.projecao != null ? fmtCompacto(progresso.projecao) : null,
+    referencia: compHoje?.rotuloCurto ?? null,
     aviso: avisoDeDado ? "dado incompleto" : linhaMenores?.aviso ? linhaMenores.texto : null,
     dica: [
       notaBase(overview, filters.channels),

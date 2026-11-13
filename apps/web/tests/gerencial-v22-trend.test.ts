@@ -649,12 +649,23 @@ test("V22-20. a linha anterior e secundaria e nao depende de cor", () => {
   assert.doesNotMatch(chart, /dataKey=\{`comparison\.values\./);
 });
 
-test("V22-21. o tooltip distingue os dois periodos com datas reais", () => {
+test("V22-21. o tooltip distingue os dois periodos com o rotulo REAL do anterior", () => {
+  // ALVO-GRADE (12/11/2026): tooltip redesenhado — total do periodo atual em
+  // destaque (com a variacao em pilula), canais com barra, e o total anterior
+  // numa linha de rodape "<rotulo real do bucket anterior> · anterior".
   const chart = read("src/components/gerencial/EvolutionChart.tsx");
-  assert.match(chart, /Período atual/);
-  assert.match(chart, /Período anterior/);
-  assert.match(chart, /\{cmp\.label\} · \{cmp\.date\}/, "exibe o label e a data REAIS do anterior");
-  assert.match(chart, /Sem ponto correspondente na janela anterior/);
+  assert.match(chart, /<span>\{cmp\.label\} · anterior<\/span>/, "exibe o rotulo REAL do bucket anterior, nunca o atual deslocado");
+  assert.match(chart, /cmp\.total != null \? formatValue\(cmp\.total, metric\) : "incompleto"/, "total anterior incompleto nunca vira numero");
+  assert.match(chart, /delta != null && showComparisonTotal && !emAndamento/, "variacao so' com comparacao completa e dia fechado");
+  assert.match(chart, /showComparisonTotal && !emAndamento && cmp && \(/, "rodape do anterior so' com comparacao completa e dia fechado");
+});
+
+// Dois contratos do tooltip antigo que o redesenho nao carregou (ver relatorio):
+// a data de calendario do bucket anterior e a mensagem de "sem ponto".
+test("V22-21b. o tooltip declara a data do anterior e a falta de ponto correspondente", () => {
+  const chart = read("src/components/gerencial/EvolutionChart.tsx");
+  assert.match(chart, /cmp\.date/, "exibe a data REAL (de calendario) do bucket anterior");
+  assert.match(chart, /Sem ponto correspondente na janela anterior/, "ausencia declarada, nao silenciosa");
 });
 
 test("V22-22. o CTA do bucket continua fixando o periodo ATUAL", () => {

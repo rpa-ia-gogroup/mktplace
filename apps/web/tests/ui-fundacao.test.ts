@@ -69,7 +69,7 @@ test("movimento: 120/180/240 ms, utilitarios novos e tudo sob prefers-reduced-mo
   assert.doesNotMatch(ler("src/components/ui/Popover.tsx"), /opacity_(150|200)ms/);
 });
 
-test("Aba: icone em caixa + titulo | selo, barra sticky, e a ordem faixa -> atencao -> paineis", () => {
+test("Aba: titulo grande sem icone | selo, abas sob o titulo, barra sticky, e a ordem faixa -> atencao -> paineis", () => {
   const html = renderToStaticMarkup(
     h(
       Aba,
@@ -84,17 +84,27 @@ test("Aba: icone em caixa + titulo | selo, barra sticky, e a ordem faixa -> aten
       h("span", null, "PAINEIS"),
     ),
   );
-  assert.match(html, /<h2[^>]*>.*<svg.*Canais<\/span><\/h2>/s);
+  // ALVO-GRADE (12/11/2026): titulo grande, sem icone em caixa.
+  assert.match(html, /<h2[^>]*text-\[28px\][^>]*>Canais<\/h2>/);
+  assert.doesNotMatch(html, /<h2[^>]*>[^<]*<svg/);
   assert.match(html, /sticky top-0/);
   const ordem = ["SELO", "FILTROS", "FAIXA", "ATENCAO", "PAINEIS"].map((m) => html.indexOf(m));
   assert.deepEqual([...ordem].sort((a, b) => a - b), ordem);
+  // sub-visoes: abas (role=tablist) sob o titulo e ANTES da barra de filtros; com uma so' visao, nao aparecem
+  const abas = renderToStaticMarkup(
+    h(Aba, { titulo: "Canais", visoes: [{ id: "a", rotulo: "Visao A" }, { id: "b", rotulo: "Visao B" }], visao: "a", filtros: h("span", null, "FILTROS") }),
+  );
+  assert.match(abas, /role="tablist"/);
+  assert.match(abas, /role="tab" aria-selected="true"[^>]*>Visao A/);
+  assert.match(abas, /role="tab" aria-selected="false"[^>]*>Visao B/);
+  assert.ok(abas.indexOf("tablist") < abas.indexOf("FILTROS"));
+  assert.doesNotMatch(renderToStaticMarkup(h(Aba, { titulo: "Canais", visoes: [{ id: "a", rotulo: "Visao A" }] })), /role="tablist"/);
 });
 
 // ---------------------------------------------------------------------------
 // Barreira: toda rota usa o esqueleto `Aba`, exceto as listadas (a migrar).
 // ---------------------------------------------------------------------------
 const AINDA_FORA_DO_ESQUELETO = new Set([
-  "/",
   "/brand/[brand]",
   "/canais",
   "/cx",

@@ -138,8 +138,11 @@ function ChartTooltip({
           );
         })}
       </ul>
+      {showComparisonTotal && !emAndamento && !cmp && (
+        <p className="mt-2 border-t border-line pt-1.5 text-ink-faint">Sem ponto correspondente na janela anterior.</p>
+      )}
       {showComparisonTotal && !emAndamento && cmp && (
-        <p className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-1.5 text-ink-faint">
+        <p title={`Período anterior: ${cmp.date}`} className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-1.5 text-ink-faint">
           <span>{cmp.label} · anterior</span>
           <span className="font-medium text-ink-muted tabular-nums">
             {cmp.total != null ? formatValue(cmp.total, metric) : "incompleto"}

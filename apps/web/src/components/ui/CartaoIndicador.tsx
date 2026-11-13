@@ -33,6 +33,8 @@ export default function CartaoIndicador({
   progresso,
   legenda,
   serie,
+  rodape,
+  tendencia,
   ajuda,
   onAbrir,
 }: {
@@ -48,6 +50,10 @@ export default function CartaoIndicador({
   legenda?: ReactNode;
   /** Pontos do periodo, na ordem. Linha so' com 4 ou mais pontos reais. */
   serie?: number[] | null;
+  /** O que a linha diz, em texto ("Tendência: tende a subir (…)"): vai para o leitor de tela e o title. */
+  tendencia?: string | null;
+  /** Sem serie real: o que ocupa o lugar da linha (ex.: o indicador aberto por canal). Nunca um grafico inventado. */
+  rodape?: ReactNode;
   /** `InfoDica emControle` ao lado do rotulo. */
   ajuda?: ReactNode;
   onAbrir?: () => void;
@@ -88,6 +94,7 @@ export default function CartaoIndicador({
         )}
         {legenda && <span className="min-w-0">{legenda}</span>}
       </span>
+      {pontos && tendencia ? <span className="sr-only">{tendencia}</span> : null}
       {pontos ? (
         <svg viewBox="0 0 100 44" preserveAspectRatio="none" aria-hidden="true" className="-mx-4 mt-2 block h-11 w-[calc(100%+2rem)]">
           <defs>
@@ -97,8 +104,10 @@ export default function CartaoIndicador({
             </linearGradient>
           </defs>
           <path d={`${linha} L100 44 L0 44 Z`} fill={`url(#${id})`} className="tc-cartao-area" />
-          <path d={linha} pathLength={400} className="tc-cartao-linha" fill="none" stroke="var(--h)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          <path d={linha} className="tc-cartao-linha" fill="none" stroke="var(--h)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
         </svg>
+      ) : rodape ? (
+        <span className="mt-2 block min-h-11 pb-3 text-xs text-ink-muted">{rodape}</span>
       ) : (
         <span aria-hidden="true" className="mt-2 block h-11" />
       )}

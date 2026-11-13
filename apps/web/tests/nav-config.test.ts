@@ -13,18 +13,16 @@ import {
 import { habilitado as performanceContasHabilitado } from "../src/lib/performance-contas.ts";
 import { buildPreservedQuery, hrefForPage } from "../src/lib/filters/nav-links.ts";
 
-test("NAV_SECTIONS mantem os grupos existentes, na ordem original", () => {
+test("NAV_SECTIONS mantem os 3 grupos do alvo + referencias externas, nessa ordem", () => {
   assert.deepEqual(
     NAV_SECTIONS.map((s) => s.label),
     [
-      "Cockpits",
-      "Pedidos",
-      "Inteligência",
-      "Operações",
-      // Gate AVH-4B-S — unico grupo acrescentado desde o Gate U1. Fica no fim
-      // e isolado de proposito: dado de terceiro, carga manual, nao e' KPI.
+      // ALVO-GRADE (12/11/2026): 3 grupos — o que se le, o que se opera, o que se digita.
+      "Visão",
+      "Operação",
       // METAS-1 — grupo de entrada de dado do time, antes das referencias externas.
       "Planejamento",
+      // Gate AVH-4B-S — isolado de proposito, no fim: dado de terceiro, carga manual, nao e' KPI.
       "Referências externas",
     ],
   );
@@ -43,16 +41,15 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
     "/dre",
     "/regioes",
     "/marcas-menores",
-    "/pedidos",
-    // Gate EXP-UX-2C — `/pedidos/tiktok` e `/pedidos/ml` sairam. Eram itens
-    // `disabled` com selo "Em breve" desde o Gate U1: promessa parada ocupa a
-    // altura de um item real e ensina o operador a ignorar a regiao da lista.
-    // Voltam como itens de verdade quando as rotas existirem.
     "/inteligencia",
     // Gate PMA-3 — primeira rota acrescentada desde o Gate U1. Nenhuma
     // removida nem renomeada; o pino literal continua exigindo revisao
     // consciente.
     "/monitoramento-preco",
+    // ALVO-GRADE: o antigo grupo "Pedidos" (item "Geral") virou o primeiro
+    // item de Operação. Gate EXP-UX-2C — `/pedidos/tiktok` e `/pedidos/ml`
+    // sairam (itens `disabled` "Em breve"); voltam quando as rotas existirem.
+    "/pedidos",
     "/operacoes",
     // Gate FULL-1D — superficie de modalidade logistica do Mercado Livre.
     // Rota de TOPO, e nao filha de /operacoes: `isNavItemActive` casa por
@@ -66,11 +63,11 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
   ]);
 });
 
-test("Gate PMA-3: /monitoramento-preco fica em Inteligencia, habilitada, sem badge", () => {
-  const inteligencia = NAV_SECTIONS.find((s) => s.label === "Inteligência")!;
-  const rotulos = inteligencia.pages.map((p) => p.label);
+test("Gate PMA-3: /monitoramento-preco fica em Visão, habilitada, sem badge", () => {
+  const visao = NAV_SECTIONS.find((s) => s.label === "Visão")!;
+  const rotulos = visao.pages.map((p) => p.label).slice(-2);
   assert.deepEqual(rotulos, ["Ações ML + TikTok", "Monitoramento de preços"]);
-  const pma = inteligencia.pages.find((p) => p.href === "/monitoramento-preco")!;
+  const pma = visao.pages.find((p) => p.href === "/monitoramento-preco")!;
   assert.equal(pma.disabled, undefined);
   assert.equal(pma.badge, undefined);
   // O rotulo NAO usa "PMA": a referencia e' preco sugerido de revenda.
@@ -91,12 +88,10 @@ test("Gate EXP-UX-2C: nenhum item do menu e' uma promessa desabilitada", () => {
   // forte: nenhuma secao pode ter item desabilitado. Item que nao leva a lugar
   // nenhum ocupa a altura de um real, some da navegacao por teclado e ensina o
   // operador a ignorar aquela regiao da lista.
-  const pedidos = NAV_SECTIONS.find((s) => s.label === "Pedidos")!;
-  assert.deepEqual(
-    pedidos.pages.map((p) => p.href),
-    ["/pedidos"],
-    "Pedidos ficou so' com a rota que existe",
-  );
+  // ALVO-GRADE: o grupo "Pedidos" deixou de existir; o item "Pedidos" abre Operação.
+  const ops0 = NAV_SECTIONS.find((s) => s.label === "Operação")!;
+  assert.deepEqual(ops0.pages[0], { href: "/pedidos", label: "Pedidos" });
+  assert.ok(!ops0.pages.some((p) => p.href.startsWith("/pedidos/")), "so' a rota que existe");
   for (const s of NAV_SECTIONS) {
     for (const p of s.pages) {
       assert.notEqual(p.disabled, true, `${s.label} > ${p.label} desabilitado`);
@@ -111,7 +106,7 @@ test("Gate EXP-UX-2C: a Expedicao no menu nao diz o canal", () => {
   assert.equal(EXPEDICAO_NAV.href, "/expedicao", "a ROTA nao pode mudar");
   assert.ok(!/Shopee|Mercado Livre/.test(EXPEDICAO_NAV.label));
   // FULL-UNIFICADO-1: o Full virou uma entrada so'; o canal se escolhe na sub-aba.
-  const ops = NAV_SECTIONS.find((s) => s.label === "Operações")!;
+  const ops = NAV_SECTIONS.find((s) => s.label === "Operação")!;
   assert.ok(ops.pages.some((p) => p.href === "/full" && p.label === "Full"));
 });
 
@@ -194,14 +189,14 @@ test("T-0014: Performance das contas ausente do menu com a flag desligada (padra
   assert.ok(!hrefs(outras).includes("/performance-contas"));
 });
 
-test("T-0014: Performance das contas presente em Operações com a flag ligada", () => {
+test("T-0014: Performance das contas presente em Operação com a flag ligada", () => {
   const flag = performanceContasHabilitado({ NEXT_PUBLIC_PERFORMANCE_CONTAS_ENABLED: "true" });
   assert.equal(flag, true);
   const secoes = navSections({ performanceContas: flag });
   // Nenhum grupo novo.
   assert.deepEqual(secoes.map((s) => s.label), NAV_SECTIONS.map((s) => s.label));
   const comItem = secoes.filter((s) => s.pages.some((p) => p.href === "/performance-contas"));
-  assert.deepEqual(comItem.map((s) => s.label), ["Operações"]);
+  assert.deepEqual(comItem.map((s) => s.label), ["Operação"]);
   const item = comItem[0].pages.find((p) => p.href === "/performance-contas")!;
   assert.deepEqual(item, { href: "/performance-contas", label: "Performance das contas" });
   assert.equal(PERFORMANCE_CONTAS_NAV.label, "Performance das contas");

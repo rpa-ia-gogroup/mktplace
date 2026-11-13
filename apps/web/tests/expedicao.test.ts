@@ -142,7 +142,7 @@ test("flag desligada: item de menu invisivel", () => {
 
 test("flag ligada: item entra em Operacoes, sem remover nada", () => {
   const on = navSections(true);
-  const operacoes = on.find((s) => s.label === "Operações");
+  const operacoes = on.find((s) => s.label === "Operação");
   assert.ok(operacoes);
   assert.ok(operacoes.pages.some((p) => p.href === EXPEDICAO_NAV.href));
   const antes = NAV_SECTIONS.flatMap((s) => s.pages.map((p) => p.href));
