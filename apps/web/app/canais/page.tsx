@@ -658,7 +658,7 @@ function CanaisPageInner() {
                     <div key={rotulo} className="flex flex-col gap-1.5">
                       <span className="flex items-baseline justify-between gap-3 text-xs">
                         <span className="font-medium text-ink-muted">{rotulo}</span>
-                        <span aria-hidden="true" className="tabular-nums text-ink-faint">{colunasCanal.map(pct).join(" · ")}</span>
+                        <span aria-hidden="true" className="tabular-nums text-ink-muted">{colunasCanal.map(pct).join(" · ")}</span>
                       </span>
                       <div
                         role="img"
