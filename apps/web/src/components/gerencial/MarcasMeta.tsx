@@ -189,8 +189,12 @@ export default function MarcasMeta({
                   abrir={d ? () => setAberta(b.brand) : null}
                   href={semMeta.includes(b.brand) ? "/marcas-menores" : brandHref(b.brand)}
                 >
-                  <span className="truncate text-sm font-semibold text-ink transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0">
-                    {b.label}
+                  <span className="flex min-w-0 items-center justify-between gap-2">
+                    <span className="truncate text-sm font-semibold text-ink transition-transform duration-200 ease-out group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0">
+                      {b.label}
+                    </span>
+                    {/* "Total" na barra maior quando ha' Full/Sem Full embaixo (pedido do Joao 13/11). */}
+                    {d && soma(d.full) + soma(d.semFull) > 0 && <span className="hidden text-xs text-ink-muted min-[480px]:inline">Total</span>}
                   </span>
                   <span className="relative hidden h-2.5 rounded-full bg-raised min-[480px]:block" aria-hidden="true">
                     <span
@@ -236,12 +240,12 @@ export default function MarcasMeta({
                   const base = soma(d.full) + soma(d.semFull);
                   const pctFull = Math.round((soma(d.full) / base) * 100);
                   return (
-                    <div className="flex flex-col gap-1 px-2 pb-1.5 min-[480px]:pl-[calc(0.5rem+min(30%,9rem))]">
-                      <BarraFull rotulo="Full" pct={pctFull} partes={d.full} canais={canaisDaBarra(b)} escala={escala} />
-                      <BarraFull rotulo="Sem Full" pct={100 - pctFull} partes={d.semFull} canais={canaisDaBarra(b)} escala={escala} />
+                    <div className="flex flex-col gap-1 pb-1.5">
+                      <LinhaFull rotulo="Full" pct={pctFull} partes={d.full} canais={canaisDaBarra(b)} escala={escala} />
+                      <LinhaFull rotulo="Sem Full" pct={100 - pctFull} partes={d.semFull} canais={canaisDaBarra(b)} escala={escala} />
                       {/* Sem medida de envio: fora do %, dito em vez de somar menos que o GMV calado. */}
                       {soma(d.semDado) > 0 && (
-                        <BarraFull rotulo="Sem dado de envio" partes={d.semDado} canais={canaisDaBarra(b)} escala={escala}
+                        <LinhaFull rotulo="Sem dado de envio" partes={d.semDado} canais={canaisDaBarra(b)} escala={escala}
                           dica="A modalidade de envio dos pedidos deste canal não foi medida no período; fica fora do % Full." />
                       )}
                     </div>
@@ -310,8 +314,35 @@ export default function MarcasMeta({
 
 const FULL_DICA = "Full = ML Full + Shopee FBS, pela proporção medida até ontem; TikTok entra em sem Full.";
 
+/** Colunas da marca e das linhas Full/Sem Full: barras com o mesmo inicio e a mesma largura. */
+const COLUNAS = "grid-cols-[minmax(0,1fr)_auto] min-[480px]:grid-cols-[minmax(84px,1.1fr)_minmax(0,2fr)_12rem]";
+
 const LINHA =
-  "group grid min-h-11 w-full grid-cols-[minmax(0,1fr)_auto] min-[480px]:grid-cols-[minmax(84px,1.1fr)_minmax(0,2fr)_auto] items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
+  `group grid min-h-11 w-full ${COLUNAS} items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent`;
+
+/** Linha Full / Sem Full / sem dado sob a marca, na grade dela: rotulo, barra e "78% · R$ 2,64 mi". */
+function LinhaFull({ rotulo, dica, pct, partes, canais, escala }: {
+  rotulo: string; dica?: string; pct?: number; partes: Partial<Record<Marketplace, number>>; canais: Marketplace[]; escala: number;
+}) {
+  const total = Object.values(partes).reduce((a, v) => a + (v ?? 0), 0);
+  return (
+    <span className={`grid ${COLUNAS} items-center gap-3 px-2 text-xs text-ink-muted`} title={dica}>
+      <span className="text-right">{rotulo}</span>
+      <span className="relative hidden h-2 rounded-full bg-raised min-[480px]:block" aria-hidden="true">
+        <span className="tc-barra absolute inset-y-0 left-0 flex overflow-hidden rounded-full" style={{ width: `${(total / escala) * 100}%` }}>
+          {canais.map((c) => {
+            const v = partes[c] ?? 0;
+            return v > 0 ? <span key={c} className={PONTO[c]} style={{ flex: v }} /> : null;
+          })}
+        </span>
+      </span>
+      <span className="whitespace-nowrap text-right tabular-nums">
+        {pct != null && <b className="font-semibold text-ink">{pct}% · </b>}
+        {fmtCompacto(total)}
+      </span>
+    </span>
+  );
+}
 
 /** A linha da marca: com a divisao Full medida, abre o dialogo; sem ela, vai para a pagina da marca. */
 function Linha({ abrir, href, children }: { abrir: (() => void) | null; href: string; children: React.ReactNode }) {
