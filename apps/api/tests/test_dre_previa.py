@@ -100,10 +100,11 @@ def test_snapshot_vencido_e_indisponivel_nao_entram():
     assert m["valor"] is None and m["suspensa"] is True and "insumo vencido: cmv" in m["motivo_suspensao"]
     assert {"taxas", "cmv"} <= set(m["faltam"]) and m["componentes_parciais"] == []
     assert c["classificacao"] == dre.PARCIAL
-    # Taxa so' indisponivel (sem insumo vencido): fica fora da soma, a margem sai.
+    # T-0112 (A2-23): taxa so' indisponivel (sem insumo vencido) tambem suspende, sem data.
     c = celula("ml", m=mart("ml", fees=None, fees_n=0))
     m = c["margem_contribuicao_conhecida"]
-    assert m["suspensa"] is False and m["valor"] == pytest.approx(1_000_000 - 40_000 - 130_000 - 300_000)
+    assert m["valor"] is None and m["suspensa"] is True
+    assert m["motivo_suspensao"].startswith("taxa indisponível: ") and "publicado em" not in m["motivo_suspensao"]
 
 
 def test_nao_aplicavel_tem_origem_propria():
