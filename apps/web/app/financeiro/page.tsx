@@ -327,7 +327,11 @@ function FinanceiroPageInner() {
   const maior = (xs: (number | null | undefined)[]) => Math.max(0, ...xs.map((x) => x ?? 0));
   // Uma escala so' para as barrinhas: 33% no TikTok e 16% no ML se comparam no olho.
   const maiorTaxa = maior(linhasTaxa.flatMap((l) => canais.map((c) => l[c])));
-  const canalDoRanking: Canal = canais.includes(canalTaxa) ? canalTaxa : canais[0] ?? "tiktok";
+  // Canal sem taxa em NENHUMA marca sai do seletor e da tabela (o cartao dele ja' diz "sem dado de taxa"):
+  // uma coluna inteira de "—" nao informa nada.
+  const canaisComTaxa = dataIsFresh ? canais.filter((c) => linhasTaxa.some((l) => l[c] != null)) : canais;
+  const semTaxa = canais.filter((c) => !canaisComTaxa.includes(c)).map((c) => NOME[c]);
+  const canalDoRanking: Canal = canaisComTaxa.includes(canalTaxa) ? canalTaxa : canaisComTaxa[0] ?? "tiktok";
   const ranking = linhasTaxa
     .flatMap((l) => { const v = l[canalDoRanking]; return v != null ? [{ marca: l.marca, v }] : []; })
     .sort((a, b) => b.v - a.v);
@@ -474,6 +478,7 @@ function FinanceiroPageInner() {
             paineis={paineis}
             total={receita}
             serieTotal={serieReceita}
+            canalDaAba={visaoAtiva === "geral" ? null : visaoAtiva}
             foraDaConta={`Margem ainda não fechada. Fora da conta: CMV, impostos, devoluções${showTiktok ? ", frete e afiliados do TikTok" : ""}.`}
             onAbrir={setDetalhe}
           />
@@ -513,10 +518,10 @@ function FinanceiroPageInner() {
               {/* ── Taxa do marketplace por marca: um canal por vez, nunca somados ── */}
               <Panel
                 titulo="Taxa do marketplace sobre o GMV"
-                ajuda={`Cada canal mede uma taxa própria, nunca somadas. ${canais.map((c) => ROTULO_TAXA[c]).join("; ")}.`}
+                ajuda={`Cada canal mede uma taxa própria, nunca somadas. ${canaisComTaxa.map((c) => ROTULO_TAXA[c]).join("; ")}.${semTaxa.length ? ` Sem taxa carregada no período: ${semTaxa.join(", ")}.` : ""}`}
                 acao={
-                  canais.length > 1 ? (
-                    <Segmented rotulo="Canal da taxa" valor={canalDoRanking} aoEscolher={setCanalTaxa} opcoes={canais.map((c) => ({ valor: c, texto: NOME[c] }))} />
+                  canaisComTaxa.length > 1 ? (
+                    <Segmented rotulo="Canal da taxa" valor={canalDoRanking} aoEscolher={setCanalTaxa} opcoes={canaisComTaxa.map((c) => ({ valor: c, texto: NOME[c] }))} />
                   ) : undefined
                 }
               >
@@ -578,13 +583,13 @@ function FinanceiroPageInner() {
 
             {/* ── Taxas por marca x canal: barrinha na cor do canal, sem mapa de calor ── */}
             {(dataIsFresh ? linhasTaxa.length > 0 : true) && (
-              <Panel titulo="Taxas por marca" semPadding>
+              <Panel titulo="Taxas por marca" ajuda={semTaxa.length ? `Sem taxa carregada no período: ${semTaxa.join(", ")}.` : undefined} semPadding>
                 <TableScrollHint>
                   <table className="w-full text-data" aria-label="Taxa do marketplace sobre o GMV, por marca e canal">
                     <thead>
                       <tr className="bg-raised text-left">
                         <th scope="col" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-ink-muted">Marca</th>
-                        {canais.map((c) => (
+                        {canaisComTaxa.map((c) => (
                           <th key={c} scope="col" className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-muted">{ROTULO_TAXA[c]}</th>
                         ))}
                       </tr>
@@ -595,7 +600,7 @@ function FinanceiroPageInner() {
                           <td className={TD_MARCA}>
                             <Link href={buildHref(`/brand/${l.brand}?brands=${l.brand}`)} className={LINK_MARCA}>{l.marca}</Link>
                           </td>
-                          {canais.map((c) => {
+                          {canaisComTaxa.map((c) => {
                             const v = l[c];
                             return (
                               <td key={c} className={TD}>

@@ -34,7 +34,8 @@ test("cartoes (ALVO-GRADE): sempre quatro CartaoIndicador, soma + um por canal; 
   assert.ok(src.includes("onAbrir={p ? () => onAbrir(canal) : undefined}"));
   assert.ok(src.includes('"Fora do filtro"') && src.includes('"Sem dado no período"'), "ausencia tem motivo, nunca zero");
   assert.ok(src.includes("valor={p?.gmv != null ? fmtBrlCurto(p.gmv) : null}"));
-  assert.ok(src.includes("serie={serieTotal}") && (src.match(/serie=/g) ?? []).length === 1, "so' o cartao da soma tem linha (taxa nao tem serie)");
+  assert.ok(src.includes("serie={serieTotal}") && src.includes("serie={paineis.length === 1 ? serieTotal : null}") && (src.match(/serie=/g) ?? []).length === 2, "linha so' no cartao da soma, ou no do canal quando o filtro e' so' ele (taxa nao tem serie)");
+  assert.ok(src.includes("p.linhas.slice(0, 3)") && src.includes("daAba.linhas.slice(0, 3)") && !/reduce\(/.test(src), "rodape e aba do canal leem as linhas do detalhe; custos nunca somam");
   assert.ok(src.includes("<InfoDica emControle texto={p.aviso} />"), "ressalva de tarifa parcial no ⓘ do cartao");
 });
 
