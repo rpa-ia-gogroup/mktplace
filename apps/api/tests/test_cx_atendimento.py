@@ -127,7 +127,7 @@ def test_parametros_das_consultas_respeitam_janela_e_cobertura():
     assert params["ml_marcas"]["marcas"] == ["barbours", "kokeshi", "lescent", "rituaria"]
     assert params["ml_marcas"]["inicio"] == date(2026, 10, 28)
     assert params["ml_marcas"]["fim_exclusivo"] == date(2026, 11, 4)
-    assert params["shopee_marcas"]["marcas"] == ["apice", "barbours", "lescent", "rituaria"]
+    assert params["shopee_marcas"]["marcas"] == ["apice", "barbours", "kokeshi", "lescent", "rituaria"]
     assert params["shopee_marcas"]["fim"] == date(2026, 11, 3)
 
 
@@ -223,13 +223,13 @@ def test_shopee_grafias_do_mesmo_motivo_somam_e_prefixo_e_reconhecido():
     assert novo.rotulo == "Motivo Inedito" and novo.natureza == "comprador"
 
 
-def test_shopee_indicadores_e_kokeshi_fora():
+def test_shopee_indicadores_e_kokeshi_pela_api():
     resp, _ = _montar()
     sh = _canal(resp, "shopee")
     assert _ind(sh, "shopee_cancelamentos").valor == 50
     assert _ind(sh, "shopee_taxa_cancelamento").valor == pytest.approx(5.0)
     assert _ind(sh, "shopee_em_devolucao").valor == 7
-    assert [f.marca for f in sh.cobertura.fora] == ["kokeshi"]
+    assert sh.cobertura.fora == [] and "kokeshi" in sh.cobertura.marcas
 
 
 def test_devolucao_e_fotografia_marca_sem_linha_e_zero_medido():
@@ -257,12 +257,11 @@ def test_tiktok_e_sem_fonte_explicado():
     assert tt.pendencias
 
 
-def test_filtro_so_kokeshi_nao_consulta_shopee():
+def test_filtro_so_kokeshi_consulta_a_shopee_pela_api():
     resp, fonte = _montar(brands=["kokeshi"])
-    assert not any(n.startswith("shopee") for n, _ in fonte.chamadas)
+    assert dict(fonte.chamadas)["shopee_marcas"]["marcas"] == ["kokeshi"]
     sh = _canal(resp, "shopee")
-    assert sh.indicadores == [] and sh.cobertura.marcas == []
-    assert [f.marca for f in sh.cobertura.fora] == ["kokeshi"]
+    assert sh.cobertura.marcas == ["kokeshi"] and sh.cobertura.fora == []
 
 
 def test_ordem_dos_canais():
