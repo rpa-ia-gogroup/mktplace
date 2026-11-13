@@ -106,7 +106,9 @@ test("pagina de Canais: os 12 cartoes vem do padrao, sem StatCard, e o detalhe u
   assert.equal((pag.match(/<KpiDrilldownDialog/g) ?? []).length, 1, "um dialogo na pagina");
   assert.ok(pag.includes("<KpiCanalDrilldownContent") && pag.includes("icone={kpiAberto ?"));
   for (const c of ["CHAVES_TIKTOK", "CHAVES_ML", "CHAVES_SHOPEE"]) assert.ok(pag.includes(c), c);
-  assert.equal((pag.match(/<FaixaCarregando/g) ?? []).length, 3, "esqueleto no formato do cartao nas 3 faixas");
+  assert.equal((pag.match(/<FaixaCarregando/g) ?? []).length, 4, "esqueleto no formato do cartao: a faixa da aba e as 3 por canal");
+  assert.ok(pag.includes("<Aba<Visao>") && pag.includes("<FaixaCanais") && pag.includes("serieQueConfere(serie.pontos, gmvTotal)") && pag.includes("serie?.key === requestKey"), "grade unica; linha so' do recorte atual e so' se confere");
+  for (const ancora of ["#comparativo-canais", "#comparativo", "#afiliados", "#descontos-tiktok", "#tiktok-shop", "#mercado-livre", "#shopee"]) assert.ok(pag.includes(`"${ancora}"`), ancora);
   // 4 + 3 + 5 = 12 chaves, todas com definicao
   const chaves = [...pag.matchAll(/const CHAVES_(?:TIKTOK|ML|SHOPEE): KpiCanalChave\[\] = \[([^\]]*)\]/g)].flatMap((m) => m[1].match(/"[a-z_]+"/g) ?? []);
   assert.equal(chaves.length, 12);
@@ -118,8 +120,9 @@ test("cartao de Canais: so' as 7 identidades existentes; canal e' ponto, nao cor
   const usadas = [...cartao.matchAll(/identidade: "([a-z]+)"/g)].map((m) => m[1]);
   assert.equal(usadas.length, 12);
   for (const id of new Set(usadas)) assert.ok(["gmv", "pedidos", "ticket", "ads", "roas", "prazo", "atendimento"].includes(id), id);
-  assert.ok(cartao.includes('variante="gerencial"') && cartao.includes("onAbrir={() => onAbrir(chave)}"));
-  assert.ok(cartao.includes("PONTO_DO_CANAL[def.canal]"));
+  assert.ok(cartao.includes("<CartaoIndicador") && cartao.includes("onAbrir={() => onAbrir(chave)}"));
+  assert.ok(cartao.includes("cor={`rgb(var(--tc-kpi-${identidade}))`}"), "cor por token de identidade: vale no tema escuro");
+  assert.ok(cartao.includes("valor={texto.ausente ? null : texto.valor}"), "ausencia e' N/D com motivo, nunca zero");
 });
 
 test("faixa de reconciliacao do TikTok, colada nos cartoes, usa o mesmo formato dos cartoes", () => {

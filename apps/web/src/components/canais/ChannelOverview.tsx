@@ -1,5 +1,6 @@
 import { Columns3 } from "lucide-react";
 import Panel from "@/components/ui/Panel";
+import CelulaBarra from "@/components/ui/CelulaBarra";
 import InfoDica from "@/components/ui/InfoDica";
 import { SO_PAGOS } from "@/lib/base-vendas";
 import TableScrollHint from "@/components/TableScrollHint";
@@ -80,6 +81,11 @@ export default function ChannelOverview({
   // de cada canal entre os canais selecionados COM dado.
   const total = colunas.reduce((s, c) => s + (c.gmv ?? 0), 0);
   const share = (c: ColunaCanal) => (c.gmv != null && total > 0 ? (c.gmv / total) * 100 : null);
+  // Barrinha na cor do canal: o peso e' o valor sobre o maior entre os canais.
+  const maior = (f: (c: ColunaCanal) => number | null) => Math.max(0, ...colunas.map((c) => f(c) ?? 0));
+  const maiorGmv = maior((c) => c.gmv);
+  const maiorPedidos = maior((c) => c.pedidos);
+  const cor = (c: ColunaCanal) => `rgb(var(--tc-canal-${c.canal}))`;
   const semDado = <span className="rounded bg-warn-soft px-1.5 py-0.5 text-xs font-semibold text-warn-ink">Sem dado</span>;
 
   type Linha = { rotulo: string; dica?: string; valor: (c: ColunaCanal) => React.ReactNode };
@@ -87,7 +93,7 @@ export default function ChannelOverview({
     {
       titulo: "Volume",
       linhas: [
-        { rotulo: "GMV", valor: (c) => (c.gmv == null ? semDado : <span className="font-semibold text-ink">{fmtBrl(c.gmv)}</span>) },
+        { rotulo: "GMV", valor: (c) => (c.gmv == null ? semDado : <CelulaBarra valor={fmtBrl(c.gmv)} peso={maiorGmv > 0 ? c.gmv / maiorGmv : 0} cor={cor(c)} />) },
         {
           rotulo: "Participação no GMV",
           dica: "Entre os canais selecionados",
@@ -96,7 +102,7 @@ export default function ChannelOverview({
             return s == null ? <span className="text-xs text-ink-faint">—</span> : <span className="text-ink-muted">{fmtPctSimples(s)}</span>;
           },
         },
-        { rotulo: "Pedidos", valor: (c) => (c.pedidos == null ? semDado : <span className="text-ink-muted">{fmtNumber(c.pedidos)}</span>) },
+        { rotulo: "Pedidos", valor: (c) => (c.pedidos == null ? semDado : <CelulaBarra valor={fmtNumber(c.pedidos)} peso={maiorPedidos > 0 ? c.pedidos / maiorPedidos : 0} cor={cor(c)} />) },
       ],
     },
     {
@@ -154,25 +160,6 @@ export default function ChannelOverview({
       icone={Columns3}
       semPadding
     >
-      {/* Participacao em barra: a unica leitura VISUAL da tabela, em cor de
-          identidade. A largura e' a fatia do GMV dos canais selecionados. */}
-      <div className="flex flex-col gap-2 border-b border-line px-4 py-3">
-        {carregando ? (
-          <div className="h-2.5 w-full animate-pulse rounded-full bg-raised" aria-hidden="true" />
-        ) : (
-          <div
-            className="flex h-2.5 w-full overflow-hidden rounded-full bg-raised"
-            role="img"
-            aria-label={`Participação no GMV: ${colunas
-              .map((c) => `${c.rotulo} ${share(c) == null ? "—" : fmtPctSimples(share(c)!)}`)
-              .join(", ")}`}
-          >
-            {colunas.map((c) => (
-              <span key={c.canal} className={PONTO[c.canal]} style={{ width: `${share(c) ?? 0}%` }} />
-            ))}
-          </div>
-        )}
-      </div>
       <TableScrollHint>
         <table className="w-full text-data" aria-label="Canais lado a lado">
           <thead>
