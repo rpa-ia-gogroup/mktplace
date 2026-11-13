@@ -29,6 +29,7 @@ import { computeRequestStatus } from "@/lib/request-freshness";
 import type { ComFrescor } from "@/lib/frescor-carga";
 import { buildChartData } from "@/lib/operacoes-trend";
 import { mensagemBr } from "@/lib/operacoes-cartoes";
+import { frescorDosDados } from "./frescor-dados";
 import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
 
@@ -289,6 +290,8 @@ export default function OperacoesPage() {
   const atencoes = alertas.filter((a) => a.severidade === "atencao");
 
   const hasAnyData = dataIsFresh && displayData != null;
+  // T-0117 (C1-202): a hora da carga nao diz ate que dia o dado vai.
+  const frescorDados = displayIsLive ? frescorDosDados(displayData) : null;
 
   return (
     <Aba<Visao>
@@ -301,6 +304,14 @@ export default function OperacoesPage() {
           carregando={isLoadingState}
           detalhe="Última carga das fontes desta tela (ML Gestão Diária e TikTok Shop)"
         />
+        {frescorDados && (
+          <span
+            className={`text-xs font-semibold ${frescorDados.atrasado ? "text-warn-ink" : "text-ink-muted"}`}
+            title={frescorDados.detalhe}
+          >
+            {frescorDados.texto}
+          </span>
+        )}
         {/* Sem filtros globais aqui: nenhuma barra de filtros, so' o aviso ao lado do selo. */}
         <InfoDica texto="Os filtros globais de canal, marca e período não se aplicam aqui: cada seção usa o próprio período." />
         </>

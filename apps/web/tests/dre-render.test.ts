@@ -438,7 +438,8 @@ test("seletor de competencia exibe MM/AAAA, inclusive a madura padrao", () => {
     assert.match(t, new RegExp(`${ROTULO_MARGEM_ESTIMADA_PREVIA}\\s*R\\$\\s?18\\.000`), "numero grande = estimada");
     assert.match(t, /18,0%/);
     assert.match(t, /Margem estimada ÷ receita/);
-    assert.match(t, /Conhecida: \d+,\d% \(sem impostos, devoluções e parte do CMV\)/);
+    // T-0117 (A2-201): a legenda sai de `faltam` da API, nao de texto fixo.
+    assert.match(t, /Conhecida: \d+,\d% \(sem devoluções, Ads e impostos em ao menos um canal\)/);
     assert.match(t, /Margem inclui CMV parcial \(NF cobre 25% do GMV\)\./, "o aviso da conhecida continua");
     assert.doesNotMatch(t, new RegExp(ROTULO_MARGEM), "a conhecida nao e' o rotulo do destaque");
   });
