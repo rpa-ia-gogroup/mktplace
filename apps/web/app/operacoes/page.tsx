@@ -10,10 +10,9 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import LiveStatusBadge from "@/components/LiveStatusBadge";
 import { GrupoSemDados, GrupoVelocidade } from "@/components/operacoes/VelocidadeMl";
-import PageContainer from "@/components/layout/PageContainer";
-import PageHeader from "@/components/layout/PageHeader";
+import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
+import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import InfoDica from "@/components/ui/InfoDica";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
@@ -27,7 +26,7 @@ import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table"
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
 import { computeRequestStatus } from "@/lib/request-freshness";
-import { rotuloFrescor, type ComFrescor } from "@/lib/frescor-carga";
+import type { ComFrescor } from "@/lib/frescor-carga";
 import { buildChartData } from "@/lib/operacoes-trend";
 import { temaDoGrafico, type MarcaDoGrafico } from "@/lib/chart-theme";
 import { useTema } from "@/components/theme/ThemeProvider";
@@ -39,6 +38,25 @@ const BRAND_LABELS: Record<string, string> = {
   lescent: "LESCENT",
   rituaria: "RITUÁRIA",
 };
+
+type Visao = "alertas" | "criadores" | "lives" | "velocidade" | "trend";
+
+/** As secoes de antes viram abas; as ancoras de sempre (#alertas, #top-criadores...) escolhem a aba. */
+const VISOES: VisaoDaAba<Visao>[] = [
+  { id: "alertas", rotulo: "Alertas" },
+  { id: "criadores", rotulo: "Top Criadores" },
+  { id: "lives", rotulo: "Performance de Lives" },
+  { id: "velocidade", rotulo: "Velocidade ML" },
+  { id: "trend", rotulo: "Trend TikTok" },
+];
+const ANCORA_DA_VISAO: Record<Visao, string> = {
+  alertas: "#alertas",
+  criadores: "#top-criadores",
+  lives: "#lives",
+  velocidade: "#velocidade-ml",
+  trend: "#trend-tiktok",
+};
+const VISAO_DA_ANCORA = Object.fromEntries(Object.entries(ANCORA_DA_VISAO).map(([v, a]) => [a, v])) as Record<string, Visao>;
 
 const ML_BRANDS = ["barbours", "kokeshi", "lescent"];
 const ALL_BRANDS = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
@@ -107,6 +125,20 @@ export default function OperacoesPage() {
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const [creatorBrand, setCreatorBrand] = useState<string>("all");
+  const [visao, setVisao] = useState<Visao>("alertas");
+  useEffect(() => {
+    const aplicar = () => {
+      const v = VISAO_DA_ANCORA[window.location.hash.split("?")[0]];
+      if (v) setVisao(v);
+    };
+    aplicar();
+    window.addEventListener("hashchange", aplicar);
+    return () => window.removeEventListener("hashchange", aplicar);
+  }, []);
+  const escolherVisao = (v: Visao) => {
+    setVisao(v);
+    window.history.replaceState(null, "", ANCORA_DA_VISAO[v]);
+  };
   // Chave da ultima requisicao resolvida (sucesso ou falha) — comparada com
   // a chave atual para nunca deixar uma resposta obsoleta (de um retry
   // anterior) sobrescrever o retry ATUAL em andamento (mesmo padrao
@@ -258,39 +290,24 @@ export default function OperacoesPage() {
   const hasAnyData = dataIsFresh && displayData != null;
 
   return (
-    <PageContainer>
-      {/* Contrato independente dos filtros globais (declarado no "ⓘ" do
-          cabecalho): sem barra sticky, para nao sugerir um escopo que a tela
-          nao aplica. */}
-      <PageHeader
-        title="Operações"
-        subtitle="Alertas, criadores, lives e velocidade de mídia."
-        status={
-          <span className="flex items-center gap-2">
-            {dataIsFresh ? (
-              <>
-                <LiveStatusBadge live={displayIsLive} />
-                {/* T-0097: carga mais antiga das fontes da tela; nunca a ultima
-                    data da serie (o dia corrente e' parcial). Demo nao tem frescor. */}
-                {displayIsLive && (
-                  <span
-                    className="text-xs text-ink-muted tabular-nums"
-                    title="Última carga das fontes desta tela (ML Gestão Diária e TikTok Shop)"
-                  >
-                    {rotuloFrescor((displayData as ComFrescor<OperacoesData> | null)?.refreshed_at)}
-                  </span>
-                )}
-              </>
-            ) : isLoadingState ? (
-              <span className="text-xs text-ink-muted bg-raised border border-line rounded-lg px-3 py-1.5 font-medium">
-                Atualizando dados...
-              </span>
-            ) : null}
-            <InfoDica texto="Os filtros globais de canal, marca e período não se aplicam aqui: cada seção usa o próprio período." />
-          </span>
-        }
-      />
-
+    <Aba<Visao>
+      titulo="Operações"
+      selo={
+        <>
+        <SeloAtualizado
+          em={displayIsLive ? (displayData as ComFrescor<OperacoesData> | null)?.refreshed_at ?? null : null}
+          aoVivo={displayIsLive || null}
+          carregando={isLoadingState}
+          detalhe="Última carga das fontes desta tela (ML Gestão Diária e TikTok Shop)"
+        />
+        {/* Sem filtros globais aqui: nenhuma barra de filtros, so' o aviso ao lado do selo. */}
+        <InfoDica texto="Os filtros globais de canal, marca e período não se aplicam aqui: cada seção usa o próprio período." />
+        </>
+      }
+      visoes={VISOES}
+      visao={visao}
+      onVisao={escolherVisao}
+    >
         <span className="sr-only" aria-live="polite" aria-atomic="true">
           {isLoadingState
             ? "Carregando dados de operações..."
@@ -314,15 +331,7 @@ export default function OperacoesPage() {
         />
       ) : (
       <>
-        {/* Navegacao interna compacta */}
-        <nav aria-label="Navegação interna da página" className="flex flex-wrap gap-1 -mx-2.5">
-          <a href="#alertas" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Alertas</a>
-          <a href="#top-criadores" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Top Criadores</a>
-          <a href="#lives" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Performance de Lives</a>
-          <a href="#velocidade-ml" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Velocidade ML</a>
-          <a href="#trend-tiktok" className="px-2.5 py-1 rounded-lg text-xs font-semibold text-accent-ink hover:bg-accent-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Trend TikTok</a>
-        </nav>
-
+        {visao === "alertas" && (<>
         {/* Seção 1 — Alertas Ativos */}
         <div
           id="alertas"
@@ -403,6 +412,9 @@ export default function OperacoesPage() {
           )}
         </div>
 
+        </>)}
+
+        {visao === "criadores" && (<>
         {/* Seção 2 — Top Criadores */}
         <div
           id="top-criadores"
@@ -551,6 +563,9 @@ export default function OperacoesPage() {
           </div>
         </div>
 
+        </>)}
+
+        {visao === "lives" && (<>
         {/* Seção 3 — Performance de Lives */}
         <div
           id="lives"
@@ -662,6 +677,9 @@ export default function OperacoesPage() {
           </div>
         </div>
 
+        </>)}
+
+        {visao === "velocidade" && (<>
         {/* Seção 4 — Velocidade ML */}
         <div
           id="velocidade-ml"
@@ -683,6 +701,9 @@ export default function OperacoesPage() {
           </div>
         </div>
 
+        </>)}
+
+        {visao === "trend" && (<>
         {/* Seção 5 — Trend TikTok */}
         <div
           id="trend-tiktok"
@@ -752,8 +773,10 @@ export default function OperacoesPage() {
             )}
           </div>
         </div>
+        </>)}
+
       </>
       )}
-    </PageContainer>
+    </Aba>
   );
 }
