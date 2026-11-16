@@ -442,7 +442,7 @@ def test_run_window_preflight_bloqueia_falta_select_gold(monkeypatch):
     write_url = _install_fake_connect(monkeypatch, main_responses=responses)
     report = wwc.run_window_preflight(write_url, _READ_URL)
     assert report.ok is False
-    assert any("falta SELECT em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+    assert any("falta SELECT em gold.fct_marketplace_region_daily" in r for r in report.blocking_reasons)
 
 
 def test_run_window_preflight_bloqueia_falta_insert_gold(monkeypatch):
@@ -453,7 +453,7 @@ def test_run_window_preflight_bloqueia_falta_insert_gold(monkeypatch):
     write_url = _install_fake_connect(monkeypatch, main_responses=responses)
     report = wwc.run_window_preflight(write_url, _READ_URL)
     assert report.ok is False
-    assert any("falta INSERT em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+    assert any("falta INSERT em gold.fct_marketplace_region_daily" in r for r in report.blocking_reasons)
 
 
 def test_run_window_preflight_bloqueia_falta_delete_gold(monkeypatch):
@@ -464,7 +464,7 @@ def test_run_window_preflight_bloqueia_falta_delete_gold(monkeypatch):
     write_url = _install_fake_connect(monkeypatch, main_responses=responses)
     report = wwc.run_window_preflight(write_url, _READ_URL)
     assert report.ok is False
-    assert any("falta DELETE em gold.marketplace_region_daily" in r for r in report.blocking_reasons)
+    assert any("falta DELETE em gold.fct_marketplace_region_daily" in r for r in report.blocking_reasons)
 
 
 def test_run_window_preflight_bloqueia_update_concedido_na_gold(monkeypatch):
@@ -763,11 +763,11 @@ def test_run_window_preflight_excecao_em_consulta_nao_deixa_campo_indefinido(mon
     ("HAS_SCHEMA_PRIVILEGE(CURRENT_USER, 'SILVER', 'USAGE')", (True, None, False, True), "USAGE no schema gold"),
     ("HAS_SCHEMA_PRIVILEGE(CURRENT_USER, 'SILVER', 'USAGE')", (True, True, None, True), "CREATE no schema gold não confirmado"),
     ("HAS_SCHEMA_PRIVILEGE(CURRENT_USER, 'SILVER', 'USAGE')", (True, True, False, None), "TEMP no database"),
-    (_GOLD_PRIVS_MATCHER, (None, True, True, False, False), "SELECT em gold.marketplace_region_daily"),
-    (_GOLD_PRIVS_MATCHER, (True, None, True, False, False), "INSERT em gold.marketplace_region_daily"),
-    (_GOLD_PRIVS_MATCHER, (True, True, None, False, False), "DELETE em gold.marketplace_region_daily"),
-    (_GOLD_PRIVS_MATCHER, (True, True, True, None, False), "UPDATE em gold.marketplace_region_daily não confirmado"),
-    (_GOLD_PRIVS_MATCHER, (True, True, True, False, None), "TRUNCATE em gold.marketplace_region_daily não confirmado"),
+    (_GOLD_PRIVS_MATCHER, (None, True, True, False, False), "SELECT em gold.fct_marketplace_region_daily"),
+    (_GOLD_PRIVS_MATCHER, (True, None, True, False, False), "INSERT em gold.fct_marketplace_region_daily"),
+    (_GOLD_PRIVS_MATCHER, (True, True, None, False, False), "DELETE em gold.fct_marketplace_region_daily"),
+    (_GOLD_PRIVS_MATCHER, (True, True, True, None, False), "UPDATE em gold.fct_marketplace_region_daily não confirmado"),
+    (_GOLD_PRIVS_MATCHER, (True, True, True, False, None), "TRUNCATE em gold.fct_marketplace_region_daily não confirmado"),
     (_SILVER_SELECT_ONLY_MATCHER, (None,), "SELECT em silver.stg_shopee_order_item_snapshots"),
     ("HAS_SEQUENCE_PRIVILEGE", (None,), "USAGE na sequence"),
 ])

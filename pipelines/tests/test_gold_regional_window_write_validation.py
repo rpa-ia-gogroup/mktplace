@@ -71,7 +71,7 @@ def _happy_responses(
         (_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), bad),
         (_contains("GMV = 'NAN'"), nan_neg),
         (_contains("MARKETPLACE_ID <> %(SHOPEE_MARKETPLACE_ID)S"), out_of_scope_staging),
-        (_contains("COALESCE(SUM(ORDERS), 0) FROM GOLD.MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID ="), gold_agg),
+        (_contains("COALESCE(SUM(ORDERS), 0) FROM GOLD.FCT_MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID ="), gold_agg),
         (_contains("FULL OUTER JOIN", "GOLD_WINDOW"), key_diff),
     ]
 
@@ -325,7 +325,7 @@ def test_validate_caminho_reconciliado_would_change_false(monkeypatch):
     assert fake_conn.committed is False
     assert fake_conn.rolled_back is True
     assert not any(s.upper().startswith("DELETE FROM") for s, _ in fake_conn.executed)
-    assert not any(s.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY") for s, _ in fake_conn.executed)
+    assert not any(s.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY") for s, _ in fake_conn.executed)
 
 
 def test_validate_caminho_divergente_gold_only_continua_sem_escrita(monkeypatch):
@@ -340,7 +340,7 @@ def test_validate_caminho_divergente_gold_only_continua_sem_escrita(monkeypatch)
     assert fake_conn.committed is False
     assert fake_conn.rolled_back is True
     assert not any(s.upper().startswith("DELETE FROM") for s, _ in fake_conn.executed)
-    assert not any(s.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY") for s, _ in fake_conn.executed)
+    assert not any(s.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY") for s, _ in fake_conn.executed)
 
 
 def test_validate_caminho_divergente_source_only_continua_sem_escrita(monkeypatch):

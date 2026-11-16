@@ -1,9 +1,10 @@
 """
-Gate 6B — sync Data Mart -> Neon de gold.marketplace_region_daily (aplicada
+Gate 6B — sync Data Mart -> Neon de gold.fct_marketplace_region_daily (aplicada
 e carregada no Gate 6A) para marts.fact_marketplace_region_daily (criada
 pela migration alembic apps/api/alembic/versions/005_create_fact_marketplace_region_daily.py).
 
-Fonte (somente leitura): Data Mart RDS, DATAMART_DATABASE_URL, gold.marketplace_region_daily.
+Fonte (somente leitura): Data Mart RDS, DATAMART_DATABASE_URL, gold.fct_marketplace_region_daily
+(TABELA; o nome antigo gold.marketplace_region_daily e' view de compatibilidade).
 Destino (escrita): Neon, DATABASE_URL, marts.fact_marketplace_region_daily.
 
 Mesmo padrao de pipelines/reconciliation/diagnose_bug8_neon.py +
@@ -60,8 +61,10 @@ from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor, execute_values
 
+from pipelines.ingestion.gold_regional import GOLD_REGION_TABLE
+
 # ---------------------------------------------------------------------------
-# Contrato de colunas — espelha gold.marketplace_region_daily (Data Mart) e
+# Contrato de colunas — espelha gold.fct_marketplace_region_daily (Data Mart) e
 # marts.fact_marketplace_region_daily (Neon). id/ingested_at sao gerados por
 # cada lado, nunca copiados da fonte.
 # ---------------------------------------------------------------------------
@@ -81,7 +84,9 @@ SUM_COLUMNS = [
     "shipping_cost_covered_orders", "shipping_cost_eligible_orders",
 ]
 
-SOURCE_TABLE = "gold.marketplace_region_daily"
+# T-0109c: a TABELA real da gold. `gold.marketplace_region_daily` virou view
+# de compatibilidade (rename airflow #1939) e vai para o archive.
+SOURCE_TABLE = GOLD_REGION_TABLE
 REAL_TABLE = "marts.fact_marketplace_region_daily"
 STAGING_TABLE_NAME = "sync_region_daily_staging"
 STAGING_TABLE_QUALIFIED = f"pg_temp.{STAGING_TABLE_NAME}"
@@ -465,7 +470,7 @@ def main() -> int:
     from dotenv import load_dotenv
     load_dotenv(dotenv_path=str(Path(__file__).resolve().parent.parent / ".env"))
 
-    parser = argparse.ArgumentParser(description="Gate 6B — sync Data Mart -> Neon de gold.marketplace_region_daily")
+    parser = argparse.ArgumentParser(description=f"Gate 6B — sync Data Mart -> Neon de {GOLD_REGION_TABLE}")
     parser.add_argument("--diagnose", action="store_true", help="Somente leitura (padrao)")
     parser.add_argument("--sync", action="store_true", help="Escreve no Neon — exige guardas explicitas, ver docstring do modulo")
     args = parser.parse_args()

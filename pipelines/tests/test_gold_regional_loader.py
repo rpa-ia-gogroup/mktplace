@@ -40,7 +40,7 @@ class FakeCursor:
         if self.conn.fail_on_substring and self.conn.fail_on_substring in norm:
             raise RuntimeError("falha simulada de execução")
         upper = norm.upper()
-        if upper.startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+        if upper.startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             self.conn.final_insert_executed = True
 
     def fetchone(self):
@@ -161,8 +161,8 @@ def test_execute_first_load_ordem_lock_staging_validacao_insert_validacao_commit
     i_shopee_insert = idx("SILVER.STG_SHOPEE_ORDER_ITEM_SNAPSHOTS")
     i_ml_insert = idx("RAW.ML_ORDERS")
     i_rowcount_check = idx("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY")
-    i_final_insert = idx("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY")
-    i_tiktok_check = idx(f"GOLD.MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}")
+    i_final_insert = idx("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY")
+    i_tiktok_check = idx(f"GOLD.FCT_MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}")
     i_unlock = idx("PG_ADVISORY_UNLOCK")
 
     # Ordem: lock -> staging -> transform (shopee/ml) -> validacoes (usam o
@@ -295,7 +295,7 @@ def test_execute_first_load_aborta_se_tiktok_inserido(monkeypatch):
         (_contains("SHOPEE_WINNING_FILE"), (Decimal("1000.00"),)),
         (_contains(f"WHERE MARKETPLACE_ID = {loader.ML_MARKETPLACE_ID}"), (Decimal("2000.00"),)),
         (_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID'"), (Decimal("2000.00"),)),
-        (_contains(f"GOLD.MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}"), (1,)),  # simula 1 linha TikTok
+        (_contains(f"GOLD.FCT_MARKETPLACE_REGION_DAILY WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}"), (1,)),  # simula 1 linha TikTok
         (_exact("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY"), (100,)),
     ]
     fake_conn = FakeConn(fetchone_responses=responses)
@@ -433,7 +433,7 @@ def test_nenhuma_query_de_staging_menciona_tiktok_ou_seu_marketplace_id():
 
 def test_ha_validacao_pos_insert_explicita_de_zero_linhas_tiktok():
     assert str(loader.TIKTOK_MARKETPLACE_ID) in loader.SQL_TIKTOK_ROWS_CHECK
-    assert "gold.marketplace_region_daily" in loader.SQL_TIKTOK_ROWS_CHECK.lower()
+    assert "gold.fct_marketplace_region_daily" in loader.SQL_TIKTOK_ROWS_CHECK.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -479,7 +479,7 @@ def test_sql_refresh_delete_e_a_unica_excecao_sancionada():
 def test_sql_refresh_delete_tem_escopo_restrito_marketplace_e_janela():
     import re
     sql_upper = loader.SQL_REFRESH_DELETE.upper()
-    assert "DELETE FROM GOLD.MARKETPLACE_REGION_DAILY" in sql_upper
+    assert "DELETE FROM GOLD.FCT_MARKETPLACE_REGION_DAILY" in sql_upper
     assert "MARKETPLACE_ID = %(SHOPEE_MARKETPLACE_ID)S" in sql_upper
     assert "DATE BETWEEN %(DATE_FROM)S AND %(DATE_TO)S" in sql_upper
     # nunca um DELETE sem WHERE, nunca literal de data/id interpolado
@@ -497,7 +497,7 @@ def test_create_temp_table_on_commit_drop_nao_e_falso_positivo_destrutivo():
 # Gate 6C — refresh incremental (diagnose_incremental_load / execute_incremental_load / CLI)
 # =============================================================================
 
-_SQL_MAX_DATE_GOLD_NORM = "SELECT MARKETPLACE_ID, MAX(DATE) AS MAX_DATE FROM GOLD.MARKETPLACE_REGION_DAILY GROUP BY MARKETPLACE_ID"
+_SQL_MAX_DATE_GOLD_NORM = "SELECT MARKETPLACE_ID, MAX(DATE) AS MAX_DATE FROM GOLD.FCT_MARKETPLACE_REGION_DAILY GROUP BY MARKETPLACE_ID"
 _SQL_MAX_DATE_ML_NORM = (
     "SELECT MAX(DATE_CREATED::DATE) AS MAX_GLOBAL, "
     "MAX(DATE_CREATED::DATE) FILTER (WHERE DATE_CREATED::DATE <= %(DATE_TO)S) AS MAX_ELIGIBLE "
@@ -537,7 +537,7 @@ class IncrementalFakeCursor:
                 and "SILVER.STG_SHOPEE_ORDER_ITEM_SNAPSHOTS" in upper
                 and "TO_REGCLASS" not in upper):
             raise RuntimeError('relation "silver.stg_shopee_order_item_snapshots" does not exist')
-        if norm.upper().startswith("INSERT INTO GOLD.MARKETPLACE_REGION_DAILY"):
+        if norm.upper().startswith("INSERT INTO GOLD.FCT_MARKETPLACE_REGION_DAILY"):
             self.conn.final_insert_executed = True
 
     def fetchone(self):
@@ -1676,7 +1676,7 @@ def _r2_conn(linhas_ml, linhas_shopee, gold=date(2026, 9, 5)):
             (_inc_contains("HAVING COUNT(*) > 1"), (0,)),
             (_inc_contains("IS NULL OR MARKETPLACE_ID IS NULL"), (0,)),
             (_inc_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), (0,)),
-            (_inc_all("GOLD.MARKETPLACE_REGION_DAILY",
+            (_inc_all("GOLD.FCT_MARKETPLACE_REGION_DAILY",
                       f"MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}"), (0,)),
             (_inc_exact("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY"), (100,)),
         ],

@@ -165,7 +165,8 @@ def check_gold_regional_write() -> CheckResult:
     pacote gold_regional (`write_conn.run_preflight`, sessao
     readonly=True desde a conexao) aprova o alvo: nao esta' em recovery, nao
     e' rolsuper, mesmo cluster fisico da leitura, permissao no schema gold, e
-    `gold.marketplace_region_daily` ja existe. Nunca imprime o conteudo do
+    a tabela `gold.fct_marketplace_region_daily` ja existe (T-0109c: o nome
+    antigo virou view de compatibilidade). Nunca imprime o conteudo do
     secret nem qualquer host/URL — so' as mensagens ja saneadas de
     SecretLoadError/PreflightReport.blocking_reasons (nenhuma delas ecoa a
     DSN, ver write_conn.sanitize_error_message)."""

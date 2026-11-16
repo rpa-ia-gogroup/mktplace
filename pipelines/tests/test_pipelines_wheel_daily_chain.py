@@ -27,13 +27,20 @@ from pipelines.ops import orchestrate as o
 
 RAIZ = pathlib.Path(__file__).resolve().parents[2]
 
-#: Steps da cadeia que NAO vao para o Airflow: exigem credencial de escrita no
-#: Data Mart (`DATAMART_GOLD_WRITE_URL`) e o artefato de consentimento local.
+#: Steps da cadeia que ficam FORA da `daily_chain` do Airflow: exigem credencial
+#: de escrita no Data Mart (`DATAMART_GOLD_WRITE_URL`). T-0109c: rodam na DAG
+#: regional propria (airflow#2571), cobertos por `CLIS_REGIONAIS_DO_AIRFLOW`.
 NAO_PORTAVEIS = {"gold_regional_incremental", "sync_region_if_needed"}
 
+#: T-0109c — CLIs que a DAG regional chama da wheel.
+CLIS_REGIONAIS_DO_AIRFLOW = {
+    "pipelines.ingestion.gold_regional.loader",  # --incremental / --diagnose
+    "pipelines.ops.sync_region_if_needed",
+    "pipelines.sync_region_daily",               # --diagnose
+}
+
 TOPO_PROIBIDO = {"alembic", "app", "etl", "apps", "tests", "tools"}
-SUBARVORES_PROIBIDAS = ("pipelines/ingestion/gold_regional/", "pipelines/ingestion/shopee_raw/",
-                        "pipelines/tests/")
+SUBARVORES_PROIBIDAS = ("pipelines/ingestion/shopee_raw/", "pipelines/tests/")
 
 
 def _arquivo(mod: str) -> pathlib.Path | None:
@@ -219,6 +226,49 @@ def test_todo_modulo_do_fecho_da_cadeia_esta_na_wheel(wheel):
         if rel not in wheel["nomes"]:
             faltando.append(rel)
     assert not faltando, f"modulos do fecho fora da wheel: {faltando}"
+
+
+def test_t0109c_fecho_dos_clis_regionais_existe_e_inclui_gold_regional():
+    """O fecho e' reconstruido, nao copiado; se os CLIs mudarem de lugar, o
+    teste de wheel abaixo passaria vazio sem esta trava."""
+    for mod in CLIS_REGIONAIS_DO_AIRFLOW:
+        assert _arquivo(mod) is not None, mod
+    fecho = fecho_interno(CLIS_REGIONAIS_DO_AIRFLOW)
+    assert CLIS_REGIONAIS_DO_AIRFLOW <= fecho
+    assert {"pipelines.ingestion.gold_regional", "pipelines.ingestion.gold_regional.write_conn",
+            "pipelines.ingestion.gold_regional.window_write_conn"} <= fecho
+
+
+def test_t0109c_fecho_regional_nao_importa_alembic_etl_nem_app():
+    for mod in fecho_interno(CLIS_REGIONAIS_DO_AIRFLOW):
+        for nome in _importados(_arquivo(mod), mod):
+            assert nome.split(".")[0] not in {"alembic", "etl", "app"}, (mod, nome)
+
+
+def test_t0109c_pacotes_do_fecho_regional_estao_no_include_do_pyproject():
+    """Complemento da prova na wheel (abaixo), que pula sem o modulo `build`:
+    todo pacote do fecho regional aparece LITERALMENTE no `include` (que nao
+    usa curinga) e nao cai no `exclude`."""
+    import tomllib
+
+    find = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["setuptools"]["packages"]["find"]
+    include, exclude = set(find["include"]), set(find.get("exclude", []))
+    pacotes = {mod if _arquivo(mod).name == "__init__.py" else mod.rsplit(".", 1)[0]
+               for mod in fecho_interno(CLIS_REGIONAIS_DO_AIRFLOW)}
+    assert "pipelines.ingestion.gold_regional" in pacotes
+    assert pacotes <= include, sorted(pacotes - include)
+    assert not pacotes & exclude
+    # sem subpacote em gold_regional: a linha do include cobre a arvore inteira
+    assert not list((RAIZ / "pipelines" / "ingestion" / "gold_regional").glob("*/__init__.py"))
+
+
+def test_t0109c_todo_modulo_do_fecho_regional_esta_na_wheel(wheel):
+    faltando = []
+    for mod in sorted(fecho_interno(CLIS_REGIONAIS_DO_AIRFLOW)):
+        rel = _arquivo(mod).relative_to(RAIZ).as_posix()
+        if rel not in wheel["nomes"]:
+            faltando.append(rel)
+    assert not faltando, f"modulos do fecho regional fora da wheel: {faltando}"
 
 
 def test_subarvores_nao_portaveis_ficam_fora(wheel):

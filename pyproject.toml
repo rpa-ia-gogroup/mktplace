@@ -132,7 +132,8 @@ where = ["."]
 #   pipelines.connectors{,.mercadolivre,.shopee,.tiktok}  — daily_performance
 #     importa os tres conectores no topo, mesmo rodando so' ML ou TikTok;
 #   pipelines.ingestion   — so' o pacote (daily_performance, fato_diaria_lock);
-#     `ingestion.gold_regional` e `ingestion.shopee_raw` NAO entram;
+#     `ingestion.shopee_raw` NAO entra (`ingestion.gold_regional` entrou
+#     depois, pela T-0109c, abaixo);
 #   pipelines.ops         — serving_refresh e health_check;
 #   pipelines.pma         — sync_ml_listing_price_serving;
 #   pipelines.quality     — daily_performance (checks, ml_fee_reconciliation);
@@ -143,12 +144,25 @@ where = ["."]
 # aparece DENTRO de funcoes de reconciliacao da Shopee que nenhum desses CLIs
 # chama; `alembic` e `app` nao aparecem. Um teste reconstroi o fecho a partir
 # de `PIPELINES["daily_chain"]` e confere a wheel construida.
+# T-0109(c): a cadeia regional saiu do Windows para o Airflow (DAG regional,
+# airflow#2571), que chama da wheel `pipelines.ingestion.gold_regional.loader`
+# (--incremental/--diagnose), `pipelines.ops.sync_region_if_needed` e
+# `pipelines.sync_region_daily` (--diagnose). Fecho transitivo MEDIDO no fonte
+# (AST, imports no topo e dentro de funcao) dos 3 CLIs, 13 modulos:
+#   pipelines.ingestion.gold_regional.{__init__, loader, write_conn, window_write_conn}
+#   pipelines.common.{config, operational_calendar}
+#   pipelines.ops.{sync_region_if_needed, region_sync_consent}
+#   pipelines.sync_region_daily + os pacotes pipelines, .common, .ingestion, .ops
+# So' `gold_regional` faltava. Terceiros: psycopg2, dotenv, pydantic_settings,
+# ja' na imagem. Zero imports dinamicos. `gold_regional` nao tem subpacote
+# (6 arquivos; `ddl` e `shopee_batch_window` vao junto sem estar no fecho).
 include = [
     "pipelines", "pipelines.expedicao", "pipelines.common", "pipelines.dre",
     "pipelines.connectors", "pipelines.connectors.mercadolivre",
     "pipelines.connectors.shopee", "pipelines.connectors.tiktok",
     "pipelines.ingestion", "pipelines.ops", "pipelines.pma",
     "pipelines.quality", "pipelines.reconciliation", "pipelines.transforms",
+    "pipelines.ingestion.gold_regional",
 ]
 exclude = ["pipelines.tests", "pipelines.tests.*"]
 

@@ -48,7 +48,9 @@ def test_parse_ddl_statements_arquivo_real_gera_apenas_statements_esperados():
     assert len(statements) > 5
     create_tables = [s for s in statements if s.upper().startswith("CREATE TABLE")]
     assert len(create_tables) == 1
-    assert "gold.marketplace_region_daily" in create_tables[0]
+    # T-0109c: o .sql versionado ainda cria o nome ANTIGO (hoje view de
+    # compatibilidade) — é exatamente o que execute_ddl recusa abaixo.
+    assert ddl.legacy_table_statements(create_tables) == create_tables
     comments = [s for s in statements if s.upper().startswith("COMMENT ON")]
     assert len(comments) >= 5  # tabela + colunas de cobertura
 
@@ -185,3 +187,39 @@ def test_execute_ddl_erro_nunca_expoe_credencial(monkeypatch, tmp_path):
     with pytest.raises(RuntimeError) as exc_info:
         ddl.execute_ddl("postgresql://writer:S3nh4Secreta@host/db", ddl_path=ddl_path)
     assert "S3nh4Secreta" not in str(exc_info.value)
+
+
+# --- T-0109c: o DDL só vale para a tabela real --------------------------------
+
+def test_constante_da_tabela_gold_regional_e_a_tabela_real():
+    """Trava: a gold regional é a TABELA `gold.fct_marketplace_region_daily`; a
+    sequence do `id` manteve o nome antigo (o rename não a levou)."""
+    import pipelines.ingestion.gold_regional as pkg
+    from pipelines import sync_region_daily as srd
+    from pipelines.ingestion.gold_regional import loader, window_write_conn
+
+    assert pkg.GOLD_REGION_TABLE == "gold.fct_marketplace_region_daily"
+    assert pkg.GOLD_REGION_ID_SEQUENCE == "gold.marketplace_region_daily_id_seq"
+    assert srd.SOURCE_TABLE == pkg.GOLD_REGION_TABLE
+    assert loader._GOLD_TABLE_QUALIFIED == pkg.GOLD_REGION_TABLE
+    assert window_write_conn._GOLD_TABLE_QUALIFIED == pkg.GOLD_REGION_TABLE
+    assert window_write_conn._GOLD_ID_SEQUENCE_QUALIFIED == pkg.GOLD_REGION_ID_SEQUENCE
+
+
+def test_legacy_table_statements_nao_confunde_a_sequence_nem_a_tabela_real():
+    assert ddl.legacy_table_statements([
+        "CREATE INDEX ix ON gold.fct_marketplace_region_daily (date)",
+        "SELECT nextval('gold.marketplace_region_daily_id_seq')",
+    ]) == []
+    assert ddl.legacy_table_statements(["COMMENT ON TABLE GOLD.MARKETPLACE_REGION_DAILY IS 'x'"]) != []
+
+
+def test_execute_ddl_recusa_ddl_com_nome_antigo_sem_conectar(monkeypatch):
+    fake_conn = FakeConn()
+    monkeypatch.setattr(ddl, "psycopg2", _FakePsycopg2Module(fake_conn))
+
+    with pytest.raises(wc.WritePreflightBlocked, match="gold.fct_marketplace_region_daily"):
+        ddl.execute_ddl("postgresql://writer@host/db")  # DEFAULT_DDL_PATH real
+
+    assert fake_conn.executed == []
+    assert fake_conn.committed is False

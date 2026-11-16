@@ -32,13 +32,13 @@ com privilégio mínimo diferente):
     substituto, ao contrário do preflight genérico do `--incremental`);
     `rolsuper`/`rolcreatedb`/`rolcreaterole`/`rolreplication`/`rolbypassrls`
     todos `false`; membro de `rds_superuser` CONFIRMADO `false`; SSL
-    CONFIRMADO em uso; `gold.marketplace_region_daily` e sua sequence
+    CONFIRMADO em uso; `gold.fct_marketplace_region_daily` e sua sequence
     existem; `USAGE` em `silver`/`gold`; `SELECT` em
     `silver.stg_shopee_order_item_snapshots`; `SELECT`/`INSERT`/`DELETE` em
-    `gold.marketplace_region_daily`; `USAGE` na sequence do `id`; `TEMP` no
+    `gold.fct_marketplace_region_daily`; `USAGE` na sequence do `id`; `TEMP` no
     database. Também bloqueia se a credencial TIVER privilégios proibidos
     (least-privilege violado): `CREATE` no schema `gold`, `UPDATE` ou
-    `TRUNCATE` em `gold.marketplace_region_daily`. Nunca exige nem concede
+    `TRUNCATE` em `gold.fct_marketplace_region_daily`. Nunca exige nem concede
     nada em tabelas ML/TikTok;
   - nenhuma mensagem de erro pode conter usuário/senha — todo texto de
     exceção passa por `sanitize_error_message` (reaproveitado de
@@ -65,7 +65,14 @@ from pathlib import Path
 import psycopg2
 from dotenv import dotenv_values
 
-from pipelines.ingestion.gold_regional import write_conn
+from pipelines.ingestion.gold_regional import (
+    GOLD_REGION_ID_SEQUENCE,
+    GOLD_REGION_ID_SEQUENCE_NAME,
+    GOLD_REGION_SCHEMA,
+    GOLD_REGION_TABLE,
+    GOLD_REGION_TABLE_NAME,
+    write_conn,
+)
 from pipelines.ingestion.gold_regional.write_conn import sanitize_error_message  # re-exportado
 
 EXPECTED_SECRET_KEYS = frozenset({
@@ -73,11 +80,16 @@ EXPECTED_SECRET_KEYS = frozenset({
     "I_UNDERSTAND_THIS_DELETES_GOLD_SHOPEE_WINDOW",
 })
 
-_GOLD_TABLE_SCHEMA = "gold"
-_GOLD_TABLE_NAME = "marketplace_region_daily"
-_GOLD_TABLE_QUALIFIED = f"{_GOLD_TABLE_SCHEMA}.{_GOLD_TABLE_NAME}"
+# T-0109c: tabela real e sequence pelos nomes do catálogo (constantes do
+# pacote). A sequence NÃO deriva do nome da tabela: o rename da gold levou a
+# tabela para `fct_marketplace_region_daily` e deixou a sequence com o nome
+# antigo `marketplace_region_daily_id_seq`.
+_GOLD_TABLE_SCHEMA = GOLD_REGION_SCHEMA
+_GOLD_TABLE_NAME = GOLD_REGION_TABLE_NAME
+_GOLD_TABLE_QUALIFIED = GOLD_REGION_TABLE
 _SILVER_SOURCE_TABLE_QUALIFIED = "silver.stg_shopee_order_item_snapshots"
-_GOLD_ID_SEQUENCE_QUALIFIED = f"{_GOLD_TABLE_SCHEMA}.{_GOLD_TABLE_NAME}_id_seq"
+_GOLD_ID_SEQUENCE_NAME = GOLD_REGION_ID_SEQUENCE_NAME
+_GOLD_ID_SEQUENCE_QUALIFIED = GOLD_REGION_ID_SEQUENCE
 
 # Gate S4.3d — interceptor de DDL do AWS DMS (achado real do Gate S4.3b/S4.3c:
 # `CREATE TEMP TABLE` da staging aciona este event trigger, que tenta INSERT/
@@ -195,7 +207,7 @@ def run_window_preflight(write_url: str, expected_read_url: str) -> WindowPrefli
     Privilégios PROIBIDOS, também bloqueantes (se a credencial os tiver, é
     sinal de que não foi escopada como least-privilege e não deve ser usada
     até ser corrigida): `CREATE` no schema `gold`; `UPDATE`/`TRUNCATE` em
-    `gold.marketplace_region_daily`. Nunca exige nem concede nada em
+    `gold.fct_marketplace_region_daily`. Nunca exige nem concede nada em
     tabelas ML/TikTok.
 
     Gate S4.3d — compatibilidade do interceptor de DDL do AWS DMS
@@ -306,9 +318,11 @@ def run_window_preflight(write_url: str, expected_read_url: str) -> WindowPrefli
             )
             rolsuper, rolcreatedb, rolcreaterole, rolreplication, rolbypassrls = cur.fetchone()
 
+            # T-0109c: só TABELA conta — a view de compatibilidade não prova
+            # que a tabela existe.
             cur.execute(
                 "SELECT EXISTS (SELECT 1 FROM information_schema.tables "
-                "WHERE table_schema = %s AND table_name = %s)",
+                "WHERE table_schema = %s AND table_name = %s AND table_type = 'BASE TABLE')",
                 (_GOLD_TABLE_SCHEMA, _GOLD_TABLE_NAME),
             )
             (gold_table_exists,) = cur.fetchone()
@@ -316,7 +330,7 @@ def run_window_preflight(write_url: str, expected_read_url: str) -> WindowPrefli
             cur.execute(
                 "SELECT EXISTS (SELECT 1 FROM information_schema.sequences "
                 "WHERE sequence_schema = %s AND sequence_name = %s)",
-                (_GOLD_TABLE_SCHEMA, f"{_GOLD_TABLE_NAME}_id_seq"),
+                (_GOLD_TABLE_SCHEMA, _GOLD_ID_SEQUENCE_NAME),
             )
             (gold_sequence_exists,) = cur.fetchone()
 
