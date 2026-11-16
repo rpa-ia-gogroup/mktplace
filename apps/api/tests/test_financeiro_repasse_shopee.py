@@ -201,6 +201,64 @@ def test_dois_meses_inteiros_com_repasse_somam():
     assert _marca(res, "apice")["shopee_settlement"] == 823_257.41
 
 
+def _get_rota(insumos, rows=None, meses=None):
+    """T-0124: chama a ROTA `/financeiro` (passa pelo `response_model`) com o dublê."""
+    from fastapi.testclient import TestClient
+
+    from app.database import get_db
+    from app.main import app
+
+    rows = rows if rows is not None else [_fato(m, g) for m, (g, *_r) in OUT26_REPASSE.items()]
+    meses = meses if meses is not None else [_mes(r["brand_key"]) for r in rows]
+    db = FinanceiroSession(rows, OUT26, insumos=insumos, meses=meses)
+    app.dependency_overrides[get_db] = lambda: db
+    try:
+        r = TestClient(app).get("/api/v1/performance/financeiro",
+                                params={"channels": "shopee", "ref_month": "2026-10"})
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _marca_json(body, brand):
+    return next(b for b in body["brands"] if b["brand"] == brand)
+
+
+def test_rota_publica_status_do_repasse_e_aviso_do_escrow():
+    """T-0124: `shopee_settlement_status` e o aviso sobrevivem ao `response_model`."""
+    body = _get_rota(_todos())
+    assert _marca_json(body, "kokeshi")["shopee_settlement"] == 2_296_007.01
+    assert _marca_json(body, "kokeshi")["shopee_settlement_status"] == "parcial"
+    assert body["kpis"]["shopee_settlement_aviso"] == perf_svc.AVISO_REPASSE_SHOPEE_ESCROW
+    assert "escrow_amount" in body["kpis"]["shopee_settlement_aviso"]
+
+
+def test_rota_completa_pelo_escrow_tambem_avisa():
+    body = _get_rota(_todos(completo=True))
+    assert all(_marca_json(body, m)["shopee_settlement_status"] == "completa" for m in OUT26_REPASSE)
+    assert body["kpis"]["shopee_settlement_aviso"] == perf_svc.AVISO_REPASSE_SHOPEE_ESCROW
+
+
+def test_rota_sem_repasse_do_escrow_nao_avisa():
+    """Repasse do mart (sem componente publicado) ou sem dado: aviso nulo."""
+    rows = [_fato("apice", 645_673.0, total_settlement=100_000.0)]
+    meses = [_mes("apice", settlement=100_000.0, settlement_n=31)]
+    body = _get_rota([], rows=rows, meses=meses)
+    assert _marca_json(body, "apice")["shopee_settlement"] == 100_000.0
+    assert _marca_json(body, "apice")["shopee_settlement_status"] == "completa"
+    assert body["kpis"]["shopee_settlement_aviso"] is None
+    # mart cheio tem precedencia sobre o escrow publicado: tambem sem aviso
+    body = _get_rota(_todos(completo=True), rows=[_fato("kokeshi", 3_800_202.69, total_settlement=2_100_000.0)],
+                     meses=[_mes("kokeshi", settlement=2_100_000.0, settlement_n=31)])
+    assert _marca_json(body, "kokeshi")["shopee_settlement"] == 2_100_000.0
+    assert body["kpis"]["shopee_settlement_aviso"] is None
+    # sem nenhum repasse: "—" e sem aviso
+    body = _get_rota(None)
+    assert _marca_json(body, "apice")["shopee_settlement_status"] == "sem_dado"
+    assert body["kpis"]["shopee_settlement_aviso"] is None
+
+
 def test_sql_do_mes_le_o_repasse_do_mart():
     sql = " ".join(str(perf_svc.SQL_SHOPEE_TAXA_MES).split())
     assert "SUM(f.total_settlement) AS settlement" in sql

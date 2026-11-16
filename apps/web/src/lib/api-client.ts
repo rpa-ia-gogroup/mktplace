@@ -1490,6 +1490,8 @@ export interface FinanceiroKpis {
   ml_fee_cobertura?: CoberturaMarcas | null;
   shopee_fee_cobertura?: CoberturaMarcas | null;
   shopee_settlement_cobertura?: CoberturaMarcas | null;
+  /** T-0124: procedencia do repasse Shopee; so' vem quando algum repasse veio do escrow. */
+  shopee_settlement_aviso?: string | null;
   /** T-0115: marcas Shopee com Ads; total e ROAS so' sobre elas. */
   shopee_ads_cobertura?: CoberturaMarcas | null;
 }
@@ -1534,6 +1536,8 @@ export interface FinanceiroBrandRow {
   ml_avg_fee_pct?: number | null;
   shopee_gmv?: number | null;
   shopee_settlement?: number | null;
+  /** T-0124: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado". */
+  shopee_settlement_status?: string | null;
   shopee_fees?: number | null;
   /** T-0120: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado". */
   shopee_fee_status?: string | null;

@@ -1614,6 +1614,10 @@ def _taxas_e_repasses_shopee(db: Session, start: date, end: date,
     return out, repasses
 
 
+#: T-0124: procedencia do repasse Shopee publicada em `kpis.shopee_settlement_aviso`.
+AVISO_REPASSE_SHOPEE_ESCROW = "Repasse do escrow (escrow_amount), antes de ajustes posteriores"
+
+
 def _repasse_shopee_do_mart(r: dict) -> dict:
     """Repasse de UM mes x marca pelo `total_settlement` do mart (T-0120b).
 
@@ -1642,7 +1646,8 @@ def _repasse_shopee_escrow(esc: dict | None, do_mart: dict) -> dict:
         return {"valor": None, "status": "sem_dado"}
     cobertura = esc.get("cobertura")
     parcial = cobertura is None or _f(cobertura) < 1
-    return {"valor": _f(esc["valor"]), "status": "parcial" if parcial else "completa"}
+    # T-0124: `fonte` so' marca a procedencia (aviso da resposta); nao entra no calculo.
+    return {"valor": _f(esc["valor"]), "status": "parcial" if parcial else "completa", "fonte": "escrow"}
 
 
 def _repasses_shopee_por_marca(meses: list[dict], inteiros: list[date], escrow: dict) -> dict[str, dict]:
@@ -1676,7 +1681,9 @@ def _repasses_shopee_por_marca(meses: list[dict], inteiros: list[date], escrow: 
             continue
         parcial = any(x["status"] == "parcial" for x in reps)
         out[marca] = {"valor": round(sum(x["valor"] for x in reps), 2),
-                      "status": "parcial" if parcial else "completa"}
+                      "status": "parcial" if parcial else "completa",
+                      # T-0124: algum mes veio do escrow publicado (so' para o aviso).
+                      "do_escrow": any(x.get("fonte") == "escrow" for x in reps)}
     return out
 
 
@@ -1746,6 +1753,8 @@ def get_financeiro(
         db, start, end, sorted(b for b, m in by_brand.items() if SHOPEE_ID in m))
 
     brand_rows = []
+    # T-0124: algum repasse Shopee publicado veio do escrow -> aviso de procedencia.
+    sh_repasse_do_escrow = False
     for brand, mkts in sorted(by_brand.items()):
         tk = mkts.get(TIKTOK_ID, {})
         ml = mkts.get(ML_ID, {})
@@ -1836,6 +1845,8 @@ def get_financeiro(
                 antes = _f(sh["total_settlement"]) or None
                 rep_sh = {"valor": antes, "status": "completa" if antes is not None else "sem_dado"}
             sh_settlement = rep_sh["valor"]
+            if sh_settlement is not None and rep_sh.get("do_escrow"):
+                sh_repasse_do_escrow = True
             sh_spend = _f(sh["ad_spend"])
             sh_revenue = _f(sh["ad_revenue"])
             sh_shipping = _f(sh["seller_shipping_cost"])
@@ -1843,7 +1854,7 @@ def get_financeiro(
                 "shopee_gmv": sh_gmv or None,
                 "shopee_settlement": sh_settlement,
                 #: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado".
-                #: Interno ate' o schema publicar o campo; alimenta `marcas_parciais`.
+                #: Publicado no schema (T-0124); alimenta tambem `marcas_parciais`.
                 "shopee_settlement_status": rep_sh["status"],
                 "shopee_fees": sh_fees,
                 "shopee_fee_status": tx_sh["status"],
@@ -1921,6 +1932,8 @@ def get_financeiro(
         # T-0120b: repasse do escrow < 100% dos pedidos -> `parcial` com `marcas_parciais`.
         "shopee_settlement_cobertura": _cobertura_com_parciais(brand_rows, "shopee_settlement", "shopee_gmv",
                                                                "shopee_settlement_status"),
+        # T-0124: procedencia do repasse, so' quando algum valor veio do escrow.
+        "shopee_settlement_aviso": AVISO_REPASSE_SHOPEE_ESCROW if sh_repasse_do_escrow else None,
         # T-0115 (B1-08): o total e o ROAS somam so' as marcas com Ads; a
         # cobertura diz quantas (e quais faltam).
         "shopee_ad_spend": sh_spend_t or None,
