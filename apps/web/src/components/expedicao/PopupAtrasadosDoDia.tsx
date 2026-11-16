@@ -26,6 +26,8 @@ import { formatarInteiro } from "@/lib/expedicao-formato";
 import { buscarTodasAsPaginas, diaCurto, faixaDaPagina, instanteCurto } from "@/lib/expedicao-tiktok-abertos";
 import { brandLabel } from "@/lib/filters/brands";
 
+const SO_TELA_LARGA = "hidden sm:table-cell";
+
 type Carga =
   | { tipo: "carregando" }
   | { tipo: "erro" }
@@ -145,7 +147,7 @@ export default function PopupAtrasadosDoDia({
                       label={brandLabel(b.brand)}
                       pct={(b.missed / total) * 100}
                       barra="bg-crit"
-                      value={`${formatarInteiro(b.missed)} · ${formatarInteiro(b.still_waiting)} ainda sem coleta`}
+                      value={`${formatarInteiro(b.missed)} ${b.missed === 1 ? "atrasado" : "atrasados"} · ${formatarInteiro(b.still_waiting)} sem coleta`}
                     />
                   ))}
                 </ul>
@@ -179,9 +181,10 @@ export default function PopupAtrasadosDoDia({
                   <thead className="sticky top-0 bg-raised text-left text-xs uppercase tracking-wide text-ink-faint">
                     <tr>
                       <th scope="col">{canal === "mercadolivre" ? "Venda" : "Pedido"}</th>
-                      {variasMarcas ? <th scope="col">Marca</th> : null}
-                      <th scope="col">Hoje</th>
-                      <th scope="col">Prazo</th>
+                      {/* No celular: numero e coleta ("ainda sem coleta" e' o que importa); o dia do prazo esta' no titulo. */}
+                      {variasMarcas ? <th scope="col" className={SO_TELA_LARGA}>Marca</th> : null}
+                      <th scope="col" className={SO_TELA_LARGA}>Situação hoje</th>
+                      <th scope="col" className={SO_TELA_LARGA}>Prazo</th>
                       <th scope="col">Coleta</th>
                     </tr>
                   </thead>
@@ -189,9 +192,9 @@ export default function PopupAtrasadosDoDia({
                     {pedidos.map((p, i) => (
                       <tr key={`${p.order_id ?? "sem-numero"}-${i}`} className="border-t border-line">
                         <td className="whitespace-nowrap font-mono text-xs text-ink">{p.order_id ?? "—"}</td>
-                        {variasMarcas ? <td className="whitespace-nowrap text-ink">{brandLabel(p.brand)}</td> : null}
-                        <td className="whitespace-nowrap text-ink-muted">{rotuloStatus(canal, p.status)}</td>
-                        <td className="whitespace-nowrap tabular-nums text-ink-muted">{instanteCurto(p.deadline_at)}</td>
+                        {variasMarcas ? <td className={`whitespace-nowrap text-ink ${SO_TELA_LARGA}`}>{brandLabel(p.brand)}</td> : null}
+                        <td className={`whitespace-nowrap text-ink-muted ${SO_TELA_LARGA}`}>{rotuloStatus(canal, p.status)}</td>
+                        <td className={`whitespace-nowrap tabular-nums text-ink-muted ${SO_TELA_LARGA}`}>{instanteCurto(p.deadline_at)}</td>
                         <td className={`whitespace-nowrap tabular-nums ${p.collected_at ? "text-warn-ink" : "font-semibold text-crit-ink"}`}>
                           {p.collected_at ? `coletado ${instanteCurto(p.collected_at)}` : "ainda sem coleta"}
                         </td>

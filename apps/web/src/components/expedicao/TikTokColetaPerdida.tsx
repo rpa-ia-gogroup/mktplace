@@ -334,7 +334,7 @@ export function PopupColetaPerdida({
                       label={brandLabel(b.brand)}
                       pct={(b.missed / total) * 100}
                       barra="bg-crit"
-                      value={`${formatarInteiro(b.missed)} · ${formatarInteiro(b.still_waiting)} ainda sem coleta`}
+                      value={`${formatarInteiro(b.missed)} ${b.missed === 1 ? "atrasado" : "atrasados"} · ${formatarInteiro(b.still_waiting)} sem coleta`}
                     />
                   ))}
                 </ul>

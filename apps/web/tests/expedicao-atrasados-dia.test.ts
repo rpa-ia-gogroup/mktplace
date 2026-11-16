@@ -93,3 +93,23 @@ test("referencia: etiqueta no topo com o texto do canal, linha sempre na escala"
   assert.match(cliente, /rotulo: "Meta da Shopee"/);
   assert.match(cliente, /rotulo: "Meta do ML"/);
 });
+
+test("Revisor UX #478: popup no celular, 'Situação hoje', por marca rotulado, chip pela cor da tabela", async () => {
+  const popup = fonte("src/components/expedicao/PopupAtrasadosDoDia.tsx");
+  assert.match(popup, /<th scope="col" className=\{SO_TELA_LARGA\}>Situação hoje<\/th>/);
+  assert.doesNotMatch(popup, />Hoje<\/th>/);
+  for (const f of [popup, fonte("src/components/expedicao/TikTokColetaPerdida.tsx")]) {
+    assert.match(f, /\$\{b\.missed === 1 \? "atrasado" : "atrasados"\} · \$\{formatarInteiro\(b\.still_waiting\)\} sem coleta/);
+  }
+  const conc = fonte("src/components/expedicao/ConcentracaoPorMarca.tsx");
+  assert.match(conc, /linhas\.some\(\(m\) => m\.severidade === "critico"\) \? "critico" : acima \? "atencao" : "neutro"/);
+  // Demo: o total do popup e' o `late` do dia na serie da barra.
+  const { respostaFicticia } = await import("../src/lib/expedicao-fixtures.ts");
+  for (const [rota, serie] of [["ml/ldr", "daily"], ["shopee/ldr", "ldr"]] as const) {
+    const ldr = respostaFicticia(`http://x/api/v1/expedicao/${rota}`, "ok")!.corpo as Record<string, any>;
+    const dias = (serie === "daily" ? ldr.daily : ldr.ldr.daily) as { due_date: string; late: number }[];
+    const dia = dias[dias.length - 2];
+    const lista = respostaFicticia(`http://x/api/v1/expedicao/${rota}/pedidos?vencimento=${dia.due_date}`, "ok")!.corpo as { list_total: number };
+    assert.equal(lista.list_total, dia.late, rota);
+  }
+});

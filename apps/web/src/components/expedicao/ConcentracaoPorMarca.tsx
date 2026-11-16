@@ -57,6 +57,8 @@ export default function ConcentracaoPorMarca({
 }) {
   const { sort, toggleSort, sortedRows } = useSortableTable<LinhaConcentracao>(linhas, valor, COLUNAS);
   const acima = linhas.filter((m) => m.severidade === "fora_da_meta" || m.severidade === "critico").length;
+  // Mesma cor da tabela: vermelho so' com alguma marca acima do teto; acima da meta e' atencao.
+  const tomChip = linhas.some((m) => m.severidade === "critico") ? "critico" : acima ? "atencao" : "neutro";
   return (
     <Panel
       className={className}
@@ -65,7 +67,7 @@ export default function ConcentracaoPorMarca({
         <span className="flex items-center gap-2">
           Concentração por marca
           {linhas.length ? (
-            <Chip tom={acima ? "critico" : "neutro"} ponto title={`De ${formatarInteiro(linhas.length)} com base.`}>
+            <Chip tom={tomChip} ponto title={`De ${formatarInteiro(linhas.length)} com base.`}>
               {acima} acima da meta
               <span className="sr-only"> de {formatarInteiro(linhas.length)} lojas com base</span>
             </Chip>

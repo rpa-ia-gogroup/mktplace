@@ -723,7 +723,10 @@ export function respostaFicticia(url: string, cenarioPedido: CenarioDemo): { sta
 function atrasadosDia(canal: "mercadolivre" | "shopee", vencimento: string, marca: string | null, pagina: number): unknown {
   const marcas = canal === "shopee" ? ["apice", "barbours", "lescent", "rituaria"] : ["barbours", "kokeshi", "lescent", "rituaria"];
   const status = canal === "shopee" ? ["shipped", "processed", "completed"] : ["shipped", "ready_to_ship", "delivered"];
-  const todos = Array.from({ length: 236 }, (_, i) => {
+  // O total bate com o `late` do dia na serie da barra (o numerador da LDR).
+  const serie: { due_date: string; late: number }[] = (canal === "shopee" ? ldrShopee("ok").ldr?.daily : ldrMl("ok").daily) ?? [];
+  const late = serie.find((d) => d.due_date === vencimento)?.late ?? 0;
+  const todos = Array.from({ length: late }, (_, i) => {
     const coletado = i % 4 !== 0;
     return {
       brand: marcas[i % marcas.length],
