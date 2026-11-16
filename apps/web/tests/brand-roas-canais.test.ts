@@ -63,16 +63,63 @@ test("canal com Ads fora da selecao nao entra", () => {
   assert.equal(consolidado.rotulo, "Mercado Livre + Shopee");
 });
 
-test("Ads null num canal e > 0 em outro: so' o canal com gasto entra; GMV do periodo inteiro", () => {
+test("Ads null num canal e > 0 em outro: so' o canal com gasto entra; GMV so' dos dias com Ads", () => {
+  // T-0113b: ate' T-0113 este caso esperava 15 (GMV do periodo inteiro, 1500/100).
+  // A regra mudou: o GMV do dia 2 (ML sem Ads) nao entra, logo 1000/100 = 10,
+  // e o rotulo passa a dizer a cobertura (1 de 2 dias).
   const linhas = [
-    // ML com Ads so' no dia 1; o GMV do dia 2 (sem Ads) tambem conta para o ML.
     linha({ ml_gmv: 1000, shopee_gmv: 5000, ml_ad_spend: 100, shopee_ad_spend: null }),
     linha({ ml_gmv: 500, shopee_gmv: 5000, ml_ad_spend: null, shopee_ad_spend: null }),
   ];
   const r = roasPorCanaisComAds(linhas, ["ml", "shopee"]);
-  assert.equal(r.roas, 15);
+  assert.equal(r.roas, 10);
   assert.deepEqual(r.canais, ["ml"]);
-  assert.equal(r.rotulo, "só Mercado Livre");
+  assert.equal(r.rotulo, "só Mercado Livre, 1 de 2 dias");
+});
+
+test("T-0113b Ads parcial: GMV dos dias sem Ads nao entra; rotulo traz a cobertura", () => {
+  // Shopee com GMV 100/dia em 4 dias e Ads 10 so' em 2: 200/20 = 10, nao 400/20 = 20.
+  const linhas = [
+    linha({ shopee_gmv: 100, shopee_ad_spend: 10 }),
+    linha({ shopee_gmv: 100, shopee_ad_spend: null }),
+    linha({ shopee_gmv: 100, shopee_ad_spend: 10 }),
+    linha({ shopee_gmv: 100, shopee_ad_spend: 0 }),
+  ];
+  const r = roasPorCanaisComAds(linhas, TODOS);
+  assert.equal(r.roas, 10);
+  assert.notEqual(r.roas, 400 / 20);
+  assert.deepEqual(r.canais, ["shopee"]);
+  assert.equal(r.rotulo, "só Shopee, 2 de 4 dias");
+  assert.deepEqual(r.cobertura, { shopee: { diasComAds: 2, diasPeriodo: 4 } });
+});
+
+test("T-0113b dois canais, ML completo e Shopee parcial", () => {
+  const linhas = [
+    linha({ ml_gmv: 1000, shopee_gmv: 300, ml_ad_spend: 100, shopee_ad_spend: 30 }),
+    linha({ ml_gmv: 1000, shopee_gmv: 300, ml_ad_spend: 100, shopee_ad_spend: null }),
+    linha({ ml_gmv: 1000, shopee_gmv: 300, ml_ad_spend: 100, shopee_ad_spend: null }),
+  ];
+  const r = roasPorCanaisComAds(linhas, TODOS);
+  // ML entra nos 3 dias; Shopee so' no dia 1.
+  assert.equal(r.roas, (3000 + 300) / (300 + 30));
+  assert.deepEqual(r.canais, ["ml", "shopee"]);
+  assert.equal(r.rotulo, "Mercado Livre + Shopee (Shopee: 1 de 3 dias)");
+  assert.deepEqual(r.cobertura, {
+    ml: { diasComAds: 3, diasPeriodo: 3 },
+    shopee: { diasComAds: 1, diasPeriodo: 3 },
+  });
+});
+
+test("T-0113b cobertura completa: rotulo identico ao de antes", () => {
+  const linhas = [
+    linha({ tiktok_gmv: 1000, ml_gmv: 500, shopee_gmv: 300, tiktok_ad_spend: 100, ml_ad_spend: 50, shopee_ad_spend: 30 }),
+    linha({ tiktok_gmv: 2000, ml_gmv: 700, shopee_gmv: 500, tiktok_ad_spend: 200, ml_ad_spend: 70, shopee_ad_spend: 50 }),
+  ];
+  const r = roasPorCanaisComAds(linhas, TODOS);
+  assert.equal(r.rotulo, "TikTok Shop + Mercado Livre + Shopee");
+  assert.equal(r.rotulo, rotuloCanaisRoas(r.canais));
+  assert.equal(roasPorCanaisComAds(linhas, ["shopee"]).rotulo, "só Shopee");
+  assert.deepEqual(r.cobertura?.tiktok, { diasComAds: 2, diasPeriodo: 2 });
 });
 
 test("mesmo helper para o periodo anterior: entrada diferente, mesma regra", () => {
