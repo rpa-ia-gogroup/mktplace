@@ -27,7 +27,6 @@
 import {
   SEM_DADO,
   fmtCobertura,
-  fmtData,
   fmtDecimal,
   fmtInt,
   fmtOpcional,
@@ -36,7 +35,13 @@ import {
 import { brandLabel } from "./filters/brands.ts";
 import type { Curva, CurvaMeta, CurvaMotivo } from "./estoque-curva.ts";
 
-export { SEM_DADO, fmtCobertura, fmtData, fmtDecimal, fmtInt, fmtOpcional, rotuloSituacao };
+/** "2026-11-16" -> "16/11": dia da foto sem ano, como no resto da Torre (nao passa por Date: sem desvio de fuso). */
+export function fmtData(iso: string | null | undefined): string {
+  const m = iso ? /^\d{4}-(\d{2})-(\d{2})/.exec(iso) : null;
+  return m ? `${m[2]}/${m[1]}` : SEM_DADO;
+}
+
+export { SEM_DADO, fmtCobertura, fmtDecimal, fmtInt, fmtOpcional, rotuloSituacao };
 
 /** Allowlist do backend (CHECK da migration 029). */
 export const MARCAS_ML = ["barbours", "kokeshi", "lescent", "rituaria"] as const;

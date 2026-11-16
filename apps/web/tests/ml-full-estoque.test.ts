@@ -17,6 +17,7 @@ import {
   FILTROS_ML_VAZIOS,
   PROXIMO_PASSO_ML,
   SEM_DADO,
+  fmtData,
   TITULO_INDISPONIVEL_ML,
   buildQueryML,
   ERRO_DATA_FUTURA_ML,
@@ -204,7 +205,7 @@ test("a tela nao exibe nem usa o ID do inventario (API publica)", () => {
 test("rotulos de frescor e cobertura", () => {
   assert.equal(
     frescorLabelML(frescor()),
-    "Fotografia de 25/10/2026 (ontem) · publicada há 6,0 h",
+    "Fotografia de 25/10 (ontem) · publicada há 6,0 h",
   );
   assert.equal(fotografiaVelhaML(frescor({ dias_desde_a_fotografia: 2 })), true);
   assert.equal(fotografiaVelhaML(frescor()), false);
@@ -292,7 +293,7 @@ test("QA3: tabelas usam TableScrollHint e tem regiao focavel com nome", () => {
 
 test("QA4: estado vazio sem filtro nao fala em filtros; transfer ausente diz 'sem medida'", () => {
   const sem = textoVazioML({ refDate: "2026-10-25", inventarios: 0, filtroAtivo: false });
-  assert.equal(sem, "A fotografia de 25/10/2026 não tem inventários.");
+  assert.equal(sem, "A fotografia de 25/10 não tem inventários.");
   const soFora = textoVazioML({ refDate: "2026-10-25", inventarios: 7, filtroAtivo: false });
   assert.ok(!soFora.includes("filtros atuais"));
   assert.match(soFora, /nenhum no Full/);
@@ -613,11 +614,11 @@ test("T-0051: total -- todas sem estoque Full = 0 nao parcial; com ausencia = pa
   // Estado vazio: so' diz "Sem estoque Full" quando TODO o escopo e' assim.
   assert.equal(
     textoVazioML({ refDate: "2026-11-04", inventarios: 0, filtroAtivo: true, semEstoqueFull: true }),
-    "Sem estoque Full na fotografia de 04/11/2026: a leitura terminou sem nenhum inventário.",
+    "Sem estoque Full na fotografia de 04/11: a leitura terminou sem nenhum inventário.",
   );
   assert.equal(
     textoVazioML({ refDate: "2026-11-04", inventarios: 0, filtroAtivo: false, semEstoqueFull: false }),
-    "A fotografia de 04/11/2026 não tem inventários.",
+    "A fotografia de 04/11 não tem inventários.",
   );
 });
 
@@ -688,4 +689,11 @@ test("a tabela mostra a identificacao com tokens existentes e sem ID do anuncio"
   assert.ok(CLIENT_SRC.includes("text-ink-muted italic"), "sem identificacao em tom neutro");
   assert.ok(!CLIENT_SRC.includes("anuncio_ancora"), "o ID do anuncio nao chega a' tela");
   assert.ok(!CLIENT_SRC.includes("inventory_id"));
+});
+
+test("data da foto do ML: dd/mm, sem ano e sem desvio de fuso", () => {
+  assert.equal(fmtData("2026-11-16"), "16/11");
+  assert.equal(fmtData("2026-01-01T03:00:00Z"), "01/01");
+  assert.equal(fmtData(null), SEM_DADO);
+  assert.equal(fmtData("lixo"), SEM_DADO);
 });

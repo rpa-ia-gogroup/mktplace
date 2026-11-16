@@ -31,6 +31,8 @@ import { Ban, CircleDollarSign, ShoppingBag, Truck } from "lucide-react";
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import Segmented from "@/components/ui/Segmented";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import { rotuloAtualizado } from "@/lib/atualizado";
+import { intervaloCurto } from "@/lib/filters/presets";
 import { AvisoTopo } from "@/components/full/CategoriasEstoque";
 import { fmtBrlCurto } from "@/lib/formatters";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
@@ -200,7 +202,7 @@ function FullMLPageInner() {
   const selo = (
     <>
       <span className="inline-flex items-center gap-1 text-xs text-ink-muted tabular-nums">
-        {dm(from)} a {dm(to)}
+        {intervaloCurto(from, to)}
         {frescor?.source_max_date && <> · fonte até {dm(frescor.source_max_date)}</>}
         <InfoDica texto={`${AVISO_COBERTURA} ${AVISO_MANUAL_SNAPSHOT}`} />
       </span>
@@ -513,7 +515,7 @@ function FullMLPageInner() {
               <div>
                 <dt className="text-xs text-ink-muted">Última carga</dt>
                 <dd className="font-semibold text-xs">
-                  {dados.freshness.refreshed_at ? `${dm(dados.freshness.refreshed_at)} ${dados.freshness.refreshed_at.slice(11, 16)}` : SEM_DADO}
+                  {rotuloAtualizado(dados.freshness.refreshed_at) ?? SEM_DADO}
                 </dd>
               </div>
             </dl>

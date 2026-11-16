@@ -30,6 +30,7 @@ import {
   type MLFullEstoqueResponse,
 } from "./ml-full-estoque.ts";
 import { doCanal } from "./canal-preposicao.ts";
+import { intervaloCurto } from "./filters/presets.ts";
 
 export type Canal = "ml" | "shopee";
 
@@ -664,7 +665,7 @@ export function janelaDeslocada(c: Pick<CanalImpactoOk, "ref_date" | "janela_gmv
   const vespera = new Date(`${c.ref_date}T00:00:00Z`);
   vespera.setUTCDate(vespera.getUTCDate() - 1);
   if (c.janela_gmv_fim === vespera.toISOString().slice(0, 10)) return "";
-  return ` · % de ${diaMes(c.janela_gmv_inicio)} a ${diaMes(c.janela_gmv_fim)}`;
+  return ` · % de ${intervaloCurto(c.janela_gmv_inicio, c.janela_gmv_fim)}`;
 }
 
 /** Cartao "Param a venda · Shopee": % das rupturas sem estoque do vendedor; "x de y" no `detalhe`. */
