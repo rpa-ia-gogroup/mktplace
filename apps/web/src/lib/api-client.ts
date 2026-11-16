@@ -1503,6 +1503,8 @@ export interface CoberturaMarcas {
   marcas_sem_dado?: string[];
   /** T-0115: sem dado porque o repasse ainda esta' maturando (subconjunto de marcas_sem_dado). */
   marcas_maturando?: string[];
+  /** T-0120: marcas COM valor cuja fonte cobre so' parte dos pedidos (escrow Shopee < 100%). */
+  marcas_parciais?: string[];
 }
 
 /** O texto "parcial (N de M marcas)" vem de `textoCoberturaFinanceiro` (src/lib/full-visao-geral.ts). */
@@ -1533,6 +1535,8 @@ export interface FinanceiroBrandRow {
   shopee_gmv?: number | null;
   shopee_settlement?: number | null;
   shopee_fees?: number | null;
+  /** T-0120: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado". */
+  shopee_fee_status?: string | null;
   shopee_avg_fee_pct?: number | null;
   shopee_avg_settlement_pct?: number | null;
   shopee_ad_spend?: number | null;

@@ -15,6 +15,9 @@ Trava-se aqui:
 """
 from __future__ import annotations
 
+from datetime import date
+
+from tests.financeiro_shopee_fake import FinanceiroSession
 from app.schemas.performance import FinanceiroResponse
 from app.services import performance_service as perf_svc
 
@@ -63,7 +66,7 @@ SHOPEE_OUT26 = [
 
 
 def _financeiro(rows):
-    return perf_svc.get_financeiro(FakeSession(rows), "all", 2026, 10)
+    return perf_svc.get_financeiro(FinanceiroSession(rows, date(2026, 10, 1)), "all", 2026, 10)
 
 
 def _marca(res, brand):
@@ -108,6 +111,8 @@ def test_consolidado_publica_cobertura_parcial():
     assert k["shopee_fee_cobertura"] == {
         "status": "parcial", "marcas_com_dado": 1, "marcas_total": 5,
         "marcas_sem_dado": ["apice", "barbours", "lescent", "rituaria"],
+        # T-0120: nenhuma marca com fonte parcial neste caso (mart cheio).
+        "marcas_parciais": [],
     }
     assert k["shopee_settlement_cobertura"]["marcas_com_dado"] == 1
 

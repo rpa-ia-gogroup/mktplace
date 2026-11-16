@@ -644,3 +644,27 @@ Fonte: `total_settlement` e `total_fees` vêm da `gold.tiktok_brand_daily` (Data
 - O ROAS consolidado da Shopee é calculado só sobre as marcas com Ads.
 - `/canais`: Shopee sem Ads sai com `ads_missing_reason`.
 - A web mostra "parcial (k de n marcas)".
+
+## Taxa Shopee na Financeiro a partir do escrow (T-0120, VAL-B1 B1-13)
+
+A fato diária grava `total_fees`/`total_settlement` **NULL** nas lojas Shopee com API (`COLUNAS_ANULADAS` em
+`pipelines/sync_shopee_daily_api.py`), e a Financeiro mostrava a taxa Shopee como "—". Agora a taxa usa **a mesma fonte
+e a mesma regra da DRE** (as funções de `apps/api/app/services/dre_service.py`):
+
+- **Fonte:** `marts.fact_marketplace_daily_performance.total_fees` quando o mês tem taxa em **todas** as linhas da marca;
+  senão o escrow publicado em `marts.fact_dre_insumo_mensal`, componente `shopee_taxa_escrow` (soma de comissão +
+  serviço + transação do escrow, `silver.fct_gobeaute_despesas_shopee`, por coorte de criação do pedido em BRT,
+  publicado pelo `pipelines/dre/insumo_publisher.py`).
+- **Grão:** competência (mês) × marca. Taxa da marca no período = soma dos meses do período.
+- **Fórmula:** `shopee_fees` = Σ meses (mart ou escrow); `shopee_avg_fee_pct` = `shopee_fees / shopee_gmv × 100`
+  (GMV da fato; consolidado só sobre as marcas com taxa, como na T-0085).
+- **Período:** o escrow é mensal e **não é rateado**. Mês cortado pelo período (ex.: 01–15/out, ou o mês corrente até
+  hoje) só usa o mart; para as lojas com API isso dá "—".
+- **Cobertura:** escrow em menos de 100% dos pedidos não cancelados → a marca sai com valor e `shopee_fee_status =
+  "parcial"`, e entra em `shopee_fee_cobertura.marcas_parciais` (status `parcial`). A parte sem escrow nunca é estimada.
+- **Sem dado ≠ 0:** marca com algum mês sem valor (escrow não publicado, lote falho, publicado há mais de 54 h ou com sinal
+  inesperado) → `null`.
+- **Repasse Shopee:** continua do mart (`total_settlement`) e sai "—" nas lojas com API. A DRE não publica repasse
+  Shopee; trazê-lo exige componente novo no insumo (migration do CHECK + publisher). Fora desta entrega.
+- **Conferência (out/26):** taxa por marca da Financeiro = componente `taxas` da célula Shopee da DRE (±0,5%).
+  Kokeshi = R$ 971.173,40 (escrow em 99,8% dos pedidos) na DRE publicada em 15/11/2026.

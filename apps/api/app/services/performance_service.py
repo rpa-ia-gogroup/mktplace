@@ -1513,6 +1513,94 @@ def _cobertura_marcas(
     return out
 
 
+#: T-0120 (B1-13): taxa da Shopee na MESMA fonte e regra da DRE. Desde o
+#: `daily_shopee` a fato grava `total_fees` NULL nas lojas com API
+#: (`COLUNAS_ANULADAS` em pipelines/sync_shopee_daily_api.py); a DRE le' a taxa
+#: dessas lojas do escrow publicado em `marts.fact_dre_insumo_mensal`
+#: (componente `shopee_taxa_escrow`, grao competencia x marca).
+SQL_SHOPEE_TAXA_MES = text("""
+    SELECT date_trunc('month', f.date)::date               AS mes,
+           l.brand_key                                     AS marca,
+           COUNT(DISTINCT f.date)                          AS dias,
+           COUNT(*)                                        AS linhas,
+           SUM(f.total_fees)                               AS fees,
+           COUNT(f.total_fees)                             AS fees_n,
+           COUNT(*) FILTER (WHERE f.total_fees < 0)        AS fees_neg_n
+    FROM marts.fact_marketplace_daily_performance f
+    JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+    WHERE f.date BETWEEN :start AND :end
+      AND f.marketplace_id = :shopee_id
+      AND l.brand_key = ANY(:marcas)
+    GROUP BY 1, 2
+""")
+
+
+def _taxas_shopee(db: Session, start: date, end: date, marcas: list[str]) -> dict[str, dict]:
+    """Taxa da Shopee por marca no periodo, com a regra da DRE, mes a mes.
+
+    Por mes: `total_fees` do mart em TODAS as linhas -> mart; senao, se o mes
+    esta' INTEIRO no periodo, o escrow publicado (`_taxa_shopee_escrow`, que
+    devolve o mart parcial quando nao ha escrow). Mes cortado pelo periodo nao
+    usa escrow: o insumo e' mensal e nao e' rateado. Marca com algum mes sem
+    valor -> `sem_dado` (nunca soma parcial nem zero). Algum mes `parcial`
+    (escrow < 100% dos pedidos, ou mart em parte das linhas) -> `parcial`.
+    """
+    # Import tardio: dre_service importa este modulo.
+    from datetime import datetime, timezone
+
+    from app.services import dre_service as dre
+
+    if not marcas:
+        return {}
+    meses = [dict(r) for r in db.execute(SQL_SHOPEE_TAXA_MES, {
+        "start": start, "end": end, "shopee_id": SHOPEE_ID, "marcas": marcas,
+    }).mappings().all()]
+    inteiros = sorted({
+        dre._chave_mes(r["mes"]) for r in meses
+        if dre._chave_mes(r["mes"]) >= start and dre.ultimo_dia(dre._chave_mes(r["mes"])) <= end
+    })
+    escrow: dict = {}
+    if inteiros:
+        leitura = dre.ler_insumos(db, inteiros[0], inteiros[-1], ["shopee"], marcas)
+        escrow = dre.indexar_taxa_shopee(leitura.linhas, datetime.now(timezone.utc))
+    por_marca: dict[str, list[dict]] = {}
+    for r in meses:
+        mes = dre._chave_mes(r["mes"])
+        tx = dre._custo_do_mart(
+            "taxas", "shopee", r["fees"], r["fees_n"], r["fees_neg_n"], int(r["linhas"] or 0),
+            "marts.fact_marketplace_daily_performance.total_fees", "taxa da Shopee ausente no mart",
+            dias=int(r["dias"] or 0),
+        )
+        if tx["status"] != dre.DISPONIVEL and mes in inteiros:
+            tx = dre._taxa_shopee_escrow(escrow.get((mes, "shopee", r["marca"])), tx)
+        por_marca.setdefault(r["marca"], []).append(tx)
+    out: dict[str, dict] = {}
+    for marca, comps in por_marca.items():
+        if any(c["valor"] is None for c in comps):
+            out[marca] = {"valor": None, "status": "sem_dado"}
+            continue
+        parcial = any(c["status"] == dre.COBERTURA_PARCIAL for c in comps)
+        out[marca] = {"valor": round(sum(_f(c["valor"]) for c in comps), 2),
+                      "status": "parcial" if parcial else "completa"}
+    return out
+
+
+def _cobertura_com_parciais(brand_rows: list[dict], base_field: str, gmv_field: str,
+                            status_field: str) -> dict | None:
+    """`_cobertura_marcas` + `marcas_parciais` (T-0120): marcas COM valor cuja
+    fonte cobre so' parte dos pedidos. Qualquer uma -> status `parcial`."""
+    c = _cobertura_marcas(brand_rows, base_field, gmv_field)
+    if c is None:
+        return None
+    c["marcas_parciais"] = sorted(
+        r["brand"] for r in _marcas_do_canal(brand_rows, gmv_field)
+        if r.get(base_field) is not None and r.get(status_field) == "parcial"
+    )
+    if c["marcas_parciais"] and c["status"] == "completa":
+        c["status"] = "parcial"
+    return c
+
+
 def get_financeiro(
     db: Session, marketplace: str, year: int, month: int, *,
     brand_keys: list[str] | None = None,
@@ -1556,6 +1644,9 @@ def get_financeiro(
         if brand not in by_brand:
             by_brand[brand] = {}
         by_brand[brand][r["marketplace_id"]] = dict(r)
+
+    # T-0120: taxa da Shopee com a regra da DRE (mart ou escrow publicado).
+    taxas_sh = _taxas_shopee(db, start, end, sorted(b for b, m in by_brand.items() if SHOPEE_ID in m))
 
     brand_rows = []
     for brand, mkts in sorted(by_brand.items()):
@@ -1643,7 +1734,9 @@ def get_financeiro(
 
         if sh:
             sh_gmv = _f(sh["gmv"])
-            sh_fees = _f(sh["total_fees"])
+            # T-0120: a taxa NAO vem mais do `total_fees` somado do periodo.
+            tx_sh = taxas_sh.get(brand) or {"valor": None, "status": "sem_dado"}
+            sh_fees = tx_sh["valor"]
             sh_settlement = _f(sh["total_settlement"])
             sh_spend = _f(sh["ad_spend"])
             sh_revenue = _f(sh["ad_revenue"])
@@ -1651,9 +1744,10 @@ def get_financeiro(
             row.update({
                 "shopee_gmv": sh_gmv or None,
                 "shopee_settlement": sh_settlement or None,
-                "shopee_fees": sh_fees or None,
+                "shopee_fees": sh_fees,
+                "shopee_fee_status": tx_sh["status"],
                 # T-0085: marca sem taxa/repasse na fato saia com 0,0% e barra.
-                "shopee_avg_fee_pct": _pct_da_marca(sh_fees, sh_gmv),
+                "shopee_avg_fee_pct": _pct_da_marca(sh_fees, sh_gmv) if sh_fees is not None else None,
                 "shopee_avg_settlement_pct": _pct_da_marca(sh_settlement, sh_gmv),
                 "shopee_ad_spend": sh_spend or None,
                 # T-0115 (B1-08): receita de Ads so' com investimento medido;
@@ -1719,7 +1813,9 @@ def get_financeiro(
         "shopee_fees": sh_fees_t or None,
         "shopee_avg_fee_pct": _pct_coberto(brand_rows, "shopee_fees", "shopee_gmv"),
         "shopee_avg_settlement_pct": _pct_coberto(brand_rows, "shopee_settlement", "shopee_gmv"),
-        "shopee_fee_cobertura": _cobertura_marcas(brand_rows, "shopee_fees", "shopee_gmv"),
+        # T-0120: escrow abaixo de 100% dos pedidos -> `parcial` com `marcas_parciais`.
+        "shopee_fee_cobertura": _cobertura_com_parciais(brand_rows, "shopee_fees", "shopee_gmv",
+                                                        "shopee_fee_status"),
         "shopee_settlement_cobertura": _cobertura_marcas(brand_rows, "shopee_settlement", "shopee_gmv"),
         # T-0115 (B1-08): o total e o ROAS somam so' as marcas com Ads; a
         # cobertura diz quantas (e quais faltam).
