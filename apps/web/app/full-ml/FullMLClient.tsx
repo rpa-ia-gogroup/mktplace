@@ -220,13 +220,13 @@ function FullMLPageInner() {
   const seriePedidos = useMemo(() => serieShare(serieDiaria(dados, "orders")), [dados]);
 
   const filtros = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2">
       <Segmented
         rotulo="Marca"
         opcoes={MARCAS.map((m) => ({ valor: m.key || "todas", texto: m.key ? m.label : "Todas" }))}
         valor={marca || "todas"}
         aoEscolher={(v) => setMarca(v === "todas" ? "" : v)}
-        className="whitespace-nowrap"
+        className="max-w-full overflow-x-auto overflow-y-hidden whitespace-nowrap"
       />
       <Segmented
         rotulo="Período"
