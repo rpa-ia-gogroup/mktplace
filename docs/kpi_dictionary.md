@@ -634,6 +634,10 @@ Fonte: `total_settlement` e `total_fees` vêm da `gold.tiktok_brand_daily` (Data
 - Por quê: num mês maduro o repasse fica em torno de 67% do GMV; a comissão de plataforma sozinha, em torno de 6%.
 - `/canais`: TikTok maturando sai com `marketplace_cost_available=false` e `marketplace_cost_pct=null`, fica fora da
   mediana e do p75 e o sinal vira `sem_dado` — não dispara "custo alto".
+- Marca 360 (`/performance/brand-detail`, T-0115b): o `cos_pct` do TikTok segue a mesma regra, com o status calculado
+  por `tiktok_repasse_status()` sobre `fact_marketplace_daily_performance` (TikTok, marca, mês). Fora de "maduro", ou
+  com taxa < 1% do GMV, o COS sai `null` e a resposta traz `tiktok_repasse_status`; a tela mostra "—" com o selo
+  "maturando". Mês sem linha TikTok na fato → `sem_dado` (COS `null`).
 - Limitação conhecida: período antigo com muitos reembolsos (repasse < 30%) também sai como "maturando".
 - Causa conhecida do repasse ausente em nov/26: a `gold.tiktok_brand_daily` congela o `total_settlement` no dia em
   que calcula a linha. A correção é na gold (time de Dados).
