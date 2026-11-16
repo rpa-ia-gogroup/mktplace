@@ -81,3 +81,22 @@ test("textos fixos: a Denavita vem do TikTok via Data Mart; so' Shopee e itens p
   assert.match(blocos, /A Denavita não tem itens: eles só vêm do Bling/);
   assert.match(blocos, /rotuloDaFonte\(m\)/);
 });
+
+test("total: parcial aparece junto do aviso de variacao sem base, nunca some", () => {
+  // Medido em producao (out/26): consolidado.parcial = true, mas a legenda so' mostrava o motivo da
+  // variacao ("sem dado de Shopee no periodo anterior"), porque o ternario dava prioridade ao motivo.
+  const blocos = readFileSync(new URL("../src/components/marcas-menores/Blocos.tsx", import.meta.url), "utf8");
+  const topo = blocos.slice(blocos.indexOf("export function Topo("));
+  const legenda = topo.slice(topo.indexOf("legenda={"), topo.indexOf(") : null", topo.indexOf("legenda={")) + 8);
+  // Ramo do motivo de variacao: do `vc.motivo != null ?` ate' o ramo seguinte (`) : parcial ?`).
+  const inicio = legenda.indexOf("vc.motivo != null ?");
+  const fim = legenda.indexOf(") : parcial ?", inicio);
+  assert.ok(inicio >= 0 && fim > inicio, "legenda do Topo mudou de forma: revisar este teste");
+  const ramoMotivo = legenda.slice(inicio, fim);
+  assert.match(ramoMotivo, /<Variacao pct=\{null\} motivo=\{vc\.motivo\} \/>/);
+  assert.match(ramoMotivo, /\bparcial\b/, "com motivo de variacao, o parcial tambem tem de aparecer");
+  // O rotulo do parcial continua o mesmo: "parcial (Denavita só TikTok)" com o aviso da API no title.
+  assert.match(topo, /title=\{c\.aviso \?\? undefined\}>\s*parcial\{pend\.itens\.length \? ` \(\$\{pend\.itens\.join\("; "\)\}\)` : ""\}/);
+  // O caso do dia em andamento segue igual.
+  assert.match(legenda, /emAndamento \? \(\s*"inclui hoje, dia em andamento"\s*\) : null/);
+});

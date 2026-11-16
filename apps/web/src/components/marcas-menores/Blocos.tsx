@@ -75,6 +75,11 @@ export function Topo({
   // Variacao so' sobre as marcas que tem base nos dois periodos, e so' se todo canal delas tem base no anterior.
   const vc = emAndamento ? { pct: null, motivo: null } : variacaoConsolidada(marcas);
   const v = vc.pct;
+  const avisoParcial = (
+    <span className="font-semibold text-warn-ink" title={c.aviso ?? undefined}>
+      parcial{pend.itens.length ? ` (${pend.itens.join("; ")})` : ""}
+    </span>
+  );
   // Faixa de cartoes iguais: a receita e, ao lado, um cartao por plataforma com a parte dela (barra).
   const colunas = ["", "", "min-[480px]:grid-cols-2", "min-[480px]:grid-cols-2 xl:grid-cols-3", "min-[480px]:grid-cols-2 xl:grid-cols-4"][Math.min(partes.length + 1, 4)];
   return (
@@ -86,12 +91,14 @@ export function Topo({
         valor={total == null ? "—" : fmtCompacto(total)}
         pilula={v != null ? { texto: `${fmtPctBr(v)} vs anterior`, tom: v >= 0 ? "ok" : "crit" } : semMeta ? { texto: "sem meta", tom: "neutro" } : null}
         legenda={
+          // Motivo da variacao e parcial juntos: um nao esconde o outro (medido out/26: o parcial sumia).
           v == null && vc.motivo != null ? (
-            <Variacao pct={null} motivo={vc.motivo} />
+            <>
+              <Variacao pct={null} motivo={vc.motivo} />
+              {parcial && <> · {avisoParcial}</>}
+            </>
           ) : parcial ? (
-            <span className="font-semibold text-warn-ink" title={c.aviso ?? undefined}>
-              parcial{pend.itens.length ? ` (${pend.itens.join("; ")})` : ""}
-            </span>
+            avisoParcial
           ) : emAndamento ? (
             "inclui hoje, dia em andamento"
           ) : null
