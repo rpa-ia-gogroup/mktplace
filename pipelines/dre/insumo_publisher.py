@@ -208,9 +208,12 @@ PROC_DEVOLUCAO_SHOPEE = ("raw.shopee_returns (status=ACCEPTED, SUM(refund_amount
                          "em BRT) @T-0093")
 #: Lojas Shopee com API (`raw.shopee_returns.brand` ja' e' o slug da marca).
 DEVOLUCOES_SHOPEE_MARCAS = ("apice", "barbours", "lescent", "rituaria")
-#: Primeiro dia com dado na fonte. A cobertura do mes e' dias cobertos / dias do
-#: mes (out/26 = 25/31); competencia inteira antes dele nao publica linha.
-DEVOLUCOES_SHOPEE_INICIO = date(2026, 10, 7)
+#: Primeiro dia com dado na fonte: `raw.shopee_returns` tem devolucao desde
+#: 05/10/2026 (medido em 16/11; a apice comeca em 06/10). Com 07/10 a janela
+#: cortava out/26 abaixo do /cx (T-0093b). A cobertura do mes e' dias cobertos /
+#: dias do mes (out/26 = 27/31); competencia inteira antes dele nao publica
+#: linha. Nao e' a `DEVOLUCAO_SHOPEE_INICIO` da API (export da kokeshi, 07/10).
+DEVOLUCOES_SHOPEE_INICIO = date(2026, 10, 5)
 
 #: T-0091 — PALIATIVO do custo NULL na gold. As NFs Full/FBS da Shopee entraram
 #: em `gold.nf_vendas_unificada_v2` (out/26, `origem = 'webgex_full'`) sem

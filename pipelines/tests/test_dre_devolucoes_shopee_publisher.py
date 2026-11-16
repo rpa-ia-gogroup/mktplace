@@ -137,14 +137,14 @@ def test_publicar_sem_a_045_nao_le_a_fonte_e_nao_grava_o_componente():
 # Com a 045: contrato da linha
 # ---------------------------------------------------------------------------
 
-def test_com_a_045_publica_as_quatro_lojas_out_25_de_31_e_nov_inteiro():
+def test_com_a_045_publica_as_quatro_lojas_out_27_de_31_e_nov_inteiro():
     rows = [dev(m, mes=c, reembolsado=f"{100 + i}.25") for c in (OUT, NOV) for i, m in enumerate(LOJAS)]
     lt = lote(comps=(OUT, NOV), devolucoes=rows)
     ln = linhas_dev(lt)
     assert lt.recusas == [] and lt.devolucoes_estado == "publicado"
     assert set(ln) == {(c, m) for c in (OUT, NOV) for m in LOJAS}
     for i, m in enumerate(LOJAS):
-        assert ln[(OUT, m)]["cobertura"] == Decimal("0.806452")  # 25/31
+        assert ln[(OUT, m)]["cobertura"] == Decimal("0.870968")  # 27/31
         assert ln[(NOV, m)]["cobertura"] == Decimal("1.000000")
         for c in (OUT, NOV):
             r = ln[(c, m)]
@@ -154,9 +154,9 @@ def test_com_a_045_publica_as_quatro_lojas_out_25_de_31_e_nov_inteiro():
             assert r["data_max_origem"] == datetime(2026, 11, 10, 9, 30, tzinfo=timezone.utc)
     assert ln[(OUT, "apice")]["motivo"] == (
         "raw.shopee_returns: ACCEPTED, por criacao da devolucao, BRT; 6 aceita(s) de 10 devolucao(oes); "
-        "cobertura 25 de 31 dias (dado desde 07/10/2026)")
+        "cobertura 27 de 31 dias (dado desde 05/10/2026)")
     assert "cobertura 30 de 30 dias" in ln[(NOV, "apice")]["motivo"]
-    assert Decimal(25) / Decimal(31) - ln[(OUT, "apice")]["cobertura"] < Decimal("0.000001")
+    assert abs(Decimal(27) / Decimal(31) - ln[(OUT, "apice")]["cobertura"]) < Decimal("0.000001")
 
 
 def test_kokeshi_nunca_publica_nem_com_linha_na_fonte():
@@ -166,14 +166,53 @@ def test_kokeshi_nunca_publica_nem_com_linha_na_fonte():
     assert linhas_dev(lt)[(OUT, "apice")]["valor"] == Decimal("1234.50")
 
 
-def test_competencia_antes_de_07_10_nao_publica():
-    assert P.DEVOLUCOES_SHOPEE_INICIO == date(2026, 10, 7)
+def test_competencia_antes_de_05_10_nao_publica():
+    assert P.DEVOLUCOES_SHOPEE_INICIO == date(2026, 10, 5)
     assert P.cobertura_devolucao_shopee(SET) is None
     lt = lote(comps=(SET, OUT), devolucoes=[dev("apice", mes=SET), dev("apice", mes=OUT)])
     ln = linhas_dev(lt)
     assert not any(c == SET for c, _ in ln)
     assert ("devolucoes_shopee", SET, "shopee", "apice") in lt.fora_do_escopo
     assert ln[(OUT, "apice")]["valor"] == Decimal("1234.50")
+
+
+class _EngCaptura:
+    """Engine fake que so' guarda os params de `SQL_DEVOLUCOES_SHOPEE`."""
+
+    def __init__(self):
+        self.params = None
+
+    def connect(self):
+        eng = self
+
+        class C:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def execute(self, sql, params=None):
+                if sql is P.SQL_DEVOLUCOES_SHOPEE:
+                    eng.params = params
+                return _Res(linhas=[])
+
+            def rollback(self):
+                pass
+        return C()
+
+
+def test_janela_de_outubro_comeca_em_05_10():
+    """T-0093b: a fonte tem devolucao desde 05/10; out/26 cobre 27 de 31 dias."""
+    assert P._dias_devolucao_shopee(OUT) == 27 and P._dias_devolucao_shopee(SET) == 0
+    assert P.cobertura_devolucao_shopee(OUT) == Decimal("0.870968")
+    for comps in ([OUT], [SET, OUT]):  # o mes anterior ao inicio nao abre a janela antes de 05/10
+        eng = _EngCaptura()
+        linhas, estado = P.ler_devolucoes_shopee(eng, comps, ["shopee"], list(LOJAS), aceita=True)
+        assert (linhas, estado) == ([], "lido")
+        assert eng.params["inicio"] == date(2026, 10, 5) and eng.params["fim_exclusivo"] == NOV
+    linhas, estado = P.ler_devolucoes_shopee(_EngCaptura(), [SET], ["shopee"], list(LOJAS), aceita=True)
+    assert linhas is None and estado == "nao avaliado: janela anterior a 2026-10-05 (inicio do dado)"
 
 
 def test_loja_sem_devolucao_no_mes_e_ausente_com_valor_nulo_nunca_zero():
@@ -251,12 +290,12 @@ def test_so_aceita_com_o_componente_no_check():
     assert P.check_aceita_impostos(_Conn(CHECK_045)) is True and P.check_aceita_taxa_shopee(_Conn(CHECK_045))
 
 
-def test_publicar_com_a_045_le_desde_07_10_sem_conexao_do_neon_e_grava():
+def test_publicar_com_a_045_le_desde_05_10_sem_conexao_do_neon_e_grava():
     alvo = _AlvoFake([esperado("shopee", m, mes=OUT) for m in LOJAS + ("kokeshi",)], check=CHECK_045)
     fonte = _FonteDev(alvo, [dev(m) for m in LOJAS])
     res = _publicar(alvo, fonte)
     assert res["aplicado"] is True and res["recusas"] == [] and res["devolucoes_shopee"] == "publicado"
-    assert fonte.params == {"marcas": list(LOJAS), "inicio": date(2026, 10, 7), "fim_exclusivo": NOV}
+    assert fonte.params == {"marcas": list(LOJAS), "inicio": date(2026, 10, 5), "fim_exclusivo": NOV}
     assert set(fonte.abertas_na_leitura) == {0}
     dev_ins = [r for r in alvo.inseridas if r["componente"] == P.DEVOLUCAO_SHOPEE]
     assert sorted(r["marca"] for r in dev_ins) == list(LOJAS)
@@ -370,16 +409,22 @@ def test_sql_real_so_accepted_e_mes_da_criacao_em_brt():
                     ("apice", "a5", "ACCEPTED", "7.00", "2026-11-01 04:00+00"),
                     ("kokeshi", "k1", "ACCEPTED", "555.00", "2026-10-10 12:00+00"),
                     ("barbours", "b1", "JUDGING", "40.00", "2026-10-20 12:00+00"),
+                    # T-0093b: 05/10 03:00 UTC = 05/10 00:00 BRT: dentro da janela (inicio 05/10)
+                    ("rituaria", "r1", "ACCEPTED", "10.00", "2026-10-05 03:00+00"),
+                    # 05/10 02:59 UTC = 04/10 23:59 BRT: antes do inicio, fora
+                    ("rituaria", "r2", "ACCEPTED", "20.00", "2026-10-05 02:59+00"),
                 ]:
                     c.execute(text("INSERT INTO raw.shopee_returns VALUES (:b, :sn, :st, :v, :ct, :ct)"),
                               {"b": brand, "sn": sn, "st": status, "v": Decimal(valor), "ct": criado})
-            linhas, estado = P.ler_devolucoes_shopee(fonte, [OUT, NOV], ["shopee"], ["apice", "barbours", "kokeshi"],
-                                                     aceita=True)
+            linhas, estado = P.ler_devolucoes_shopee(fonte, [OUT, NOV], ["shopee"],
+                                                     ["apice", "barbours", "rituaria", "kokeshi"], aceita=True)
         finally:
             fonte.dispose()
     assert estado == "lido"
     por = {(r["competencia"], r["marca"]): r for r in linhas}
-    assert set(por) == {(OUT, "apice"), (NOV, "apice"), (OUT, "barbours")}  # kokeshi nem e' lida
+    assert set(por) == {(OUT, "apice"), (NOV, "apice"), (OUT, "barbours"), (OUT, "rituaria")}  # kokeshi nem e' lida
+    assert por[(OUT, "rituaria")]["reembolsado"] == Decimal("10.00")  # 05/10 entra, 04/10 nao
+    assert (por[(OUT, "rituaria")]["devolucoes"], por[(OUT, "rituaria")]["aceitas"]) == (1, 1)
     assert por[(OUT, "apice")]["reembolsado"] == Decimal("150.00")
     assert (por[(OUT, "apice")]["devolucoes"], por[(OUT, "apice")]["aceitas"]) == (4, 2)
     assert por[(NOV, "apice")]["reembolsado"] == Decimal("7.00")
