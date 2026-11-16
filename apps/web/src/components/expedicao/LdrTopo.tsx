@@ -27,6 +27,7 @@ import {
   type Celula,
   type Faixa,
   type FonteCanal,
+  type LinhaLdrMarca,
 } from "@/lib/expedicao-ldr-topo";
 
 import { SecaoGerencial } from "./SecoesExpedicao";
@@ -69,23 +70,36 @@ function buscarJson(url: string): Promise<unknown> {
   return p;
 }
 
-/** Serie diaria da LDR do ML (`daily[]`), para a evolucao por vencimento. `null` = sem grafico. */
-export function useDiariaLdrMl(api: string, marca: string | null, ligada: boolean): DiaLdr[] | null {
+/**
+ * LDR do ML para a faixa "Evolução + Concentração": serie diaria (`daily[]`) e
+ * `brands[]` da MESMA resposta (cache de 60 s, uma consulta so'). `null` = sem dado.
+ */
+export function useLdrMl(
+  api: string,
+  marca: string | null,
+  ligada: boolean,
+): { dias: DiaLdr[] | null; marcas: LinhaLdrMarca[] | null } {
   const url = urlLdr(api, "mercadolivre", marca);
-  const [dias, setDias] = useState<DiaLdr[] | null>(null);
+  const [estado, setEstado] = useState<{ dias: DiaLdr[] | null; marcas: LinhaLdrMarca[] | null }>(VAZIO_ML);
   useEffect(() => {
-    setDias(null);
+    setEstado(VAZIO_ML);
     if (!ligada) return;
     let vivo = true;
     buscarJson(url)
-      .then((json) => vivo && setDias(lerDiariaLdr(json)))
-      .catch(() => vivo && setDias(null));
+      .then((json) => {
+        if (!vivo) return;
+        const fonte = lerRespostaLdr(json);
+        setEstado({ dias: lerDiariaLdr(json), marcas: fonte.estado === "dado" ? fonte.marcas : null });
+      })
+      .catch(() => vivo && setEstado(VAZIO_ML));
     return () => {
       vivo = false;
     };
   }, [url, ligada]);
-  return dias;
+  return estado;
 }
+
+const VAZIO_ML = { dias: null, marcas: null };
 
 function useFonte(api: string, canal: CanalLdr, marca: string | null): FonteCanal {
   const url = urlLdr(api, canal, marca);

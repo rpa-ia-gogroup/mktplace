@@ -63,9 +63,19 @@ function Grafico<D extends DiaVencimento>({
   clicavel?: (dia: string) => boolean;
 }) {
   const maximo = taxaMaxima(dias);
-  const meta = alturaDaMeta(maximo, linha.valor);
+  // A escala inclui a referencia: a linha aparece nos tres canais, mesmo numa
+  // janela toda abaixo dela (antes sumia).
+  const escala = Math.max(maximo, linha.valor);
+  const meta = alturaDaMeta(escala, linha.valor);
   return (
     <div>
+      {/* Etiqueta da referencia NO TOPO, igual nos tres canais; o traco fica na altura real. */}
+      <div className="mb-1 flex justify-end">
+        <span className="inline-flex items-center gap-1.5 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
+          <span aria-hidden="true" className="inline-block w-3 border-t border-dashed border-warn" />
+          {linha.rotulo} {formatarTaxa(linha.valor, 0)}
+        </span>
+      </div>
       {/* `items-stretch` e nao `items-end`: com `items-end` cada coluna e'
           dimensionada pelo CONTEUDO, o `flex-1` de dentro nao recebe altura e
           a barra desaparece. Ja aconteceu neste grafico. */}
@@ -75,11 +85,7 @@ function Grafico<D extends DiaVencimento>({
             className="pointer-events-none absolute inset-x-0 z-10 border-t border-dashed border-warn"
             style={{ bottom: `calc(${meta}% + 1.25rem)` }}
             aria-hidden="true"
-          >
-            <span className="absolute -top-4 right-0 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
-              {linha.rotulo} {formatarTaxa(linha.valor, 0)}
-            </span>
-          </div>
+          />
         ) : null}
         <div
           className="flex h-56 items-stretch gap-1 overflow-x-auto pb-1"
@@ -116,7 +122,7 @@ function Grafico<D extends DiaVencimento>({
                 <div className="flex w-full flex-1 items-end">
                   <div
                     className={`w-full rounded-t ${COR_SEVERIDADE[sev]}`}
-                    style={{ height: `${alturaDaBarra(d, maximo)}%` }}
+                    style={{ height: `${alturaDaBarra(d, escala)}%` }}
                     title={`${formatarDiaLongo(d.due_date)} · ${formatarTaxa(d.rate)}${
                       d.rate === null && d.is_mature ? "" : ` · ${rotulos[sev]}`
                     }`}

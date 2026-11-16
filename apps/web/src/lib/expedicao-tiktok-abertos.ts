@@ -131,7 +131,7 @@ export const CONFIG_LISTA: Record<ListaAbertos, { titulo: string; vazio: string 
   all: { titulo: "Pedidos em aberto (TikTok)", vazio: "Nenhum pedido em aberto." },
 };
 
-function celula(v: string): string {
+export function celula(v: string): string {
   return /[",;\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 

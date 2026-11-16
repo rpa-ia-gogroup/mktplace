@@ -82,22 +82,19 @@ import LayoutExpedicao, {
 } from "@/components/expedicao/LayoutExpedicao";
 import { Ajuda, CartaoComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
 import PainelAtencao from "@/components/expedicao/PainelAtencao";
+import ConcentracaoPorMarca from "@/components/expedicao/ConcentracaoPorMarca";
 import EvolucaoPorVencimento, { TEXTO_SEVERIDADE } from "@/components/expedicao/EvolucaoPorVencimento";
 import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Gauge } from "lucide-react";
-import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
-import SortHeaderComAjuda from "@/components/expedicao/SortHeaderComAjuda";
-import SortHeader from "@/components/ui/SortHeader";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import type { Visao } from "@/lib/expedicao-ux";
-import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 
 import {
   DEFINICAO_TIKTOK,
@@ -118,14 +115,12 @@ import {
   formatarInteiro,
   formatarTaxa,
   fotografiaDoTikTok,
-  marcasForaDaMeta,
   alertasNaFila,
   montarAtencaoDoTikTok,
   montarBarraDeQualidadeTikTok,
   queryDoTikTok,
   severidadeDoDia,
   type Evento,
-  type TikTokMarca,
   type TikTokPayload,
 } from "@/lib/expedicao-tiktok-contract";
 import { buscarExpedicao } from "@/lib/expedicao-demo";
@@ -155,20 +150,6 @@ function janelaInicial(): { dias: number; descartado: boolean } {
 }
 
 // T-0010: CLASSE_TABELA e CLASSE_CABECALHO vem do esqueleto comum.
-
-const COLUNAS_MARCA: Record<string, SortColumnType> = {
-  loja: "text",
-  base: "numeric",
-  late: "numeric",
-  rate: "numeric",
-};
-
-function valorDaMarca(m: TikTokMarca, coluna: string): string | number | null {
-  if (coluna === "loja") return m.shop_name ?? m.brand;
-  if (coluna === "base") return m.base;
-  if (coluna === "late") return m.late;
-  return m.rate;
-}
 
 // ---------------------------------------------------------------------------
 // Painel
@@ -277,7 +258,6 @@ export default function TikTokDispatchPanel({
 
   const ldr = dados?.ldr ?? null;
   const fluxo = dados?.payment_flow ?? [];
-  const piores = marcasForaDaMeta(dados?.brands ?? []);
   const fotografia = fotografiaDoTikTok(dados);
   const barra = montarBarraDeQualidadeTikTok(dados);
   const atencao = montarAtencaoDoTikTok(dados);
@@ -288,14 +268,6 @@ export default function TikTokDispatchPanel({
         timeStyle: "short",
       })
     : null;
-  // Ordenacao client-side sobre `brands`, que vem INTEIRO no payload. Nao ha
-  // paginacao aqui, entao ordenar nao esconde linha nenhuma nem recalcula
-  // metrica: as taxas continuam sendo as que a API publicou.
-  const { sort, toggleSort, sortedRows } = useSortableTable<TikTokMarca>(
-    dados?.brands ?? [],
-    valorDaMarca,
-    COLUNAS_MARCA,
-  );
 
   // EXPEDICAO-TIKTOK-PADRAO: cada controle e' um item da MESMA faixa de
   // Profundidade e Marca (antes os dois iam juntos e quebravam numa segunda
@@ -467,94 +439,22 @@ export default function TikTokDispatchPanel({
     />
   ) : null;
 
-  // 7. CONCENTRACAO — lojas, nas duas profundidades.
+  // 7. CONCENTRACAO — lojas, nas duas profundidades (componente comum).
   const painelLojas = (classe: string) => (
-    <Panel
+    <ConcentracaoPorMarca
       className={classe}
-      semPadding
-      titulo={
-        <span className="flex items-center gap-2">
-          Concentração por marca
-          {/* Antes tambem era o cartao "Lojas acima da meta"; a base vai no `title`. */}
-          {dados?.brands.length ? (
-            <Chip
-              tom={piores.length ? "critico" : "neutro"}
-              ponto
-              title={`De ${formatarInteiro(dados.brands.length)} com base suficiente.`}
-            >
-              {piores.length} acima da meta
-              <span className="sr-only"> de {formatarInteiro(dados.brands.length)} lojas com base suficiente</span>
-            </Chip>
-          ) : null}
-        </span>
-      }
-      acao={<InfoDica texto="Só lojas com base suficiente; vencimentos no prazo ficam fora." />}
-    >
-      {/* Sem loja elegivel, um cabecalho de tabela sem linha nenhuma so'
-          ocuparia espaco: a tela diz que nao ha loja a ranquear. */}
-      {sortedRows.length === 0 ? (
-        <p role="status" className="px-4 py-3 text-sm text-ink-muted">
-          Nenhuma loja com base suficiente de vencimentos fechados no período.
-        </p>
-      ) : (
-        <div className="max-h-96 overflow-auto">
-          <table className={CLASSE_TABELA}>
-            <caption className="sr-only">LDR por loja no período</caption>
-            <thead className={CLASSE_CABECALHO}>
-              <tr>
-                <SortHeader
-                  rotulo="Loja"
-                  coluna="loja"
-                  sort={sort}
-                  aoOrdenar={toggleSort}
-                  alinhamento="left"
-                />
-                {/* O "ⓘ" fica FORA do botao de ordenar. */}
-                <SortHeaderComAjuda
-                  rotulo="Venciam"
-                  coluna="base"
-                  sort={sort}
-                  aoOrdenar={toggleSort}
-                  ajuda="tiktok.venciam"
-                />
-                <SortHeaderComAjuda
-                  rotulo="Atrasados"
-                  coluna="late"
-                  sort={sort}
-                  aoOrdenar={toggleSort}
-                  ajuda="tiktok.atrasaram"
-                />
-                <SortHeaderComAjuda
-                  rotulo="LDR"
-                  coluna="rate"
-                  sort={sort}
-                  aoOrdenar={toggleSort}
-                  ajuda="tiktok.ldr"
-                />
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((m) => (
-                <tr key={m.brand} className="border-t border-line">
-                  <th scope="row" className="text-left font-medium text-ink">
-                    {m.shop_name ?? m.brand}
-                  </th>
-                  <td className="text-right tabular-nums text-ink">{formatarInteiro(m.base)}</td>
-                  <td className="text-right tabular-nums text-ink">{formatarInteiro(m.late)}</td>
-                  <td
-                    className={`text-right font-semibold tabular-nums ${
-                      m.above_target ? "text-crit-ink" : "text-ok-ink"
-                    }`}
-                  >
-                    <TaxaComBase numerador={m.late} base={m.base} taxa={m.rate} linha />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </Panel>
+      linhas={(dados?.brands ?? []).map((m) => ({
+        chave: m.brand,
+        nome: m.shop_name ?? m.brand,
+        base: m.base,
+        late: m.late,
+        rate: m.rate,
+        severidade: m.above_target ? "critico" : "ok",
+      }))}
+      ajudas={{ base: "tiktok.venciam", late: "tiktok.atrasaram", rate: "tiktok.ldr" }}
+      dica="Só lojas com base suficiente; vencimentos no prazo ficam fora."
+      vazio="Nenhuma loja com base suficiente de vencimentos fechados no período."
+    />
   );
 
   // 8. DETALHE — as coortes que compoem a LDR, linha a linha. Sao os mesmos

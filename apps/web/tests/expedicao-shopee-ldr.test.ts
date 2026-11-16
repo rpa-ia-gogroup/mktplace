@@ -251,7 +251,8 @@ test("evolucao por vencimento: um grafico so', comum a TikTok e Shopee", () => {
   // legenda so' com as severidades presentes na serie (Revisor UX #467)
   assert.match(comum, /\.filter\(\(s\) => dias\.some\(\(d\) => \(d\.rate !== null \|\| !d\.is_mature\) && severidade\(d\) === s\)\)/);
   assert.match(TIKTOK, /<EvolucaoPorVencimento/);
-  assert.match(CLIENTE, /evolucao=\{\s*ldrNaSecao && ldr\.resposta\?\.ldr \? \(\s*<EvolucaoPorVencimento\s+dias=\{ldr\.resposta\.ldr\.daily\}/);
+  assert.match(CLIENTE, /ldrNaSecao && ldr\.resposta\?\.ldr\s+\? \{ dias: ldr\.resposta\.ldr\.daily, marcas: ldr\.resposta\.brands, mt: META_TETO\.shopee, rotulo: "Meta da Shopee" \}/);
+  assert.match(CLIENTE, /evolucao=\{\s*ladoLdr \? \(\s*<EvolucaoPorVencimento/);
   for (const f of [TIKTOK, CLIENTE]) {
     assert.doesNotMatch(f, /function Grafico|COR_SEVERIDADE =/, "grafico duplicado fora do componente comum");
   }

@@ -25,19 +25,21 @@ export default function SortHeaderComAjuda({
   sort,
   aoOrdenar,
   ajuda,
+  className = "",
 }: {
   rotulo: ReactNode;
   coluna: string;
   sort: SortState;
   aoOrdenar: (coluna: string) => void;
   ajuda: ChaveMetrica;
+  className?: string;
 }) {
   const ativo = sort.column === coluna;
   return (
     <th
       scope="col"
       aria-sort={ativo ? (sort.direction === "asc" ? "ascending" : "descending") : "none"}
-      className="p-0 text-right text-xs font-semibold uppercase tracking-wide"
+      className={`p-0 text-right text-xs font-semibold uppercase tracking-wide ${className}`}
     >
       <span className="flex items-center justify-end">
         {/* O botao ocupa o resto da celula (como no SortHeader); o rotulo

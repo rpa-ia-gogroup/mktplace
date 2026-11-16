@@ -258,9 +258,9 @@ test("ML: daily[] lido sem inventar; forma invalida ou API antiga = sem grafico"
 test("ML: evolucao ligada no esqueleto, com a requisicao da faixa do topo", () => {
   const cliente = readFileSync(join(AQUI, "..", "app/expedicao/ExpedicaoClient.tsx"), "utf8");
   const topo = readFileSync(join(AQUI, "..", "src/components/expedicao/LdrTopo.tsx"), "utf8");
-  assert.match(cliente, /useDiariaLdrMl\(API, marcaAtiva, Boolean\(faixaTopo\) && filtros\.channel !== "shopee"\)/);
-  assert.match(cliente, /<EvolucaoPorVencimento\s+dias=\{diariaMl\}\s+severidade=\{severidadeDoDiaMl\}/);
-  assert.match(cliente, /severidadePelaMetaTeto\(d, META_TETO\.mercadolivre\)/);
+  assert.match(cliente, /useLdrMl\(API, marcaAtiva, Boolean\(faixaTopo\) && filtros\.channel !== "shopee"\)/);
+  assert.match(cliente, /\{ dias: ldrMl\.dias, marcas: ldrMl\.marcas, mt: META_TETO\.mercadolivre, rotulo: "Meta do ML" \}/);
+  assert.match(cliente, /<EvolucaoPorVencimento\s+dias=\{ladoLdr\.dias\}\s+severidade=\{\(d\) => severidadePelaMetaTeto\(d, ladoLdr\.mt\)\}/);
   // a mesma URL da faixa: uma requisicao so'
   assert.match(topo, /const url = urlLdr\(api, "mercadolivre", marca\);/);
   assert.match(topo, /cache\.get\(url\)/);

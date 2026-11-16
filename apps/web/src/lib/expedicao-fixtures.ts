@@ -261,6 +261,8 @@ function ldrMl(c: CenarioDemo) {
     brands: [
       { brand: "barbours", base: 900, late: 31, rate: 31 / 900, without_pickup_mark: 2 },
       { brand: "kokeshi", base: 1120, late: 40, rate: 40 / 1120, without_pickup_mark: 0 },
+      { brand: "lescent", base: 640, late: 14, rate: 14 / 640, without_pickup_mark: 0 },
+      { brand: "rituaria", base: 520, late: 37, rate: 37 / 520, without_pickup_mark: 1 },
     ],
     daily,
   };
@@ -334,7 +336,13 @@ function ldrShopee(c: CenarioDemo): RespostaLdrShopee {
       without_deadline: 4,
     },
     coverage: { state: "completa", missing_share: 0.001, missing: 6, eligible: 5946, without_deadline: 4, shipped_without_pickup: 2 },
-    brands: [],
+    // Demo da Concentracao por marca: dentro da meta, acima da meta e acima do teto.
+    brands: c === "vazio" ? [] : [
+      ["apice", 1480, 22], ["barbours", 1620, 49], ["lescent", 1310, 71], ["rituaria", 1530, 57],
+    ].map(([brand, base, late]) => ({
+      brand: brand as string, base: base as number, late: late as number, rate: (late as number) / (base as number),
+      coverage_state: "completa" as const, excluded_fbs: 50, excluded_cancelled: 10, source_watermark_at: AGORA,
+    })),
     alerts: [],
     queue_by_flow: {
       effective_at: AGORA,
@@ -698,7 +706,46 @@ export function respostaFicticia(url: string, cenarioPedido: CenarioDemo): { sta
     };
   if (caminho === "/api/v1/expedicao/shopee/ldr") return { status: 200, corpo: ldrShopee(cenario) };
   if (caminho === "/api/v1/expedicao/ml/ldr") return { status: 200, corpo: ldrMl(cenario) };
+  if (caminho === "/api/v1/expedicao/ml/ldr/pedidos" || caminho === "/api/v1/expedicao/shopee/ldr/pedidos")
+    return {
+      status: 200,
+      corpo: atrasadosDia(
+        caminho.includes("/ml/") ? "mercadolivre" : "shopee",
+        u.searchParams.get("vencimento") ?? "2026-10-22",
+        u.searchParams.get("brands"),
+        Number(u.searchParams.get("page") ?? "1"),
+      ),
+    };
   return null;
+}
+
+// Clique na evolucao do ML/Shopee: atrasados de um dia (formato real, numeros ficticios).
+function atrasadosDia(canal: "mercadolivre" | "shopee", vencimento: string, marca: string | null, pagina: number): unknown {
+  const marcas = canal === "shopee" ? ["apice", "barbours", "lescent", "rituaria"] : ["barbours", "kokeshi", "lescent", "rituaria"];
+  const status = canal === "shopee" ? ["shipped", "processed", "completed"] : ["shipped", "ready_to_ship", "delivered"];
+  const todos = Array.from({ length: 236 }, (_, i) => {
+    const coletado = i % 4 !== 0;
+    return {
+      brand: marcas[i % marcas.length],
+      order_id: canal === "shopee" ? `2610${String(220000 + i * 37).padStart(10, "0")}` : String(2000009100000 + i * 911),
+      status: coletado ? status[i % 2 === 0 ? 0 : 2] : status[1],
+      deadline_at: `${vencimento}T${canal === "shopee" ? "23:59" : "14:00"}:00`,
+      collected_at: coletado ? `${vencimento.slice(0, 8)}${String(Number(vencimento.slice(8)) + 1).padStart(2, "0")}T${String(8 + (i % 9)).padStart(2, "0")}:12:00` : null,
+    };
+  });
+  const filtrados = todos.filter((p) => !marca || p.brand === marca);
+  const ini = (pagina - 1) * 200;
+  return {
+    channel: canal, availability: "available", deadline: vencimento,
+    brands: marcas
+      .map((m) => ({ brand: m, missed: filtrados.filter((p) => p.brand === m).length,
+        still_waiting: filtrados.filter((p) => p.brand === m && !p.collected_at).length }))
+      .filter((b) => b.missed > 0)
+      .sort((a, b) => b.missed - a.missed),
+    all_brands: marcas, list_total: filtrados.length,
+    still_waiting: filtrados.filter((p) => !p.collected_at).length,
+    orders: filtrados.slice(ini, ini + 200), page: pagina, page_size: 200, has_more: ini + 200 < filtrados.length,
+  };
 }
 
 // EXPEDICAO-TIKTOK-ABERTOS — pedidos em aberto (formato real, numeros ficticios).

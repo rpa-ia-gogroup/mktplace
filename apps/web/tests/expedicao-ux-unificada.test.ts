@@ -459,7 +459,7 @@ test("sem vencimento fechado, base e atrasados sao ausencia, nao zero", () => {
 });
 
 test("lojas sem base nao desenham tabela vazia", () => {
-  assert.match(TIKTOK, /sortedRows\.length === 0 \? \(/);
+  assert.match(fonte("src/components/expedicao/ConcentracaoPorMarca.tsx"), /sortedRows\.length === 0 \? \(/);
   assert.match(TIKTOK, /Nenhuma loja com base suficiente de vencimentos fechados no período\./);
 });
 

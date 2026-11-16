@@ -35,9 +35,10 @@ Consultar = Callable[[str, dict], list[dict]]
 SHOPEE_MARCAS: tuple[str, ...] = ("apice", "barbours", "lescent", "rituaria")
 JANELA_MAX_DIAS = 30
 
-SQL_LDR_SHOPEE_DM = """
+#: Pedidos com prazo na janela. Comum a' taxa e a' lista do dia.
+_CTE_SHOPEE = """
 WITH o AS (
-    SELECT shop_account, order_status, fulfillment_flag, ship_by_date, pickup_done_time
+    SELECT shop_account, order_sn, order_status, fulfillment_flag, ship_by_date, pickup_done_time
       FROM silver.stg_shopee_orders
      WHERE pay_time IS NOT NULL AND ship_by_date IS NOT NULL
        AND shop_account = ANY(:marcas)
@@ -51,13 +52,30 @@ WITH o AS (
             AND order_status IN ('shipped', 'to_confirm_receive', 'completed', 'to_return')) AS sem_marco
       FROM o
 )
+"""
+
+#: Atrasado na regra do cabecalho (mesma condicao na taxa e na lista).
+_ATRASADO_SHOPEE = """NOT fbs AND NOT cancelado_sem_coleta AND NOT sem_marco
+                          AND (pickup_done_time > ship_by_date OR pickup_done_time IS NULL)"""
+
+SQL_LDR_SHOPEE_DM = _CTE_SHOPEE + f"""
 SELECT shop_account AS marca,
        COUNT(*) FILTER (WHERE NOT fbs AND NOT cancelado_sem_coleta AND NOT sem_marco) AS base,
-       COUNT(*) FILTER (WHERE NOT fbs AND NOT cancelado_sem_coleta AND NOT sem_marco
-                          AND (pickup_done_time > ship_by_date OR pickup_done_time IS NULL)) AS atrasados,
+       COUNT(*) FILTER (WHERE {_ATRASADO_SHOPEE}) AS atrasados,
        COUNT(*) FILTER (WHERE sem_marco) AS sem_marco
   FROM c
  GROUP BY shop_account
+"""
+
+#: Os atrasados de UM dia de prazo, numa linha so' (json_agg; ver o ML).
+SQL_ATRASADOS_DIA_SHOPEE = _CTE_SHOPEE + f"""
+SELECT json_agg(json_build_object(
+           'brand', shop_account, 'order_id', order_sn, 'status', order_status,
+           'prazo', ship_by_date AT TIME ZONE 'America/Sao_Paulo',
+           'coletado_em', pickup_done_time AT TIME ZONE 'America/Sao_Paulo')
+         ORDER BY shop_account, ship_by_date, order_sn) AS pedidos
+  FROM c
+ WHERE {_ATRASADO_SHOPEE}
 """
 
 
