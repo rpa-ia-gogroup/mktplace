@@ -42,6 +42,15 @@ test("isAllowedEmail: match exato do dominio", () => {
   assert.equal(isAllowedEmail("semarroba", ENV), false);
 });
 
+test("isAllowedEmail: item com @ libera so aquele e-mail", () => {
+  const env: AuthEnv = { ...ENV, ALLOWED_EMAIL_DOMAINS: "gocase.com,Convidada@Gmail.com" };
+  assert.equal(isAllowedEmail("convidada@gmail.com", env), true);
+  assert.equal(isAllowedEmail("joao@gocase.com", env), true);
+  for (const ruim of ["outra@gmail.com", "x.convidada@gmail.com", "convidada@gmail.com.evil.com", "@gmail.com"]) {
+    assert.equal(isAllowedEmail(ruim, env), false, ruim);
+  }
+});
+
 test("sessao: ida e volta com iss/aud", async () => {
   const token = await createSessionToken({ email: "joao@gocase.com" }, ENV);
   assert.deepEqual(await verifySessionToken(token, ENV), { email: "joao@gocase.com" });

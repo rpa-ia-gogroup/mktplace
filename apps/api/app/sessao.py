@@ -35,11 +35,16 @@ def dominios_permitidos(csv: str) -> tuple[str, ...]:
 
 
 def email_permitido(email: Optional[str], dominios: tuple[str, ...]) -> bool:
-    """Match EXATO do trecho apos o ultimo `@` (nada de endswith/includes)."""
+    """Match EXATO do trecho apos o ultimo `@` (nada de endswith/includes).
+
+    Item da lista com `@` libera so' aquele e-mail, inteiro e exato (convidado
+    de fora dos dominios, ex.: Gmail), sem abrir o dominio dele.
+    """
     if not isinstance(email, str) or "@" not in email:
         return False
-    local, _, dominio = email.strip().lower().rpartition("@")
-    return bool(local) and dominio in dominios
+    e = email.strip().lower()
+    local, _, dominio = e.rpartition("@")
+    return bool(local) and (dominio in dominios or e in dominios)
 
 
 def validar_sessao(token: Optional[str], segredo: str, dominios: tuple[str, ...]) -> Optional[Sessao]:

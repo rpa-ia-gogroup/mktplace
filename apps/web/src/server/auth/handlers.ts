@@ -60,7 +60,8 @@ export async function handleGoogleLogin(
     return json(
       {
         error: "dominio_nao_permitido",
-        message: `Acesso restrito a contas @${allowedDomains(env).join(" / @")}.`,
+        // So' dominios: e-mail de convidado liberado um a um nunca aparece para quem foi barrado.
+        message: `Acesso restrito a contas @${allowedDomains(env).filter((d) => !d.includes("@")).join(" / @")}.`,
       },
       403,
     );
