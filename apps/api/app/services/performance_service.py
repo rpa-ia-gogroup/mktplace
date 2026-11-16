@@ -1795,6 +1795,13 @@ def get_quality(
             COALESCE(SUM(f.canceled_orders), 0)       AS canceled_orders,
             COALESCE(SUM(f.returned_orders), 0)       AS returned_orders,
             COALESCE(SUM(f.delivered_orders), 0)      AS delivered_orders,
+            -- T-0118: "nao entregue" do ML na populacao de ENVIOS, como a gold.
+            -- Sem COALESCE: NULL = sem dado de envios no recorte, nunca zero.
+            -- Os entregues do numerador saem so' dos dias com envios, para
+            -- numerador e denominador cobrirem os mesmos dias.
+            SUM(f.total_shipments)                    AS total_shipments,
+            SUM(f.delivered_orders) FILTER (WHERE f.total_shipments IS NOT NULL)
+                                                      AS delivered_with_shipments,
             COALESCE(SUM(f.unique_buyers), 0)         AS unique_buyers,
             COALESCE(SUM(f.new_buyers), 0)            AS new_buyers,
             COALESCE(SUM(f.repeat_buyers), 0)         AS repeat_buyers,
@@ -1883,8 +1890,19 @@ def get_quality(
             ml_orders = int(_f(ml["orders"]))
             ml_canceled = int(_f(ml["canceled_orders"]))
             ml_total = ml_orders + ml_canceled
-            ml_delivered = int(_f(ml["delivered_orders"]))
-            ml_not_del = max(0, ml_orders - ml_delivered) if ml_delivered > 0 else None
+            # T-0118: GREATEST(envios - entregues, 0) / envios, a formula da
+            # gold (`gold_service`, aba Qualidade gold). Pedido != envio (pack /
+            # carrinho), por isso o denominador deixou de ser pedidos pagos.
+            # Sem envios no recorte (None ou 0): taxa e contagem None.
+            ml_ship_raw = ml.get("total_shipments")
+            ml_total_ship = int(_f(ml_ship_raw)) if ml_ship_raw is not None else None
+            if ml_total_ship:
+                ml_delivered = int(_f(ml.get("delivered_with_shipments")))
+                ml_not_del = max(ml_total_ship - ml_delivered, 0)
+                ml_nd_rate = round(ml_not_del / ml_total_ship * 100, 2)
+            else:
+                ml_not_del = None
+                ml_nd_rate = None
             ml_gmv = _f(ml["gmv"])
             ml_buyers = int(_f(ml["unique_buyers"]))
             ml_new = int(_f(ml["new_buyers"]))
@@ -1894,10 +1912,11 @@ def get_quality(
             prev_gmv = prev_ml_gmv.get(brand, 0.0)
             row.update({
                 "ml_cancel_rate_pct": round(ml_canceled / ml_total * 100, 2) if ml_total > 0 else None,
-                "ml_not_delivered_rate_pct": round(ml_not_del / ml_orders * 100, 2) if (ml_not_del is not None and ml_orders > 0) else None,
+                "ml_not_delivered_rate_pct": ml_nd_rate,
                 "ml_cancelled_orders": ml_canceled or None,
                 "ml_total_orders": ml_total or None,
                 "ml_not_delivered_shipments": ml_not_del,
+                "ml_total_shipments": ml_total_ship,
                 "ml_avg_delivery_days": round(ml_del_days, 1) if ml_del_days else None,
                 "ml_repeat_buyer_rate_pct": round(ml_repeat / ml_buyers * 100, 1) if ml_buyers > 0 else None,
                 "ml_gmv_per_buyer": round(ml_gmv / ml_buyers, 2) if ml_buyers > 0 else None,
@@ -1936,9 +1955,13 @@ def get_quality(
     ml_all_canceled = sum(r.get("ml_cancelled_orders") or 0 for r in ml_br)
     ml_all_total = sum(r.get("ml_total_orders") or 0 for r in ml_br)
     kpi_ml_cancel = round(ml_all_canceled / ml_all_total * 100, 2) if ml_all_total > 0 else None
-    ml_nd_all = sum(r.get("ml_not_delivered_shipments") or 0 for r in ml_br)
-    ml_paid_all = sum((r.get("ml_total_orders") or 0) - (r.get("ml_cancelled_orders") or 0) for r in ml_br)
-    kpi_ml_nd = round(ml_nd_all / ml_paid_all * 100, 2) if ml_paid_all > 0 else None
+    # T-0118: Σnao entregues / Σenvios, so' nas marcas com dado de envios
+    # (numerador E denominador). Nenhuma marca com dado: None, nunca 0.
+    ml_nd_br = [r for r in brand_rows
+                if r.get("ml_not_delivered_shipments") is not None and r.get("ml_total_shipments")]
+    ml_nd_all = sum(r["ml_not_delivered_shipments"] for r in ml_nd_br)
+    ml_ship_all = sum(r["ml_total_shipments"] for r in ml_nd_br)
+    kpi_ml_nd = round(ml_nd_all / ml_ship_all * 100, 2) if ml_ship_all > 0 else None
     ml_del_pairs = [(r["ml_avg_delivery_days"], (r.get("ml_total_orders") or 0) - (r.get("ml_cancelled_orders") or 0))
                     for r in ml_br if r.get("ml_avg_delivery_days")]
     kpi_ml_del = round(sum(v * w for v, w in ml_del_pairs) / sum(w for _, w in ml_del_pairs), 1) if ml_del_pairs else None

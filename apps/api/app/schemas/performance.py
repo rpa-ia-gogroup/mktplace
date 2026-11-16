@@ -232,6 +232,9 @@ class QualityBrandRow(BaseModel):
     ml_cancelled_orders: Optional[int] = None
     ml_total_orders: Optional[int] = None
     ml_not_delivered_shipments: Optional[int] = None
+    # T-0118: envios do recorte (gold.total_shipments), denominador de
+    # `ml_not_delivered_rate_pct`. `None` = sem dado de envios. Aditivo.
+    ml_total_shipments: Optional[int] = None
     ml_avg_delivery_days: Optional[float] = None
     ml_repeat_buyer_rate_pct: Optional[float] = None
     ml_gmv_per_buyer: Optional[float] = None

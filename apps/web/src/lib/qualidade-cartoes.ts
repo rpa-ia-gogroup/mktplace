@@ -58,8 +58,11 @@ export const DEF_QUALIDADE: Record<ChaveQualidade, Definicao> = {
   },
   ml_nao_entregue: {
     rotulo: "Não entregue", canal: "ml", tipo: "pct", valor: (f) => f.ml_not_delivered_rate_pct,
-    apoio: (r) => (r.ml_not_delivered_shipments != null ? `${fmtNumCurto(r.ml_not_delivered_shipments)} envios` : undefined),
-    dica: "Proxy: pagos − entregues",
+    // T-0118: denominador e' envios (como a gold), nao pedidos pagos.
+    apoio: (r) =>
+      de(r.ml_not_delivered_shipments, r.ml_total_shipments, "envios") ??
+      (r.ml_not_delivered_shipments != null ? `${fmtNumCurto(r.ml_not_delivered_shipments)} envios` : undefined),
+    dica: "Envios não entregues / envios · um envio pode juntar vários pedidos",
   },
   ml_entrega: { rotulo: "Entrega", canal: "ml", tipo: "dias", valor: (f) => f.ml_avg_delivery_days },
   sh_cancelamento: {
