@@ -7,6 +7,7 @@ from app.gate_sessao import GateDeSessao
 from app.routers import (
     account_performance,
     alertas,
+    auth_permitido,
     b2b_revenda,
     cx_atendimento,
     cx_site,
@@ -60,6 +61,7 @@ app.include_router(cx_atendimento.router)
 app.include_router(cx_site.router)
 app.include_router(metas.router)
 app.include_router(alertas.router)
+app.include_router(auth_permitido.router)
 # Top 5 produtos por marca na Gerencial (base consolidada por NF).
 app.include_router(top_produtos.router)
 app.include_router(marcas_menores.router)

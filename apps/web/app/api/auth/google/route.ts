@@ -7,7 +7,9 @@ function currentEnv() {
   return {
     AUTH_GOOGLE_ID: process.env.AUTH_GOOGLE_ID,
     AUTH_SECRET: process.env.AUTH_SECRET,
-    ALLOWED_EMAIL_DOMAINS: process.env.ALLOWED_EMAIL_DOMAINS,
+    TORRE_API_ORIGIN: process.env.TORRE_API_ORIGIN,
+    TORRE_SERVICE_KEY: process.env.TORRE_SERVICE_KEY,
+    MCP_BACKEND_SERVICE_KEY: process.env.MCP_BACKEND_SERVICE_KEY,
     NODE_ENV: process.env.NODE_ENV,
   };
 }

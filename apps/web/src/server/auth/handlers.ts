@@ -8,10 +8,8 @@ import type { JWTVerifyGetKey } from "jose";
 
 import {
   SESSION_COOKIE,
-  allowedDomains,
   authEnabled,
   createSessionToken,
-  isAllowedEmail,
   readCookie,
   sessionCookieHeader,
   verifyGoogleIdToken,
@@ -26,10 +24,37 @@ function json(body: unknown, status: number, extra?: Record<string, string>): Re
   });
 }
 
+const PERMITIDO_TIMEOUT_MS = 5000;
+
+/**
+ * A lista de dominios/e-mails vive so' na API (Render). `null` = nao deu para
+ * perguntar (config ausente, rede, status ou corpo inesperado): nunca libera.
+ */
+async function emailPermitido(email: string, env: AuthEnv, fetchImpl: typeof fetch): Promise<boolean | null> {
+  const origem = (env.TORRE_API_ORIGIN ?? "").trim();
+  const chave = (env.TORRE_SERVICE_KEY || env.MCP_BACKEND_SERVICE_KEY || "").trim();
+  if (!origem || !chave) return null;
+  try {
+    const url = new URL("/auth/permitido", origem);
+    url.searchParams.set("email", email);
+    const res = await fetchImpl(url, {
+      headers: { "x-torre-service-key": chave },
+      cache: "no-store",
+      signal: AbortSignal.timeout(PERMITIDO_TIMEOUT_MS),
+    });
+    if (res.status !== 200) return null;
+    const j = (await res.json()) as { permitido?: unknown };
+    return typeof j.permitido === "boolean" ? j.permitido : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function handleGoogleLogin(
   req: Request,
   env: AuthEnv,
   keys?: JWTVerifyGetKey,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<Response> {
   if (!authEnabled(env)) return json({ error: "auth_desligada" }, 404);
 
@@ -56,13 +81,14 @@ export async function handleGoogleLogin(
   if (!identity.email || !identity.emailVerified) {
     return json({ error: "email_nao_verificado" }, 403);
   }
-  if (!isAllowedEmail(identity.email, env)) {
+  const permitido = await emailPermitido(identity.email, env, fetchImpl);
+  if (permitido === null) {
+    return json({ error: "verificacao_indisponivel", message: "Não deu para confirmar seu acesso. Tente de novo." }, 503);
+  }
+  if (!permitido) {
+    // Sem listar dominios nem e-mails liberados.
     return json(
-      {
-        error: "dominio_nao_permitido",
-        // So' dominios: e-mail de convidado liberado um a um nunca aparece para quem foi barrado.
-        message: `Acesso restrito a contas @${allowedDomains(env).filter((d) => !d.includes("@")).join(" / @")}.`,
-      },
+      { error: "dominio_nao_permitido", message: "Acesso restrito. Peça liberação a quem administra a Torre." },
       403,
     );
   }

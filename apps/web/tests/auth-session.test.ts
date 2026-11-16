@@ -6,7 +6,7 @@ import { createLocalJWKSet, decodeJwt, exportJWK, generateKeyPair, SignJWT } fro
 
 import {
   SESSION_AUDIENCE, SESSION_COOKIE, SESSION_ISSUER, SESSION_TTL_SECONDS,
-  allowedDomains, authEnabled, createSessionToken, isAllowedEmail, readCookie,
+  authEnabled, createSessionToken, readCookie,
   sessionCookieHeader, verifyGoogleIdToken, verifySessionToken,
   type AuthEnv,
 } from "../src/server/auth/session.ts";
@@ -28,29 +28,6 @@ test("authEnabled depende de AUTH_GOOGLE_ID", () => {
   assert.equal(authEnabled({ AUTH_GOOGLE_ID: "  " }), false);
 });
 
-test("allowedDomains padrao e override", () => {
-  assert.deepEqual(allowedDomains({}), ["gocase.com", "gobeaute.com.br"]);
-  assert.deepEqual(allowedDomains({ ALLOWED_EMAIL_DOMAINS: " A.com , b.com " }), ["a.com", "b.com"]);
-});
-
-test("isAllowedEmail: match exato do dominio", () => {
-  assert.equal(isAllowedEmail("JOAO@GOCASE.COM", ENV), true);
-  assert.equal(isAllowedEmail("x@gocase.com.evil.com", ENV), false);
-  assert.equal(isAllowedEmail("x@mail.gocase.com", ENV), false);
-  assert.equal(isAllowedEmail("x@gocase.com@evil.com", ENV), false);
-  assert.equal(isAllowedEmail(null, ENV), false);
-  assert.equal(isAllowedEmail("semarroba", ENV), false);
-});
-
-test("isAllowedEmail: item com @ libera so aquele e-mail", () => {
-  const env: AuthEnv = { ...ENV, ALLOWED_EMAIL_DOMAINS: "gocase.com,Convidada@Gmail.com" };
-  assert.equal(isAllowedEmail("convidada@gmail.com", env), true);
-  assert.equal(isAllowedEmail("joao@gocase.com", env), true);
-  for (const ruim of ["outra@gmail.com", "x.convidada@gmail.com", "convidada@gmail.com.evil.com", "@gmail.com"]) {
-    assert.equal(isAllowedEmail(ruim, env), false, ruim);
-  }
-});
-
 test("sessao: ida e volta com iss/aud", async () => {
   const token = await createSessionToken({ email: "joao@gocase.com" }, ENV);
   assert.deepEqual(await verifySessionToken(token, ENV), { email: "joao@gocase.com" });
@@ -65,9 +42,9 @@ test("sessao: name e picture voltam", async () => {
   assert.deepEqual(await verifySessionToken(token, ENV), { email: "a@gocase.com", name: "A", picture: "https://x/y.png" });
 });
 
-test("sessao: dominio deixou de ser permitido -> null", async () => {
-  const token = await createSessionToken({ email: "joao@gocase.com" }, ENV);
-  assert.equal(await verifySessionToken(token, { ...ENV, ALLOWED_EMAIL_DOMAINS: "gobeaute.com.br" }), null);
+test("sessao: nao checa dominio (a lista vive na API)", async () => {
+  const token = await createSessionToken({ email: "larissa@gmail.com" }, ENV);
+  assert.deepEqual(await verifySessionToken(token, ENV), { email: "larissa@gmail.com" });
 });
 
 test("sessao: segredo curto", async () => {
