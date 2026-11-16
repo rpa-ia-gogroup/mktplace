@@ -692,10 +692,45 @@ e a mesma regra da DRE** (as funções de `apps/api/app/services/dre_service.py`
   "parcial"`, e entra em `shopee_fee_cobertura.marcas_parciais` (status `parcial`). A parte sem escrow nunca é estimada.
 - **Sem dado ≠ 0:** marca com algum mês sem valor (escrow não publicado, lote falho, publicado há mais de 54 h ou com sinal
   inesperado) → `null`.
-- **Repasse Shopee:** continua do mart (`total_settlement`) e sai "—" nas lojas com API. A DRE não publica repasse
-  Shopee; trazê-lo exige componente novo no insumo (migration do CHECK + publisher). Fora desta entrega.
+- **Repasse Shopee:** ver a seção T-0120b abaixo.
 - **Conferência (out/26):** taxa por marca da Financeiro = componente `taxas` da célula Shopee da DRE (±0,5%).
   Kokeshi = R$ 971.173,40 (escrow em 99,8% dos pedidos) na DRE publicada em 15/11/2026.
+
+## Repasse Shopee na Financeiro a partir do escrow (T-0120b)
+
+A fato grava `total_settlement` **NULL** nas lojas Shopee com API (`COLUNAS_ANULADAS`), e o repasse Shopee da
+Financeiro saía "—". Agora ele vem do insumo da DRE, com a mesma regra da taxa (T-0120).
+
+- **Componente:** `shopee_repasse_escrow` em `marts.fact_dre_insumo_mensal`, publicado pelo
+  `pipelines/dre/insumo_publisher.py`. Ele só é publicado depois da migration **048**, que amplia o CHECK
+  `ck_fdim_componente`. Sem a 048, o publisher pula o componente com o resumo `inerte` e o lote sai igual ao de antes.
+- **Fórmula:** `valor` = `SUM(valor_repasse)` dos pedidos com escrow, em `silver.fct_gobeaute_despesas_shopee`.
+  `valor_repasse` é igual a `escrow_amount` em 100% das linhas (medido em 16/11/2026).
+  - **Aviso:** é o valor **antes de ajustes posteriores**. O `escrow_amount_after_adjustment` fica fora.
+  - O sinal é o da origem, e repasse negativo (devolução/reembolso, 0,6% a 2,3% das linhas) entra na soma e não
+    recusa o lote.
+  - `sinal_origem` = NULL, porque é recebível e não custo.
+- **Filtro e coorte:** os mesmos da taxa, na mesma consulta (`SQL_TAXA_REPASSE_SHOPEE`). A base é
+  `silver.stg_shopee_orders`, com um registro por `order_sn` (o mais recente), não cancelado, por mês de criação em BRT.
+  O escrow entra por LEFT JOIN, com `canal_origem = 'shopee'`.
+- **Cobertura:** pedidos com `valor_repasse` / pedidos não cancelados. Abaixo de 100%, a marca sai com valor e status
+  `parcial` e entra em `shopee_settlement_cobertura.marcas_parciais`. A parte sem escrow nunca é estimada.
+- **Ausência:** se nenhum pedido tem escrow, o publisher grava `valor` NULL com `ausente_na_origem`, nunca 0.
+- **Na Financeiro** (`shopee_settlement`, `shopee_avg_settlement_pct`, `shopee_settlement_cobertura`), mês a mês:
+  1. com `total_settlement` do mart em todas as linhas, vale o mart;
+  2. senão, se o mês está inteiro no período, vale o repasse publicado;
+  3. mês cortado pelo período não usa o escrow;
+  4. se algum mês fica sem valor, a marca sai `null` (lote falho, publicado há mais de 54 h ou `sinal_origem` não
+     nulo também dão `null`).
+- **Sem componente publicado** para a marca, nada muda em relação a antes: vale a soma de `total_settlement` da fato no
+  período, e as lojas com API ficam com "—".
+- **Exibição:** o texto "antes de ajustes posteriores" fica na ajuda da tabela Shopee da tela, porque o contrato da
+  resposta não tem campo de texto para isso. O status por marca (`shopee_settlement_status`) é calculado, mas só chega
+  ao cliente quando o schema `FinanceiroBrandRow` publicar o campo.
+- **Limitação:** num mês com o mart cheio (era do arquivo), o valor é o `Total global` do export, que não é repasse
+  líquido. Um período que junta meses do arquivo com meses do escrow soma os dois conceitos.
+- **Valores de referência (out/26, Data Mart, 16/11):** apice 423.257,41; barbours 555.641,50; kokeshi 2.296.007,01;
+  lescent 174.769,65; rituaria 244.532,29.
 
 ## Demais marcas (marcas menores) — fonte provisória da Denavita (T-0119, 2026-11-16)
 

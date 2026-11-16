@@ -744,7 +744,7 @@ function FinanceiroPageInner() {
           <Panel
             id="shopee"
             titulo="Taxas e Custos Shopee"
-            ajuda={`Total Global (pedidos) não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV.\n${FAIXAS_TAXA}`}
+            ajuda={`Total Global (pedidos): nas lojas com API, repasse do escrow da Shopee (escrow_amount, antes de ajustes posteriores), só para mês inteiro; parcial quando o escrow não cobre todos os pedidos. Sem escrow publicado, vale o Total Global do arquivo de pedidos, que não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV.\n${FAIXAS_TAXA}`}
             icone={Percent}
             semPadding
           >
