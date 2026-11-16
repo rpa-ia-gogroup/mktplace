@@ -404,6 +404,10 @@ class FinanceiroKpis(BaseModel):
     ml_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_settlement_cobertura: Optional["CoberturaMarcas"] = None
+    #: T-0124: procedencia do repasse Shopee. Preenchido SO' quando algum
+    #: repasse de marca veio do escrow publicado (`escrow_amount`, antes de
+    #: ajustes posteriores); `None` = repasse do mart ou sem repasse.
+    shopee_settlement_aviso: Optional[str] = None
     # T-0115 (B1-08): marcas Shopee com Ads; total e ROAS so' sobre elas.
     shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
 
@@ -462,6 +466,8 @@ class FinanceiroBrandRow(BaseModel):
     ml_avg_fee_pct: Optional[float] = None
     shopee_gmv: Optional[float] = None
     shopee_settlement: Optional[float] = None
+    #: T-0120b/T-0124: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado".
+    shopee_settlement_status: Optional[str] = None
     shopee_fees: Optional[float] = None
     #: T-0120: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado".
     shopee_fee_status: Optional[str] = None

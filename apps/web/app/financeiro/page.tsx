@@ -34,6 +34,9 @@ import { mergeFilteredHref } from "@/lib/filters/nav-links";
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
 import Aba, { type VisaoDaAba } from "@/components/layout/Aba";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
+import Chip from "@/components/ui/Chip";
+// T-0124: selo "parcial" e procedencia do repasse Shopee (helper puro, testavel no node --test).
+import { procedenciaRepasseShopee, seloRepasseShopee } from "./repasse-shopee";
 import CelulaBarra from "@/components/ui/CelulaBarra";
 import Segmented from "@/components/ui/Segmented";
 import Note from "@/components/ui/Note";
@@ -744,7 +747,7 @@ function FinanceiroPageInner() {
           <Panel
             id="shopee"
             titulo="Taxas e Custos Shopee"
-            ajuda={`Total Global (pedidos): nas lojas com API, repasse do escrow da Shopee (escrow_amount, antes de ajustes posteriores), só para mês inteiro; parcial quando o escrow não cobre todos os pedidos. Sem escrow publicado, vale o Total Global do arquivo de pedidos, que não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV.\n${FAIXAS_TAXA}`}
+            ajuda={`Total Global (pedidos): ${procedenciaRepasseShopee(k)}, só para mês inteiro; parcial quando o escrow não cobre todos os pedidos. Sem escrow publicado, vale o Total Global do arquivo de pedidos, que não é repasse líquido. Taxas e encargos = comissão + taxa de serviço líquidas, sobre o GMV.\n${FAIXAS_TAXA}`}
             icone={Percent}
             semPadding
           >
@@ -784,6 +787,14 @@ function FinanceiroPageInner() {
                       </td>
                       <td className={`${TD} text-ink font-bold`}>
                         {b.shopee_settlement != null ? fmtBrlCurto(b.shopee_settlement) : "—"}
+                        {/* T-0124: escrow cobre so' parte dos pedidos da marca. */}
+                        {seloRepasseShopee(b) && (
+                          <span className="ml-1.5 align-middle">
+                            <Chip tom="atencao" title="Escrow não cobre todos os pedidos da marca">
+                              {seloRepasseShopee(b)}
+                            </Chip>
+                          </span>
+                        )}
                       </td>
                       <td className={`${TD} text-ink-muted`}>{b.shopee_ad_spend != null ? fmtBrlCurto(b.shopee_ad_spend) : "—"}</td>
                       <td className={`${TD} font-semibold ${roasColor(b.shopee_roas ?? null)}`}>
