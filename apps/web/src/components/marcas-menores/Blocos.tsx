@@ -17,6 +17,9 @@ import {
   corDaPlataforma,
   fatias,
   nomeDaPlataforma,
+  pendenciasDoTotal,
+  rotuloDaFonte,
+  textoSemDado,
   variacaoConsolidada,
   variacaoDaMarca,
   type Consolidado,
@@ -28,7 +31,7 @@ import { fmtCompacto } from "@/lib/metas";
 const SerieDiaria = dynamic(() => import("./SerieDiaria"), { ssr: false, loading: () => <div className="h-36" aria-hidden="true" /> });
 
 export const FONTE_PRODUTOS =
-  "Origem: itens dos pedidos do Bling. Quantidade e receita por produto (valor × quantidade − desconto do item), sem cancelados. A Denavita aguarda autorização da conta. Os itens são lidos pedido a pedido: a tabela pode vir parcial e se completa sozinha.";
+  "Origem: itens dos pedidos do Bling. Quantidade e receita por produto (valor × quantidade − desconto do item), sem cancelados. A Denavita não tem itens: eles só vêm do Bling, e a conta dela segue sem autorização (o pedido dela vem do TikTok via Data Mart, que não traz itens). Os itens são lidos pedido a pedido: a tabela pode vir parcial e se completa sozinha.";
 
 /** "▲ 12%" contra o período anterior; sem base, nada; com `motivo` (canal sem base no anterior), "—" e o aviso. */
 export function Variacao({ pct, motivo = null }: { pct: number | null; motivo?: string | null }) {
@@ -65,9 +68,10 @@ export function Topo({
   const total = c.total;
   const partes = c.por_plataforma.filter((p) => p.faturamento > 0);
   const pct = (x: number) => Math.round(x * 100);
-  // Parcial: marca sem dado fica de fora da soma e o topo diz isso (nunca soma ausencia como 0).
-  const comDado = marcas.filter((m) => m.total != null).length;
-  const parcial = comDado < marcas.length;
+  // Parcial: marca sem dado fica de fora da soma e o topo diz isso (nunca soma ausencia como 0); a API
+  // tambem declara parcial quando uma marca entra so' com parte dos canais (Denavita: Shopee pendente).
+  const pend = pendenciasDoTotal(c, marcas);
+  const parcial = pend.parcial;
   // Variacao so' sobre as marcas que tem base nos dois periodos, e so' se todo canal delas tem base no anterior.
   const vc = emAndamento ? { pct: null, motivo: null } : variacaoConsolidada(marcas);
   const v = vc.pct;
@@ -85,7 +89,9 @@ export function Topo({
           v == null && vc.motivo != null ? (
             <Variacao pct={null} motivo={vc.motivo} />
           ) : parcial ? (
-            <span className="font-semibold text-warn-ink">parcial (sem {marcas.filter((m) => m.total == null).map((m) => m.label).join(", ")})</span>
+            <span className="font-semibold text-warn-ink" title={c.aviso ?? undefined}>
+              parcial{pend.itens.length ? ` (${pend.itens.join("; ")})` : ""}
+            </span>
           ) : emAndamento ? (
             "inclui hoje, dia em andamento"
           ) : null
@@ -119,14 +125,13 @@ export function Marcas({ marcas, emAndamento, semMeta = false }: { marcas: Marca
         {marcas.map((m) => {
           const partes = fatias(m);
           const v = emAndamento ? { pct: null, motivo: null } : variacaoDaMarca(m);
+          const rotulo = rotuloDaFonte(m);
           return (
             <li key={m.id} className="flex flex-col gap-2 border-t border-line py-3 first:border-t-0 first:pt-0">
               <div className="grid min-h-11 grid-cols-[88px_1fr_auto] items-center gap-3">
                 <span className="truncate text-sm font-semibold text-ink">{m.label}</span>
                 {m.total == null ? (
-                  <span className="text-xs text-ink-muted">
-                    {m.status === "aguardando_autorizacao" ? "Aguardando autorização." : "Sem dado no período."}
-                  </span>
+                  <span className="text-xs text-ink-muted">{textoSemDado(m)}</span>
                 ) : (
                   <span className="relative h-2.5 rounded-full bg-raised" aria-hidden="true">
                     <span className="absolute inset-y-0 left-0 flex overflow-hidden rounded-full" style={{ width: `${(m.total / escala) * 100}%` }}>
@@ -144,6 +149,12 @@ export function Marcas({ marcas, emAndamento, semMeta = false }: { marcas: Marca
                   </span>
                 </span>
               </div>
+              {(rotulo || m.aviso) && (
+                <p className="flex items-center gap-1.5 pl-1 text-xs font-semibold text-warn-ink">
+                  {rotulo ?? "Fonte provisória"}
+                  {m.aviso && <InfoDica texto={m.aviso} />}
+                </p>
+              )}
               {m.total != null && (
                 <ul className="flex flex-wrap gap-x-4 gap-y-1 pl-1 text-xs text-ink-muted tabular-nums">
                   {m.por_plataforma.map((p, i) => (
@@ -213,6 +224,14 @@ export function Produtos({
               <TabelaProdutos m={m} lendo={!r.completo && !desistiu} />
             </li>
           ))}
+          {/* Marca sem itens (Denavita: itens só pelo Bling): o motivo, nunca uma tabela com 0. */}
+          {r.marcas
+            .filter((m) => m.status === "aguardando_autorizacao" && m.motivo && (!ids || ids.includes(m.id)))
+            .map((m) => (
+              <li key={m.id} className="text-xs text-ink-muted">
+                <b className="font-semibold text-ink">{m.label}:</b> {m.motivo}
+              </li>
+            ))}
         </ul>
       )}
     </section>

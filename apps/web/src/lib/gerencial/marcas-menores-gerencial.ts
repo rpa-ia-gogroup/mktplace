@@ -4,12 +4,18 @@
  * meta, na tendência do dia nem no corte por hora do Hoje (o Bling não traz a
  * hora do pedido). Ausência nunca vira 0: marca sem pedido não entra, e um total
  * com menores nunca é comparado com um anterior sem elas.
+ *
+ * Denavita (T-0119): o pedido dela vem do TikTok via Data Mart (fonte provisória,
+ * GMV com outra definição) e a Shopee e os itens seguem pendentes (Bling sem
+ * autorização). Ela fica FORA da soma da Gerencial (como antes) e a nota diz isso.
  */
 import type { Marketplace } from "../mock-data.ts";
 import type { OverviewData } from "../api-client.ts";
 import { fmtBrlFull, fmtNumCurto } from "../formatters.ts";
 import { deltaPct, type KpiDescriptor } from "./kpi-band.ts";
 import {
+  STATUS_FONTE_INDISPONIVEL,
+  STATUS_FONTE_PROVISORIA,
   canaisSemBase,
   motivoSemBase,
   variacaoPct,
@@ -48,6 +54,8 @@ export interface MenoresOk {
   pedidosAnterior: number | null;
   marcas: MarcaMenorGerencial[];
   aguardando: string[];
+  /** Marcas com fonte provisória (Denavita: TikTok via Data Mart): fora da soma, citadas na nota. */
+  provisorias: string[];
   /** Canal com receita agora e sem receita no anterior; null = nada a avisar. */
   motivo: string | null;
 }
@@ -87,11 +95,17 @@ export function menoresNaGerencial(
   if (d === null || !d.disponivel) return { estado: "indisponivel" };
   const marcas: MarcaMenorGerencial[] = [];
   const aguardando: string[] = [];
+  const provisorias: string[] = [];
   const anteriores: PorCanal[] = [];
   const semBase: string[] = [];
   const pedidosDasMarcas: (number | null)[] = [];
   const pedidosAnteriores: (number | null)[] = [];
   for (const m of d.marcas) {
+    if (ehFonteProvisoria(m)) {
+      // Outra definição de GMV e Shopee pendente: não soma na Gerencial; só a nota a cita.
+      if (!selecionadas || selecionadas.includes(m.id)) provisorias.push(m.label);
+      continue;
+    }
     if (selecionadas && !selecionadas.includes(m.id) && m.status !== "aguardando_autorizacao") continue;
     if (m.status === "aguardando_autorizacao") {
       if (!selecionadas || selecionadas.includes(m.id)) aguardando.push(m.label);
@@ -142,8 +156,14 @@ export function menoresNaGerencial(
     pedidosAnterior: comBase && !motivo && pedidosAnteriores.every((p) => p != null) ? soma2(pedidosAnteriores as number[]) : null,
     marcas,
     aguardando,
+    provisorias,
     motivo,
   };
+}
+
+/** Denavita pelo TikTok do Data Mart (ou essa fonte fora): não entra nas somas da Gerencial. */
+function ehFonteProvisoria(m: MarcaMenor): boolean {
+  return m.status === STATUS_FONTE_PROVISORIA || m.status === STATUS_FONTE_INDISPONIVEL;
 }
 
 export interface GmvBase {
@@ -242,12 +262,16 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
   if (m.total <= 0) return null;
   const nomes = m.marcas.map((x) => x.label).join(", ");
   const ag = m.aguardando.length ? ` ${m.aguardando.join(", ")}: aguardando autorização do Bling.` : "";
+  const provisorias = m.provisorias ?? []; // MenoresOk montado sem o campo (versao antiga): nada a dizer
+  const prov = provisorias.length
+    ? ` ${provisorias.join(", ")}: fora desta soma; o pedido vem só do TikTok via Data Mart (fonte provisória), e a Shopee e os itens seguem pendentes (conta do Bling sem autorização).`
+    : "";
   const variacao = hoje
     ? "A variação de hoje não as inclui (o Bling não traz a hora do pedido)."
     : variacaoInclui
       ? "A variação as inclui nos dois períodos."
       : `A variação não as inclui (${m.motivo ?? "sem base no período anterior"}).`;
-  return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag} ${variacao}`;
+  return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag}${prov} ${variacao}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +292,7 @@ const filtrarDict = <T,>(d: Record<string, T> | undefined, canais: readonly Mark
 export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], canais: readonly Marketplace[]): MarcasMenores {
   const marcas: MarcaMenor[] = [];
   for (const m of d.marcas) {
-    if (!ids.includes(m.id) || m.status === "aguardando_autorizacao") continue;
+    if (!ids.includes(m.id) || m.status === "aguardando_autorizacao" || ehFonteProvisoria(m)) continue;
     const por = m.por_plataforma.filter((p) => canais.includes(CANAL_DA_PLATAFORMA[p.plataforma]));
     const ant = filtrarDict(m.por_plataforma_anterior, canais);
     const ped = filtrarDict(m.pedidos_por_plataforma, canais);
