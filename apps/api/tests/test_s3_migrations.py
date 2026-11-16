@@ -215,7 +215,8 @@ def test_m02_head_unico_em_todas_as_revisoes():
     # VENDAS-REALIZADAS: head avancado de 045 para 046 (colunas anulaveis de nao
     # pagos na fato diaria e na de vendas por hora).
     # T-0118: head avancado de 046 para 047 (`total_shipments` anulavel na fato diaria).
-    assert heads == ["047"], f"head deveria ser unico e igual a 047, veio {heads}"
+    # T-0120b: head avancado de 047 para 048 (CHECK dos insumos aceita `shopee_repasse_escrow`).
+    assert heads == ["048"], f"head deveria ser unico e igual a 048, veio {heads}"
 
 
 def test_m03_as_tres_revisoes_novas_existem_uma_vez_cada():
