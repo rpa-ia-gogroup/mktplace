@@ -307,6 +307,16 @@ def _tiktok_taxa_plausivel(fees: float, gmv: float) -> bool:
     return gmv > 0 and fees / gmv * 100 >= _TIKTOK_TAXA_PLAUSIVEL_MIN_PCT
 
 
+def tiktok_repasse_status(settlement: float, fees: float, gmv: float) -> str:
+    """T-0115: "maduro" | "maturando" | "sem_dado" do repasse TikTok da marca
+    no periodo. Usada pelo Financeiro e pela Marca 360 (T-0115b)."""
+    if _tiktok_repasse_maduro(settlement, gmv):
+        return "maduro"
+    if settlement or fees:
+        return "maturando"
+    return "sem_dado"
+
+
 def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
     """Monta uma linha da matriz comparativa marca x canal (Canais Gate 2).
     `raw` e o dict agregado de uma (brand, marketplace_id) vindo do mart."""
@@ -1665,12 +1675,7 @@ def get_financeiro(
             # implausivel (< 1%) com repasse maduro tira so' a taxa.
             maduro = _tiktok_repasse_maduro(tk_settlement, tk_gmv)
             taxa_ok = maduro and _tiktok_taxa_plausivel(tk_fees, tk_gmv)
-            if maduro:
-                repasse_status = "maduro"
-            elif tk_settlement or tk_fees:
-                repasse_status = "maturando"
-            else:
-                repasse_status = "sem_dado"
+            repasse_status = tiktok_repasse_status(tk_settlement, tk_fees, tk_gmv)
             row.update({
                 "tiktok_gmv": tk_gmv or None,
                 "tiktok_settlement": (tk_settlement or None) if maduro else None,

@@ -1122,7 +1122,11 @@ class BrandDetailResponse(BaseModel):
     orders: int
     customers: int
     cvr_pct: Optional[float] = None
+    #: T-0115b: null quando o repasse TikTok esta' maturando/sem dado ou a
+    #: taxa e' implausivel (< 1% do GMV) — nunca 0,0%.
     cos_pct: Optional[float] = None
+    #: T-0115b: "maduro" | "maturando" (repasse < 30% do GMV) | "sem_dado".
+    tiktok_repasse_status: Optional[str] = None
     pct_video: Optional[float] = None
     pct_live: Optional[float] = None
     pct_card: Optional[float] = None

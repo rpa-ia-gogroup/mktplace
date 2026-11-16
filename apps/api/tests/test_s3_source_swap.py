@@ -42,6 +42,9 @@ ESPERADAS = {
         "marts.fact_tiktok_creator_daily",
         "marts.fact_tiktok_product_daily",
         "marts.fact_tiktok_channel_efficiency_daily",
+        # T-0115b: maturacao do repasse TikTok (mesma fonte do Financeiro).
+        "marts.fact_marketplace_daily_performance",
+        "marts.dim_loja",
     },
 }
 
@@ -154,7 +157,8 @@ def test_g09_brand_detail_atravessa_inteira_sem_datamart(monkeypatch):
     assert out["channel_funnel"] == [] and out["top_produtos"] == []
     # Gate V3-BE: +1 consulta, a de `available_months` (BE5).
     # T-0097: +1 consulta, a de frescor (`refreshed_at`), tambem pela Session.
-    assert len(sessao.consultas) == 7, sessao.consultas
+    # T-0115b: +1 consulta, a de maturacao do repasse TikTok.
+    assert len(sessao.consultas) == 8, sessao.consultas
     assert out["available_months"] == []
     assert out["refreshed_at"] is None
 
@@ -270,7 +274,8 @@ def test_g18_nenhum_campo_novo_nos_schemas():
     # Gate V3-BE: +1 campo, `available_months` (BE5). A contraprova abaixo
     # continua exata: nenhum campo de FRESCOR entrou aqui — o frescor do
     # snapshot ML vive em `/inteligencia`, que nao tem response_model.
-    assert len(BrandDetailResponse.model_fields) == 38
+    # T-0115b: +1 campo opcional, `tiktok_repasse_status`.
+    assert len(BrandDetailResponse.model_fields) == 39
     for campo in BrandDetailResponse.model_fields:
         assert not any(t in campo.lower() for t in
                        ("refreshed", "synced", "source_max", "stale", "coverage")), campo

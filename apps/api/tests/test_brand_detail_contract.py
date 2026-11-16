@@ -52,6 +52,9 @@ def _classifica(sql: str) -> str:
         return "creators"
     if "group by product_id" in s:
         return "products"
+    # T-0115b: maturacao do repasse TikTok (a unica que le `total_settlement`).
+    if "total_settlement" in s:
+        return "repasse"
     if "cos_pct" in s:
         return "monthly"
     if "new_videos_posted" in s and "order by date" in s:
@@ -59,11 +62,15 @@ def _classifica(sql: str) -> str:
     raise AssertionError(f"consulta inesperada em get_brand_detail: {s[:140]}")
 
 
+#: T-0115b: repasse maduro (67% do GMV, taxa 30%), o default das fixtures.
+REPASSE_MADURO = {"gmv": 1000.0, "total_settlement": 670.0, "total_fees": -300.0}
+
+
 @pytest.fixture
 def fixar(monkeypatch):
     dados: dict[str, list[dict]] = {
         "monthly": [], "daily": [], "creators": [], "products": [], "channel_funnel": [],
-        "available_months": [], "frescor": [],
+        "available_months": [], "frescor": [], "repasse": [dict(REPASSE_MADURO)],
     }
     vistas: list[tuple[str, str]] = []
 
@@ -125,6 +132,8 @@ CAMPOS_TOP_LEVEL = [
     "channel_funnel", "daily", "top_creators", "top_produtos",
     # T-0097: frescor da competencia, aditivo, no fim.
     "refreshed_at",
+    # T-0115b: maturacao do repasse TikTok, aditivo, no fim.
+    "tiktok_repasse_status",
 ]
 
 DEMOGRAFICOS = [c for c in CAMPOS_TOP_LEVEL if c.startswith(("viewers_pct", "followers_pct"))]
@@ -142,7 +151,7 @@ def test_b01_chaves_top_level_exatas_e_na_ordem(fixar):
 def test_b02_sao_46_chaves_das_quais_5_listas(fixar):
     """Gate V3-BE: +1 chave e +1 lista, `available_months`."""
     out = _chamar()
-    assert len(out) == 47  # T-0097: + `refreshed_at`
+    assert len(out) == 48  # T-0097: + `refreshed_at`; T-0115b: + `tiktok_repasse_status`
     listas = [k for k, v in out.items() if isinstance(v, list)]
     assert listas == ["available_months", "channel_funnel", "daily",
                       "top_creators", "top_produtos"]
@@ -168,8 +177,8 @@ def test_b05_as_seis_consultas_sao_executadas(fixar):
     _chamar()
     assert sorted(t for t, _ in vistas) == [
         "available_months", "channel_funnel", "creators", "daily", "frescor", "monthly",
-        "products"]
-    assert len(vistas) == 7  # T-0097: + a consulta de frescor
+        "products", "repasse"]
+    assert len(vistas) == 8  # T-0097: + frescor; T-0115b: + repasse
 
 
 def test_b06_fonte_vazia_produz_zeros_e_listas_vazias(fixar):
@@ -616,3 +625,67 @@ def test_b41_rota_preserva_refreshed_at_no_response_model():
                 refreshed_at="2026-08-01T10:05:00Z")
     validado = rota.response_model.model_validate(base).model_dump()
     assert validado["refreshed_at"] == "2026-08-01T10:05:00Z"
+
+
+# ===========================================================================
+# T-0115b - COS da Marca 360 segue a regra "maturando" do repasse TikTok
+# ===========================================================================
+
+@pytest.mark.parametrize("repasse,status", [
+    # nov/26: repasse quase zerado (0,5% do GMV) e taxa 0,01% -> maturando.
+    ([{"gmv": 1000.0, "total_settlement": 5.0, "total_fees": -0.1}], "maturando"),
+    # repasse abaixo de 30% do GMV, taxa ainda plausivel -> maturando.
+    ([{"gmv": 1000.0, "total_settlement": 290.0, "total_fees": -120.0}], "maturando"),
+    # fato sem repasse e sem taxa na competencia -> sem dado.
+    ([{"gmv": 1000.0, "total_settlement": 0, "total_fees": 0}], "sem_dado"),
+    ([], "sem_dado"),
+])
+def test_b42_repasse_imaturo_ou_ausente_zera_o_cos_para_null(fixar, repasse, status):
+    dados, _ = fixar
+    dados["monthly"] = [dict(LINHA_MENSAL)]
+    dados["repasse"] = repasse
+    out = _chamar()
+    assert out["cos_pct"] is None
+    assert out["tiktok_repasse_status"] == status
+
+
+def test_b43_repasse_maduro_mantem_o_cos_da_fonte(fixar):
+    dados, _ = fixar
+    dados["monthly"] = [dict(LINHA_MENSAL)]
+    out = _chamar()
+    assert out["cos_pct"] == 12.35
+    assert out["tiktok_repasse_status"] == "maduro"
+
+
+def test_b44_repasse_maduro_com_taxa_implausivel_tira_so_o_cos(fixar):
+    dados, _ = fixar
+    linha = dict(LINHA_MENSAL)
+    dados["monthly"] = [linha]
+    # taxa do fato de repasse < 1% do GMV
+    dados["repasse"] = [{"gmv": 1000.0, "total_settlement": 670.0, "total_fees": -5.0}]
+    out = _chamar()
+    assert out["cos_pct"] is None and out["tiktok_repasse_status"] == "maduro"
+    # COS da propria fonte < 1% (0,01%), repasse maduro: tambem ausente.
+    dados["repasse"] = [dict(REPASSE_MADURO)]
+    linha["cos_pct"] = 0.01
+    assert _chamar()["cos_pct"] is None
+
+
+def test_b45_consulta_de_repasse_usa_a_regra_e_o_fato_do_financeiro(fixar):
+    from app.services import performance_service as ps
+    _, vistas = fixar
+    _chamar()
+    sql = _sql_de(vistas, "repasse")
+    assert "marts.fact_marketplace_daily_performance" in sql
+    assert f"f.marketplace_id = {ps.TIKTOK_ID}" in sql
+    assert f"l.brand_key = '{MARCA}'" in sql
+    # mesma funcao nos dois lugares, sem copia da regra
+    assert gs.tiktok_repasse_status is ps.tiktok_repasse_status
+    assert ps.tiktok_repasse_status(299.0, 100.0, 1000.0) == "maturando"
+    assert ps.tiktok_repasse_status(300.0, 100.0, 1000.0) == "maduro"
+
+
+def test_b46_schema_publica_o_status_como_opcional():
+    from app.schemas.performance import BrandDetailResponse
+    campo = BrandDetailResponse.model_fields["tiktok_repasse_status"]
+    assert campo.is_required() is False and campo.default is None

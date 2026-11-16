@@ -16,6 +16,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.database import datamart_engine
+from app.services.performance_service import (
+    TIKTOK_ID,
+    _TIKTOK_TAXA_PLAUSIVEL_MIN_PCT,
+    _tiktok_taxa_plausivel,
+    tiktok_repasse_status,
+)
 
 #: Fuso do negocio. O dia operacional e' o dia no Brasil, nao o do processo: a API
 #: roda em UTC no Render, os testes rodam no fuso da maquina e um worker futuro
@@ -1929,11 +1935,39 @@ def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
     channel_funnel_rows = _query(db, sql_channel_funnel)
     refreshed_at = _frescor_mais_antigo(_query(db, sql_frescor))
 
+    # T-0115b: o fato de conteudo nao tem repasse. A maturacao do repasse
+    # TikTok vem do mesmo fato e pela mesma regra do Financeiro (T-0115).
+    sql_repasse = f"""
+        SELECT COALESCE(SUM(f.gmv), 0)              AS gmv,
+               COALESCE(SUM(f.total_settlement), 0) AS total_settlement,
+               COALESCE(SUM(f.total_fees), 0)       AS total_fees
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.marketplace_id = {TIKTOK_ID}
+          AND l.brand_key = '{brand}'
+          AND f.date BETWEEN '{start}' AND '{end}'
+    """
+    repasse_rows = _query(db, sql_repasse)
+
     m = monthly_rows[0] if monthly_rows else {}
 
     def _r(v, decimals=2):
         f = _float(v)
         return round(f, decimals) if v is not None and f != 0 else None
+
+    # T-0115b: repasse maturando (< 30% do GMV) ou sem dado = COS ausente,
+    # nunca 0,0%. Com repasse maduro, taxa < 1% do GMV tambem e' ausente.
+    rp = repasse_rows[0] if repasse_rows else {}
+    rp_gmv = _float(rp.get("gmv"))
+    rp_fees = abs(_float(rp.get("total_fees")))
+    repasse_status = tiktok_repasse_status(_float(rp.get("total_settlement")), rp_fees, rp_gmv)
+    cos_pct = _r(m.get("cos_pct"))
+    if (
+        repasse_status != "maduro"
+        or not _tiktok_taxa_plausivel(rp_fees, rp_gmv)
+        or (cos_pct is not None and cos_pct < _TIKTOK_TAXA_PLAUSIVEL_MIN_PCT)
+    ):
+        cos_pct = None
 
     return {
         "brand": brand,
@@ -1944,7 +1978,7 @@ def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
         "orders": int(_float(m.get("orders", 0))),
         "customers": int(_float(m.get("customers", 0))),
         "cvr_pct": _r(m.get("cvr_pct")),
-        "cos_pct": _r(m.get("cos_pct")),
+        "cos_pct": cos_pct,
         "pct_video": _r(m.get("pct_video"), 1),
         "pct_live": _r(m.get("pct_live"), 1),
         "pct_card": _r(m.get("pct_card"), 1),
@@ -2025,6 +2059,8 @@ def get_brand_detail(db: Session, brand: str, year: int, month: int) -> dict:
             for r in products
         ],
         "refreshed_at": refreshed_at,
+        # T-0115b: aditivo, no fim. "maduro" | "maturando" | "sem_dado".
+        "tiktok_repasse_status": repasse_status,
     }
 
 
