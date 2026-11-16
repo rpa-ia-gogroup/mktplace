@@ -16,22 +16,26 @@ export interface PeriodTableKeyInput {
   offset: number;
   sortColumn: string | null;
   sortDirection: string | null;
+  /** So' ML: sinal de acao filtrado. */
+  signal?: string;
 }
 
 export function buildPeriodTableKey(input: PeriodTableKeyInput): string {
   return [
     input.brand, input.period, input.bucket ?? "", input.offset,
     input.sortColumn ?? "", input.sortDirection ?? "",
+    ...(input.signal ? [input.signal] : []),
   ].join("|");
 }
 
 export interface PeriodSummaryKeyInput {
   brand: string;
   period: string;
+  signal?: string;
 }
 
 export function buildPeriodSummaryKey(input: PeriodSummaryKeyInput): string {
-  return [input.brand, input.period].join("|");
+  return [input.brand, input.period, ...(input.signal ? [input.signal] : [])].join("|");
 }
 
 /**

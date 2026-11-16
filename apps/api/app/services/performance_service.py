@@ -3659,8 +3659,12 @@ def get_produtos_tiktok(
     sort_by: str | None = None,
     sort_dir: str | None = None,
     pareto_bucket: str | None = None,
+    *,
+    start: date | None = None,
+    end: date | None = None,
 ) -> dict:
-    start, end = _month_bounds(year, month)
+    # start/end: intervalo livre (a fato e' diaria); sem eles, o mes.
+    start, end = (start, end) if start and end else _month_bounds(year, month)
     brands_tuple = tuple(sorted(_TK_BRANDS))
     filters = ["brand IN :brands", "date BETWEEN :start AND :end"]
     params: dict = {"brands": brands_tuple, "start": start, "end": end, "limit": limit, "offset": offset}
@@ -3786,10 +3790,11 @@ def get_produtos_tiktok(
     }
 
 
-def get_produtos_tiktok_summary(db: Session, brand: str | None, year: int, month: int) -> dict:
-    """Cards A/B/C/D — mesmos filtros da tabela (brand, ref_month/mes), exceto
+def get_produtos_tiktok_summary(db: Session, brand: str | None, year: int, month: int, *,
+                                start: date | None = None, end: date | None = None) -> dict:
+    """Cards A/B/C/D — mesmos filtros da tabela (brand, periodo), exceto
     o proprio filtro de bucket."""
-    start, end = _month_bounds(year, month)
+    start, end = (start, end) if start and end else _month_bounds(year, month)
     brands_tuple = tuple(sorted(_TK_BRANDS))
     filters = ["brand IN :brands", "date BETWEEN :start AND :end"]
     params: dict = {"brands": brands_tuple, "start": start, "end": end}

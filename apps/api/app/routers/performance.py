@@ -264,9 +264,19 @@ def daily(
 
 
 def _ml_mes_sem_filtros_lifetime(*filtros: Optional[str]) -> None:
-    # Sinal, status e velocidade sao regras do ranking acumulado do Airflow; nao existem por mes.
+    # Status e velocidade sao regras do ranking acumulado do Airflow; nao existem no periodo.
     if any(filtros):
-        raise HTTPException(422, "action_signal, product_status e revenue_velocity so' valem sem ref_month.")
+        raise HTTPException(422, "product_status e revenue_velocity so' valem sem periodo.")
+
+
+def _periodo_produtos(ref_month: Optional[str], data_inicio: Optional[date], data_fim: Optional[date],
+                      ) -> EffectivePeriod:
+    """data_inicio/data_fim > ref_month (atalho do mes) > mes anterior. Mesmas travas do filtro global."""
+    return resolve_period(ref_month=ref_month, date_from=data_inicio, date_to=data_fim,
+                          default_mode="previous_month", today=today_brt())
+
+
+_PERIODO_DESC = "Com data_inicio/data_fim (YYYY-MM-DD) ou ref_month (YYYY-MM): produtos do periodo (Data Mart). Sem nenhum, ranking acumulado."
 
 
 def _ml_mes(ler):
@@ -280,7 +290,9 @@ def _ml_mes(ler):
 @router.get("/produtos/ml/summary", response_model=ProdutosMLSummaryResponse)
 def produtos_ml_summary(
     brand: Optional[str] = Query(None),
-    ref_month: Optional[str] = Query(None, description="YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado."),
+    ref_month: Optional[str] = Query(None, description=_PERIODO_DESC),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
     action_signal: Optional[str] = Query(None),
     product_status: Optional[str] = Query(None),
     revenue_velocity: Optional[str] = Query(None),
@@ -302,17 +314,21 @@ def produtos_ml_summary(
         raise HTTPException(422, f"revenue_velocity '{revenue_velocity}' invalido.")
     if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
         raise HTTPException(422, "action_signal invalido.")
-    if ref_month:
-        _ml_mes_sem_filtros_lifetime(action_signal, product_status, revenue_velocity)
-        year, month = _parse_month(ref_month)
-        return _ml_mes(lambda: ml_mes_svc.get_resumo(datamart_leitura.consultar, year, month, brand))
+    if ref_month or data_inicio or data_fim:
+        _ml_mes_sem_filtros_lifetime(product_status, revenue_velocity)
+        per = _periodo_produtos(ref_month, data_inicio, data_fim)
+        return _ml_mes(lambda: ml_mes_svc.get_resumo(
+            datamart_leitura.consultar, per.start, per.end, brand, action_signal, per.ref_month,
+        ))
     return perf_svc.get_produtos_ml_summary(_require_db(db), brand, action_signal, product_status, revenue_velocity)
 
 
 @router.get("/produtos/ml", response_model=ProdutosMLResponse)
 def produtos_ml(
     brand: Optional[str] = Query(None),
-    ref_month: Optional[str] = Query(None, description="YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado."),
+    ref_month: Optional[str] = Query(None, description=_PERIODO_DESC),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
     pareto_bucket: Optional[str] = Query(None),
     action_signal: Optional[str] = Query(None),
     product_status: Optional[str] = Query(None),
@@ -334,11 +350,12 @@ def produtos_ml(
     if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
         raise HTTPException(422, f"action_signal invalido.")
     _validate_sort_by(sort_by, perf_svc.PRODUTOS_ML_SORT_COLUMNS)
-    if ref_month:
-        _ml_mes_sem_filtros_lifetime(action_signal, product_status, revenue_velocity)
-        year, month = _parse_month(ref_month)
+    if ref_month or data_inicio or data_fim:
+        _ml_mes_sem_filtros_lifetime(product_status, revenue_velocity)
+        per = _periodo_produtos(ref_month, data_inicio, data_fim)
         return _ml_mes(lambda: ml_mes_svc.get_tabela(
-            datamart_leitura.consultar, year, month, brand, pareto_bucket, limit, offset, sort_by, sort_dir,
+            datamart_leitura.consultar, per.start, per.end, brand, pareto_bucket, limit, offset, sort_by, sort_dir,
+            action_signal, per.ref_month,
         ))
     return perf_svc.get_produtos_ml(
         _require_db(db), brand, pareto_bucket, action_signal, product_status, revenue_velocity,
@@ -350,6 +367,8 @@ def produtos_ml(
 def produtos_tiktok(
     brand: Optional[str] = Query(None),
     ref_month: Optional[str] = Query(None),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
     pareto_bucket: Optional[str] = Query(None),
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -362,9 +381,10 @@ def produtos_tiktok(
     if pareto_bucket and pareto_bucket not in VALID_PARETO_BUCKETS:
         raise HTTPException(422, f"pareto_bucket '{pareto_bucket}' invalido.")
     _validate_sort_by(sort_by, perf_svc.PRODUTOS_TIKTOK_SORT_COLUMNS)
-    year, month = _parse_month(ref_month)
+    per = _periodo_produtos(ref_month, data_inicio, data_fim)
     return perf_svc.get_produtos_tiktok(
-        _require_db(db), brand, year, month, limit, offset, sort_by, sort_dir, pareto_bucket,
+        _require_db(db), brand, per.start.year, per.start.month, limit, offset, sort_by, sort_dir, pareto_bucket,
+        start=per.start, end=per.end,
     )
 
 
@@ -372,13 +392,17 @@ def produtos_tiktok(
 def produtos_tiktok_summary(
     brand: Optional[str] = Query(None),
     ref_month: Optional[str] = Query(None),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
     db: Session = Depends(get_db),
 ):
     """Cards A/B/C/D dinamicos — mesmos filtros da tabela (brand, ref_month), exceto pareto_bucket."""
     if brand and brand not in VALID_TK_BRANDS:
         raise HTTPException(422, f"Brand '{brand}' invalida para TikTok.")
-    year, month = _parse_month(ref_month)
-    return perf_svc.get_produtos_tiktok_summary(_require_db(db), brand, year, month)
+    per = _periodo_produtos(ref_month, data_inicio, data_fim)
+    return perf_svc.get_produtos_tiktok_summary(
+        _require_db(db), brand, per.start.year, per.start.month, start=per.start, end=per.end,
+    )
 
 
 @router.get("/produtos/shopee", response_model=ProdutosShopeeResponse)

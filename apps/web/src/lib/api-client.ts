@@ -646,6 +646,8 @@ export interface ProdutoMLRow {
   pareto_bucket: string | null;
   revenue_velocity: string | null;
   ad_roas: number | null;
+  /** Periodo: ROAS so' da venda direta (o ad_roas inclui a indireta, como no ML). */
+  ad_roas_direto?: number | null;
   ad_acos_pct: number | null;
   ad_spend: number | null;
   ad_efficiency: string | null;
@@ -664,6 +666,8 @@ export interface ProdutosMLResponse {
   refreshed_at: string | null;
   // Com ref_month (scope "mes"): ultimo dia com Ads no relatorio do ML.
   ref_month?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
   ads_ate?: string | null;
 }
 
@@ -693,9 +697,18 @@ export interface ProdutosTikTokResponse {
   items: ProdutoTikTokRow[];
 }
 
+/** Periodo de Produtos: "YYYY-MM" (ref_month) ou "YYYY-MM-DD..YYYY-MM-DD" (data_inicio/data_fim). */
+function setPeriodoProdutos(qs: URLSearchParams, period: string): void {
+  const [inicio, fim] = period.split("..");
+  if (fim) {
+    qs.set("data_inicio", inicio);
+    qs.set("data_fim", fim);
+  } else qs.set("ref_month", period);
+}
+
 export interface ProdutoMLListParams {
   brand?: string;
-  // YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado (contrato do Oraculo).
+  // YYYY-MM ou inicio..fim: produtos do periodo (Data Mart). Sem ele, ranking acumulado (contrato do Oraculo).
   period?: string;
   pareto_bucket?: string;
   action_signal?: string;
@@ -710,7 +723,7 @@ export interface ProdutoMLListParams {
 export function fetchProdutosML(params: ProdutoMLListParams): Promise<ProdutosMLResponse | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
-  if (params.period) qs.set("ref_month", params.period);
+  if (params.period) setPeriodoProdutos(qs, params.period);
   if (params.pareto_bucket) qs.set("pareto_bucket", params.pareto_bucket);
   if (params.action_signal) qs.set("action_signal", params.action_signal);
   if (params.product_status) qs.set("product_status", params.product_status);
@@ -776,7 +789,7 @@ export function fetchProdutosShopee(params: ProdutoChannelListParams): Promise<P
 export function fetchProdutosTikTok(params: ProdutoChannelListParams): Promise<ProdutosTikTokResponse | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
-  qs.set("ref_month", params.period ?? refMonth());
+  setPeriodoProdutos(qs, params.period ?? refMonth());
   if (params.pareto_bucket) qs.set("pareto_bucket", params.pareto_bucket);
   qs.set("limit", String(params.limit ?? 25));
   qs.set("offset", String(params.offset ?? 0));
@@ -812,6 +825,8 @@ export interface ProdutosMLSummary {
   // nunca media simples de avg_price por linha.
   avg_price_weighted: number | null;
   ref_month?: string | null;
+  data_inicio?: string | null;
+  data_fim?: string | null;
   ads_ate?: string | null;
 }
 
@@ -824,7 +839,7 @@ export function fetchProdutosMLSummary(params: {
 } = {}): Promise<ProdutosMLSummary | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
-  if (params.period) qs.set("ref_month", params.period);
+  if (params.period) setPeriodoProdutos(qs, params.period);
   if (params.action_signal) qs.set("action_signal", params.action_signal);
   if (params.product_status) qs.set("product_status", params.product_status);
   if (params.revenue_velocity) qs.set("revenue_velocity", params.revenue_velocity);
@@ -976,7 +991,7 @@ export interface ProdutosChannelSummary {
 export function fetchProdutosTikTokSummary(params: { brand?: string; period?: string } = {}): Promise<ProdutosChannelSummary | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
-  qs.set("ref_month", params.period ?? refMonth());
+  setPeriodoProdutos(qs, params.period ?? refMonth());
   return withCache(`produtos-tk-summary:${qs}`, () =>
     apiFetch<ProdutosChannelSummary>(`/api/v1/performance/produtos/tiktok/summary?${qs}`)
   );

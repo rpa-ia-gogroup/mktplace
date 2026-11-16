@@ -41,9 +41,9 @@ test("ultima pagina parcial trunca o 'ate' no total, nao no offset+limit", () =>
   assert.equal(line, "Mercado Livre · Todas as marcas · ranking acumulado atual · 101–110 de 110 produtos");
 });
 
-test("adsAteParcial: marca so' quando o Ads nao cobre o mes inteiro", () => {
-  assert.equal(adsAteParcial("2026-11", "2026-11-15"), "Ads até 15/11");
-  assert.equal(adsAteParcial("2026-10", "2026-10-31"), null);
-  assert.equal(adsAteParcial("2026-02", "2026-02-28"), null);
-  assert.equal(adsAteParcial("2026-10", null), null);
+test("adsAteParcial: marca so' quando o Ads nao cobre o periodo inteiro", () => {
+  assert.equal(adsAteParcial("2026-11-15", "2026-11-14"), "Ads até 14/11");
+  assert.equal(adsAteParcial("2026-10-31", "2026-10-31"), null);
+  assert.equal(adsAteParcial("2026-11-15", "2026-11-15"), null);
+  assert.equal(adsAteParcial("2026-10-31", null), null);
 });
