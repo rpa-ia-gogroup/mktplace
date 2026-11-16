@@ -487,7 +487,7 @@ function ProdutosPageInner() {
   const filtros = (
     <div className="flex flex-wrap items-center gap-2">
       {marcaSelect}
-        // 390: a trilha rola sozinha; a pagina nao ganha rolagem lateral.
+      {/* 390: a trilha rola sozinha; a pagina nao ganha rolagem lateral. */}
         <div className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
           <Segmented rotulo="Período" opcoes={monthOptions.map((m) => ({ valor: m.value, texto: m.label }))} valor={period} aoEscolher={setPeriod} className="whitespace-nowrap" />
         </div>
