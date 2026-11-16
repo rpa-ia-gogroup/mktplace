@@ -12,10 +12,11 @@
  * taxa fica neutra; o que tem regra (cobertura, fonte vencida, pendente
  * vencido) vem como alerta da API.
  */
+import { AlertTriangle, CalendarClock, ClipboardList, Gauge } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { FaixaKpis } from "@/components/expedicao/SecoesExpedicao";
-import { KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
+import { CartaoComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
@@ -184,39 +185,40 @@ function Conteudo({ r }: { r: RespostaLdrShopee }) {
         </ul>
       )}
       <FaixaKpis rotulo="LDR operacional da Shopee" colunas={4}>
-        <KpiComAjuda
-          variante="gerencial"
+        {/* Taxa neutra (sem pilula de estado): a Shopee nao publica a referencia deste recorte. */}
+        <CartaoComAjuda
           ajuda="shopee.ldr"
+          extras={[AVISO_LDR_SHOPEE]}
           rotulo="LDR operacional"
+          icone={Gauge}
+          cor="rgb(var(--tc-kpi-ticket))"
           valor={<TaxaComBase numerador={l.late} base={l.base} taxa={l.rate} />}
-          comparacao={motivo}
-          contexto={AVISO_LDR_SHOPEE}
-          tom={l.rate === null ? "ausente" : "neutro"}
-          destaque
+          ausente={l.rate === null}
+          legenda={motivo}
         />
-        <KpiComAjuda
-          variante="gerencial"
+        <CartaoComAjuda
           ajuda="shopee.ldr_base"
           rotulo="Base (prazos vencidos)"
+          icone={ClipboardList}
+          cor="rgb(var(--tc-kpi-gmv))"
           valor={l.mature_due_days ? numero(l.base) : VALOR_AUSENTE}
-          tom={l.mature_due_days ? "neutro" : "ausente"}
-          destaque
+          ausente={!l.mature_due_days}
         />
-        <KpiComAjuda
-          variante="gerencial"
+        <CartaoComAjuda
           ajuda="shopee.ldr_atrasados"
           rotulo="Atrasados"
+          icone={AlertTriangle}
+          cor="rgb(var(--tc-kpi-prazo))"
           valor={l.mature_due_days ? numero(l.late) : VALOR_AUSENTE}
-          comparacao={`${numero(l.shipped_late)} coletados depois do prazo · ${numero(l.pending_overdue)} vencidos sem coleta`}
-          tom={l.mature_due_days ? "neutro" : "ausente"}
-          destaque
+          ausente={!l.mature_due_days}
+          legenda={`${numero(l.shipped_late)} coletados depois do prazo · ${numero(l.pending_overdue)} vencidos sem coleta`}
         />
-        <KpiComAjuda
-          variante="gerencial"
+        <CartaoComAjuda
           ajuda="shopee.ldr_em_risco"
-          rotulo="Vencem hoje ou amanhã"
+          rotulo="Vencem hoje/amanhã"
+          icone={CalendarClock}
+          cor="rgb(var(--tc-kpi-pedidos))"
           valor={numero(l.pending_at_risk)}
-          destaque
         />
       </FaixaKpis>
       {cobertura && (

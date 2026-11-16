@@ -30,7 +30,8 @@ export function FaixaKpis({
   // IDENTIDADE-GERENCIAL: 1 coluna no celular (rotulo sem quebrar em 3
   // linhas), como no Full e na CX; a grade de antes a partir de `sm`.
   const grade = secundaria
-    ? "grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5"
+    ? // F1: o cartao unico pede largura para o rotulo inteiro (6 secundarios = 2 linhas de 3).
+      "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3"
     : colunas === 6
       ? "grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-6"
       : colunas === 3

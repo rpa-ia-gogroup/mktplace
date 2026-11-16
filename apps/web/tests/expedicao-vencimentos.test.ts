@@ -49,7 +49,8 @@ const {
   queryDaLista,
   queryDosTravados,
 } = await import("../src/lib/expedicao-travados.ts");
-const { KpiComAjuda } = await import("../src/components/expedicao/KpiComAjuda.tsx");
+const { CartaoComAjuda } = await import("../src/components/expedicao/KpiComAjuda.tsx");
+const { Inbox } = await import("lucide-react");
 const { default: EvolucaoPorMarca } = await import("../src/components/expedicao/EvolucaoPorMarca.tsx");
 
 function totais(over: Partial<Totais> = {}): Totais {
@@ -233,9 +234,9 @@ test("popup: 'Por que travou' so' na lista de travados", () => {
 // ===========================================================================
 // "ⓘ" ao lado do titulo, com o que cada classificacao trata
 // ===========================================================================
-test("KpiComAjuda poe o ⓘ ao lado do rotulo, antes do numero", () => {
+test("CartaoComAjuda poe o ⓘ ao lado do rotulo, antes do numero", () => {
   const html = renderToStaticMarkup(
-    h(KpiComAjuda, { ajuda: "shopee.due24h", rotulo: "Vence em 24h", valor: "378", comparacao: "nota" }),
+    h(CartaoComAjuda, { ajuda: "shopee.due24h", rotulo: "Vence em 24h", icone: Inbox, cor: "rgb(var(--tc-kpi-pedidos))", valor: "378", legenda: "nota" }),
   );
   const iInfo = html.indexOf('role="img"');
   const iValor = html.indexOf("378");

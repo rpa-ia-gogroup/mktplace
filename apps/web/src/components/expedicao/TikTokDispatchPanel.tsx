@@ -80,14 +80,13 @@ import LayoutExpedicao, {
   CorpoGestor,
   TEXTO_ESTADO,
 } from "@/components/expedicao/LayoutExpedicao";
-import DeltaBadge from "@/components/ui/DeltaBadge";
-import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
+import { Ajuda, CartaoComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
 import PainelAtencao from "@/components/expedicao/PainelAtencao";
 import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
-import { Gauge } from "lucide-react";
+import { AlertTriangle, CalendarClock, CheckCircle2, ClipboardList, Gauge } from "lucide-react";
 import InfoDica from "@/components/ui/InfoDica";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
@@ -451,28 +450,19 @@ export default function TikTokDispatchPanel({
   // A LDR da janela sobe da secao "Prazo" para a faixa.
   const deltaLdr = ldr ? deltaDaLdr(ldr) : null;
   const cartaoLdr = ldr ? (
-    <KpiComAjuda
+    <CartaoComAjuda
       ajuda="tiktok.ldr"
-      variante="gerencial"
       icone={Gauge}
-      // CARDS-KPIBAND: sparkline dos vencimentos FECHADOS; delta em p.p. contra
-      // a janela anterior do mesmo tamanho (API-2), so' com as duas taxas.
-      identidade="ticket"
+      cor="rgb(var(--tc-kpi-ticket))"
+      // CARDS-KPIBAND: linha dos vencimentos FECHADOS; o "antes" e' a janela
+      // anterior do mesmo tamanho (API-2), so' com as duas taxas.
       serie={serieDaLdr(ldr.daily)}
-      granularidade="day"
-      delta={deltaLdr ? <DeltaBadge pct={deltaLdr.pp} unidade="pp" tone={Math.abs(deltaLdr.pp) < 0.05 ? "neutral" : "lower_is_better"} /> : undefined}
-      antes={
-        deltaLdr && ldr.previous
-          ? `antes ${formatarTaxa(deltaLdr.antes / 100, 1)} · ${formatarDiaCurto(ldr.previous.from)}–${formatarDiaCurto(ldr.previous.to)}`
-          : undefined
-      }
+      tendencia="Tendência: LDR por dia de vencimento fechado"
       rotulo="LDR da janela"
       // A taxa PUBLICADA pela API, com 1 casa como os outros cartoes; a base
       // ("6.883 de 56.970") em title + sr-only. "Medição interna" fica no ⓘ.
       valor={
-        ldr.rate === null ? (
-          "—"
-        ) : (
+        ldr.rate === null ? null : (
           <span className="relative" title={`${formatarInteiro(ldr.late)} de ${formatarInteiro(ldr.base)}`}>
             {formatarTaxa(ldr.rate, 1)}
             <span className="sr-only">
@@ -481,14 +471,20 @@ export default function TikTokDispatchPanel({
           </span>
         )
       }
-      comparacao={
+      // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
+      pilula={ldr.rate === null ? null : ldr.above_target ? { texto: "Acima da meta", tom: "crit" } : { texto: "Dentro da meta", tom: "ok" }}
+      legenda={
         ldr.rate === null
           ? "Sem vencimento maduro na janela."
-          : // "acima/dentro da meta" ja' esta' na tinta do valor e no ⓘ: 1 linha a menos.
-            `meta ${formatarTaxa(META_TIKTOK_LDR, 0)}`
+          : [
+              `meta ${formatarTaxa(META_TIKTOK_LDR, 0)}`,
+              deltaLdr && ldr.previous
+                ? `antes ${formatarTaxa(deltaLdr.antes / 100, 1)} (${formatarDiaCurto(ldr.previous.from)}–${formatarDiaCurto(ldr.previous.to)})`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")
       }
-      // Sem taxa nao ha veredito: verde aqui leria ausencia como acerto.
-      tom={ldr.rate === null ? "ausente" : ldr.above_target ? "critico" : "bom"}
     />
   ) : null;
 
@@ -531,32 +527,36 @@ export default function TikTokDispatchPanel({
           {/* `base` e `late` da LDR somam SO' vencimentos fechados. Sem nenhum
               fechado (o caso da serie vencida) eles valem zero por construcao,
               nao por medicao: a tela mostra ausencia, nao "0 venciam". */}
-          <KpiComAjuda
+          <CartaoComAjuda
             ajuda="tiktok.venciam"
-            variante="gerencial"
             rotulo="Venciam no período"
+            icone={ClipboardList}
+            cor="rgb(var(--tc-kpi-gmv))"
             valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.base)}
-            tom={semVencimentoFechado ? "ausente" : "neutro"}
+            ausente={semVencimentoFechado}
           />
-          <KpiComAjuda
+          <CartaoComAjuda
             ajuda="tiktok.atrasaram"
-            variante="gerencial"
             rotulo="Já atrasaram"
+            icone={AlertTriangle}
+            cor="rgb(var(--tc-kpi-prazo))"
             valor={semVencimentoFechado ? VALOR_SEM_TAXA : formatarInteiro(ldr.late)}
-            comparacao={`${formatarInteiro(ldr.pending_overdue)} venceram e ainda não saíram.`}
-            tom={semVencimentoFechado ? "ausente" : ldr.late > 0 ? "critico" : "bom"}
+            ausente={semVencimentoFechado}
+            pilula={semVencimentoFechado ? null : ldr.late > 0 ? { texto: "Com atraso", tom: "crit" } : { texto: "Em dia", tom: "ok" }}
+            legenda={`${formatarInteiro(ldr.pending_overdue)} venceram e ainda não saíram.`}
           />
-          <KpiComAjuda
+          <CartaoComAjuda
             ajuda="tiktok.vence_hoje_amanha"
-            variante="gerencial"
             rotulo="Vencem hoje ou amanhã (janela da LDR)"
+            icone={CalendarClock}
+            cor="rgb(var(--tc-kpi-pedidos))"
             valor={formatarInteiro(ldr.pending_at_risk)}
-            tom={ldr.pending_at_risk > 0 ? "atencao" : "neutro"}
           />
-          <KpiComAjuda
+          <CartaoComAjuda
             ajuda="tiktok.pendente_no_prazo"
-            variante="gerencial"
             rotulo="Pendentes no prazo"
+            icone={CheckCircle2}
+            cor="rgb(var(--tc-kpi-atendimento))"
             valor={formatarInteiro(ldr.pending_on_time)}
           />
         </FaixaKpis>
