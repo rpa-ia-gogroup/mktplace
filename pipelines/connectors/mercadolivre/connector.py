@@ -101,6 +101,9 @@ SELECT
     g.cancelled_orders          AS canceled_orders,
     g.cancel_rate_pct,
     g.delivered_shipments       AS delivered_orders,
+    -- T-0118: denominador do "nao entregue" (envios, nao pedidos: pack/carrinho
+    -- junta pedidos num envio). Mesma populacao do numerador acima.
+    g.total_shipments,
     g.avg_delivery_days,
     g.seller_shipping_cost,
     g.shipping_pct_of_gmv,
