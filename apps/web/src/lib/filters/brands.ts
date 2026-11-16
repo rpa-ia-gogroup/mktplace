@@ -12,7 +12,9 @@ export const ALL_BRAND_KEYS: readonly string[] = ALL_BRAND_OPTIONS.map((b) => b.
 /**
  * Marcas menores: o dado vem do Bling (`/marcas-menores`), nao do Data Mart. Vivem no
  * filtro de marca global, mas as APIs do Data Mart nunca as recebem (ver `semMarcasMenores`).
- * A Denavita entra aqui quando a conta dela no Bling for autorizada.
+ * A Denavita NAO entra aqui (T-0119): a aba /marcas-menores nao filtra por marca, e no filtro
+ * global ela entraria na soma da Gerencial com o TikTok do Data Mart (fonte provisoria, outra
+ * definicao de GMV) e sem a Shopee. Entra quando a conta dela no Bling for autorizada.
  */
 export const MARCAS_MENORES_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "yenzah", label: "YENZAH" },

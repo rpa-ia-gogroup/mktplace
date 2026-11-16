@@ -2,7 +2,15 @@
  * Marcas menores (Denavita, Yenzah, Auá, By Samia) — contrato de
  * `GET /api/v1/performance/marcas-menores` (fonte: API do Bling v3) e a
  * leitura pura dele. Ausência nunca vira 0: `total` null = sem dado.
+ * Denavita (T-0119): TikTok via Data Mart (`gold.tiktok_brand_daily`, fonte
+ * provisória) e Shopee pendente (conta do Bling sem autorização).
  */
+
+/** Marca com fonte provisória (Denavita: TikTok via Data Mart; Shopee pendente). */
+export const STATUS_FONTE_PROVISORIA = "parcial_fonte_provisoria";
+/** A fonte provisória falhou (Data Mart indisponível): `total` null com `motivo`. */
+export const STATUS_FONTE_INDISPONIVEL = "fonte_indisponivel";
+export const ROTULO_FONTE_PROVISORIA = "TikTok via Data Mart; Shopee pendente";
 export interface PlataformaValor {
   plataforma: string;
   faturamento: number;
@@ -18,8 +26,15 @@ export interface DiaMarca {
 export interface MarcaMenor {
   id: string;
   label: string;
-  /** "aguardando_autorizacao" = conta do Bling ainda não autorizada (não é zero). */
+  /**
+   * "ok" | "aguardando_autorizacao" (conta do Bling não autorizada) | "parcial_fonte_provisoria"
+   * (Denavita: TikTok via Data Mart, Shopee pendente) | "fonte_indisponivel" (Data Mart fora). Nunca é zero.
+   */
   status?: string;
+  /** Fonte provisória: de onde vem o número e o que falta. */
+  aviso?: string | null;
+  /** Por que `total` é null quando a fonte falhou (ex.: Data Mart indisponível). */
+  motivo?: string | null;
   total: number | null;
   /** Período anterior de mesma duração; null = sem base (nunca 0). */
   total_anterior?: number | null;
@@ -34,6 +49,9 @@ export interface MarcaMenor {
 }
 
 export interface Consolidado {
+  /** true = o total não cobre todas as marcas/canais (ex.: Shopee da Denavita pendente). */
+  parcial?: boolean;
+  aviso?: string | null;
   total: number | null;
   total_anterior: number | null;
   por_plataforma_anterior?: Record<string, number>;
@@ -67,6 +85,30 @@ const TOKEN: Record<string, string> = { MELI: "ml", SHOPEE: "shopee", TIKTOK: "t
 export function corDaPlataforma(p: string): string {
   const t = TOKEN[p];
   return t ? `rgb(var(--tc-canal-${t}))` : "rgb(var(--tc-faint))";
+}
+
+/** Rótulo curto da fonte provisória; null para as marcas do Bling. */
+export function rotuloDaFonte(m: Pick<MarcaMenor, "status">): string | null {
+  return m.status === STATUS_FONTE_PROVISORIA ? ROTULO_FONTE_PROVISORIA : null;
+}
+
+/** Texto da linha da marca sem total: o motivo certo, nunca "0". */
+export function textoSemDado(m: Pick<MarcaMenor, "status" | "motivo">): string {
+  if (m.status === "aguardando_autorizacao") return "Aguardando autorização.";
+  if (m.status === STATUS_FONTE_INDISPONIVEL) return m.motivo ?? "Fonte indisponível.";
+  if (m.status === STATUS_FONTE_PROVISORIA) return "Sem venda no TikTok no período (Shopee pendente).";
+  return "Sem dado no período.";
+}
+
+/**
+ * O que falta no total consolidado: marca sem dado ("sem By Samia") e marca só com parte dos canais
+ * ("Denavita só TikTok"). `parcial` vale se a API declarar ou se faltar alguma marca.
+ */
+export function pendenciasDoTotal(c: Pick<Consolidado, "parcial">, marcas: MarcaMenor[]): { parcial: boolean; itens: string[] } {
+  const itens = marcas.flatMap((m) =>
+    m.total == null ? [`sem ${m.label}`] : m.status === STATUS_FONTE_PROVISORIA ? [`${m.label} só TikTok`] : [],
+  );
+  return { parcial: !!c.parcial || itens.length > 0, itens };
 }
 
 /** Fatias de 0..1 da quebra por plataforma; sem total, sem fatia. */
@@ -142,6 +184,8 @@ export interface ProdutosDaMarca {
   id: string;
   label: string;
   status?: string;
+  /** Por que a marca não tem itens (Denavita: itens só pelo Bling, conta sem autorização). */
+  motivo?: string | null;
   produtos: ProdutoLinha[];
   /** O mesmo produto por canal (o Gerencial e a aba Produtos filtram por canal). */
   itens_por_canal?: ProdutoLinha[];
