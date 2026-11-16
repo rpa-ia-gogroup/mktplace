@@ -139,6 +139,41 @@ def _com_nao_pagos(sql: str) -> str:
 UPSERT_TIKTOK_SQL = text(_com_nao_pagos(str(UPSERT_SQL)))
 
 
+def _com_total_shipments(sql: str) -> str:
+    """UPSERT_SQL + `total_shipments` (T-0118, migration 047). So' o ML.
+
+    Derivado do UPSERT_SQL, que segue inalterado para quem nao tem a coluna.
+    """
+    pares = (
+        ("data_quality_score, source_updated_at\n    ) VALUES (",
+         "data_quality_score, source_updated_at,\n        total_shipments\n    ) VALUES ("),
+        (":data_quality_score, :source_updated_at\n    )",
+         ":data_quality_score, :source_updated_at,\n        :total_shipments\n    )"),
+        ("        ingested_at             = NOW()",
+         "        total_shipments         = EXCLUDED.total_shipments,\n"
+         "        ingested_at             = NOW()"),
+    )
+    for velho, novo in pares:
+        assert sql.count(velho) == 1, velho
+        sql = sql.replace(velho, novo)
+    return sql
+
+
+UPSERT_ML_SQL = text(_com_total_shipments(str(UPSERT_SQL)))
+
+
+def sql_do_ml(row: dict):
+    """SQL do ML escolhido PELA FORMA de cada registro (T-0118).
+
+    A coluna so' entra no INSERT/UPDATE quando o registro traz a CHAVE
+    `total_shipments` (valor None incluido: a fonte disse "sem dado"). Registro
+    sem a chave usa o UPSERT_SQL antigo, que nao cita a coluna e portanto nao a
+    toca. Assim um lote misto nunca grava NULL por cima do valor de quem veio
+    sem a chave — cada linha e' executada com o SQL da sua propria forma.
+    """
+    return UPSERT_ML_SQL if "total_shipments" in row else UPSERT_SQL
+
+
 PATCH_ADS_SQL = text("""
     INSERT INTO marts.fact_marketplace_daily_performance (
         date, loja_id, marketplace_id, empresa_id,
@@ -694,6 +729,9 @@ def run(
             if len(escritas) != len(canonical_rows):
                 logger.info("precedencia API: %d linha(s) de lojas com API nao escritas pelo arquivo",
                             len(canonical_rows) - len(escritas))
+            if source == "ml":
+                # T-0118: SQL por registro, conforme a forma (ver `sql_do_ml`).
+                escritas = [(sql_do_ml(r), r) for _, r in escritas]
             with local_session() as session:
                 for upsert_sql, row in escritas:
                     session.execute(upsert_sql, row)

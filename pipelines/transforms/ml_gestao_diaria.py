@@ -89,6 +89,9 @@ def transform(row: dict) -> Optional[dict]:
         "problem_rate": None,
         "cancel_rate_pct": row.get("cancel_rate_pct"),
         "delivered_orders": row.get("delivered_orders"),
+        # T-0118: envios do dia (gold.total_shipments), denominador do "nao
+        # entregue". Ausente fica None — zero diria "nenhum envio".
+        "total_shipments": row.get("total_shipments"),
         "avg_delivery_hours": None,   # ML usa dias
         "avg_delivery_days": row.get("avg_delivery_days"),
 

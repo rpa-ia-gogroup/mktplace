@@ -41,6 +41,8 @@ COLUNAS_INT = [
     "orders", "units_sold", "unique_buyers", "new_buyers", "repeat_buyers",
     "visitors", "canceled_orders", "returned_orders", "refunded_orders",
     "delivered_orders", "ad_impressions", "ad_clicks",
+    # T-0118 (migration 047): so' o UPSERT_ML_SQL e o backfill a tocam.
+    "total_shipments",
 ]
 
 DDL = f"""

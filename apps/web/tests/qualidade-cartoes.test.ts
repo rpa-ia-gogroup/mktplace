@@ -52,7 +52,8 @@ test("cartoes por canal: 1 + 3 + 2 definidos, todos com definicao; titulo do det
 });
 
 test("ressalvas vao para o ⓘ (nao para o cartao): proxy de nao entregue e inicio dos dados do TikTok", () => {
-  assert.equal(DEF_QUALIDADE.ml_nao_entregue.dica, "Proxy: pagos − entregues");
+  assert.equal(DEF_QUALIDADE.ml_nao_entregue.dica, "Envios não entregues / envios · um envio pode juntar vários pedidos");
+  assert.doesNotMatch(DEF_QUALIDADE.ml_nao_entregue.dica!, /pagos/);
   assert.match(DEF_QUALIDADE.tk_entrega.dica!, /abr\/26/);
 });
 
@@ -109,4 +110,11 @@ test("ⓘ so' onde a ressalva muda a leitura (Entrega ML nao repete o valor); fa
   const src = ler("src/components/qualidade/QualidadeCartoes.tsx");
   // quatro cartoes: 1 coluna no celular, 2 a partir de 480px, 4 a partir de xl (nunca um cartao sozinho em meia linha)
   assert.ok(src.includes('"grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4"'));
+});
+
+test("T-0118: apoio do nao entregue mostra o denominador em envios; sem envios cai so' na contagem", () => {
+  const apoio = DEF_QUALIDADE.ml_nao_entregue.apoio!;
+  assert.equal(apoio(marca("barbours", "BARBOURS", { ml_not_delivered_shipments: 6, ml_total_shipments: 800 })), "6 de 800 envios");
+  assert.equal(apoio(marca("kokeshi", "KOKESHI", { ml_not_delivered_shipments: 6 })), "6 envios");
+  assert.equal(apoio(marca("lescent", "LESCENT", { ml_not_delivered_shipments: null, ml_total_shipments: null })), undefined);
 });

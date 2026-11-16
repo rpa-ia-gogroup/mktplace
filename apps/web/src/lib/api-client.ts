@@ -1636,6 +1636,8 @@ export interface QualityBrandRow {
   ml_cancelled_orders: number | null;
   ml_total_orders: number | null;
   ml_not_delivered_shipments: number | null;
+  /** T-0118: envios do recorte, denominador do nao entregue. Opcional (API antiga nao manda). */
+  ml_total_shipments?: number | null;
   ml_avg_delivery_days: number | null;
   ml_repeat_buyer_rate_pct: number | null;
   ml_gmv_per_buyer: number | null;

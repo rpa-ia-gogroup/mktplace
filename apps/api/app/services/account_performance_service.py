@@ -181,14 +181,16 @@ META: dict[str, dict[str, Any]] = {
                  "não se aplicam a este número.",
     },
     "ml_nao_entregue_torre": {
-        "rotulo": "Não entregue · shipments não entregues / pedidos pagos",
+        "rotulo": "Não entregue · envios não entregues / envios",
         "tipo": "torre",
         "unidade": "pct",
-        "fonte": "marts.fact_marketplace_daily_performance → /api/v1/performance/quality "
+        "fonte": "gold.ml_gestao_diaria → marts.fact_marketplace_daily_performance "
+                 "(total_shipments, delivered_orders) → /api/v1/performance/quality "
                  "(ml_not_delivered_rate_pct)",
-        "ajuda": "Shipments não entregues / pedidos pagos (pedidos − cancelados) "
-                 "do período, somados só nas marcas com dado de não entregue "
-                 "(numerador e denominador). Não é métrica de reputação do ML.",
+        "ajuda": "Envios não entregues (envios − entregues) / envios do período, "
+                 "somados só nas marcas com dado de envios (numerador e "
+                 "denominador). Envio não é pedido: um envio pode juntar vários "
+                 "pedidos (pack/carrinho). Não é métrica de reputação do ML.",
     },
     "ml_expedicao_48h_torre": {
         # A ressalva "limite interno, nao SLA do ML" mora no limiar; aqui so'
@@ -330,27 +332,26 @@ def _ml_quality(codigo: str, campo: str, res: Optional[dict], falhou: bool,
 
 
 def _tem_nao_entregue(linha: dict) -> bool:
-    # So' a contagem: e' ela que entra no numerador recalculado.
-    return linha.get("ml_not_delivered_shipments") is not None
+    # Contagem E envios: os dois entram no recalculo (T-0118).
+    return (linha.get("ml_not_delivered_shipments") is not None
+            and linha.get("ml_total_shipments") is not None)
 
 
-def _pedidos_pagos(linha: dict) -> int:
-    # Mesma definicao do agregado de `get_quality`: pedidos - cancelados.
-    return int(linha.get("ml_total_orders") or 0) - int(linha.get("ml_cancelled_orders") or 0)
+def _envios(linha: dict) -> int:
+    # T-0118: o denominador e' envios (gold.total_shipments), nao pedidos pagos.
+    return int(linha["ml_total_shipments"])
 
 
 def _ml_nao_entregue(res: Optional[dict], falhou: bool, janela: str) -> Indicador:
-    """Nao entregue sem falso zero e sem denominador maior que o numerador.
+    """Nao entregue sem falso zero, na populacao de ENVIOS (T-0118).
 
-    O agregado de `get_quality` soma `ml_not_delivered_shipments or 0`: marca
-    sem o dado (nenhuma entrega registrada) entra como 0 no numerador e com os
-    pedidos no denominador. Por isso a taxa e' RECALCULADA aqui a partir das
-    linhas por marca (sem SQL novo, sem mexer no servico da Gerencial), so'
-    sobre as marcas com o dado, no numerador E no denominador:
+    A taxa e' RECALCULADA aqui a partir das linhas por marca (sem SQL novo),
+    so' sobre as marcas com dado de envios, no numerador E no denominador:
 
-        soma(ml_not_delivered_shipments) / soma(ml_total_orders - ml_cancelled_orders) * 100
+        soma(ml_not_delivered_shipments) / soma(ml_total_shipments) * 100
 
-    Com todas as marcas com dado, a formula e' a mesma do agregado do servico.
+    E' a mesma formula do agregado de `get_quality`; o recalculo existe para
+    publicar a cobertura e o aviso das marcas que ficaram fora.
     """
     codigo = "ml_nao_entregue_torre"
     if falhou:
@@ -370,10 +371,10 @@ def _ml_nao_entregue(res: Optional[dict], falhou: bool, janela: str) -> Indicado
                     "motivo_indisponivel": MOTIVO_ML_NAO_ENTREGUE_AUSENTE}
         # int(None) levanta: contagem corrompida vira `erro`, nunca zero.
         numerador = sum(int(r["ml_not_delivered_shipments"]) for r in com_dado)
-        denominador = sum(_pedidos_pagos(r) for r in com_dado)
+        denominador = sum(_envios(r) for r in com_dado)
         if denominador <= 0:
             return {**comum, "estado": "vazio_legitimo",
-                    "motivo_indisponivel": "Nenhum pedido pago Mercado Livre nas "
+                    "motivo_indisponivel": "Nenhum envio Mercado Livre nas "
                                            f"marcas com dado de não entregue em {janela}."}
         aviso = None
         if sem_dado:

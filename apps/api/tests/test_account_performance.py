@@ -50,16 +50,21 @@ def _agora() -> datetime:
 # ---------------------------------------------------------------------------
 # Respostas falsas das fontes (formato real dos servicos)
 # ---------------------------------------------------------------------------
-def _linha_ml(marca, pedidos, nao_entregues, cancelados=0):
-    """Linha por marca no formato de `get_quality`: sem entrega registrada, o
-    servico publica `ml_not_delivered_shipments` e a taxa como None. Como no
-    servico, `ml_total_orders` inclui os cancelados e cancelado 0 sai None."""
+def _linha_ml(marca, pedidos, nao_entregues, cancelados=0, envios="pagos"):
+    """Linha por marca no formato de `get_quality`: sem dado de envios, o
+    servico publica `ml_not_delivered_shipments`, `ml_total_shipments` e a taxa
+    como None. Como no servico, `ml_total_orders` inclui os cancelados e
+    cancelado 0 sai None. Por padrao os envios igualam os pedidos pagos (sem
+    pack); passe `envios=` para separar as duas populacoes (T-0118)."""
     pagos = pedidos - cancelados
+    if envios == "pagos":
+        envios = pagos if nao_entregues is not None else None
     return {"brand": marca, "ml_total_orders": pedidos,
             "ml_cancelled_orders": cancelados or None,
             "ml_not_delivered_shipments": nao_entregues,
-            "ml_not_delivered_rate_pct": (None if nao_entregues is None or not pagos
-                                          else round(nao_entregues / pagos * 100, 2))}
+            "ml_total_shipments": envios,
+            "ml_not_delivered_rate_pct": (None if nao_entregues is None or not envios
+                                          else round(nao_entregues / envios * 100, 2))}
 
 
 def quality_ok(cancel=4.5, nao_entregue=1.2, linhas=None):
@@ -335,9 +340,9 @@ def test_mapeamento_dado_de_cada_indicador_torre(cliente, fontes):
     n = _ind(corpo, "ml_nao_entregue_torre")
     # Recalculado das linhas por marca: (1 + 1) / (100 + 50) = 1,33.
     assert (n["estado"], n["valor"], n["unidade"]) == ("dado", 1.33, "pct")
-    assert "shipments não entregues / pedidos pagos" in n["rotulo"]
+    assert "envios não entregues / envios" in n["rotulo"]
     assert "por pedido" not in n["rotulo"] + n["ajuda"]
-    assert "pedidos − cancelados" in n["ajuda"]
+    assert "envios − entregues" in n["ajuda"]
 
     e = _ind(corpo, "ml_expedicao_48h_torre")
     assert (e["estado"], e["valor"], e["unidade"]) == ("dado", 3.0, "contagem")
@@ -405,8 +410,9 @@ def test_nao_entregue_sem_dado_em_nenhuma_marca_e_sem_fonte_nunca_zero(cliente, 
 def test_nao_entregue_parcial_recalcula_sobre_a_mesma_cobertura(cliente, fontes):
     """Assimetrico: kokeshi (sem dado) tem 3x os pedidos de barbours.
 
-    Agregado do servico: 2 / (100 + 300) = 0,5 (kokeshi no denominador e com 0
-    no numerador). Recalculo: 2 / (110 - 10) = 2,0, so' barbours dos dois lados.
+    Agregado falso 0,5 (como o servico calculava antes da T-0118: kokeshi no
+    denominador e com 0 no numerador). Recalculo: 2 / 100 envios = 2,0, so'
+    barbours dos dois lados.
     """
     fontes["quality"] = lambda: quality_ok(
         nao_entregue=0.5,
@@ -462,12 +468,17 @@ class _DbQualidadeFalso:
         return _ResultadoFalso(self.linhas)
 
 
-def _linha_mart_ml(marca, pedidos, cancelados, entregues):
+def _linha_mart_ml(marca, pedidos, cancelados, entregues, envios=None):
+    """Linha crua do SQL de `get_quality`. `envios=None` = sem total_shipments
+    na fato (SUM de NULL), e os entregues pareados tambem saem NULL."""
     base = {k: 0 for k in ("returned_orders", "unique_buyers", "new_buyers",
                            "repeat_buyers", "gmv", "seller_shipping_cost")}
     return {**base, "brand_key": marca, "marketplace_id": performance_service.ML_ID,
             "orders": pedidos, "canceled_orders": cancelados,
-            "delivered_orders": entregues, "avg_delivery_days": None,
+            "delivered_orders": entregues,
+            "total_shipments": envios,
+            "delivered_with_shipments": entregues if envios is not None else None,
+            "avg_delivery_days": None,
             "avg_delivery_hours": None, "problem_rate": None}
 
 
@@ -479,24 +490,44 @@ def _qualidade_real(linhas):
 
 
 def test_nao_entregue_completo_bate_com_agregado_real_do_servico():
-    # barbours 3 nao entregues / 100 pagos; kokeshi 1 / 50.
-    res = _qualidade_real([_linha_mart_ml("barbours", 100, 10, 97),
-                           _linha_mart_ml("kokeshi", 50, 5, 49)])
+    # barbours 3 nao entregues / 100 envios; kokeshi 1 / 50.
+    res = _qualidade_real([_linha_mart_ml("barbours", 100, 10, 97, envios=100),
+                           _linha_mart_ml("kokeshi", 50, 5, 49, envios=50)])
     agregado = res["kpis"]["ml_not_delivered_rate_pct"]
     assert agregado == 2.67
     ind = svc._ml_nao_entregue(res, False, "janela")
     assert (ind.estado, ind.valor, ind.aviso_frescor) == ("dado", agregado, None)
 
 
-def test_nao_entregue_parcial_diverge_do_agregado_real_do_servico():
-    # kokeshi sem entrega registrada: o servico soma 0 no numerador e mantem
-    # os 50 pagos no denominador (3 / 150 = 2,0). O recalculo usa 3 / 100.
-    res = _qualidade_real([_linha_mart_ml("barbours", 100, 10, 97),
+def test_nao_entregue_parcial_servico_e_recalculo_concordam():
+    # T-0118: kokeshi sem envios na fato fica fora dos DOIS lados, no servico
+    # (3 / 100) e no recalculo da Gerencial. Antes o servico somava 0 no
+    # numerador e mantinha os pedidos no denominador (3 / 150 = 2,0).
+    res = _qualidade_real([_linha_mart_ml("barbours", 100, 10, 97, envios=100),
                            _linha_mart_ml("kokeshi", 50, 5, 0)])
-    assert res["kpis"]["ml_not_delivered_rate_pct"] == 2.0
+    assert res["kpis"]["ml_not_delivered_rate_pct"] == 3.0
     ind = svc._ml_nao_entregue(res, False, "janela")
     assert (ind.estado, ind.valor, ind.cobertura) == ("dado", 3.0, "BARBOURS")
     assert "KOKESHI" in ind.aviso_frescor
+
+
+def test_nao_entregue_gerencial_divide_por_envios_nao_por_pedidos():
+    """Contraprova T-0118: com pack, envios < pedidos pagos.
+
+    barbours 100 pedidos pagos em 80 envios, 78 entregues: 2 / 80 = 2,5%. A
+    formula antiga (pagos - entregues) / pagos daria 22 / 100 = 22%.
+    """
+    res = _qualidade_real([_linha_mart_ml("barbours", 100, 0, 78, envios=80)])
+    assert res["kpis"]["ml_not_delivered_rate_pct"] == 2.5
+    ind = svc._ml_nao_entregue(res, False, "janela")
+    assert (ind.estado, ind.valor) == ("dado", 2.5)
+    assert ind.valor != 22.0
+
+
+def test_nao_entregue_rotulo_fala_em_envios():
+    meta = svc.META["ml_nao_entregue_torre"]
+    assert meta["rotulo"] == "Não entregue · envios não entregues / envios"
+    assert "pedidos pagos" not in meta["ajuda"]
 
 
 def test_null_da_ldr_tiktok_vira_vazio_legitimo(cliente, fontes):

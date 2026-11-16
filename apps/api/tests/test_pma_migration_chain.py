@@ -75,7 +75,9 @@ DDL_PATH = REPO / "db" / "sql" / "marts" / "pma_listing_price_serving_ddl.sql"
 #: marts.fact_dre_insumo_mensal aceita `shopee_devolucao_reembolso`), SOBRE a 044.
 #: Avancado para 046 pelo VENDAS-REALIZADAS (colunas anulaveis de nao pagos na
 #: fato diaria e na de vendas por hora), SOBRE a 045.
-HEAD_ESPERADO = "046"
+#: Avancado para 047 pela T-0118 (`total_shipments` anulavel na fato diaria),
+#: SOBRE a 046.
+HEAD_ESPERADO = "047"
 
 #: Mapa OFICIAL de propriedade das revisoes. Existe para que uma frente nao
 #: ocupe o numero de outra: 016 e' do Full, 017 e' do PMA e a 018 esta
