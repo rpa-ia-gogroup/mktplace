@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * Marcas menores (Denavita, Yenzah, Auá, By Samia) — fonte: API do Bling v3 (a
- * conta da Denavita ainda não foi autorizada: "aguardando", nunca 0). Só ML,
+ * Marcas menores (Denavita, Yenzah, Auá, By Samia) — fonte: API do Bling v3. A
+ * Denavita entra provisoriamente pelo TikTok via Data Mart (gold.tiktok_brand_daily);
+ * a Shopee e os itens dela seguem pendentes (conta do Bling sem autorização). Só ML,
  * Shopee e TikTok. Fica SEPARADA: não entra no GMV total, na meta nem na rosca
  * da Gerencial, e não tem meta.
  */
@@ -23,7 +24,7 @@ import { toISODate } from "@/lib/filters/presets";
 import type { MarcasMenores } from "@/lib/marcas-menores";
 
 const FONTE =
-  "Fonte: API do Bling (conta da Rituária), em tempo quase real: o dia de hoje conta. A marca vem do canal do pedido, só Shopee e TikTok; nenhuma tem Mercado Livre. Receita = total do pedido (produtos − descontos + frete), sem cancelados. A Denavita está em outra conta, ainda sem autorização. Estas marcas ficam fora do GMV total, da meta e da rosca da Gerencial e não têm meta.";
+  "Fonte: API do Bling (conta da Rituária), em tempo quase real: o dia de hoje conta. A marca vem do canal do pedido, só Shopee e TikTok; nenhuma tem Mercado Livre. Receita = total do pedido (produtos − descontos + frete), sem cancelados. A Denavita entra provisoriamente pelo TikTok via Data Mart (gold.tiktok_brand_daily; o GMV dessa fonte tem definição própria, 1,4% a 3,9% acima do mart da Torre): a Shopee e os itens dela seguem pendentes, porque a conta dela no Bling ainda não foi autorizada, e o total fica parcial. Estas marcas ficam fora do GMV total, da meta e da rosca da Gerencial e não têm meta.";
 
 export default function MarcasMenoresPage() {
   const [filters, setFilters] = useGlobalFilters({ defaultPreset: "7d", defaultCompare: false });
