@@ -1,8 +1,13 @@
 """Marcas menores (Yenzah, Aua, By Samia) pela API do Bling v3 (conta da Rituaria).
 
 A marca sai do CANAL do pedido (`loja.id`). So' Shopee e TikTok; nenhuma das tres
-tem ML. A Denavita esta' em outra conta Bling, ainda nao autorizada: aparece como
-"aguardando autorizacao", nunca como 0. Ausencia nunca vira 0: marca sem pedido
+tem ML. A Denavita esta' em outra conta Bling, ainda nao autorizada. Fonte PROVISORIA
+dela (T-0119): o TikTok vem da gold do Data Mart (`gold.tiktok_brand_daily`,
+`brand = 'denavita'`), com status `parcial_fonte_provisoria` e aviso; a Shopee dela segue
+sem fonte (ausente, nunca 0) e o consolidado declara `parcial`. O `gmv` dessa gold tem
+definicao propria (1,4% a 3,9% acima do mart da Torre): nao e' o mesmo numero do Bling
+nem do GMV oficial. Data Mart fora (sem engine ou erro): a Denavita volta a `total=None`
+com `motivo`, sem derrubar as outras. Ausencia nunca vira 0: marca sem pedido
 tem `total=None` e dia sem pedido nao entra na serie. Canal sem pedido no periodo anterior
 nao entra em `por_plataforma_anterior` (nem como 0): o front so' calcula a variacao quando todo
 canal do periodo atual tem base no anterior (achado C1-03).
@@ -49,6 +54,28 @@ MARCAS: list[tuple[str, str, bool]] = [
     ("by-samia", "By Samia", True),
 ]
 AGUARDANDO = "Aguardando autorização da conta do Bling."
+
+# --- Denavita: TikTok pelo Data Mart (fonte provisoria, T-0119) ------------------------------
+DENAVITA = "denavita"
+STATUS_FONTE_PROVISORIA = "parcial_fonte_provisoria"
+STATUS_FONTE_INDISPONIVEL = "fonte_indisponivel"
+AVISO_DENAVITA = (
+    "TikTok via Data Mart (gold.tiktok_brand_daily); Shopee pendente: conta do Bling sem autorização. "
+    "O GMV dessa gold tem definição própria (1,4% a 3,9% acima do mart da Torre)."
+)
+MOTIVO_DM_INDISPONIVEL = "Data Mart indisponível: sem o TikTok da Denavita agora (Shopee pendente: conta do Bling sem autorização)."
+MOTIVO_ITENS_DENAVITA = "Itens só pelo Bling; a conta da Denavita segue sem autorização (a gold por marca não tem itens)."
+AVISO_PARCIAL_DENAVITA = "Parcial: a Denavita entra só pelo TikTok (Data Mart, fonte provisória); a Shopee dela está pendente."
+AVISO_PARCIAL_DENAVITA_FORA = "Parcial: sem a Denavita (Data Mart indisponível; a Shopee dela também está pendente)."
+#: Grao da gold: marca x dia. Soma por dia por seguranca; valores SEMPRE por parametro.
+SQL_DENAVITA_TIKTOK = """
+SELECT date AS dia, SUM(gmv) AS gmv, SUM(orders) AS pedidos
+  FROM gold.tiktok_brand_daily
+ WHERE brand = :brand
+   AND date BETWEEN :inicio AND :fim
+ GROUP BY date
+ ORDER BY date
+"""
 #: O cache do banco serve a leitura enquanto a rotina de aquecimento o renova em menos que isto.
 IDADE_MAXIMA_CACHE_S = 45 * 60
 #: A rotina guarda a lista dos ultimos N dias (cobre mes atual, mes anterior e o "periodo anterior" dos filtros comuns).
@@ -175,15 +202,49 @@ def pedidos(
     return saida
 
 
-def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dict:
+def consultar_datamart(sql: str, params: dict) -> list[dict]:
+    """Direto no Data Mart (`datamart_engine`); a reserva pelo Metabase so' nos casos de
+    `datamart_leitura` (permissao, conexao ou sem engine, com chave configurada)."""
+    from app.services import datamart_leitura  # import tardio: testes injetam `consultar`
+
+    return datamart_leitura.consultar(sql, params)
+
+
+def _dia(v) -> date:
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    return date.fromisoformat(str(v)[:10])  # a reserva pelo Metabase devolve texto ISO
+
+
+def pedidos_denavita_tiktok(consultar: Callable[[str, dict], list[dict]], inicio: date, fim: date) -> list[dict]:
+    """Dias da Denavita no TikTok (gold) como linhas agregadas: {data, marca, plataforma, total, pedidos}.
+    Dia sem linha nao volta; linha com `gmv` nulo e' sem dado (fora, nunca 0). Falha sobe."""
+    saida = []
+    for r in consultar(SQL_DENAVITA_TIKTOK, {"brand": DENAVITA, "inicio": inicio, "fim": fim}):
+        if r.get("gmv") is None or r.get("dia") is None:
+            continue
+        ped = r.get("pedidos")
+        saida.append({
+            "data": _dia(r["dia"]), "marca": DENAVITA, "plataforma": "TIKTOK", "total": float(r["gmv"]),
+            "pedidos": None if ped is None else int(ped),
+        })
+    return saida
+
+
+def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date, status_denavita: Optional[str] = None) -> dict:
+    """Cada linha do Bling e' 1 pedido; a linha agregada da gold traz `pedidos` (None = sem dado, nao conta)."""
     por_marca: dict[str, dict] = {id_: {"plat": {}, "dias": {}, "dias_ped": {}} for id_, _, _ in MARCAS}
     for l in linhas:
         a = por_marca[l["marca"]]
         a["plat"][l["plataforma"]] = a["plat"].get(l["plataforma"], 0.0) + l["total"]
         d = a["dias"].setdefault(l["data"], {})
         d[l["plataforma"]] = d.get(l["plataforma"], 0.0) + l["total"]
-        dp = a["dias_ped"].setdefault(l["data"], {})
-        dp[l["plataforma"]] = dp.get(l["plataforma"], 0) + 1
+        n = l.get("pedidos", 1)
+        if n is not None:
+            dp = a["dias_ped"].setdefault(l["data"], {})
+            dp[l["plataforma"]] = dp.get(l["plataforma"], 0) + n
     ant_plat: dict[str, dict[str, float]] = {}  # marca -> plataforma -> total do periodo anterior
     for l in ant:
         d = ant_plat.setdefault(l["marca"], {})
@@ -191,13 +252,14 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
     ant_marca = {m: sum(d.values()) for m, d in ant_plat.items()}
     # Contagem de pedidos (cada linha da lista e um pedido nao cancelado): ticket = GMV / pedidos no front.
     qtd: dict[str, dict[str, int]] = {}
-    for l in linhas:
-        d = qtd.setdefault(l["marca"], {})
-        d[l["plataforma"]] = d.get(l["plataforma"], 0) + 1
     qtd_ant: dict[str, dict[str, int]] = {}
-    for l in ant:
-        d = qtd_ant.setdefault(l["marca"], {})
-        d[l["plataforma"]] = d.get(l["plataforma"], 0) + 1
+    for fonte, destino in ((linhas, qtd), (ant, qtd_ant)):
+        for l in fonte:
+            n = l.get("pedidos", 1)
+            if n is None:
+                continue  # pedidos sem dado: nao vira 0
+            d = destino.setdefault(l["marca"], {})
+            d[l["plataforma"]] = d.get(l["plataforma"], 0) + n
     qtd_total: dict[str, int] = {}
     qtd_ant_total: dict[str, int] = {}
     for src, dst in ((qtd, qtd_total), (qtd_ant, qtd_ant_total)):
@@ -215,10 +277,19 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
         a = por_marca[id_]
         for p, v in a["plat"].items():
             por_plat[p] = por_plat.get(p, 0.0) + v
+        status = "ok" if conectada else "aguardando_autorizacao"
+        aviso = motivo = None
+        if id_ == DENAVITA and status_denavita is not None:
+            status, aviso = status_denavita, AVISO_DENAVITA
+            motivo = MOTIVO_DM_INDISPONIVEL if status_denavita == STATUS_FONTE_INDISPONIVEL else None
         marcas.append({
             "id": id_,
             "label": label,
-            "status": "ok" if conectada else "aguardando_autorizacao",
+            "status": status,
+            #: Fonte provisoria (Denavita): de onde vem o numero e o que falta.
+            "aviso": aviso,
+            #: Por que `total` e' None quando a fonte falhou (nunca 0).
+            "motivo": motivo,
             "total": sum(a["plat"].values()) if a["plat"] else None,
             "total_anterior": ant_marca.get(id_),
             "por_plataforma_anterior": ant_plat.get(id_, {}),
@@ -231,9 +302,19 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date) -> dic
                 for d, v in sorted(a["dias"].items())
             ],
         })
+    # Parcial: alguma marca fora do Bling conectado (Denavita provisoria, indisponivel ou aguardando).
+    parcial = any(m["status"] != "ok" for m in marcas)
+    aviso_total = None
+    if status_denavita == STATUS_FONTE_PROVISORIA:
+        aviso_total = AVISO_PARCIAL_DENAVITA
+    elif status_denavita == STATUS_FONTE_INDISPONIVEL:
+        aviso_total = AVISO_PARCIAL_DENAVITA_FORA
     return {
         "disponivel": True,
         "consolidado": {
+            #: True = o total nao cobre todas as marcas/canais (ex.: Shopee da Denavita pendente).
+            "parcial": parcial,
+            "aviso": aviso_total,
             "total": sum(por_plat.values()) if por_plat else None,
             "total_anterior": sum(ant_marca.values()) if ant_marca else None,
             "por_plataforma_anterior": ant_total_plat,
@@ -255,7 +336,11 @@ def get_marcas_menores(
     agora: Callable[[], float] = time.monotonic,
     cache: Optional[CacheBling] = None,
     ao_faltar_cache: Optional[Callable[[], None]] = None,
+    consultar_dm: Optional[Callable[[str, dict], list[dict]]] = None,
 ) -> dict:
+    """`consultar_dm`: leitura do Data Mart para o TikTok da Denavita. A rota passa
+    `consultar_datamart`; sem ela (rotina, chamadas diretas) a Denavita fica indisponivel e
+    nada toca o Data Mart. O cache/aquecimento do Bling nao depende disto."""
     fim = min(date_to, hoje)  # o Bling e' quase em tempo real: hoje conta
     inicio = min(date_from, fim)
     try:
@@ -268,7 +353,17 @@ def get_marcas_menores(
         ant = pedidos(cli, ant_fim - timedelta(days=dias - 1), ant_fim, agora, cache, ao_faltar_cache)
     except BlingIndisponivel:
         ant = []  # sem base: a variacao some, nunca vira 0
-    return _montar(linhas, ant, inicio, fim)
+    ant_ini = ant_fim - timedelta(days=dias - 1)
+    status_denavita = STATUS_FONTE_INDISPONIVEL
+    if consultar_dm is not None:
+        try:
+            dm = pedidos_denavita_tiktok(consultar_dm, ant_ini, fim)  # atual + anterior numa consulta so'
+            linhas = linhas + [l for l in dm if l["data"] >= inicio]
+            ant = ant + [l for l in dm if l["data"] <= ant_fim]
+            status_denavita = STATUS_FONTE_PROVISORIA
+        except Exception as exc:  # noqa: BLE001 - motivo fixo; o texto da excecao (pode ter DSN) nunca sai
+            logger.warning("marcas_menores: Data Mart da Denavita falhou (%s)", type(exc).__name__)
+    return _montar(linhas, ant, inicio, fim, status_denavita)
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +471,8 @@ def get_produtos(
                 "id": id_,
                 "label": label,
                 "status": "ok" if conectada else "aguardando_autorizacao",
+                #: Por que a marca nao tem itens (Denavita: so' o Bling tem itens); nunca 0.
+                "motivo": MOTIVO_ITENS_DENAVITA if id_ == DENAVITA else (None if conectada else AGUARDANDO),
                 "produtos": sorted(acum[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:30],
                 #: Mesmo produto por canal (o Gerencial tem filtro de canal): so' o que o recorte tem.
                 "itens_por_canal": sorted(por_canal[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:100],

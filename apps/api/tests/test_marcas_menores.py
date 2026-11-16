@@ -47,8 +47,14 @@ class FakeBling:
         raise AssertionError(caminho)
 
 
+def _sem_data_mart(sql, params):
+    raise RuntimeError("datamart indisponivel")
+
+
 @pytest.fixture(autouse=True)
-def _limpo():
+def _limpo(monkeypatch):
+    # T-0119: a rota le o TikTok da Denavita no Data Mart; aqui nenhuma query real (Denavita indisponivel).
+    monkeypatch.setattr(svc, "consultar_datamart", _sem_data_mart)
     svc.limpar_cache()
     yield
     svc.limpar_cache()
@@ -92,11 +98,12 @@ def test_pedidos_do_periodo_anterior_por_canal():
     assert r["consolidado"]["pedidos_por_plataforma_anterior"] == {"SHOPEE": 2}
 
 
-def test_ausencia_nao_vira_zero_e_denavita_aguarda_autorizacao():
+def test_ausencia_nao_vira_zero_e_denavita_sem_data_mart_fica_indisponivel():
     r = svc.get_marcas_menores(FakeBling(DADOS), date(2026, 11, 1), date(2026, 11, 9), HOJE)
     m = _marcas(r)
     assert m["by-samia"]["total"] is None and m["by-samia"]["serie"] == [] and m["by-samia"]["status"] == "ok"
-    assert m["denavita"]["total"] is None and m["denavita"]["status"] == "aguardando_autorizacao"
+    # T-0119: sem a leitura do Data Mart, a Denavita (TikTok provisorio) fica indisponivel com motivo, nunca 0.
+    assert m["denavita"]["total"] is None and m["denavita"]["status"] == "fonte_indisponivel" and m["denavita"]["motivo"]
 
 
 def test_hoje_conta_e_nao_e_recortado():

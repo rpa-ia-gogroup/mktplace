@@ -6,7 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps.period import resolve_period, today_brt
-from app.schemas.marcas_menores import MarcasMenoresResponse, ProdutosResponse
+from app.schemas.marcas_menores import (
+    Consolidado,
+    MarcaMenor,
+    MarcasMenoresResponse,
+    ProdutosDaMarca,
+    ProdutosResponse,
+)
 from app.services import bling_warm
 from app.services import marcas_menores_service as svc
 from app.services.bling_cache import ArmazemCachePg
@@ -15,6 +21,35 @@ from app.services.bling_client import BlingCliente, cliente_com_sessao
 router = APIRouter(prefix="/api/v1/performance", tags=["marcas-menores"])
 
 _PLATAFORMA = {"shopee": "SHOPEE", "tiktok": "TIKTOK", "ml": "MELI"}
+
+
+# T-0119: campos novos do contrato (fonte provisoria da Denavita). Ficam aqui porque o arquivo de
+# schemas esta' fora do escopo desta tarefa; sem eles o `response_model` descartaria aviso/motivo/parcial.
+class MarcaMenorComFonte(MarcaMenor):
+    #: Fonte provisoria (ex.: Denavita pelo TikTok do Data Mart): de onde vem o numero e o que falta.
+    aviso: Optional[str] = None
+    #: Por que `total` e' None quando a fonte falhou (ex.: "Data Mart indisponivel"); nunca 0.
+    motivo: Optional[str] = None
+
+
+class ConsolidadoComParcial(Consolidado):
+    #: True = o total nao cobre todas as marcas/canais (ex.: Shopee da Denavita pendente).
+    parcial: bool = False
+    aviso: Optional[str] = None
+
+
+class MarcasMenoresComFonte(MarcasMenoresResponse):
+    consolidado: Optional[ConsolidadoComParcial] = None
+    marcas: list[MarcaMenorComFonte] = []
+
+
+class ProdutosDaMarcaComMotivo(ProdutosDaMarca):
+    #: Por que a marca nao tem itens (Denavita: itens so' pelo Bling, conta sem autorizacao).
+    motivo: Optional[str] = None
+
+
+class ProdutosComMotivo(ProdutosResponse):
+    marcas: list[ProdutosDaMarcaComMotivo] = []
 
 
 def cliente_bling(db: Session) -> BlingCliente:
@@ -26,18 +61,20 @@ def cache_bling(db: Session):
     return ArmazemCachePg(db) if db is not None else None
 
 
-@router.get("/marcas-menores", response_model=MarcasMenoresResponse)
+@router.get("/marcas-menores", response_model=MarcasMenoresComFonte)
 def marcas_menores(date_from: Optional[date] = Query(None), date_to: Optional[date] = Query(None), db: Session = Depends(get_db)):
-    """Yenzah, Auá e By Samia pelo Bling (Denavita: aguardando autorização).
+    """Yenzah, Auá e By Samia pelo Bling. Denavita: TikTok via Data Mart (gold.tiktok_brand_daily,
+    fonte provisória) e Shopee pendente (conta do Bling sem autorização); o consolidado vem `parcial`.
     Fora do GMV total, da meta e da rosca da Gerencial."""
     hoje = today_brt()
     p = resolve_period(date_from=date_from, date_to=date_to, default_days=30, today=hoje)
     return svc.get_marcas_menores(
-        cliente_bling(db), p.start, p.end, hoje, cache=cache_bling(db), ao_faltar_cache=bling_warm.disparar_em_segundo_plano
+        cliente_bling(db), p.start, p.end, hoje, cache=cache_bling(db), ao_faltar_cache=bling_warm.disparar_em_segundo_plano,
+        consultar_dm=svc.consultar_datamart,
     )
 
 
-@router.get("/marcas-menores/produtos", response_model=ProdutosResponse)
+@router.get("/marcas-menores/produtos", response_model=ProdutosComMotivo)
 def marcas_menores_produtos(
     date_from: Optional[date] = Query(None),
     date_to: Optional[date] = Query(None),
