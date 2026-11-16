@@ -1667,6 +1667,26 @@ def indexar_taxa_shopee(linhas: list[dict], agora: datetime) -> dict:
     return out
 
 
+def indexar_repasse_shopee(linhas: list[dict], agora: datetime) -> dict:
+    """Repasse da Shopee do escrow (`shopee_repasse_escrow`, T-0120b) por chave.
+
+    So' a Financeiro le' (a regra da DRE nao muda). Mesma forma e mesma regra
+    de estado do lote de `indexar_taxa_shopee`.
+    """
+    out = {}
+    for r in linhas:
+        if r["componente"] != "shopee_repasse_escrow":
+            continue
+        estado, motivo = _estado_do_lote([r], agora)
+        out[(_chave_mes(r["competencia"]), r["canal"], r["marca"])] = {
+            "_estado": estado, "_motivo": motivo,
+            "valor": r["valor"], "sinal": r["sinal_origem"], "cobertura": r.get("cobertura"),
+            "status": r["status_reconciliacao"], "motivo": r["motivo"],
+            "data_as_of": r["data_max_origem"], "publicado_em": r["publicado_em"], "lote_id": r["lote_id"],
+        }
+    return out
+
+
 def indexar_impostos(linhas: list[dict], agora: datetime) -> dict:
     """Impostos realizados (T-0069) por chave: `{"linhas": {parte: linha|None}, ...}`.
 
