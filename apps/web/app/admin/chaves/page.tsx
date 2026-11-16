@@ -49,6 +49,9 @@ export default function ChavesPage() {
   const [copiada, setCopiada] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erroForm, setErroForm] = useState<string | null>(null);
+  const [revogando, setRevogando] = useState<number | null>(null);
+  const [erroLista, setErroLista] = useState<string | null>(null);
+  const [erroCopia, setErroCopia] = useState(false);
 
   const carregar = useCallback(async () => {
     setCarga(null);
@@ -86,6 +89,7 @@ export default function ChavesPage() {
       const criada = (await res.json()) as { nome: string; chave: string };
       setNova({ nome: criada.nome, chave: criada.chave });
       setCopiada(false);
+      setErroCopia(false);
       (e.target as HTMLFormElement).reset();
       void carregar();
     } catch {
@@ -97,8 +101,11 @@ export default function ChavesPage() {
 
   async function revogar(c: Chave) {
     if (!window.confirm(`Revogar a chave "${c.nome}" de ${c.dono_email}? Quem a usa perde o acesso na hora.`)) return;
+    setRevogando(c.id);
+    setErroLista(null);
     const res = await torreFetch(`${BASE}/${c.id}/revogar`, { method: "POST" }).catch(() => null);
-    if (!res?.ok) window.alert("Não deu para revogar a chave.");
+    setRevogando(null);
+    if (!res?.ok) return setErroLista(`Não deu para revogar a chave “${c.nome}”. Tente de novo.`);
     void carregar();
   }
 
@@ -107,8 +114,10 @@ export default function ChavesPage() {
     try {
       await navigator.clipboard.writeText(nova.chave);
       setCopiada(true);
+      setErroCopia(false);
     } catch {
       setCopiada(false);
+      setErroCopia(true);
     }
   }
 
@@ -130,7 +139,7 @@ export default function ChavesPage() {
         <form onSubmit={criar} className="flex flex-wrap items-end gap-3">
           <label className="flex min-w-[12rem] flex-1 flex-col gap-1 text-xs font-medium text-ink-muted">
             Nome
-            <input name="nome" required maxLength={80} placeholder="Ex.: Simulador da Nathalia" className={CAMPO} />
+            <input name="nome" required maxLength={80} placeholder="Ex.: Planilha de metas" className={CAMPO} />
           </label>
           <label className="flex min-w-[14rem] flex-1 flex-col gap-1 text-xs font-medium text-ink-muted">
             E-mail do dono
@@ -159,11 +168,21 @@ export default function ChavesPage() {
                 {copiada ? "Copiada" : "Copiar"}
               </button>
             </div>
+            {erroCopia && (
+              <p role="alert" className="mt-2 text-crit-ink">
+                Não deu para copiar. Selecione a chave e copie com Ctrl+C.
+              </p>
+            )}
           </div>
         )}
       </Panel>
 
       <Panel titulo="Chaves" semPadding>
+        {erroLista && (
+          <p role="alert" className="px-4 pt-3 text-sm text-crit-ink">
+            {erroLista}
+          </p>
+        )}
         {carga === null ? (
           <StateBlock tipo="carregando" titulo="Carregando chaves" compacto />
         ) : carga.chaves.length === 0 ? (
@@ -194,16 +213,18 @@ export default function ChavesPage() {
                       </td>
                       <td className="px-4 py-2 text-ink">{c.dono_email}</td>
                       <td className="px-4 py-2 tabular-nums text-ink">{data(c.expira_em)}</td>
-                      <td className="px-4 py-2 tabular-nums text-ink">{data(c.ultimo_uso_em)}</td>
+                      <td className="px-4 py-2 tabular-nums text-ink">{c.ultimo_uso_em ? data(c.ultimo_uso_em) : "Nunca usada"}</td>
                       <td className={`px-4 py-2 font-medium ${s.classe}`}>{s.rotulo}</td>
                       <td className="px-4 py-2 text-right">
                         {s.rotulo === "Ativa" && (
                           <button
                             type="button"
                             onClick={() => revogar(c)}
+                            disabled={revogando === c.id}
+                            aria-label={`Revogar a chave ${c.nome}`}
                             className={`${BOTAO} border border-crit/35 text-crit-ink hover:bg-crit-soft`}
                           >
-                            Revogar
+                            {revogando === c.id ? "Revogando…" : "Revogar"}
                           </button>
                         )}
                       </td>
