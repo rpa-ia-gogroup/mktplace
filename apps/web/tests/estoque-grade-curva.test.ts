@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
-import { fmtPermanencia, linhaDaCurva, montarGrade, TOTAL, type ItemGrade } from "../src/lib/estoque-grade-curva.ts";
+import { descreverPartes, fmtPermanencia, linhaDaCurva, montarGrade, ordenarPorAcao, TOTAL, type ItemGrade } from "../src/lib/estoque-grade-curva.ts";
 
 const it = (o: Partial<ItemGrade>): ItemGrade => ({
   brand: "barbours", curva: "A", disponivel: 100, mediaDiaria: 10, classe: null, ...o,
@@ -80,4 +80,45 @@ test("lista da pilula: marca/curva/classe; ruptura por menos cobertura, excesso 
   assert.deepEqual(itensDaCelula(xs, marcas, "barbours", "aa_a", "ruptura").map((i) => i.rotulo), ["r0", "r2", "rsem"]);
   assert.deepEqual(itensDaCelula(xs, marcas, "barbours", "aa_a", "excesso").map((i) => i.rotulo), ["e9", "e5"]);
   assert.deepEqual(itensDaCelula(xs, marcas, TOTAL, "aa_a", "ruptura").map((i) => i.rotulo), ["r0", "kB", "r2", "rsem"]);
+});
+
+test("demais = itens sem ruptura/baixo/excesso; a barra fecha com o total de itens", () => {
+  const g = montarGrade([
+    it({ classe: "ruptura" }), it({ classe: "baixo" }), it({ classe: "excesso" }), it({}), it({}),
+  ], ["barbours"]);
+  const c = g.totalMarca.barbours;
+  assert.deepEqual([c.ruptura, c.baixo, c.excesso, c.demais, c.itens], [1, 1, 1, 2, 5]);
+  assert.equal(c.ruptura + c.baixo + c.excesso + c.demais, c.itens);
+});
+
+test("marcas: mais ruptura primeiro, depois mais baixo; sem itens por ultimo; empate mantem a ordem", () => {
+  const g = montarGrade([
+    it({ brand: "a", classe: "baixo" }),
+    it({ brand: "b", classe: "ruptura" }),
+    it({ brand: "c", classe: "ruptura" }), it({ brand: "c", classe: "ruptura" }),
+    it({ brand: "e", classe: "baixo" }),
+  ], ["a", "b", "c", "d", "e"]);
+  assert.deepEqual(ordenarPorAcao(["a", "b", "c", "d", "e"], g.totalMarca), ["c", "b", "a", "e", "d"]);
+});
+
+test("curva Todas: a lista da pilula junta todas as curvas", async () => {
+  const { itensDaCelula } = await import("../src/lib/estoque-grade-curva.ts");
+  const xs = [it({ rotulo: "a", classe: "ruptura" }), it({ rotulo: "c", curva: "C", classe: "ruptura" }), it({ rotulo: "s", curva: null, classe: "ruptura" })];
+  assert.equal(itensDaCelula(xs, ["barbours"], "barbours", "todas", "ruptura").length, 3);
+  assert.equal(itensDaCelula(xs, ["barbours"], "barbours", "aa_a", "ruptura").length, 1);
+});
+
+test("texto da barra: so' o que existe, singular e plural", () => {
+  assert.equal(descreverPartes({ itens: 1, ruptura: 1, baixo: 0, excesso: 0, demais: 0 }), "1 item: 1 em ruptura");
+  assert.equal(descreverPartes({ itens: 12, ruptura: 3, baixo: 2, excesso: 0, demais: 7 }), "12 itens: 3 em ruptura, 2 com estoque baixo, 7 demais");
+});
+
+test("Visao geral usa a visao rapida; a grade nao rola na horizontal", () => {
+  const vg = readFileSync(join(import.meta.dirname, "../app/full/VisaoGeralFull.tsx"), "utf8");
+  const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
+  const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
+  assert.match(vg, /<VisaoRapidaEstoque canais=\{canais\}/);
+  assert.doesNotMatch(grade, /TableScrollHint|min-w-max/); // so o seletor de curva rola, a lista de marcas nao
+  assert.match(rapida, /hrefAba\(ABA\[c\.canal\]\)/); // link para o detalhe do canal
+  assert.doesNotMatch(rapida, /fmtReais|perda/); // R$ nunca soma entre canais: aqui nem aparece
 });

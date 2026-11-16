@@ -107,6 +107,7 @@ import {
   type ResumoOk,
   type Antes,
 } from "@/lib/full-visao-geral";
+import VisaoRapidaEstoque from "@/components/full/VisaoRapidaEstoque";
 import { tituloMarca, validarPayloadML } from "@/lib/ml-full-estoque";
 
 const DICA_RUPTURA =
@@ -803,6 +804,9 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
           </tbody>
         </table>
       </Panel>
+
+      {/* 4a. Visao rapida por canal: ruptura e estoque baixo por marca, com link para a aba do canal */}
+      <VisaoRapidaEstoque canais={canais} />
 
       {/* 4b. Brindes e descontinuados: fora da fila e dos numeros, recolhidos */}
       <BlocosForaDaFila canais={canais} />

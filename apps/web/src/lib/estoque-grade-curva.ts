@@ -22,6 +22,13 @@ export const LINHAS_CURVA: { chave: LinhaCurva; rotulo: string }[] = [
   { chave: "sem", rotulo: "Sem curva" },
 ];
 
+/** Filtro da tela: uma curva ou "todas" (a antiga linha "Total marca"). */
+export type FiltroCurvaGrade = LinhaCurva | "todas";
+export const OPCOES_CURVA: { chave: FiltroCurvaGrade; rotulo: string }[] = [
+  ...LINHAS_CURVA,
+  { chave: "todas", rotulo: "Todas" },
+];
+
 export type ClasseGrade = "ruptura" | "baixo" | "excesso" | null;
 
 export interface ItemGrade {
@@ -43,6 +50,8 @@ export interface CelulaGrade {
   ruptura: number;
   baixo: number;
   excesso: number;
+  /** Itens sem ruptura/baixo/excesso (suficiente, sem giro...): o resto da barra. */
+  demais: number;
   permanencia: number | null;
 }
 
@@ -78,6 +87,7 @@ const fechar = (a: Acumulador): CelulaGrade => ({
   ruptura: a.ruptura,
   baixo: a.baixo,
   excesso: a.excesso,
+  demais: a.itens - a.ruptura - a.baixo - a.excesso,
   permanencia: a.venda > 0 ? a.dispComVenda / a.venda : null,
 });
 
@@ -108,16 +118,40 @@ export function montarGrade(itens: readonly ItemGrade[], marcas: readonly string
  * classe. Ruptura/baixo: menos cobertura primeiro; excesso: mais primeiro.
  */
 export function itensDaCelula(
-  itens: readonly ItemGrade[], marcas: readonly string[], marca: string, linha: LinhaCurva, classe: Exclude<ClasseGrade, null>,
+  itens: readonly ItemGrade[], marcas: readonly string[], marca: string, linha: FiltroCurvaGrade, classe: Exclude<ClasseGrade, null>,
 ): ItemGrade[] {
   const dias = (v: ItemGrade["cobertura"]) => { const n = Number(v); return v === null || v === undefined || v === "" || !Number.isFinite(n) ? null : n; };
   const sinal = classe === "excesso" ? -1 : 1;
   return itens
-    .filter((i) => marcas.includes(i.brand) && (marca === TOTAL || i.brand === marca) && linhaDaCurva(i.curva) === linha && i.classe === classe)
+    .filter((i) => marcas.includes(i.brand) && (marca === TOTAL || i.brand === marca) && (linha === "todas" || linhaDaCurva(i.curva) === linha) && i.classe === classe)
     .sort((a, b) => {
       const da = dias(a.cobertura), db = dias(b.cobertura);
       return (da === null ? 1 : 0) - (db === null ? 1 : 0) || sinal * ((da ?? 0) - (db ?? 0));
     });
+}
+
+/**
+ * Ordem das marcas na lista: quem mais precisa de acao primeiro (mais rupturas,
+ * depois mais estoque baixo); marca sem itens por ultimo. Estavel: empate fica
+ * na ordem recebida.
+ */
+export function ordenarPorAcao(marcas: readonly string[], celulas: Record<string, CelulaGrade>): string[] {
+  return [...marcas].sort((a, b) => {
+    const x = celulas[a], y = celulas[b];
+    return (y.itens > 0 ? 1 : 0) - (x.itens > 0 ? 1 : 0) || y.ruptura - x.ruptura || y.baixo - x.baixo;
+  });
+}
+
+/** Texto da barra (title e leitor de tela): so' o que existe, sem "0 em...". */
+export function descreverPartes(c: Pick<CelulaGrade, "itens" | "ruptura" | "baixo" | "excesso" | "demais">): string {
+  const n = (v: number, um: string, varios = um) => `${v.toLocaleString("pt-BR")} ${v === 1 ? um : varios}`;
+  const partes = [
+    c.ruptura > 0 && `${n(c.ruptura, "em ruptura")}`,
+    c.baixo > 0 && `${n(c.baixo, "com estoque baixo")}`,
+    c.excesso > 0 && `${n(c.excesso, "em excesso")}`,
+    c.demais > 0 && `${n(c.demais, "demais")}`,
+  ].filter(Boolean);
+  return `${n(c.itens, "item", "itens")}: ${partes.join(", ")}`;
 }
 
 /** "38 d" / "—". Arredonda para dia inteiro. */
@@ -126,4 +160,4 @@ export function fmtPermanencia(dias: number | null): string {
 }
 
 export const AJUDA_GRADE =
-  "Mesmo recorte dos cartões (brinde e descontinuado fora). Disponível em unidades; ruptura, estoque baixo e excesso em nº de itens. Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";
+  "Mesmo recorte dos cartões (brinde e descontinuado fora). A barra mostra os itens da marca: ruptura, estoque baixo, excesso e, em cinza, os demais (suficiente, sem giro). Quem mais precisa de ação vem primeiro; clique em ruptura, baixo ou excesso para ver os itens. Disponível em unidades; ruptura, estoque baixo e excesso em nº de itens. Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";
