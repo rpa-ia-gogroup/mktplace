@@ -247,6 +247,25 @@ function tendencia(canal: "shopee" | "mercadolivre", c: CenarioDemo): RespostaTe
 // ---------------------------------------------------------------------------
 // LDR operacional da Shopee
 // ---------------------------------------------------------------------------
+/** Demo do `/expedicao/ml/ldr`: so' dias fechados (todos maduros); um dia sem envio. */
+function ldrMl(c: CenarioDemo) {
+  if (c === "indisponivel") return { channel: "mercadolivre", availability: "unavailable", unavailable_reason: "source_error", brands: [] };
+  const taxas = c === "vazio" ? [] : [0.021, 0.028, 0.044, 0.071, 0.035, null, 0.019];
+  const daily = taxas.map((rate, i) => {
+    const base = rate === null ? 0 : 410 - i * 12;
+    return { due_date: `2026-10-${String(19 + i).padStart(2, "0")}`, base, late: rate === null ? 0 : Math.round(base * rate), rate, is_mature: true };
+  });
+  return {
+    channel: "mercadolivre", availability: "available", from: "2026-10-19", to: "2026-10-25",
+    requested_days: 7, series_start: "2026-10-19", mature_days: 7,
+    brands: [
+      { brand: "barbours", base: 900, late: 31, rate: 31 / 900, without_pickup_mark: 2 },
+      { brand: "kokeshi", base: 1120, late: 40, rate: 40 / 1120, without_pickup_mark: 0 },
+    ],
+    daily,
+  };
+}
+
 function ldrShopee(c: CenarioDemo): RespostaLdrShopee {
   const f = fila("shopee", c);
   const vendedor = f.totals ?? totais(0, 0, 0, 0);
@@ -678,6 +697,7 @@ export function respostaFicticia(url: string, cenarioPedido: CenarioDemo): { sta
       corpo: tiktokAbertos(u.searchParams.get("brands"), u.searchParams.get("lista"), Number(u.searchParams.get("page") ?? "1")),
     };
   if (caminho === "/api/v1/expedicao/shopee/ldr") return { status: 200, corpo: ldrShopee(cenario) };
+  if (caminho === "/api/v1/expedicao/ml/ldr") return { status: 200, corpo: ldrMl(cenario) };
   return null;
 }
 

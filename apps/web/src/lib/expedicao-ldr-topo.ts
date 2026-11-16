@@ -21,6 +21,8 @@
  * plataforma (essa fica na seção "Performance"). Ausência nunca vira 0%.
  */
 
+import type { Severidade } from "./expedicao-tiktok-contract.ts";
+
 export type CanalLdr = "shopee" | "mercadolivre" | "tiktokshop";
 
 export interface MetaTeto {
@@ -64,6 +66,52 @@ export const CONTAS_POR_CANAL: Record<CanalLdr, readonly string[]> = {
   mercadolivre: ["barbours", "kokeshi", "lescent", "rituaria"],
   tiktokshop: ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
 };
+
+/** Rotulos da legenda da evolucao por vencimento: o vermelho e' o TETO do canal. */
+export const ROTULO_SEVERIDADE_META_TETO: Record<Severidade, string> = {
+  ok: "Dentro da meta",
+  fora_da_meta: "Acima da meta",
+  critico: "Acima do teto",
+  parcial: "Ainda no prazo (parcial)",
+};
+
+/**
+ * Severidade de um dia de vencimento contra meta/teto do canal. Coorte que
+ * ainda nao venceu e' sempre parcial. Dia sem taxa desenha "—" e barra vazia:
+ * a cor nao aparece, a ausencia nao vira 0.
+ */
+export function severidadePelaMetaTeto(d: { rate: number | null; is_mature: boolean }, mt: MetaTeto): Severidade {
+  if (!d.is_mature) return "parcial";
+  if (d.rate === null) return "ok";
+  if (d.rate > mt.teto) return "critico";
+  if (d.rate > mt.meta) return "fora_da_meta";
+  return "ok";
+}
+
+/** Um dia da serie `daily[]` de `/expedicao/ml/ldr`. */
+export interface DiaLdr {
+  due_date: string;
+  base: number;
+  late: number;
+  rate: number | null;
+  is_mature: boolean;
+}
+
+/** `daily[]` da resposta. Forma invalida ou indisponivel = `null` (sem grafico, nunca serie parcial). */
+export function lerDiariaLdr(json: unknown): DiaLdr[] | null {
+  if (typeof json !== "object" || json === null) return null;
+  const j = json as Record<string, unknown>;
+  if (j.availability !== "available" || !Array.isArray(j.daily)) return null;
+  const dias: DiaLdr[] = [];
+  for (const d of j.daily) {
+    if (typeof d !== "object" || d === null) return null;
+    const x = d as Record<string, unknown>;
+    if (typeof x.due_date !== "string" || !numero(x.base) || !numero(x.late) || typeof x.is_mature !== "boolean") return null;
+    if (!(x.rate === null || numero(x.rate))) return null;
+    dias.push({ due_date: x.due_date, base: x.base, late: x.late, rate: x.rate, is_mature: x.is_mature });
+  }
+  return dias;
+}
 
 export type Faixa = "dentro" | "entre" | "acima";
 

@@ -248,6 +248,8 @@ test("evolucao da Shopee: severidade pela meta/teto, parcial antes de tudo", () 
 test("evolucao por vencimento: um grafico so', comum a TikTok e Shopee", () => {
   const comum = fonte("src/components/expedicao/EvolucaoPorVencimento.tsx");
   assert.match(comum, /titulo="Evolução por dia de vencimento"/);
+  // legenda so' com as severidades presentes na serie (Revisor UX #467)
+  assert.match(comum, /\.filter\(\(s\) => dias\.some\(\(d\) => \(d\.rate !== null \|\| !d\.is_mature\) && severidade\(d\) === s\)\)/);
   assert.match(TIKTOK, /<EvolucaoPorVencimento/);
   assert.match(CLIENTE, /evolucao=\{\s*ldrNaSecao && ldr\.resposta\?\.ldr \? \(\s*<EvolucaoPorVencimento\s+dias=\{ldr\.resposta\.ldr\.daily\}/);
   for (const f of [TIKTOK, CLIENTE]) {

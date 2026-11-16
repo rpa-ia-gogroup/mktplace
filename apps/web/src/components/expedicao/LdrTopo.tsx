@@ -15,6 +15,7 @@ import {
   ROTULO_FAIXA,
   escalaBarra,
   inteiro,
+  lerDiariaLdr,
   lerRespostaLdr,
   montarMatriz,
   pct,
@@ -22,6 +23,7 @@ import {
   urlLdr,
   urlLdrReserva,
   type CanalLdr,
+  type DiaLdr,
   type Celula,
   type Faixa,
   type FonteCanal,
@@ -47,11 +49,42 @@ const PONTO_CANAL: Record<CanalLdr, string> = {
   tiktokshop: "bg-canal-tiktok",
 };
 
-async function buscarJson(url: string): Promise<unknown> {
+async function buscarJsonSemCache(url: string): Promise<unknown> {
   const r = await buscarExpedicao(url, { headers: { Accept: "application/json" } });
   if (r.status === 404) return { availability: "unavailable", unavailable_reason: "disabled" };
   if (!r.ok) throw new Error("http");
   return r.json();
+}
+
+// A faixa do topo e a evolucao do ML leem a MESMA rota: uma requisicao so'
+// (no Data Mart cada consulta entra na fila do Metabase). Erro nao fica no cache.
+const CACHE_MS = 60_000;
+const cache = new Map<string, { em: number; p: Promise<unknown> }>();
+function buscarJson(url: string): Promise<unknown> {
+  const hit = cache.get(url);
+  if (hit && Date.now() - hit.em < CACHE_MS) return hit.p;
+  const p = buscarJsonSemCache(url);
+  cache.set(url, { em: Date.now(), p });
+  p.catch(() => cache.delete(url));
+  return p;
+}
+
+/** Serie diaria da LDR do ML (`daily[]`), para a evolucao por vencimento. `null` = sem grafico. */
+export function useDiariaLdrMl(api: string, marca: string | null, ligada: boolean): DiaLdr[] | null {
+  const url = urlLdr(api, "mercadolivre", marca);
+  const [dias, setDias] = useState<DiaLdr[] | null>(null);
+  useEffect(() => {
+    setDias(null);
+    if (!ligada) return;
+    let vivo = true;
+    buscarJson(url)
+      .then((json) => vivo && setDias(lerDiariaLdr(json)))
+      .catch(() => vivo && setDias(null));
+    return () => {
+      vivo = false;
+    };
+  }, [url, ligada]);
+  return dias;
 }
 
 function useFonte(api: string, canal: CanalLdr, marca: string | null): FonteCanal {

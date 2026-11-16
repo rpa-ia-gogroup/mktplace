@@ -12,7 +12,7 @@
 
 import type { ResumoConta, Totais } from "./expedicao-contract.ts";
 import { VALOR_AUSENTE as AUSENTE, formatarInteiro, formatarPercentual } from "./expedicao-formato.ts";
-import { META_TETO } from "./expedicao-ldr-topo.ts";
+import { META_TETO, severidadePelaMetaTeto } from "./expedicao-ldr-topo.ts";
 import type { Severidade } from "./expedicao-tiktok-contract.ts";
 
 export const NOME_LDR_SHOPEE = "LDR operacional (coleta × prazo Shopee)";
@@ -40,26 +40,9 @@ export interface DiaLdrShopee {
   is_mature: boolean;
 }
 
-/** Rotulos da legenda da evolucao: o vermelho da Shopee e' o TETO, nao um limiar interno. */
-export const ROTULO_SEVERIDADE_SHOPEE: Record<Severidade, string> = {
-  ok: "Dentro da meta",
-  fora_da_meta: "Acima da meta",
-  critico: "Acima do teto",
-  parcial: "Ainda no prazo (parcial)",
-};
-
-/**
- * Severidade do dia contra a meta/teto da Shopee (`META_TETO`, confirmados em
- * 04/11/2026). Coorte que ainda nao venceu e' sempre parcial. Dia sem taxa
- * desenha "—" e barra vazia: a cor nao aparece, a ausencia nao vira 0.
- */
+/** Severidade do dia contra a meta/teto da Shopee (`META_TETO`, confirmados em 04/11/2026). */
 export function severidadeDoDiaShopee(d: DiaLdrShopee): Severidade {
-  if (!d.is_mature) return "parcial";
-  if (d.rate === null) return "ok";
-  const { meta, teto } = META_TETO.shopee;
-  if (d.rate > teto) return "critico";
-  if (d.rate > meta) return "fora_da_meta";
-  return "ok";
+  return severidadePelaMetaTeto(d, META_TETO.shopee);
 }
 
 export interface RespostaLdrShopee {

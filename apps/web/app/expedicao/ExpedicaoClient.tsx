@@ -43,11 +43,11 @@ import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
 import type { LinhaDaFila } from "@/components/expedicao/EvolucaoPorMarca";
 import LdrShopeePanel, { useLdrShopee } from "@/components/expedicao/LdrShopeePanel";
 import EvolucaoPorVencimento from "@/components/expedicao/EvolucaoPorVencimento";
-import { META_TETO } from "@/lib/expedicao-ldr-topo";
+import { META_TETO, ROTULO_SEVERIDADE_META_TETO, severidadePelaMetaTeto } from "@/lib/expedicao-ldr-topo";
+import { useDiariaLdrMl } from "@/components/expedicao/LdrTopo";
 import {
   AVISO_FILA_COM_FBS,
   DIAS_LDR_SHOPEE,
-  ROTULO_SEVERIDADE_SHOPEE,
   severidadeDoDiaShopee,
   divisaoDaFila,
   textoDaReconciliacao,
@@ -187,6 +187,9 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 // EXPEDICAO-SHOPEE-LDR-1: a LDR operacional da Shopee nasce DESLIGADA. Com a
 // flag off, a secao "Prazo" fica exatamente como antes — inclusive o aviso de
 // que a LDR ainda nao e' calculada. Literal inline para o Next embutir.
+/** Severidade do dia do ML contra meta 3% / teto 6% (confirmados em 04/11/2026). */
+const severidadeDoDiaMl = (d: { rate: number | null; is_mature: boolean }) =>
+  severidadePelaMetaTeto(d, META_TETO.mercadolivre);
 const LDR_SHOPEE_LIGADA = process.env.NEXT_PUBLIC_EXPEDICAO_SHOPEE_LDR_ENABLED === "true";
 
 // A flag do Mercado Livre (`NEXT_PUBLIC_EXPEDICAO_ML_ENABLED`) mora na casca
@@ -705,6 +708,10 @@ export default function ExpedicaoClient({
   // topo: com 3 dias no topo o painel mostrava uma taxa que nao e' a do canal.
   const ldr = useLdrShopee(API, marcaAtiva, LDR_SHOPEE_LIGADA && filtros.channel === "shopee", DIAS_LDR_SHOPEE);
   const pace = usePaceDespachados(API, filtros.channel, true);
+  // ML (o outro canal desta fila; o literal do canal so' existe atras das flags):
+  // a serie diaria vem da mesma rota da faixa do topo (requisicao compartilhada).
+  // So' com a faixa ligada (`faixaTopo`): sem ela a rota nem e' consultada.
+  const diariaMl = useDiariaLdrMl(API, marcaAtiva, Boolean(faixaTopo) && filtros.channel !== "shopee");
 
   const temFiltro =
     filtros.brands.length > 0 || filtros.accounts.length > 0 || filtros.situacao.length > 0;
@@ -1972,8 +1979,15 @@ export default function ExpedicaoClient({
                 <EvolucaoPorVencimento
                   dias={ldr.resposta.ldr.daily}
                   severidade={severidadeDoDiaShopee}
-                  rotulos={ROTULO_SEVERIDADE_SHOPEE}
+                  rotulos={ROTULO_SEVERIDADE_META_TETO}
                   linha={{ valor: META_TETO.shopee.meta, rotulo: "Meta" }}
+                />
+              ) : diariaMl ? (
+                <EvolucaoPorVencimento
+                  dias={diariaMl}
+                  severidade={severidadeDoDiaMl}
+                  rotulos={ROTULO_SEVERIDADE_META_TETO}
+                  linha={{ valor: META_TETO.mercadolivre.meta, rotulo: "Meta" }}
                 />
               ) : null
             }

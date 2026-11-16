@@ -13,10 +13,12 @@ import {
   celula,
   classificar,
   escalaBarra,
+  lerDiariaLdr,
   lerRespostaLdr,
   montarMatriz,
   pct,
   precisaReserva,
+  severidadePelaMetaTeto,
   urlLdr,
   urlLdrReserva,
   type FonteCanal,
@@ -222,4 +224,44 @@ test("fila: metrica oficial fora do limite le '41,8% · meta ≥ 60%', como na C
   );
   // Sem meta numerica, vale o rotulo da API; sem valor, "—" (nunca 0).
   assert.equal(detalheForaDoLimite({ valor: null, unidade: "pct", meta: null, comparador: null, rotulo_meta: "Meta >= 60" }), "— · Meta >= 60");
+});
+
+// ---------------------------------------------------------------------------
+// Evolucao por vencimento do ML (`daily[]` de /expedicao/ml/ldr)
+// ---------------------------------------------------------------------------
+test("ML: severidade do dia pela meta 3% / teto 6%", () => {
+  const mt = META_TETO.mercadolivre;
+  const dia = (rate: number | null) => ({ rate, is_mature: true });
+  assert.equal(severidadePelaMetaTeto(dia(0.03), mt), "ok", "meta exata conta como dentro");
+  assert.equal(severidadePelaMetaTeto(dia(0.045), mt), "fora_da_meta");
+  assert.equal(severidadePelaMetaTeto(dia(0.06), mt), "fora_da_meta", "teto exato nao e' critico");
+  assert.equal(severidadePelaMetaTeto(dia(0.061), mt), "critico");
+  assert.equal(severidadePelaMetaTeto({ rate: 0.5, is_mature: false }, mt), "parcial");
+});
+
+test("ML: daily[] lido sem inventar; forma invalida ou API antiga = sem grafico", () => {
+  const ok = {
+    availability: "available",
+    daily: [
+      { due_date: "2026-11-03", base: 300, late: 3, rate: 0.01, is_mature: true },
+      { due_date: "2026-11-04", base: 0, late: 0, rate: null, is_mature: true },
+    ],
+  };
+  const dias = lerDiariaLdr(ok);
+  assert.equal(dias?.length, 2);
+  assert.equal(dias?.[1].rate, null, "dia sem envio segue ausente, nao 0");
+  assert.equal(lerDiariaLdr({ availability: "available", brands: [] }), null, "API sem daily");
+  assert.equal(lerDiariaLdr({ availability: "unavailable", daily: [] }), null);
+  assert.equal(lerDiariaLdr({ availability: "available", daily: [{ due_date: "x", base: "1" }] }), null);
+});
+
+test("ML: evolucao ligada no esqueleto, com a requisicao da faixa do topo", () => {
+  const cliente = readFileSync(join(AQUI, "..", "app/expedicao/ExpedicaoClient.tsx"), "utf8");
+  const topo = readFileSync(join(AQUI, "..", "src/components/expedicao/LdrTopo.tsx"), "utf8");
+  assert.match(cliente, /useDiariaLdrMl\(API, marcaAtiva, Boolean\(faixaTopo\) && filtros\.channel !== "shopee"\)/);
+  assert.match(cliente, /<EvolucaoPorVencimento\s+dias=\{diariaMl\}\s+severidade=\{severidadeDoDiaMl\}/);
+  assert.match(cliente, /severidadePelaMetaTeto\(d, META_TETO\.mercadolivre\)/);
+  // a mesma URL da faixa: uma requisicao so'
+  assert.match(topo, /const url = urlLdr\(api, "mercadolivre", marca\);/);
+  assert.match(topo, /cache\.get\(url\)/);
 });
