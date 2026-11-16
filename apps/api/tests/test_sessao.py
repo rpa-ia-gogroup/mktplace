@@ -21,6 +21,13 @@ def test_email_permitido_match_exato():
     for ruim in ["x@gocase.com.evil.com", "x@mail.gocase.com", "x@evil.com", "gocase.com", "", None]:
         assert not email_permitido(ruim, DOM), ruim
 
+def test_email_individual_libera_so_ele():
+    lista = dominios_permitidos("gocase.com,Convidada@Gmail.com")
+    assert email_permitido("convidada@gmail.com", lista)
+    assert email_permitido("joao@gocase.com", lista)
+    for ruim in ["outra@gmail.com", "x.convidada@gmail.com", "convidada@gmail.com.evil.com", "@gmail.com"]:
+        assert not email_permitido(ruim, lista), ruim
+
 def test_sessao_valida():
     assert validar_sessao(_tok(), SEGREDO, DOM) == Sessao(email="joao@gocase.com", nome="Joao")
 

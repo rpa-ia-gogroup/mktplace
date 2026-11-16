@@ -48,12 +48,17 @@ export function allowedDomains(env: AuthEnv): string[] {
   return raw.split(",").map((d) => d.trim().toLowerCase()).filter(Boolean);
 }
 
-/** Match exato do dominio depois do ultimo `@`; nunca includes/endsWith. */
+/**
+ * Match exato do dominio depois do ultimo `@`; nunca includes/endsWith.
+ * Item da lista com `@` libera so' aquele e-mail inteiro (convidado de fora,
+ * ex.: Gmail), sem abrir o dominio dele.
+ */
 export function isAllowedEmail(email: string | null | undefined, env: AuthEnv): boolean {
   const e = (email || "").trim().toLowerCase();
   const at = e.lastIndexOf("@");
-  if (at < 0) return false;
-  return allowedDomains(env).includes(e.slice(at + 1));
+  if (at < 1) return false;
+  const lista = allowedDomains(env);
+  return lista.includes(e.slice(at + 1)) || lista.includes(e);
 }
 
 function sessionSecret(env: AuthEnv): Uint8Array {
