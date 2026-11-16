@@ -67,7 +67,7 @@ WITH s AS (
            (coletado_em IS NULL AND status IN ('shipped', 'delivered', 'not_delivered')) AS sem_marco
       FROM s
 )
-SELECT brand AS marca,
+SELECT brand AS marca, dia_prazo AS dia,
        COUNT(*) FILTER (WHERE NOT cancelado_sem_coleta AND NOT sem_marco) AS base,
        COUNT(*) FILTER (WHERE NOT cancelado_sem_coleta AND NOT sem_marco AND (
               coletado_em >= ((dia_prazo + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
@@ -75,7 +75,7 @@ SELECT brand AS marca,
            OR coletado_em IS NULL)) AS atrasados,
        COUNT(*) FILTER (WHERE sem_marco) AS sem_marco
   FROM c
- GROUP BY brand
+ GROUP BY brand, dia_prazo
 """
 
 
@@ -119,12 +119,30 @@ def obter_ldr_ml(*, dias: int = 7, brands: Optional[list[str]] = None,
     except Exception as exc:  # noqa: BLE001 — motivo fixo, texto nunca sai
         logger.warning("ml_ldr: consulta falhou (%s)", type(exc).__name__)
         return {**base, "availability": "unavailable", "unavailable_reason": "source_error", "mature_days": 0}
-    marcas_out = []
+    # Uma linha por marca x dia do prazo: soma por marca (faixa do topo) e por
+    # dia (evolucao por vencimento). Dia sem envio fica com base 0 e taxa None.
+    por_marca: dict[str, dict[str, int]] = {}
+    por_dia: dict[date, list[int]] = {inicio + timedelta(days=i): [0, 0] for i in range((fim - inicio).days + 1)}
     for r in linhas:
         b, a = _int(r.get("base")), _int(r.get("atrasados"))
-        marcas_out.append({
-            "brand": str(r.get("marca")), "base": b, "late": a,
-            "rate": (a / b) if b > 0 else None, "without_pickup_mark": _int(r.get("sem_marco")),
-        })
-    marcas_out.sort(key=lambda x: x["brand"])
-    return {**base, "availability": "available", "mature_days": (fim - inicio).days + 1, "brands": marcas_out}
+        m = por_marca.setdefault(str(r.get("marca")), {"base": 0, "late": 0, "sem_marco": 0})
+        m["base"] += b
+        m["late"] += a
+        m["sem_marco"] += _int(r.get("sem_marco"))
+        dia = r.get("dia")
+        dia = dia if isinstance(dia, date) else date.fromisoformat(str(dia)[:10])
+        if dia in por_dia:
+            por_dia[dia][0] += b
+            por_dia[dia][1] += a
+    marcas_out = [
+        {"brand": marca, "base": m["base"], "late": m["late"],
+         "rate": (m["late"] / m["base"]) if m["base"] > 0 else None, "without_pickup_mark": m["sem_marco"]}
+        for marca, m in sorted(por_marca.items())
+    ]
+    # So' dias fechados (ate' D-1) entram na janela: todo dia e' maduro.
+    daily = [
+        {"due_date": d.isoformat(), "base": b, "late": a, "rate": (a / b) if b > 0 else None, "is_mature": True}
+        for d, (b, a) in sorted(por_dia.items())
+    ]
+    return {**base, "availability": "available", "mature_days": (fim - inicio).days + 1,
+            "brands": marcas_out, "daily": daily}

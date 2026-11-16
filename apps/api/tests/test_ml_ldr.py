@@ -24,8 +24,9 @@ def _fonte(linhas=None, erro=False):
         if erro:
             raise RuntimeError("postgresql://u:senha-SECRETA@h/db")
         return linhas if linhas is not None else [
-            {"marca": "kokeshi", "base": 340, "atrasados": 3, "sem_marco": 1},
-            {"marca": "barbours", "base": 0, "atrasados": 0, "sem_marco": 0},
+            {"marca": "kokeshi", "dia": date(2026, 11, 3), "base": 300, "atrasados": 3, "sem_marco": 1},
+            {"marca": "kokeshi", "dia": "2026-11-04", "base": 40, "atrasados": 0, "sem_marco": 0},
+            {"marca": "barbours", "dia": date(2026, 11, 3), "base": 0, "atrasados": 0, "sem_marco": 0},
         ]
     return consultar, chamadas
 
@@ -60,6 +61,17 @@ def test_taxa_e_base_zero_sem_taxa():
     assert por["barbours"]["rate"] is None
 
 
+def test_serie_diaria_soma_marcas_e_dia_sem_envio_nao_vira_zero():
+    consultar, _ = _fonte()
+    r = svc.obter_ldr_ml(consultar=consultar, agora=datetime(2026, 11, 6, 15, 0, tzinfo=timezone.utc))
+    assert [d["due_date"] for d in r["daily"]] == ["2026-11-03", "2026-11-04", "2026-11-05"]
+    d3, d4, d5 = r["daily"]
+    assert (d3["base"], d3["late"], d3["rate"]) == (300, 3, pytest.approx(0.01))
+    assert (d4["base"], d4["late"], d4["rate"]) == (40, 0, 0)
+    assert (d5["base"], d5["rate"]) == (0, None), "dia sem envio e' ausencia, nao 0%"
+    assert all(d["is_mature"] for d in r["daily"])
+
+
 def test_erro_nao_vaza():
     consultar, _ = _fonte(erro=True)
     r = svc.obter_ldr_ml(consultar=consultar, agora=datetime(2026, 11, 6, 15, 0, tzinfo=timezone.utc))
@@ -79,6 +91,7 @@ def test_regra_no_sql():
     assert "sla_status = 'delayed'" in sql
     assert "(dia_prazo + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo'" in sql
     assert "cancelado_sem_coleta" in sql and "sem_marco" in sql
+    assert "GROUP BY brand, dia_prazo" in sql
 
 
 @pytest.fixture
