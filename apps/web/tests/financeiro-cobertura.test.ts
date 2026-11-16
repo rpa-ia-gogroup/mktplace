@@ -105,3 +105,28 @@ test("T-0115 A1-12 marca TikTok com repasse maturando: motivo de maturacao, sem 
   assert.doesNotMatch(d.headline, /custo alto/i);
   assert.match(d.explanations.map((e) => e.reason).join(" "), /Repasse do TikTok ainda nao consolidado/);
 });
+
+// ---------------------------------------------------------------------------
+// T-0120 (VAL-B1 B1-13) — taxa Shopee do escrow, com cobertura parcial por marca
+// ---------------------------------------------------------------------------
+
+test("T-0120 taxa Shopee com escrow parcial em todas as marcas diz 'fonte parcial', nao '5 de 5'", () => {
+  // out/26: as 5 marcas tem taxa do escrow, todas com escrow < 100% dos pedidos.
+  const c = {
+    status: "parcial", marcas_com_dado: 5, marcas_total: 5, marcas_sem_dado: [],
+    marcas_parciais: ["apice", "barbours", "kokeshi", "lescent", "rituaria"],
+  };
+  assert.equal(textoCoberturaFinanceiro(c), "fonte parcial em 5 de 5 marcas");
+  assert.equal(
+    textoCoberturaFinanceiro({ ...c, marcas_com_dado: 4, marcas_sem_dado: ["lescent"], marcas_parciais: ["apice"] }),
+    "parcial (4 de 5 marcas) · fonte parcial em 1 de 4 marcas",
+  );
+  // sem marcas_parciais (API antiga ou lista vazia): texto de antes.
+  assert.equal(textoCoberturaFinanceiro({ ...c, marcas_com_dado: 1, marcas_parciais: [] }), "parcial (1 de 5 marcas)");
+});
+
+test("T-0120 o tipo publica marcas_parciais e o status da taxa Shopee por marca", () => {
+  const tipos = fonte("src/lib/api-client.ts");
+  assert.ok(tipos.includes("marcas_parciais?: string[];"));
+  assert.ok(tipos.includes("shopee_fee_status?: string | null;"));
+});

@@ -15,6 +15,9 @@ repasse saem); taxa < 1% do GMV = implausivel (so' a taxa sai).
 """
 from __future__ import annotations
 
+from datetime import date
+
+from tests.financeiro_shopee_fake import FinanceiroSession
 from app.schemas.performance import FinanceiroResponse, KpiSummary
 from app.services import performance_service as perf_svc
 
@@ -72,7 +75,7 @@ SHOPEE_NOV = [
 
 
 def _financeiro(rows):
-    return perf_svc.get_financeiro(FakeSession(rows), "all", 2026, 11)
+    return perf_svc.get_financeiro(FinanceiroSession(rows, date(2026, 11, 1)), "all", 2026, 11)
 
 
 def _marca(res, brand):

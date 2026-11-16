@@ -418,6 +418,9 @@ class CoberturaMarcas(BaseModel):
     #: T-0115: marcas sem dado porque o valor ficou abaixo do limiar de
     #: maturacao (repasse TikTok). Subconjunto de `marcas_sem_dado`.
     marcas_maturando: list[str] = []
+    #: T-0120: marcas COM valor cuja fonte cobre so' parte dos pedidos
+    #: (escrow da Shopee < 100%). Nao entram em `marcas_sem_dado`.
+    marcas_parciais: list[str] = []
 
 
 FinanceiroKpis.model_rebuild()
@@ -457,6 +460,8 @@ class FinanceiroBrandRow(BaseModel):
     shopee_gmv: Optional[float] = None
     shopee_settlement: Optional[float] = None
     shopee_fees: Optional[float] = None
+    #: T-0120: "completa" | "parcial" (escrow < 100% dos pedidos) | "sem_dado".
+    shopee_fee_status: Optional[str] = None
     shopee_avg_fee_pct: Optional[float] = None
     shopee_avg_settlement_pct: Optional[float] = None
     shopee_ad_spend: Optional[float] = None

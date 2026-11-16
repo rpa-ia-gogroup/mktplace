@@ -526,10 +526,16 @@ export function textoCoberturaImpacto(c: CoberturaImpacto | null | undefined): s
  * `null` com cobertura completa, sem dado (o % ja' e' "—") ou sem cobertura.
  */
 export function textoCoberturaFinanceiro(
-  c: { status: string; marcas_com_dado: number; marcas_total: number } | null | undefined,
+  c: { status: string; marcas_com_dado: number; marcas_total: number; marcas_parciais?: string[] } | null | undefined,
 ): string | null {
   if (!c || c.status !== "parcial") return null;
-  return textoParcialMarcas(c.marcas_com_dado, c.marcas_total);
+  // T-0120: marca COM valor mas fonte parcial (escrow Shopee < 100% dos pedidos).
+  const n = c.marcas_parciais?.length ?? 0;
+  if (n === 0) return textoParcialMarcas(c.marcas_com_dado, c.marcas_total);
+  const fonte = `fonte parcial em ${n} de ${c.marcas_com_dado} ${c.marcas_com_dado === 1 ? "marca" : "marcas"}`;
+  return c.marcas_com_dado < c.marcas_total
+    ? `${textoParcialMarcas(c.marcas_com_dado, c.marcas_total)} · ${fonte}`
+    : fonte;
 }
 
 /** Marca do bloco de impacto sem fotografia no dia: tudo "—", nunca R$ 0 / 0,0%. */

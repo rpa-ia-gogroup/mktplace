@@ -19,6 +19,7 @@ from datetime import date
 
 import pytest
 
+from tests.financeiro_shopee_fake import FinanceiroSession
 from app.schemas.performance import FinanceiroResponse
 from app.services import performance_service as perf_svc
 
@@ -75,7 +76,7 @@ def _linha_ml(brand="kokeshi", gmv=1_000_000.0, total_fees=170_000.0, **over):
 
 
 def _financeiro(rows):
-    return perf_svc.get_financeiro(FakeSession(rows), "all", 2026, 7)
+    return perf_svc.get_financeiro(FinanceiroSession(rows, date(2026, 7, 1)), "all", 2026, 7)
 
 
 def _marca(res, brand):
