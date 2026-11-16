@@ -374,11 +374,13 @@ GROUP BY date, marketplace_id, loja_id, uf
 """
 
 # ML: pedidos de raw.ml_orders, shipments/custos de raw.ml_shipments/
+# order_date = dia BRT `(date_created + 1h)::date`: date_created e' -04:00 sem fuso
+# (parse_ts do airflow corta o offset), igual a gold.ml_gestao_diaria (migration 64).
 # raw.ml_shipment_costs (decisao secao 1.2c — nao silver.stg_ml_*).
 SQL_INSERT_ML_STAGING = f"""
 WITH ml_orders AS (
     SELECT brand, order_id, status, shipping_id, total_amount,
-           date_created::date AS order_date
+           (date_created + interval '1 hour')::date AS order_date
     FROM raw.ml_orders
     WHERE status IN ('paid', 'cancelled')
 ),
@@ -630,8 +632,8 @@ SQL_MAX_DATE_SHOPEE_SOURCE = (
     "FROM silver.stg_shopee_order_item_snapshots"
 )
 SQL_MAX_DATE_ML_SOURCE = (
-    "SELECT MAX(date_created::date) AS max_global, "
-    "MAX(date_created::date) FILTER (WHERE date_created::date <= %(date_to)s) AS max_eligible "
+    "SELECT MAX((date_created + interval '1 hour')::date) AS max_global, "
+    "MAX((date_created + interval '1 hour')::date) FILTER (WHERE (date_created + interval '1 hour')::date <= %(date_to)s) AS max_eligible "
     "FROM raw.ml_orders WHERE status IN ('paid', 'cancelled')"
 )
 
@@ -723,11 +725,11 @@ def _ml_incremental_select(min_date: date, date_to: date) -> str:
     return f"""
     WITH ml_orders AS (
         SELECT brand, order_id, status, shipping_id, total_amount,
-               date_created::date AS order_date
+               (date_created + interval '1 hour')::date AS order_date
         FROM raw.ml_orders
         WHERE status IN ('paid', 'cancelled')
-          AND date_created::date > '{min_date_literal}'::date
-          AND date_created::date <= '{date_to_literal}'::date
+          AND (date_created + interval '1 hour')::date > '{min_date_literal}'::date
+          AND (date_created + interval '1 hour')::date <= '{date_to_literal}'::date
     ),
     ml_shipments AS (
         SELECT brand, shipment_id, receiver_state FROM raw.ml_shipments
@@ -819,7 +821,7 @@ def _ml_gmv_source_recalc_incremental(min_date: date, date_to: date) -> str:
 
     JANELA, IDÊNTICA À DO STAGING  (Gate DQ-D2-R2)
     ----------------------------------------------
-        min_date < date_created::date <= date_to
+        min_date < (date_created + interval '1 hour')::date <= date_to
 
     Piso exclusivo, teto INCLUSIVO — igual a `_ml_incremental_select`.
     `date_to` é OBRIGATÓRIO e sem default: ver a mesma justificativa em
@@ -829,8 +831,8 @@ def _ml_gmv_source_recalc_incremental(min_date: date, date_to: date) -> str:
     date_to_literal = date_to.isoformat()
     return (
         "SELECT COALESCE(SUM(total_amount), 0) FROM raw.ml_orders "
-        f"WHERE status = 'paid' AND date_created::date > '{min_date_literal}'::date "
-        f"AND date_created::date <= '{date_to_literal}'::date"
+        f"WHERE status = 'paid' AND (date_created + interval '1 hour')::date > '{min_date_literal}'::date "
+        f"AND (date_created + interval '1 hour')::date <= '{date_to_literal}'::date"
     )
 
 

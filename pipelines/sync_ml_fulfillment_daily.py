@@ -14,7 +14,7 @@ fisico. Nao e' margem (falta CMV), nao e' caixa (falta settlement).
 
 UMA COORTE SO': O PEDIDO (corrigido no FULL-1A-R)
 --------------------------------------------------
-`ref_date` e' `date_created::date` do PEDIDO, em America/Sao_Paulo, e vale para
+`ref_date` e' o dia BRT do PEDIDO, `(date_created + 1h)::date`, e vale para
 TODAS as metricas da linha -- GMV, pedidos, unidades, cancelamento, handling e
 delivery.
 
@@ -420,14 +420,17 @@ WITH pedidos AS (
     SELECT o.brand,
            o.order_id,
            o.date_created,
-           o.date_created::date AS ref_date,
+           -- date_created e' -04:00 sem fuso (parse_ts do airflow corta o offset):
+           -- +1h = dia de Brasilia. Handling/delivery NAO mudam: date_shipped e
+           -- date_delivered tambem sao -04:00 (medido 16/11/2026), a diferenca anula.
+           (o.date_created + interval '1 hour')::date AS ref_date,
            o.status,
            o.total_amount,
            o.shipping_id,
            o.updated_at
       FROM api.ml_orders o
-     WHERE o.date_created >= :date_from
-       AND o.date_created <  :date_to_excl
+     WHERE o.date_created >= CAST(:date_from AS date) - interval '1 hour'
+       AND o.date_created <  CAST(:date_to_excl AS date) - interval '1 hour'
 ),
 envio AS (
     SELECT DISTINCT ON (s.brand, s.shipment_id)
@@ -501,10 +504,10 @@ SELECT ref_date,
 #: `total_amount` -- a alocacao e' determinística e o preflight mede se continua.
 SQL_LISTING = text(f"""
 WITH pedidos AS (
-    SELECT o.brand, o.order_id, o.date_created::date AS ref_date, o.shipping_id
+    SELECT o.brand, o.order_id, (o.date_created + interval '1 hour')::date AS ref_date, o.shipping_id
       FROM api.ml_orders o
-     WHERE o.date_created >= :date_from
-       AND o.date_created <  :date_to_excl
+     WHERE o.date_created >= CAST(:date_from AS date) - interval '1 hour'
+       AND o.date_created <  CAST(:date_to_excl AS date) - interval '1 hour'
        AND o.status = :pago
 ),
 envio AS (
@@ -538,7 +541,8 @@ SQL_PREFLIGHT_FONTE = text("""
 WITH pedidos AS (
     SELECT o.brand, o.order_id, o.shipping_id, o.status, o.total_amount
       FROM api.ml_orders o
-     WHERE o.date_created >= :date_from AND o.date_created < :date_to_excl
+     WHERE o.date_created >= CAST(:date_from AS date) - interval '1 hour'
+       AND o.date_created < CAST(:date_to_excl AS date) - interval '1 hour'
 ),
 li AS (
     SELECT l.brand, l.order_id, COUNT(*) AS linhas,

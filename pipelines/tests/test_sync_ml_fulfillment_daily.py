@@ -310,7 +310,7 @@ def test_nao_existe_mais_consulta_separada_de_tempos():
 
 def test_agregado_agrupa_apenas_por_ref_date_do_pedido():
     sql = str(mod.SQL_AGREGADO)
-    assert "o.date_created::date AS ref_date" in sql
+    assert "(o.date_created + interval '1 hour')::date AS ref_date" in sql
     assert ("GROUP BY ref_date, brand, fulfillment_class, "
             "logistic_type_original") in sql
 
@@ -755,3 +755,17 @@ def test_obrigacao_mensal_continua_exigindo_full():
         "ml_fulfillment_daily", "ml_fulfillment_daily_full")
     assert audit_sources_for_mode(MODE_BACKFILL) == (
         "ml_fulfillment_daily", "ml_fulfillment_daily_backfill")
+
+
+def test_ref_date_e_janela_no_dia_brt_porque_date_created_e_menos_4h():
+    """`date_created` e' -04:00 sem fuso (parse_ts do airflow corta o offset).
+
+    O dia e' o de Brasilia (+1h) e a janela [date_from, date_to_excl) de dias BRT
+    comeca 1h antes no relogio do ML, nas TRES consultas da mesma coorte.
+    Handling/delivery seguem subtraindo direto: date_shipped/date_delivered
+    tambem sao -04:00, entao a diferenca nao muda."""
+    for sql in (str(mod.SQL_AGREGADO), str(mod.SQL_LISTING), str(mod.SQL_PREFLIGHT_FONTE)):
+        assert "o.date_created::date" not in sql
+        assert "CAST(:date_from AS date) - interval '1 hour'" in sql
+        assert "CAST(:date_to_excl AS date) - interval '1 hour'" in sql
+    assert "e.date_shipped - p.date_created" in str(mod.SQL_AGREGADO)
