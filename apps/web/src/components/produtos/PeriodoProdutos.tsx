@@ -56,7 +56,6 @@ export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }
         ativo={!ativo}
         icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
         largura="w-64"
-        alinhar="fim"
       >
         {(fechar) => (
           <div className="flex flex-col gap-2">
