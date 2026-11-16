@@ -33,7 +33,7 @@ import {
   lastNMonths, type ProdutosTab,
 } from "@/lib/produtos-tab-transition";
 import { initialChannelState, startFetch, resolveFetch, resolveFetchError, type ChannelState } from "@/lib/async-channel-state";
-import { formatProdutosScope } from "@/lib/produtos-scope";
+import { adsAteParcial, formatProdutosScope } from "@/lib/produtos-scope";
 import { fmtBrlExato } from "@/lib/formatters";
 import {
   mlRowToExportRecord, tiktokRowToExportRecord, shopeeRowToExportRecord,
@@ -87,7 +87,7 @@ const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio pond
 // ML por mes (silver do Data Mart): dia do pedido em BRT; Ads do relatorio diario do ML, que chega no dia seguinte.
 function dicaMlMes(adsAte: string | null | undefined): string {
   const ate = adsAte ? `, até ${adsAte.slice(8, 10)}/${adsAte.slice(5, 7)}` : "";
-  return `Mês pelo dia do pedido (horário de Brasília), só pedidos pagos. Ads do relatório diário do ML${ate}. Velocidade, status e sinal de ação existem só no ranking acumulado e não aparecem por mês.`;
+  return `Mês pelo dia do pedido (horário de Brasília), só pedidos pagos. Ads do relatório diário do ML${ate}.`;
 }
 const DICA_BLING_TODAS =
   "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
@@ -566,7 +566,8 @@ function ProdutosPageInner() {
   const escopo =
     tab === "ml"
       ? formatProdutosScope({
-          channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
+          channelLabel: activeChannelLabel, brandLabel: activeBrandLabel,
+          periodLabel: [periodLabel, adsAteParcial(period, mlDisplayData?.ads_ate)].filter(Boolean).join(" · "),
           total: mlDisplayData?.total ?? null, offset: mlOffset, limit: PAGE_SIZE,
         })
       : tab === "tiktok"

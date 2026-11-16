@@ -18,7 +18,8 @@ const PARETO_COLOR: Record<string, string> = {
   D_tail: "bg-raised text-ink-muted",
 };
 interface Props {
-  items: { total: number; items: ProdutoMLRow[] } | null;
+  // ads_ate: ha relatorio de Ads no mes, entao item sem investimento e' "Sem Ads", nao ausencia.
+  items: { total: number; items: ProdutoMLRow[]; ads_ate?: string | null } | null;
   loading: boolean;
   sort: SortState;
   onSort: (column: string) => void;
@@ -93,6 +94,8 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
               <span className={p.ad_roas >= 4 ? "text-ok-ink font-semibold" : p.ad_roas >= 2.5 ? "text-warn-ink" : "text-crit-ink"}>
                 {dec(p.ad_roas, 1)}x ROAS
               </span>
+            ) : p.ad_spend == null && items?.ads_ate ? (
+              <span className="text-ink-muted">Sem Ads</span>
             ) : <span className="text-ink-faint">—</span>}
             {(p.ad_acos_pct != null || p.ad_spend != null) && (
               <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">

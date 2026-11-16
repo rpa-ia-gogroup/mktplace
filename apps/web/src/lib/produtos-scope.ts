@@ -32,3 +32,12 @@ export function formatProdutosScope(input: ProdutosScopeInput): string {
   }
   return parts.join(" · ");
 }
+
+/** "Ads até dd/mm" quando o relatório de Ads do ML não cobre o mês inteiro
+ * (mês atual, ou atraso no relatório); null em mês fechado com Ads completo. */
+export function adsAteParcial(period: string, adsAte: string | null | undefined): string | null {
+  if (!adsAte) return null;
+  const [y, m] = period.split("-").map(Number);
+  const fim = `${period}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+  return adsAte < fim ? `Ads até ${adsAte.slice(8, 10)}/${adsAte.slice(5, 7)}` : null;
+}
