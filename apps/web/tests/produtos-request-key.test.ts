@@ -4,32 +4,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  buildMlTableKey, buildMlSummaryKey, buildPeriodTableKey, buildPeriodSummaryKey,
+  buildPeriodTableKey, buildPeriodSummaryKey,
   resolveChannelAvailability, describeProdutosPartialWarning,
 } from "../src/lib/produtos-request-key.ts";
 
-const ML_TABLE_BASE = { brand: "barbours", bucket: null, signal: "", status: "", velocity: "", offset: 0, sortColumn: null, sortDirection: null };
-
-test("chave da tabela ML muda com marca, bucket, signal, status, velocity, offset e sort — cada parametro isoladamente", () => {
-  const base = buildMlTableKey(ML_TABLE_BASE);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, brand: "kokeshi" }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, bucket: "A_top50" }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, signal: "ALERTA: taxa cancelamento alta (> 10%)" }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, status: "inactive" }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, velocity: "high" }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, offset: 25 }), base);
-  assert.notEqual(buildMlTableKey({ ...ML_TABLE_BASE, sortColumn: "gross_revenue", sortDirection: "desc" }), base);
-});
-
-test("chave do resumo ML NAO inclui bucket/offset/sort — mesmo bucket diferente, resumo e' o mesmo", () => {
-  const a = buildMlSummaryKey({ brand: "barbours", signal: "", status: "", velocity: "" });
-  const b = buildMlSummaryKey({ brand: "barbours", signal: "", status: "", velocity: "" });
-  assert.equal(a, b);
-});
-
 const PERIOD_TABLE_BASE = { brand: "kokeshi", period: "2026-07", bucket: null, offset: 0, sortColumn: null, sortDirection: null };
 
-test("chave de tabela TikTok/Shopee (compartilhada) muda com marca, periodo, bucket, offset e sort", () => {
+test("chave de tabela ML/TikTok/Shopee (compartilhada) muda com marca, periodo, bucket, offset e sort", () => {
   const base = buildPeriodTableKey(PERIOD_TABLE_BASE);
   assert.notEqual(buildPeriodTableKey({ ...PERIOD_TABLE_BASE, brand: "apice" }), base);
   assert.notEqual(buildPeriodTableKey({ ...PERIOD_TABLE_BASE, period: "2026-06" }), base);

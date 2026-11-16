@@ -1,4 +1,5 @@
-﻿from datetime import date, timedelta
+﻿import logging
+from datetime import date, timedelta
 from typing import Literal, Optional, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -40,6 +41,8 @@ from app.services import gold_service as svc
 from app.services import hoje_por_hora_service as hph_svc
 from app.services import monitoramento_preco_service as mp_svc
 from app.services import performance_service as perf_svc
+from app.services import datamart_leitura
+from app.services import produtos_ml_mes_service as ml_mes_svc
 from app.services import pma_match
 from app.services.affiliate_costs_service import safe_affiliate_costs_block
 from app.services.tiktok_order_discounts_service import (
@@ -59,6 +62,7 @@ from app.services.ml_fulfillment_service import (
 )
 
 router = APIRouter(prefix="/api/v1/performance", tags=["performance"])
+logger = logging.getLogger(__name__)
 
 #: Corpo do 503 da superficie Full do ML. Constante, sanitizada e sem detalhe de
 #: infraestrutura: o cliente sabe que a secao caiu, nao por que nem onde.
@@ -259,9 +263,24 @@ def daily(
     return perf_svc.get_daily(_require_db(db), brand, marketplace, days_back, period=period)
 
 
+def _ml_mes_sem_filtros_lifetime(*filtros: Optional[str]) -> None:
+    # Sinal, status e velocidade sao regras do ranking acumulado do Airflow; nao existem por mes.
+    if any(filtros):
+        raise HTTPException(422, "action_signal, product_status e revenue_velocity so' valem sem ref_month.")
+
+
+def _ml_mes(ler):
+    try:
+        return ler()
+    except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
+        logger.exception("produtos/ml por mes falhou")
+        raise HTTPException(503, "Base de produtos do Mercado Livre indisponivel.") from exc
+
+
 @router.get("/produtos/ml/summary", response_model=ProdutosMLSummaryResponse)
 def produtos_ml_summary(
     brand: Optional[str] = Query(None),
+    ref_month: Optional[str] = Query(None, description="YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado."),
     action_signal: Optional[str] = Query(None),
     product_status: Optional[str] = Query(None),
     revenue_velocity: Optional[str] = Query(None),
@@ -283,12 +302,17 @@ def produtos_ml_summary(
         raise HTTPException(422, f"revenue_velocity '{revenue_velocity}' invalido.")
     if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
         raise HTTPException(422, "action_signal invalido.")
+    if ref_month:
+        _ml_mes_sem_filtros_lifetime(action_signal, product_status, revenue_velocity)
+        year, month = _parse_month(ref_month)
+        return _ml_mes(lambda: ml_mes_svc.get_resumo(datamart_leitura.consultar, year, month, brand))
     return perf_svc.get_produtos_ml_summary(_require_db(db), brand, action_signal, product_status, revenue_velocity)
 
 
 @router.get("/produtos/ml", response_model=ProdutosMLResponse)
 def produtos_ml(
     brand: Optional[str] = Query(None),
+    ref_month: Optional[str] = Query(None, description="YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado."),
     pareto_bucket: Optional[str] = Query(None),
     action_signal: Optional[str] = Query(None),
     product_status: Optional[str] = Query(None),
@@ -310,6 +334,12 @@ def produtos_ml(
     if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
         raise HTTPException(422, f"action_signal invalido.")
     _validate_sort_by(sort_by, perf_svc.PRODUTOS_ML_SORT_COLUMNS)
+    if ref_month:
+        _ml_mes_sem_filtros_lifetime(action_signal, product_status, revenue_velocity)
+        year, month = _parse_month(ref_month)
+        return _ml_mes(lambda: ml_mes_svc.get_tabela(
+            datamart_leitura.consultar, year, month, brand, pareto_bucket, limit, offset, sort_by, sort_dir,
+        ))
     return perf_svc.get_produtos_ml(
         _require_db(db), brand, pareto_bucket, action_signal, product_status, revenue_velocity,
         limit, offset, sort_by, sort_dir,

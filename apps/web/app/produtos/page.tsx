@@ -40,13 +40,11 @@ import {
   ML_EXPORT_COLUMNS, TIKTOK_EXPORT_COLUMNS, SHOPEE_EXPORT_COLUMNS,
 } from "@/lib/produtos-export";
 import {
-  buildMlTableKey, buildMlSummaryKey, buildPeriodTableKey, buildPeriodSummaryKey,
+  buildPeriodTableKey, buildPeriodSummaryKey,
   resolveChannelAvailability, describeProdutosPartialWarning, type ProdutosSectionState,
 } from "@/lib/produtos-request-key";
 
 type Tab = ProdutosTab;
-type ProductStatus = "" | "sells+advertised" | "sells_organic_only" | "ad_spend_no_sales" | "inactive";
-type VelocityFilter = "" | "high" | "medium" | "low" | "zero";
 
 const PAGE_SIZE = 25;
 
@@ -86,6 +84,11 @@ function precoMedio(avg: number | null | undefined): string | null {
 }
 // Ressalvas de metodologia vao para o ⓘ ao lado da linha.
 const DICA_PARETO = "Pareto só com produtos de GMV positivo. Preço médio ponderado por unidade.";
+// ML por mes (silver do Data Mart): dia do pedido em BRT; Ads do relatorio diario do ML, que chega no dia seguinte.
+function dicaMlMes(adsAte: string | null | undefined): string {
+  const ate = adsAte ? `, até ${adsAte.slice(8, 10)}/${adsAte.slice(5, 7)}` : "";
+  return `Mês pelo dia do pedido (horário de Brasília), só pedidos pagos. Ads do relatório diário do ML${ate}. Velocidade, status e sinal de ação existem só no ranking acumulado e não aparecem por mês.`;
+}
 const DICA_BLING_TODAS =
   "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do mês; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 const DICA_BLING =
@@ -125,11 +128,6 @@ function ProdutosPageInner() {
   const [shBucket, setShBucket] = useState<string | null>(
     fromUrl.tab === "shopee" ? fromUrl.bucket : null,
   );
-
-  // Filtros especificos do ML (nao existem em TikTok/Shopee)
-  const [mlSignal, setMlSignal] = useState("");
-  const [mlStatus, setMlStatus] = useState<ProductStatus>("");
-  const [mlVelocity, setMlVelocity] = useState<VelocityFilter>("");
 
   const [mlOffset, setMlOffset] = useState(0);
   const [tkOffset, setTkOffset] = useState(0);
@@ -199,8 +197,8 @@ function ProdutosPageInner() {
   const [shSummaryResolvedKey, setShSummaryResolvedKey] = useState<string | null>(null);
 
   const mlTableKey = useMemo(
-    () => buildMlTableKey({ brand, bucket: mlBucket, signal: mlSignal, status: mlStatus, velocity: mlVelocity, offset: mlOffset, sortColumn: mlSort.sort.column, sortDirection: mlSort.sort.direction }),
-    [brand, mlBucket, mlSignal, mlStatus, mlVelocity, mlOffset, mlSort.sort.column, mlSort.sort.direction],
+    () => buildPeriodTableKey({ brand, period, bucket: mlBucket, offset: mlOffset, sortColumn: mlSort.sort.column, sortDirection: mlSort.sort.direction }),
+    [brand, period, mlBucket, mlOffset, mlSort.sort.column, mlSort.sort.direction],
   );
   const tkTableKey = useMemo(
     () => buildPeriodTableKey({ brand, period, bucket: tkBucket, offset: tkOffset, sortColumn: tkSort.sort.column, sortDirection: tkSort.sort.direction }),
@@ -210,10 +208,7 @@ function ProdutosPageInner() {
     () => buildPeriodTableKey({ brand, period, bucket: shBucket, offset: shOffset, sortColumn: shSort.sort.column, sortDirection: shSort.sort.direction }),
     [brand, period, shBucket, shOffset, shSort.sort.column, shSort.sort.direction],
   );
-  const mlSummaryKey = useMemo(
-    () => buildMlSummaryKey({ brand, signal: mlSignal, status: mlStatus, velocity: mlVelocity }),
-    [brand, mlSignal, mlStatus, mlVelocity],
-  );
+  const mlSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period }), [brand, period]);
   const tkSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period }), [brand, period]);
   const shSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period }), [brand, period]);
 
@@ -296,10 +291,8 @@ function ProdutosPageInner() {
       try {
         result = await fetchProdutosML({
           brand: brandParamForEndpoint(brand),
+          period,
           pareto_bucket: mlBucket || undefined,
-          action_signal: mlSignal || undefined,
-          product_status: mlStatus || undefined,
-          revenue_velocity: mlVelocity || undefined,
           limit: PAGE_SIZE,
           offset: mlOffset,
           sort_by: mlSort.sort.column ?? undefined,
@@ -313,7 +306,7 @@ function ProdutosPageInner() {
         if (isCurrent) setMlResolvedKey(mlTableKey);
       }
     })();
-  }, [brand, mlBucket, mlSignal, mlStatus, mlVelocity, mlOffset, mlSort.sort.column, mlSort.sort.direction, mlTableKey]);
+  }, [brand, period, mlBucket, mlOffset, mlSort.sort.column, mlSort.sort.direction, mlTableKey]);
 
   const loadTK = useCallback(() => {
     const id = ++tkReqId.current;
@@ -380,10 +373,7 @@ function ProdutosPageInner() {
       let result: ProdutosMLSummary | null = null;
       let failed = false;
       try {
-        result = await fetchProdutosMLSummary({
-          brand: brandParamForEndpoint(brand), action_signal: mlSignal || undefined,
-          product_status: mlStatus || undefined, revenue_velocity: mlVelocity || undefined,
-        });
+        result = await fetchProdutosMLSummary({ brand: brandParamForEndpoint(brand), period });
       } catch {
         failed = true;
       } finally {
@@ -392,7 +382,7 @@ function ProdutosPageInner() {
         if (isCurrent) setMlSummaryResolvedKey(mlSummaryKey);
       }
     })();
-  }, [tab, brand, mlSignal, mlStatus, mlVelocity, mlSummaryKey]);
+  }, [tab, brand, period, mlSummaryKey]);
 
   useEffect(() => {
     if (tab !== "tiktok" || ehMenor) return;
@@ -433,7 +423,7 @@ function ProdutosPageInner() {
   }, [tab, brand, period, shSummaryKey, ehMenor]);
 
   // Reset offset quando filtros mudam (nunca usa a pagina visivel como base)
-  useEffect(() => { setMlOffset(0); }, [brand, mlBucket, mlSignal, mlStatus, mlVelocity]);
+  useEffect(() => { setMlOffset(0); }, [brand, mlBucket, period]);
   useEffect(() => { setTkOffset(0); }, [brand, tkBucket, period]);
   useEffect(() => { setShOffset(0); }, [brand, shBucket, period]);
 
@@ -486,7 +476,7 @@ function ProdutosPageInner() {
   const shPageNumber = Math.floor(shOffset / PAGE_SIZE) + 1;
 
   // ALVO-GRADE: um esqueleto so' para os tres canais. Filtros, faixa A/B/C/D e
-  // tabela mudam com a aba; a regra de cada canal (ML sem competencia mensal,
+  // tabela mudam com a aba; a regra de cada canal (ML com Ads ate o ultimo dia do relatorio,
   // Shopee com selo de maturacao ANTES dos cartoes, marcas menores do Bling) fica igual.
   const marcaSelect = (
     <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
@@ -497,38 +487,10 @@ function ProdutosPageInner() {
   const filtros = (
     <div className="flex flex-wrap items-center gap-2">
       {marcaSelect}
-      {tab === "ml" ? (
-        <>
-          <ProductSelect value={mlStatus} onChange={(e) => setMlStatus(e.target.value as ProductStatus)} aria-label="Status">
-            <option value="">Todos os status</option>
-            <option value="sells+advertised">Vende + anunciado</option>
-            <option value="sells_organic_only">Vende orgânico</option>
-            <option value="ad_spend_no_sales">Gasta ads, sem venda</option>
-            <option value="inactive">Inativo</option>
-          </ProductSelect>
-          <ProductSelect value={mlVelocity} onChange={(e) => setMlVelocity(e.target.value as VelocityFilter)} aria-label="Velocidade">
-            <option value="">Toda velocidade</option>
-            <option value="high">Alta velocidade</option>
-            <option value="medium">Média velocidade</option>
-            <option value="low">Baixa velocidade</option>
-            <option value="zero">Sem vendas</option>
-          </ProductSelect>
-          <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de ação">
-            <option value="">Todos os sinais</option>
-            <option value="ACAO: aumentar investimento (ROAS > 15x)">Aumentar investimento</option>
-            <option value="ACAO: considerar pausar ads (ROAS &lt; 3x)">Considerar pausar ads</option>
-            <option value="ALERTA: taxa cancelamento alta (> 10%)">Cancelamento alto</option>
-            <option value="OPORTUNIDADE: produto vende organico, considerar ads">Oportunidade orgânica</option>
-            <option value="REVIEW: spend sem vendas no período de orders">Investe sem vender</option>
-            <option value="ATENCAO: grande variacao de preco">Variação de preço</option>
-          </ProductSelect>
-        </>
-      ) : (
         // 390: a trilha rola sozinha; a pagina nao ganha rolagem lateral.
         <div className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
           <Segmented rotulo="Período" opcoes={monthOptions.map((m) => ({ valor: m.value, texto: m.label }))} valor={period} aoEscolher={setPeriod} className="whitespace-nowrap" />
         </div>
-      )}
     </div>
   );
   // Selo: a hora publicada no resumo do canal ativo (nunca a de uma identidade antiga); sem hora, o estado da fonte.
@@ -557,7 +519,7 @@ function ProdutosPageInner() {
               ])
             : undefined
         }
-        dica={`Sem competência mensal na fonte: ranking acumulado atual. ${DICA_PARETO} ${marginUnavailableNote("ml")}`}
+        dica={`${dicaMlMes(mlDisplaySummary?.ads_ate)} ${DICA_PARETO} ${marginUnavailableNote("ml")}`}
       />
     ) : tab === "tiktok" ? (
       <>
@@ -604,7 +566,7 @@ function ProdutosPageInner() {
   const escopo =
     tab === "ml"
       ? formatProdutosScope({
-          channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel: null,
+          channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
           total: mlDisplayData?.total ?? null, offset: mlOffset, limit: PAGE_SIZE,
         })
       : tab === "tiktok"
@@ -619,7 +581,7 @@ function ProdutosPageInner() {
 
   const exportar =
     tab === "ml" ? (
-      <ProductExportButton rows={mlDisplayData?.items ?? null} loading={mlTableAvail !== "available"} columns={ML_EXPORT_COLUMNS} toRecord={mlRowToExportRecord} scope={{ channel: "ml", brand, period: null, pageNumber: mlPageNumber }} />
+      <ProductExportButton rows={mlDisplayData?.items ?? null} loading={mlTableAvail !== "available"} columns={ML_EXPORT_COLUMNS} toRecord={mlRowToExportRecord} scope={{ channel: "ml", brand, period, pageNumber: mlPageNumber }} />
     ) : tab === "tiktok" ? (
       <ProductExportButton rows={tkDisplayData?.items ?? null} loading={tkTableAvail !== "available"} columns={TIKTOK_EXPORT_COLUMNS} toRecord={tiktokRowToExportRecord} scope={{ channel: "tiktok", brand, period, pageNumber: tkPageNumber }} />
     ) : (

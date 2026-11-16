@@ -662,6 +662,9 @@ export interface ProdutosMLResponse {
   items: ProdutoMLRow[];
   scope: string;
   refreshed_at: string | null;
+  // Com ref_month (scope "mes"): ultimo dia com Ads no relatorio do ML.
+  ref_month?: string | null;
+  ads_ate?: string | null;
 }
 
 export interface ProdutoTikTokRow {
@@ -692,6 +695,8 @@ export interface ProdutosTikTokResponse {
 
 export interface ProdutoMLListParams {
   brand?: string;
+  // YYYY-MM: produtos do mes (Data Mart). Sem ele, ranking acumulado (contrato do Oraculo).
+  period?: string;
   pareto_bucket?: string;
   action_signal?: string;
   product_status?: string;
@@ -705,6 +710,7 @@ export interface ProdutoMLListParams {
 export function fetchProdutosML(params: ProdutoMLListParams): Promise<ProdutosMLResponse | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
+  if (params.period) qs.set("ref_month", params.period);
   if (params.pareto_bucket) qs.set("pareto_bucket", params.pareto_bucket);
   if (params.action_signal) qs.set("action_signal", params.action_signal);
   if (params.product_status) qs.set("product_status", params.product_status);
@@ -805,16 +811,20 @@ export interface ProdutosMLSummary {
   // total_gmv do escopo elegivel / total de unidades — media ponderada,
   // nunca media simples de avg_price por linha.
   avg_price_weighted: number | null;
+  ref_month?: string | null;
+  ads_ate?: string | null;
 }
 
 export function fetchProdutosMLSummary(params: {
   brand?: string;
+  period?: string;
   action_signal?: string;
   product_status?: string;
   revenue_velocity?: string;
 } = {}): Promise<ProdutosMLSummary | null> {
   const qs = new URLSearchParams();
   if (params.brand) qs.set("brand", params.brand);
+  if (params.period) qs.set("ref_month", params.period);
   if (params.action_signal) qs.set("action_signal", params.action_signal);
   if (params.product_status) qs.set("product_status", params.product_status);
   if (params.revenue_velocity) qs.set("revenue_velocity", params.revenue_velocity);

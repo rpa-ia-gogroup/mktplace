@@ -896,6 +896,9 @@ class ProdutosMLResponse(BaseModel):
     items: list[ProdutoMLRow]
     scope: str = "ranking_acumulado_atual"
     refreshed_at: Optional[str] = None
+    # Com ref_month (scope "mes"): competencia e ultimo dia com Ads no relatorio do ML.
+    ref_month: Optional[str] = None
+    ads_ate: Optional[str] = None
 
 
 class ParetoBucketSummary(BaseModel):
@@ -923,6 +926,9 @@ class ProdutosMLSummaryResponse(BaseModel):
     # total_gmv / total_units do escopo elegivel (GMV>0) — media ponderada,
     # NUNCA media simples de avg_price por linha (ver produtos_audit.md 10.5).
     avg_price_weighted: Optional[float] = None
+    # Com ref_month (scope "mes"): competencia e ultimo dia com Ads no relatorio do ML.
+    ref_month: Optional[str] = None
+    ads_ate: Optional[str] = None
 
 
 class ProdutoTikTokRow(BaseModel):
