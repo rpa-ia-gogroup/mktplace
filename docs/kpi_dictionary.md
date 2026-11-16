@@ -644,3 +644,30 @@ Fonte: `total_settlement` e `total_fees` vêm da `gold.tiktok_brand_daily` (Data
 - O ROAS consolidado da Shopee é calculado só sobre as marcas com Ads.
 - `/canais`: Shopee sem Ads sai com `ads_missing_reason`.
 - A web mostra "parcial (k de n marcas)".
+
+## Demais marcas (marcas menores) — fonte provisória da Denavita (T-0119, 2026-11-16)
+
+Aba `/marcas-menores` ("Demais marcas"), rota `GET /api/v1/performance/marcas-menores`.
+
+- **Yenzah, Auá e By Samia:** API do Bling v3 (conta da Rituária). Receita = `total` do pedido (produtos − descontos
+  + frete), sem cancelados; a marca vem do canal do pedido (`loja.id`), só Shopee e TikTok.
+- **Denavita — TikTok (provisório):** `gold.tiktok_brand_daily` do Data Mart, filtro `brand = 'denavita'` e
+  `date BETWEEN :inicio AND :fim` (parametrizado). Receita = `SUM(gmv)`, pedidos = `SUM(orders)`, por dia. Uma
+  consulta cobre a janela pedida e o período anterior de mesma duração. Status `parcial_fonte_provisoria`, com aviso
+  "TikTok via Data Mart (gold.tiktok_brand_daily); Shopee pendente: conta do Bling sem autorização."
+- **Definição do GMV:** o `gmv` dessa gold tem definição própria, de 1,4% a 3,9% acima do mart da Torre. Não é a
+  mesma receita do Bling (total do pedido) nem o GMV oficial. Os últimos dias ainda amadurecem (status de pedido do
+  TikTok), então podem subir depois.
+- **Denavita — Shopee: pendente.** A conta do Bling dela não está autorizada. A Shopee fica fora de
+  `por_plataforma`, sem aparecer como 0. Os itens (tabela de produtos) também vêm só do Bling: a Denavita fica sem
+  produtos, com `motivo` = "Itens só pelo Bling; a conta da Denavita segue sem autorização".
+- **Total "Demais marcas":** soma a Denavita (TikTok) às outras três e vem com `consolidado.parcial = true` e
+  `consolidado.aviso` (Shopee da Denavita pendente). A web mostra "parcial (Denavita só TikTok)".
+- **Ausência ≠ 0:** dia sem linha na gold não entra na série. Linha com `gmv` nulo é tratada como sem dado. Data Mart
+  indisponível (sem engine ou erro) → Denavita com `total = null`, status `fonte_indisponivel` e `motivo`
+  "Data Mart indisponível…". As outras três marcas continuam como estão.
+- **Fora da Gerencial:** a Denavita não está no filtro de marcas (`MARCAS_MENORES_KEYS`) e não entra na soma, na
+  rosca nem na meta da Gerencial. Ela é só citada na nota (ⓘ) do GMV. O cache e o aquecimento do Bling não dependem
+  do Data Mart.
+- **Referência medida (gold, `brand = 'denavita'`):** set/26 R$ 58.522,28 (543 pedidos); out/26 R$ 43.763,45
+  (412 pedidos, 25 dias com venda); nov/26 até 14/11 R$ 33.342,64 (306 pedidos).
