@@ -13,6 +13,7 @@ import type { BrandDetail, BrandDetailChannelRow, BrandDetailProduto } from "@/l
 import type { MonthOption } from "@/lib/produtos-tab-transition";
 import { fmtCompetencia, type MonthlyViewState } from "@/lib/brand/ref-month";
 import { SECTION_MENSAL_PRODUTOS } from "@/lib/brand-arrival-context";
+import { cosCartao, COS_MATURANDO_DICA } from "@/lib/brand/cos-maturacao";
 
 interface Props {
   state: MonthlyViewState;
@@ -178,7 +179,7 @@ export default function TikTokMonthlyPanel({
                 />
                 <Stat label="Clientes" value={fmtNumber(detail.customers)} sub="dias com visitantes" />
                 <Stat label="Conversão" value={pct(detail.cvr_pct)} sub="visitantes com dados" />
-                <Stat label="COS" value={pct(detail.cos_pct)} sub="custo sobre GMV" />
+                <StatCos detail={detail} />
               </div>
             </BlocoMensal>
 
@@ -431,6 +432,26 @@ function Stat({ label, value, sub }: { label: string; value: string; sub?: strin
       <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-0.5">{label}</p>
       <p className="text-base font-bold text-slate-800 tabular-nums leading-tight">{value}</p>
       {sub && <p className="text-xs text-slate-500 mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+/** T-0115b: COS com o repasse TikTok maturando mostra "—" e o selo, nunca 0,0%. */
+function StatCos({ detail }: { detail: BrandDetail }) {
+  const cos = cosCartao(detail.cos_pct, detail.tiktok_repasse_status, (v) => pct(v));
+  return (
+    <div className="bg-slate-50 rounded-xl px-3 py-2.5">
+      <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-0.5">COS</p>
+      <p className="flex items-center gap-1.5 text-base font-bold text-slate-800 tabular-nums leading-tight">
+        {cos.valor}
+        {cos.selo && (
+          <span className="flex items-center gap-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg px-1.5 py-0.5">
+            {cos.selo}
+            <InfoDica texto={COS_MATURANDO_DICA} />
+          </span>
+        )}
+      </p>
+      <p className="text-xs text-slate-500 mt-0.5">custo sobre GMV</p>
     </div>
   );
 }

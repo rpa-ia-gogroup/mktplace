@@ -1784,7 +1784,10 @@ export interface BrandDetail {
   orders: number;
   customers: number;
   cvr_pct: number | null;
+  /** T-0115b: null com o repasse TikTok maturando/sem dado — nunca 0,0%. */
   cos_pct: number | null;
+  /** T-0115b: "maduro" | "maturando" (repasse < 30% do GMV) | "sem_dado". Aditivo. */
+  tiktok_repasse_status?: "maduro" | "maturando" | "sem_dado" | null;
   pct_video: number | null;
   pct_live: number | null;
   pct_card: number | null;
