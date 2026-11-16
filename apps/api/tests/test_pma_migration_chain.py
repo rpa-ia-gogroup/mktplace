@@ -78,7 +78,8 @@ DDL_PATH = REPO / "db" / "sql" / "marts" / "pma_listing_price_serving_ddl.sql"
 #: Avancado para 048 pela T-0120b (CHECK dos insumos aceita `shopee_repasse_escrow`).
 #: Antes: avancado para 047 pela T-0118 (`total_shipments` anulavel na fato diaria),
 #: SOBRE a 046.
-HEAD_ESPERADO = "048"
+#: Avancado para 049 pelas CHAVES-PESSOAIS (tabela nova audit.torre_chave_pessoal), SOBRE a 048.
+HEAD_ESPERADO = "049"
 
 #: Mapa OFICIAL de propriedade das revisoes. Existe para que uma frente nao
 #: ocupe o numero de outra: 016 e' do Full, 017 e' do PMA e a 018 esta
