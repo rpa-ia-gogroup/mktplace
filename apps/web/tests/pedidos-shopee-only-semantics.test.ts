@@ -1,93 +1,111 @@
-// Regressao estatica (Gate U5, rodada de correcao — Finding 2). Antes desta
-// correcao, a selecao Shopee-isolada em Pedidos (`showShopeeOnly`) nunca
-// chamava `fetchPedidos` (correto), mas `dataIsFresh` ficava `true` (a
-// identidade da requisicao foi marcada como resolvida, sem erro/loading) —
-// isso fazia o cabecalho renderizar `<LiveStatusBadge live={false}>` ("Sem
-// dados · API offline") e o `aria-live` anunciar "Dados de pedidos
-// carregados.", confundindo "fonte sem cobertura Shopee" com "API offline"/
-// "sucesso". Os testes abaixo confirmam, estaticamente (sem harness de
-// componente React), que essa confusao foi eliminada.
+// T-0116 — a aba /pedidos inclui a Shopee e "sem dado" deixa de virar 0 (B1-10).
+//
+// Este arquivo testava a selecao Shopee-isolada SEM fetch (Gate U5: "fonte sem
+// cobertura Shopee"). Desde a T-0116 o mart tem pedidos da Shopee (daily_shopee,
+// API) e a Shopee entra como TikTok e ML: a selecao Shopee-isolada busca dado.
+// Os testes abaixo cobrem o comportamento novo: logica pura (pedidos-cartoes) e
+// a fiacao estatica da pagina (sem harness React).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-// Normalizacao para LF, UMA vez. O repositorio esta com `core.autocrlf=true` e
-// sem `.gitattributes`, entao no Windows o arquivo chega em CRLF — e os
-// marcadores multilinha abaixo (`"useEffect(() => {\n    // Ignora..."`) nunca
-// casavam, deixando este teste vermelho por motivo de plataforma, nao de
-// semantica. `app/pedidos/page.tsx` NAO foi alterado.
+import {
+  avisoParcial,
+  canaisSemDado,
+  canalOuNulo,
+  kpisOuNulo,
+  linhasPorCanal,
+  linhasPorMarca,
+  paraPedidosLiquidos,
+  rotuloConsolidado,
+  seriesDoPeriodo,
+  valorExato,
+  type Dados,
+} from "../src/lib/pedidos-cartoes.ts";
+import type { PedidosBrandRow, PedidosDailyRow } from "../src/lib/api-client.ts";
+
+// CRLF -> LF uma vez (core.autocrlf=true no Windows).
 const SRC = fs
   .readFileSync(path.join(import.meta.dirname, "..", "app", "pedidos", "page.tsx"), "utf8")
   .replace(/\r\n/g, "\n");
 
-function sliceBetween(src: string, startMarker: string, endMarker: string): string {
-  const start = src.indexOf(startMarker);
-  assert.notEqual(start, -1, `marcador de inicio nao encontrado: ${startMarker}`);
-  const end = src.indexOf(endMarker, start);
-  assert.notEqual(end, -1, `marcador de fim nao encontrado: ${endMarker}`);
-  return src.slice(start, end);
-}
-
-test("cabecalho: showShopeeOnly e' verificado ANTES de renderizar o LiveStatusBadge (nunca 'API offline' para cobertura ausente)", () => {
-  // ALVO-GRADE: o `selo` da `Aba` substitui o `status` do PageHeader; SeloAtualizado no lugar do LiveStatusBadge.
-  const header = sliceBetween(SRC, "        selo={", "        filtros={");
-  const shopeeOnlyIdx = header.indexOf("showShopeeOnly");
-  const liveBadgeIdx = header.indexOf("<SeloAtualizado");
-  assert.notEqual(shopeeOnlyIdx, -1, "cabecalho deve checar showShopeeOnly");
-  assert.notEqual(liveBadgeIdx, -1, "cabecalho deve continuar usando SeloAtualizado para os demais casos");
-  assert.ok(shopeeOnlyIdx < liveBadgeIdx, "a checagem de showShopeeOnly deve vir ANTES do LiveStatusBadge no ternario (senao ele so seria alcancado quando showShopeeOnly for falso)");
+const TRES = { tiktok: true, ml: true, shopee: true };
+const SO_SHOPEE = { tiktok: false, ml: false, shopee: true };
+const marca = (x: Partial<PedidosBrandRow>): PedidosBrandRow => ({
+  brand: "apice", label: "ÁPICE",
+  tiktok_orders: null, tiktok_canceled: null, tiktok_cancel_rate_pct: null, tiktok_gmv: null,
+  ml_orders: null, ml_canceled: null, ml_cancel_rate_pct: null, ml_gmv: null,
+  shopee_orders: null, shopee_canceled: null, shopee_cancel_rate_pct: null, shopee_gmv: null,
+  total_orders: 0, total_gmv: 0, ...x,
 });
 
-test("cabecalho: Shopee isolada mostra indicador neutro, nunca o LiveStatusBadge com estado offline", () => {
-  const header = sliceBetween(SRC, "        selo={", "        filtros={");
-  const branchStart = header.indexOf("dataIsFresh && showShopeeOnly");
-  assert.notEqual(branchStart, -1, "deve existir um branch dedicado para dataIsFresh && showShopeeOnly");
-  const branchEnd = header.indexOf(") : (", branchStart);
-  assert.notEqual(branchEnd, -1, "branch de showShopeeOnly deve ser seguido do selo geral");
-  const shopeeOnlyBranch = header.slice(branchStart, branchEnd);
-  assert.doesNotMatch(shopeeOnlyBranch, /<SeloAtualizado/, "branch de Shopee isolada nao deve renderizar o selo de rede");
-  assert.doesNotMatch(shopeeOnlyBranch, /offline/i, "branch de Shopee isolada nao deve mencionar 'offline' — nao e' uma falha de API");
-  assert.match(shopeeOnlyBranch, /sem cobertura/i, "branch de Shopee isolada deve comunicar falta de cobertura, nao falha de rede");
+test("Shopee aparece: canal, total liquido e quebra por canal com os 3", () => {
+  const sh = canalOuNulo({ orders: 80, canceled: 20, gmv: 4000, cancel_rate_pct: 20, delivered: 70 });
+  assert.deepEqual(sh, { orders: 80, canceled: 20, gmv: 4000, cancel_rate_pct: 20, delivered: 70 });
+  // API: total bruto = (100+10) + (55 bruto ML) + (80+20); liquido desconta os cancelados dos 3
+  const d: Dados = {
+    kpis: { total_orders: 265, total_gmv: 19000, avg_ticket: 82.61, cancel_rate_pct: 13.21 },
+    tk: { orders: 100, canceled: 10, gmv: 10000, cancel_rate_pct: 9.09, delivered: null },
+    ml: { orders: 55, canceled: 5, gmv: 5000, cancel_rate_pct: 9.09, delivered: null },
+    sh,
+  };
+  const liq = paraPedidosLiquidos(d);
+  assert.equal(liq.kpis!.total_orders, 230, "100 + 50 + 80 pagos");
+  assert.equal(liq.sh!.orders, 80, "Shopee ja' vem liquida da API: nao desconta de novo");
+  assert.deepEqual(linhasPorCanal("total_pedidos", liq, TRES).map((l) => l.label), ["TikTok Shop", "Mercado Livre", "Shopee"]);
+  assert.equal(valorExato("sh_pedidos", liq), "80");
+  assert.equal(valorExato("sh_cancelados", liq), "20");
+  assert.equal(rotuloConsolidado(TRES), "Consolidado (TikTok Shop + Mercado Livre + Shopee)");
+  assert.equal(rotuloConsolidado({ tiktok: true, ml: true }), "Consolidado (TikTok Shop + Mercado Livre)");
 });
 
-test("aria-live: Shopee isolada anuncia falta de cobertura, nunca 'dados carregados' nem estado de API offline", () => {
-  const liveRegion = sliceBetween(SRC, '<span className="sr-only" aria-live="polite" aria-atomic="true">', "</span>");
-  assert.match(liveRegion, /showShopeeOnly/, "aria-live deve checar showShopeeOnly explicitamente");
-  const shopeeOnlyIdx = liveRegion.indexOf("showShopeeOnly");
-  const shopeeOnlyMsgIdx = liveRegion.indexOf('"', liveRegion.indexOf("?", shopeeOnlyIdx));
-  const shopeeOnlyMsgEnd = liveRegion.indexOf('"', shopeeOnlyMsgIdx + 1);
-  const shopeeOnlyMessage = liveRegion.slice(shopeeOnlyMsgIdx, shopeeOnlyMsgEnd + 1);
-  assert.match(shopeeOnlyMessage, /cobertura Shopee/i, `mensagem do branch showShopeeOnly deveria falar de cobertura Shopee, obteve: ${shopeeOnlyMessage}`);
-  assert.doesNotMatch(shopeeOnlyMessage, /carregados/i, "mensagem do branch showShopeeOnly nao deve afirmar sucesso de carregamento");
-  assert.doesNotMatch(shopeeOnlyMessage, /offline/i, "mensagem do branch showShopeeOnly nao deve mencionar API offline");
+test("Shopee na serie diaria e na tabela por marca", () => {
+  const dia: PedidosDailyRow = { date: "2026-10-01", tiktok_orders: null, tiktok_canceled: null, ml_orders: null, ml_canceled: null, shopee_orders: 40, shopee_canceled: 10, total_orders: 40, total_gmv: 400 };
+  const s = seriesDoPeriodo([dia], SO_SHOPEE);
+  assert.deepEqual(s.shPedidos, [40]);
+  assert.deepEqual(s.tkPedidos, [], "canal sem linha no dia nao vira ponto 0");
+  assert.equal(s.cancelamento[0], 25);
+  const linhas = linhasPorMarca("sh_pedidos", [marca({ shopee_orders: 40 }), marca({ brand: "kokeshi", label: "KOKESHI" })], SO_SHOPEE);
+  assert.deepEqual(linhas.map((l) => l.valor), ["40", "Sem dado"]);
 });
 
-test("Shopee isolada continua sem chamar fetchPedidos (branch de skip permanece antes do fetch real)", () => {
-  const effectBody = sliceBetween(SRC, "useEffect(() => {\n    // Ignora a resposta", "}, [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, retryKey, showShopeeOnly]);");
-  const skipBranchIdx = effectBody.indexOf("if (showShopeeOnly) {");
-  const fetchCallIdx = effectBody.indexOf("fetchPedidos(");
-  assert.notEqual(skipBranchIdx, -1, "efeito deve conter o branch de skip 'if (showShopeeOnly)'");
-  assert.notEqual(fetchCallIdx, -1, "efeito deve conter a chamada real a fetchPedidos para os demais casos");
-  assert.ok(skipBranchIdx < fetchCallIdx, "o branch de skip de Shopee isolada deve vir antes (e sair via return) da chamada real a fetchPedidos");
-  const skipBranch = effectBody.slice(skipBranchIdx, fetchCallIdx);
-  assert.doesNotMatch(skipBranch, /fetchPedidos\(/, "o branch de Shopee isolada nao deve chamar fetchPedidos");
-  assert.match(skipBranch, /return \(\) => \{ ignore = true; \};/, "o branch de Shopee isolada deve retornar (encerrar o efeito) antes de chegar na chamada real de fetch");
+test("null vira '—', nunca 0 nem R$ 0,00 (B1-10: ÁPICE x ML)", () => {
+  // API: nenhum canal pedido com linha -> totais e campos do canal null
+  const kpis = kpisOuNulo({ total_orders: null, total_gmv: null, avg_ticket: null, cancel_rate_pct: null });
+  const ml = canalOuNulo({ orders: null, canceled: null, gmv: null, cancel_rate_pct: null, delivered: null });
+  assert.equal(kpis, null);
+  assert.equal(ml, null);
+  const d: Dados = { kpis, tk: undefined, ml, sh: undefined };
+  for (const chave of ["total_pedidos", "total_gmv", "ticket", "cancelamento", "ml_pedidos", "ml_gmv", "sh_pedidos", "sh_gmv"] as const) {
+    assert.equal(valorExato(chave, d), "—", chave);
+  }
+  // ticket sem pedido pago: null -> "—", mesmo com total presente
+  const soCancelados = kpisOuNulo({ total_orders: 3, total_gmv: 0, avg_ticket: null, cancel_rate_pct: 100 });
+  assert.equal(valorExato("ticket", { kpis: soCancelados, tk: null, ml: null }), "—");
+  // zero real continua 0
+  const zero = canalOuNulo({ orders: 0, canceled: 0, gmv: 0, cancel_rate_pct: 0, delivered: null });
+  assert.equal(valorExato("sh_pedidos", { kpis: null, tk: null, ml: null, sh: zero }), "0");
+  // tabela por marca: canal sem linha mostra "—" (fmtNum(null))
+  assert.match(SRC, /fmtNum\(row\.shopee_orders \?\? null\)/);
+  assert.match(SRC, /function fmtNum\(v: number \| null\): string \{\n  if \(v == null\) return "—";/);
 });
 
-test("selecao mista (Shopee + TikTok/ML) preserva o comportamento existente: LiveStatusBadge e aria-live de sucesso/loading normais", () => {
-  const header = sliceBetween(SRC, "        selo={", "        filtros={");
-  // O branch dedicado a Shopee isolada usa `dataIsFresh && showShopeeOnly`
-  // — quando a selecao e mista, `showShopeeOnly` e' falso e o fluxo cai no
-  // branch geral (`dataIsFresh ? <LiveStatusBadge ... /> : ...`), que segue
-  // inalterado.
-  assert.match(header, /dataIsFresh && showShopeeOnly \? \(/);
-  assert.match(header, /\) : \(\s*<SeloAtualizado aoVivo=\{dataIsFresh \? displayIsLive : null\}/);
+test("total parcial: canal do filtro sem linha gera aviso; resposta antiga deduz pelo bloco null", () => {
+  const data = { tiktok: { orders: 10, canceled: 1, gmv: 1, cancel_rate_pct: 1, delivered: null }, ml: { orders: null, canceled: null, gmv: null, cancel_rate_pct: null, delivered: null }, shopee: { orders: 5, canceled: 0, gmv: 1, cancel_rate_pct: 0, delivered: null } };
+  assert.deepEqual(canaisSemDado(data, TRES), ["ml"]);
+  assert.deepEqual(canaisSemDado({ ...data, canais_sem_dado: ["ml"] }, { tiktok: true, ml: false, shopee: true }), [], "canal fora do filtro nao avisa");
+  assert.equal(avisoParcial(["ml"], TRES), "Mercado Livre sem dado no período · total parcial, só de TikTok Shop e Shopee");
+  assert.equal(avisoParcial(["shopee"], SO_SHOPEE), "Shopee sem dado no período (ausência de dado, não zero)");
+  assert.equal(avisoParcial([], TRES), null);
+});
 
-  const liveRegion = sliceBetween(SRC, '<span className="sr-only" aria-live="polite" aria-atomic="true">', "</span>");
-  assert.match(liveRegion, /"Dados de pedidos carregados\."/, "selecao mista com sucesso deve continuar anunciando 'Dados de pedidos carregados.'");
-
-  // O aviso de cobertura mista (Shopee + outro canal) continua existindo e
-  // separado do aviso de Shopee isolada.
-  assert.match(SRC, /showShopeeMixed/, "aviso de selecao mista (showShopeeMixed) deve continuar presente");
+test("pagina: Shopee isolada busca dado (sem branch de 'sem cobertura'), aba e colunas da Shopee", () => {
+  assert.doesNotMatch(SRC, /showShopeeOnly|showShopeeMixed|avisoCoberturaShopee|sem cobertura/i);
+  assert.match(SRC, /fetchPedidos\(filters\.channels, opts\)/);
+  assert.match(SRC, /id: "shopee" as const, rotulo: "Shopee", ponto: "bg-canal-shopee"/);
+  assert.match(SRC, /<SortableHeader label="Shopee · Pedidos" column="sh_orders"/);
+  assert.match(SRC, /showShopee=\{verShopee\}/);
+  assert.match(SRC, /consolidado=\{rotuloConsolidado\(selecao\)\}/);
+  assert.match(SRC, /"Dados de pedidos carregados\."/);
 });

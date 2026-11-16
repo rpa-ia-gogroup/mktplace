@@ -92,7 +92,8 @@ def test_marca_nunca_varrida_e_sem_app_aparecem_sem_fonte_nunca_zero():
     assert [m.marca for m in r.marcas] == list(svc.MARCAS_PERMITIDAS)
     assert por["apice"].estado == "sem_fonte" and por["apice"].avaliacoes is None
     assert por["apice"].motivo == svc.MOTIVO_NAO_VARRIDA
-    assert por["kokeshi"].estado == "sem_fonte" and por["kokeshi"].motivo == svc.MOTIVO_SEM_APP
+    # Kokeshi pela API (T-0114): sem linha na view = ainda nao varrida, nunca zero
+    assert por["kokeshi"].estado == "sem_fonte" and por["kokeshi"].motivo == svc.MOTIVO_NAO_VARRIDA
     # o total soma so' quem tem dado
     assert r.total.avaliacoes == 1100
 
@@ -118,14 +119,6 @@ def test_minimo_de_avaliacoes_e_ordem_pior_nota_desempate_por_1a3():
     assert [p.item_id for p in r.produtos] == ["2", "3", "1"]  # 3,5 (30 de 1-3) antes de 3,5 (12)
     assert r.produtos[1].nome is None  # fora do catalogo: a tela mostra "Produto {item_id}"
     assert r.produtos[0].pct_1a3 == 37.5
-
-
-def test_kokeshi_nunca_e_consultada():
-    fonte = Fonte()
-    _montar(fonte)
-    assert all("kokeshi" not in (p.get("marcas") or []) for _, p in fonte.chamadas)
-    r = _montar(Fonte(), brands=["kokeshi"])
-    assert r.estado == "sem_fonte" and r.marcas[0].motivo == svc.MOTIVO_SEM_APP
 
 
 def test_view_ausente_e_sem_fonte_nunca_zero():

@@ -152,17 +152,24 @@ def ler_fonte(date_from: date, date_to: date) -> dict:
 
 
 def ler_destino(date_from: date, date_to: date) -> list[dict]:
-    """Le a janela do destino em transacao READ ONLY, colunas explicitas."""
+    """Le a janela do destino em transacao READ ONLY, colunas explicitas.
+
+    Transacao explicita (`conn.begin()` + `trans.rollback()`): `Connection.rollback()`
+    so' existe no SQLAlchemy 2.x; a imagem do Airflow roda 1.4 sem `future=True`.
+    """
     engine = _common_db.local_engine()
     with engine.connect() as conn:
-        conn.execute(text("SET TRANSACTION READ ONLY"))
-        rows = conn.execute(
-            text(f"SELECT {', '.join(COLUNAS_DESTINO)} FROM {TARGET_TABLE} "
-                 "WHERE marketplace_id = :mkt AND date BETWEEN :df AND :dt "
-                 "ORDER BY date, loja_id"),
-            {"mkt": ML_MARKETPLACE_ID, "df": date_from, "dt": date_to},
-        ).mappings().all()
-        conn.rollback()
+        trans = conn.begin()
+        try:
+            conn.execute(text("SET TRANSACTION READ ONLY"))
+            rows = conn.execute(
+                text(f"SELECT {', '.join(COLUNAS_DESTINO)} FROM {TARGET_TABLE} "
+                     "WHERE marketplace_id = :mkt AND date BETWEEN :df AND :dt "
+                     "ORDER BY date, loja_id"),
+                {"mkt": ML_MARKETPLACE_ID, "df": date_from, "dt": date_to},
+            ).mappings().all()
+        finally:
+            trans.rollback()
     return [dict(r) for r in rows]
 
 

@@ -82,6 +82,12 @@ LIMITACAO_SEM_ESTOQUE = (
     "Esta superficie mede modalidade logistica, nao estoque. Nao ha aqui "
     "disponibilidade, cobertura em dias nem ruptura."
 )
+#: T-0111: a fato nao tem linha no recorte pedido (marca sem conta ML, D0,
+#: janela antes da serie). Os totais saem null, nunca 0.
+LIMITACAO_SEM_DADO = (
+    "sem_dado: a fato nao tem linha para o recorte pedido. Totais null -- "
+    "ausencia de dado, nao venda zero."
+)
 
 
 class MLFulfillmentUnavailable(RuntimeError):
@@ -319,6 +325,10 @@ def get_ml_fulfillment_block(db: Session, date_from: date, date_to: date,
         limitacoes.append(
             f"Janela pedida tem {dias_pedidos} dia(s); a fato cobre {dias}."
         )
+    # T-0111 (sem dado != 0): nenhuma linha no recorte -> totais None.
+    sem_linha = not por_classe
+    if sem_linha:
+        limitacoes.append(LIMITACAO_SEM_DADO)
 
     return {
         "date_from": date_from, "date_to": date_to,
@@ -326,9 +336,9 @@ def get_ml_fulfillment_block(db: Session, date_from: date, date_to: date,
         "share_full_gmv": _share(full["paid_gmv"] if full else 0, gmv_class),
         "share_full_orders": _share(full["paid_orders"] if full else 0, ped_class),
         "share_full_units": _share(full["paid_units"] if full else 0, un_class),
-        "paid_gmv_total": gmv_total,
-        "paid_orders_total": ped_total,
-        "paid_units_total": un_total,
+        "paid_gmv_total": None if sem_linha else gmv_total,
+        "paid_orders_total": None if sem_linha else ped_total,
+        "paid_units_total": None if sem_linha else un_total,
         "by_class": by_class,
         "by_logistic_type": [{
             "logistic_type_original": r["logistic_type_original"],

@@ -435,6 +435,8 @@ function FinanceiroPageInner() {
           valor: k?.shopee_ad_spend != null ? fmtBrlCurto(k.shopee_ad_spend) : "—",
           detalhe: (
             <>
+              {/* T-0115 (B1-08): total e ROAS so' das marcas com Ads; diz quantas. */}
+              {textoCoberturaFinanceiro(k?.shopee_ads_cobertura) && <>{textoCoberturaFinanceiro(k?.shopee_ads_cobertura)} · </>}
               ROAS{" "}
               <span className={`font-semibold ${roasColor(k?.shopee_roas ?? null)}`}>
                 {k?.shopee_roas != null ? fmtRoas(k.shopee_roas) : "—"}

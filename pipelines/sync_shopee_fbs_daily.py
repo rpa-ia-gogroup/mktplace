@@ -12,9 +12,8 @@ O QUE ESTE PIPELINE NAO FAZ
 - NAO usa `is_sale`: aquele predicado exclui `to_return` e `unpaid`, que por
   decisao deste gate PERMANECEM no GMV bruto.
 - NAO le nenhuma coluna de comprador, documento, telefone ou endereco.
-- NAO usa o XLSX do Seller Centre. Desde 11/2026 a Kokeshi (app aprovado) vem
-  da esteira API como as outras quatro contas; o historico dela comeca quando
-  o `shopee_orders_etl` passou a grava-la.
+- NAO usa o XLSX do Seller Centre. A Kokeshi vem da esteira API como as
+  outras quatro contas; a silver tem pedidos dela desde 31/08/2026.
 
 GMV = SUM(item_total) DOS PEDIDOS NAO CANCELADOS
 -------------------------------------------------
@@ -58,8 +57,8 @@ OPERATIONAL_TZ = timezone(timedelta(hours=-3))
 #: pedidos de 2025-12-31, residuo de fronteira de fuso -- nao serie.
 SOURCE_COMPLETE_FROM_DATE = date(2026, 1, 1)
 
-#: As cinco contas da esteira API. A Kokeshi entrou em 11/2026, quando o app
-#: Shopee dela foi aprovado e o `shopee_orders_etl` passou a grava-la.
+#: As cinco contas da esteira API. A Kokeshi tem pedidos na silver desde
+#: 31/08/2026 (carregados na recarga full de 13/11/2026).
 CONTAS_ESPERADAS = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
 
 #: Marca conhecida por estar FORA da esteira API (vazia desde 11/2026).
@@ -108,6 +107,11 @@ class ConcurrentRunError(ShopeeFbsSyncError):
 
 class SourceUnavailableError(ShopeeFbsSyncError):
     """A fonte nao atende ao contrato minimo."""
+
+
+class ContaSemHistoricoError(ShopeeFbsSyncError):
+    """Conta com historico na silver ANTES da janela incremental e nenhuma
+    linha no destino antes dela. O incremental nunca carregaria esse passado."""
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +404,64 @@ def read_source(conn, window: Window) -> SourceSnapshot:
         "cobertura_por_conta": [dict(c) for c in cobertura],
     })
     return SourceSnapshot(window=window, rows=rows, preflight=preflight)
+
+
+# ---------------------------------------------------------------------------
+# Conta nova com historico anterior a janela incremental (B2-06)
+# ---------------------------------------------------------------------------
+
+#: Primeiro dia de cada conta na silver ANTES da janela. O piso exclui o
+#: residuo de fronteira de fuso de 2025-12-31, que nem o modo full carrega.
+SQL_SILVER_ANTES_DA_JANELA = text("""
+    SELECT shop_account, min(created_date_brt) AS primeiro_dia_silver
+      FROM silver.stg_shopee_orders
+     WHERE created_date_brt >= :piso
+       AND created_date_brt <  :date_from
+     GROUP BY 1
+""")
+
+#: Contas que ja' tem alguma linha publicada antes da janela. Leitura apenas.
+SQL_DESTINO_ANTES_DA_JANELA = text(f"""
+    SELECT DISTINCT shop_account
+      FROM {FACT_TABLE}
+     WHERE ref_date < :date_from
+""")
+
+
+def silver_antes_da_janela(conn, window: Window) -> dict[str, date]:
+    linhas = conn.execute(SQL_SILVER_ANTES_DA_JANELA, {
+        "piso": SOURCE_COMPLETE_FROM_DATE, "date_from": window.date_from,
+    }).mappings().all()
+    return {r["shop_account"]: r["primeiro_dia_silver"] for r in linhas}
+
+
+def destino_antes_da_janela(conn, window: Window) -> set[str]:
+    linhas = conn.execute(SQL_DESTINO_ANTES_DA_JANELA, {
+        "date_from": window.date_from,
+    }).mappings().all()
+    return {r["shop_account"] for r in linhas}
+
+
+def contas_sem_historico(silver_antes: dict[str, date],
+                         destino_antes: set[str]) -> list[tuple[str, date]]:
+    """Contas com pedido na silver antes da janela e NENHUMA linha no destino
+    antes dela. Conta que comecou dentro da janela nao aparece aqui: o proprio
+    incremental a carrega inteira."""
+    return sorted((c, d) for c, d in silver_antes.items()
+                  if c not in destino_antes)
+
+
+def mensagem_conta_sem_historico(lacunas: list[tuple[str, date]],
+                                 window: Window) -> str:
+    contas = "; ".join(f"{c} (primeiro dia na silver: {d})" for c, d in lacunas)
+    return (
+        f"conta(s) com historico na silver antes de {window.date_from} e "
+        f"nenhuma linha em {FACT_TABLE} antes dessa data: {contas}. O "
+        f"incremental so' regrava {window.date_from}..{window.date_to} e nunca "
+        "carregaria esse passado. Rode a carga completa: "
+        "`python -m pipelines.sync_shopee_fbs_daily --mode full --apply` ou a "
+        "DAG manual marketplace_tower_shopee_fbs_reparo_manual_*."
+    )
 
 
 def validate_contract(snapshot: SourceSnapshot) -> list[str]:
@@ -769,10 +831,25 @@ def run(mode: str = MODE_INCREMENTAL, apply: bool = False,
         sessao_dm = fabrica_dm()
         try:
             snapshot = read_source(sessao_dm.connection(), window)
+            silver_antes = (silver_antes_da_janela(sessao_dm.connection(), window)
+                            if mode == MODE_INCREMENTAL else {})
         finally:
             sessao_dm.rollback()
             sessao_dm.close()
         avisos = validate_contract(snapshot)
+        if mode == MODE_INCREMENTAL:
+            # Leitura do destino, sem lock e sem escrita: rollback sempre.
+            sessao_dest = fabrica_neon()
+            try:
+                destino_antes = destino_antes_da_janela(
+                    sessao_dest.connection(), window)
+            finally:
+                sessao_dest.rollback()
+                sessao_dest.close()
+            lacunas = contas_sem_historico(silver_antes, destino_antes)
+            if lacunas:
+                avisos.append("O --apply sera' RECUSADO: "
+                              + mensagem_conta_sem_historico(lacunas, window))
         resultado = dict(summarize(snapshot))
         resultado.update({
             "mode": mode, "applied": False,
@@ -808,6 +885,8 @@ def run(mode: str = MODE_INCREMENTAL, apply: bool = False,
         sessao_dm = fabrica_dm()
         try:
             snapshot = read_source(sessao_dm.connection(), window)
+            silver_antes = (silver_antes_da_janela(sessao_dm.connection(), window)
+                            if mode == MODE_INCREMENTAL else {})
         finally:
             sessao_dm.rollback()
             sessao_dm.close()
@@ -819,6 +898,15 @@ def run(mode: str = MODE_INCREMENTAL, apply: bool = False,
         sessao_pub = fabrica_neon()
         conn_pub = sessao_pub.connection()
         janela = {"date_from": window.date_from, "date_to": window.date_to}
+
+        if mode == MODE_INCREMENTAL:
+            # FAIL-CLOSED antes de qualquer escrita: ampliar a janela sozinho
+            # mudaria o volume publicado sem revisao.
+            lacunas = contas_sem_historico(
+                silver_antes, destino_antes_da_janela(conn_pub, window))
+            if lacunas:
+                raise ContaSemHistoricoError(
+                    mensagem_conta_sem_historico(lacunas, window))
 
         antes = dict(conn_pub.execute(SQL_RECONCILIA_DESTINO, janela).mappings().one())
         loaded = publish_in_transaction(conn_pub, snapshot, run_id)

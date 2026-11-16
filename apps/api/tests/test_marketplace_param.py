@@ -165,7 +165,8 @@ def test_get_overview_combinacao_all_inclui_os_tres_canais():
         {"marketplace_id": 3, "gmv": 200, "orders": 2, "canceled_orders": 0,
          "unique_buyers": 2, "ad_spend": 20, "ad_revenue": 100},
     ]
-    db = FakeMappingSession([cur_rows, []])
+    # T-0115: 3a consulta = cobertura do Ads Shopee (so' com Shopee no filtro).
+    db = FakeMappingSession([cur_rows, [], []])
 
     result = perf_svc.get_overview(db, "all", 2026, 6)
 
@@ -180,7 +181,8 @@ def test_get_overview_canal_isolado_shopee_nao_soma_outros_canais():
     # (como a SQL parametrizada faria) para confirmar a montagem do resultado.
     cur_rows = [{"marketplace_id": 3, "gmv": 300, "orders": 3, "canceled_orders": 0,
                  "unique_buyers": 2, "ad_spend": 30, "ad_revenue": 450}]
-    db = FakeMappingSession([cur_rows, []])
+    # T-0115: 3a consulta = cobertura do Ads Shopee.
+    db = FakeMappingSession([cur_rows, [], []])
 
     result = perf_svc.get_overview(db, "shopee", 2026, 6)
 

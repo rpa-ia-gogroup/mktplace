@@ -648,7 +648,7 @@ ou ausente não é dado nenhum.
 - a classificação **não muda** (PREVIA/PARCIAL); receita, componentes (valores e status), `completude`,
   `componentes_disponiveis` e `componentes_ausentes` também não.
 
-Só esses dois status disparam a suspensão: o parcial **não vencido** (inclusive o CMV extrapolado) segue a regra
+Só esses dois status disparam a suspensão (mais `indisponivel` e `sinal_inesperado` desde a T-0112, abaixo): o parcial **não vencido** (inclusive o CMV extrapolado) segue a regra
 da T-0090. Frete, Ads, devoluções e impostos vencidos não suspendem (não são obrigatórios); ficam fora da soma.
 
 **Cenário estimado.** Pela mesma condição, o `cenario_premissas` da célula sai `estado = nao_calculavel`,
@@ -668,6 +668,18 @@ O cenário agregado já sai `nao_calculavel` (alguma célula é) e ganha `suspen
 Contrato: campos aditivos e opcionais (`Margem.suspensa`, `Margem.motivo_suspensao`,
 `CelulaDRE.celulas_suspensas`, `CenarioPremissas.suspensa|motivo_suspensao|celulas_suspensas`).
 Testes: `apps/api/tests/test_dre_insumo_vencido_margem.py`.
+
+**Indisponível / sinal inesperado em taxa ou CMV → suspende (T-0112, A2-23, 13/11/2026).** Medido no VAL-A2: a
+kokeshi Shopee de out/26 saiu com margem "conhecida" de 51% com a taxa `indisponivel` (fora da soma, margem
+inflada). A regra acima passa a valer também quando, numa célula **com receita**, `taxas` ou `cmv` está
+`indisponivel` ou `sinal_inesperado` (sem valor utilizável): margem conhecida e estimada suspensas, igual à
+T-0101. O motivo não tem data (republicar não resolve): "taxa indisponível: <motivo do componente>; margem
+suspensa", "CMV indisponível: …", "taxa com sinal inesperado: …". Junto com insumo vencido/ausente, as partes se
+somam e o fecho com a data é mantido ("insumo vencido: cmv; taxa indisponível: …; margem suspensa até a
+republicação (publicado em …)"). No agregado a causa vira "(taxa ou CMV indisponível)" / "(taxa ou CMV com sinal
+inesperado)" com o fecho "margem suspensa"; no cenário agregado, "(taxa ou CMV sem valor utilizável)".
+`nao_aplicavel` **não** suspende; `parcial`, `nao_confirmado`, `provisorio`, `nao_reconciliado` e o CMV
+extrapolado seguem a T-0090 (entram na margem).
 
 ---
 

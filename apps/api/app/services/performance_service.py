@@ -265,6 +265,47 @@ _ML_COST_MISSING_WARNING = (
     "Ver docs/margem_real_1_diagnostico.md secao 10.5."
 )
 
+# T-0115 (B1-07/A1-12): limiares de maturacao do repasse TikTok POR MARCA.
+# O repasse por pedido chega semanas depois do pedido; ate' la' a fato tem
+# `total_settlement`/`total_fees` quase zerados, e a razao sobre o GMV sai
+# como taxa "real" (nov/26: BARBOURS 0,01%, LESCENT 0,00%; out/26 maduro:
+# taxa 28-33% e repasse ~67% do GMV).
+#  - repasse < 30% do GMV: menos da metade do nivel maduro (~67%), ou seja, a
+#    maior parte dos pedidos do periodo ainda nao foi liquidada. E' o mesmo
+#    corte que a validacao usou para datar o ultimo dia maduro (VAL-B1 B1-07).
+#    Taxa e repasse vem do MESMO extrato por pedido: os dois saem.
+#  - taxa < 1% do GMV: implausivel para o TikTok (a comissao de plataforma
+#    sozinha e' ~6% da receita); so' a taxa sai.
+# Abaixo do limiar o valor vira ausente ("maturando"), nunca taxa real: sai
+# do numerador E do denominador do consolidado e nao alimenta `custo_alto`.
+_TIKTOK_REPASSE_MADURO_MIN_PCT = 30.0
+_TIKTOK_TAXA_PLAUSIVEL_MIN_PCT = 1.0
+
+_TIKTOK_COST_MATURANDO_WARNING = (
+    "Repasse do TikTok ainda nao consolidado para esta marca no periodo "
+    "(repasse abaixo de 30% do GMV ou taxa abaixo de 1%): o custo de "
+    "marketplace fica sem dado/maturando, nunca 0%. O repasse por pedido "
+    "chega semanas depois do pedido."
+)
+
+# T-0115 (B1-08/A1-14): o Ads da Shopee vem dos relatorios exportados por
+# marca; marca sem o relatorio carregado no periodo fica sem Ads (ausente).
+_SHOPEE_ADS_MISSING_REASON = (
+    "Ads da Shopee sem dado para esta marca no periodo: o relatorio de Ads "
+    "(exportado do Seller Center) nao foi carregado no mart — valor ausente, "
+    "nao zero. O total de Ads Shopee soma so' as marcas com o relatorio."
+)
+
+
+def _tiktok_repasse_maduro(settlement: float, gmv: float) -> bool:
+    """Repasse TikTok da marca no periodo atingiu o limiar de maturacao."""
+    return gmv > 0 and settlement / gmv * 100 >= _TIKTOK_REPASSE_MADURO_MIN_PCT
+
+
+def _tiktok_taxa_plausivel(fees: float, gmv: float) -> bool:
+    """Taxa TikTok (valor absoluto) da marca e' plausivel frente ao GMV."""
+    return gmv > 0 and fees / gmv * 100 >= _TIKTOK_TAXA_PLAUSIVEL_MIN_PCT
+
 
 def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
     """Monta uma linha da matriz comparativa marca x canal (Canais Gate 2).
@@ -285,8 +326,19 @@ def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
     cost_available = _COST_APPLICABLE[channel] and fees_n > 0
     shipping_available = _SHIPPING_APPLICABLE[channel] and shipping_n > 0
 
+    # T-0115 (A1-12): repasse TikTok imaturo ou taxa implausivel = sem dado,
+    # nunca 0,0% com `available true` (e fora de mediana/p75/`custo_alto`).
+    tiktok_maturando = channel == "tiktok" and cost_available and not (
+        _tiktok_repasse_maduro(_f(raw.get("total_settlement")), gmv)
+        and _tiktok_taxa_plausivel(fees, gmv)
+    )
+    if tiktok_maturando:
+        cost_available = False
+
     data_warning = None
-    if channel == "tiktok" and cost_available:
+    if tiktok_maturando:
+        data_warning = _TIKTOK_COST_MATURANDO_WARNING
+    elif channel == "tiktok" and cost_available:
         data_warning = _TIKTOK_COST_WARNING
     elif channel == "ml" and _COST_APPLICABLE[channel] and not cost_available:
         data_warning = _ML_COST_MISSING_WARNING
@@ -315,11 +367,13 @@ def _channel_row(channel: str, brand: str, label: str, raw: dict) -> dict:
         "ads_applicable": _ADS_APPLICABLE[channel],
         "marketplace_cost_applicable": _COST_APPLICABLE[channel],
         "seller_shipping_applicable": _SHIPPING_APPLICABLE[channel],
-        # Aditivo e opcional: so' o TikTok tem motivo fixo hoje (fonte nao
-        # integrada). ML/Shopee sem ad_spend no periodo seguem com None.
+        # Aditivo e opcional: TikTok (fonte nao integrada) e, desde a T-0115,
+        # Shopee (relatorio de Ads da marca nao carregado). ML sem ad_spend
+        # no periodo segue com None.
         "ads_missing_reason": (
-            _TIKTOK_ADS_MISSING_REASON
-            if channel == "tiktok" and not ads_available else None
+            _TIKTOK_ADS_MISSING_REASON if channel == "tiktok" and not ads_available
+            else _SHOPEE_ADS_MISSING_REASON if channel == "shopee" and not ads_available
+            else None
         ),
         "data_warning": data_warning,
         "signals": [],
@@ -572,6 +626,38 @@ def _brand_mkt_rows(
     return result
 
 
+def _shopee_ads_cobertura(
+    db: Session, start: date, end: date, brand_keys: list[str] | None = None,
+) -> dict | None:
+    """T-0115 (B1-08/A1-14): marcas Shopee com GMV no recorte que tem Ads.
+
+    O Ads Shopee vem do relatorio exportado por marca; sem ele, `ad_spend` e'
+    NULL na fato e o total do canal soma so' as marcas com relatorio. Mesmo
+    contrato de `_cobertura_marcas` (`None` = Shopee sem GMV no recorte).
+    """
+    params: dict = {"start": start, "end": end, "mkt_id": SHOPEE_ID}
+    brand_filter = _brand_filter_sql(brand_keys, params)
+    sql = text(f"""
+        -- shopee_ads_cobertura
+        SELECT
+            l.brand_key,
+            COALESCE(SUM(f.gmv), 0)       AS gmv,
+            COALESCE(SUM(f.ad_spend), 0)  AS ad_spend
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date BETWEEN :start AND :end
+          AND f.marketplace_id = :mkt_id
+          {brand_filter}
+        GROUP BY l.brand_key
+    """)
+    rows = [
+        {"brand": r["brand_key"], "shopee_gmv": _f(r.get("gmv")), "shopee_ad_spend": _f(r.get("ad_spend")) or None}
+        for r in db.execute(sql, params).mappings().all()
+        if r.get("brand_key")
+    ]
+    return _cobertura_marcas(rows, "shopee_ad_spend", "shopee_gmv")
+
+
 # ---------------------------------------------------------------------------
 # Overview
 # ---------------------------------------------------------------------------
@@ -620,8 +706,12 @@ def get_overview(
         tk_gmv, tk_orders = _gmv_orders(tk, base)
         ml_gmv, ml_orders = _gmv_orders(ml, base)
         sh_gmv, sh_orders = _gmv_orders(sh, base)
-        gmv = tk_gmv + ml_gmv + sh_gmv
-        orders = tk_orders + ml_orders + sh_orders
+        # T-0111 (sem dado != 0): nenhum canal com linha no recorte -> GMV,
+        # pedidos e ticket saem None, nunca 0. Canal com linha (mesmo zerada)
+        # entra na soma; canal sem linha so' fica de fora dela.
+        sem_linha = not data
+        gmv = None if sem_linha else tk_gmv + ml_gmv + sh_gmv
+        orders = None if sem_linha else tk_orders + ml_orders + sh_orders
 
         ml_canceled = int(_f(ml.get("canceled_orders")))
         ml_total = ml_orders + ml_canceled
@@ -638,7 +728,8 @@ def get_overview(
             "ml_gmv": ml_gmv or None,
             "shopee_gmv": sh_gmv or None,
             "orders": orders,
-            "avg_ticket": gmv / orders if orders > 0 else 0.0,
+            # Ticket sem pedido e' media sem base: None, nunca 0.
+            "avg_ticket": gmv / orders if orders else None,
             "ad_spend": (ml_spend + sh_spend) or None,
             "ml_roas": round(ml_revenue / ml_spend, 2) if ml_spend > 0 else None,
             "ml_cancel_rate_pct": ml_cancel_rate,
@@ -651,10 +742,21 @@ def get_overview(
     cur = _assemble(_mkt_kpis(db, start, end, mkt_ids, brand_keys, base))
     if pstart is not None:
         prev = _assemble(_mkt_kpis(db, pstart, pend, mkt_ids, brand_keys, base))
-        mom = round((cur["gmv"] - prev["gmv"]) / prev["gmv"] * 100, 2) if prev["gmv"] > 0 else None
+        # Base None (sem linha) ou 0 -> delta None; atual None -> delta None.
+        mom = (
+            round((cur["gmv"] - prev["gmv"]) / prev["gmv"] * 100, 2)
+            if cur["gmv"] is not None and prev["gmv"] else None
+        )
     else:
         prev = _assemble({})
         mom = None
+
+    # T-0115 (A1-14): o Ads Shopee do recorte pode cobrir so' parte das marcas.
+    # So' no periodo atual; consultado depois do anterior (ordem das consultas
+    # preservada para quem ja' as observa).
+    cur["shopee_ads_cobertura"] = (
+        _shopee_ads_cobertura(db, start, end, brand_keys) if SHOPEE_ID in mkt_ids else None
+    )
 
     ref_month_label = period.ref_month if period is not None else f"{year:04d}-{month:02d}"
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
@@ -1036,11 +1138,17 @@ def get_daily(
         d = r["date"]
         if d not in days:
             days[d] = {"date": d, "tiktok_gmv": None, "ml_gmv": None,
-                       "shopee_gmv": None, "orders": 0, "ad_spend": None}
+                       "shopee_gmv": None, "orders": 0, "ad_spend": None,
+                       "ml_ad_spend": None, "shopee_ad_spend": None}
         mkt = r["marketplace_id"]
         gmv_val = _f(r["gmv"]) or None
         orders_val = int(_f(r["orders"]))
         spend_val = _f(r["ad_spend"]) if r["ad_spend"] else None
+        # T-0113: Ads POR CANAL, para o ROAS da Marca 360 casar GMV e Ads do
+        # mesmo canal. Sem linha do canal no dia ou `ad_spend` NULL na fonte
+        # -> None; 0 so' quando a fonte grava 0. O `ad_spend` combinado (soma
+        # ML + Shopee, sem distinguir o canal) continua igual.
+        spend_canal = _f(r["ad_spend"]) if r["ad_spend"] is not None else None
 
         if mkt == TIKTOK_ID:
             days[d]["tiktok_gmv"] = gmv_val
@@ -1048,11 +1156,13 @@ def get_daily(
         elif mkt == ML_ID:
             days[d]["ml_gmv"] = gmv_val
             days[d]["orders"] += orders_val
+            days[d]["ml_ad_spend"] = spend_canal
             if spend_val:
                 days[d]["ad_spend"] = spend_val
         elif mkt == SHOPEE_ID:
             days[d]["shopee_gmv"] = gmv_val
             days[d]["orders"] += orders_val
+            days[d]["shopee_ad_spend"] = spend_canal
             if spend_val:
                 prev_spend = _f(days[d].get("ad_spend"))
                 days[d]["ad_spend"] = (prev_spend + spend_val) or None
@@ -1070,6 +1180,8 @@ def get_daily(
             "orders": orders,
             "avg_ticket": total / orders if orders > 0 else None,
             "ad_spend": v["ad_spend"],
+            "ml_ad_spend": v["ml_ad_spend"],
+            "shopee_ad_spend": v["shopee_ad_spend"],
             "tiktok_em_maturacao": (
                 d >= maturacao["em_maturacao_desde"] if maturacao is not None else None
             ),
@@ -1128,6 +1240,7 @@ def get_canais(
             COALESCE(SUM(f.ad_spend), 0)                 AS ad_spend,
             COALESCE(SUM(f.ad_revenue), 0)                AS ad_revenue,
             COALESCE(SUM(f.total_fees), 0)                AS total_fees,
+            COALESCE(SUM(f.total_settlement), 0)          AS total_settlement,
             COALESCE(SUM(f.seller_shipping_cost), 0)      AS seller_shipping_cost,
             COUNT(f.ad_spend)                             AS ad_spend_n,
             COUNT(f.total_fees)                           AS total_fees_n,
@@ -1375,11 +1488,16 @@ def _pct_coberto(brand_rows: list[dict], base_field: str, gmv_field: str) -> flo
     return _pct_da_marca(num, den)
 
 
-def _cobertura_marcas(brand_rows: list[dict], base_field: str, gmv_field: str) -> dict | None:
+def _cobertura_marcas(
+    brand_rows: list[dict], base_field: str, gmv_field: str, maturando_field: str | None = None,
+) -> dict | None:
     """Quantas marcas com GMV no canal entraram no % consolidado.
 
     `None` = canal sem GMV no recorte (nao ha' o que cobrir). `status`:
     `completa` (todas), `parcial` (algumas) ou `sem_dado` (nenhuma).
+    Com `maturando_field` (T-0115), publica tambem `marcas_maturando`: as
+    marcas sem dado cujo valor existia mas ficou abaixo do limiar de
+    maturacao (subconjunto de `marcas_sem_dado`).
     """
     marcas = _marcas_do_canal(brand_rows, gmv_field)
     if not marcas:
@@ -1387,7 +1505,12 @@ def _cobertura_marcas(brand_rows: list[dict], base_field: str, gmv_field: str) -
     sem = sorted(r["brand"] for r in marcas if r.get(base_field) is None)
     com = len(marcas) - len(sem)
     status = "completa" if not sem else ("parcial" if com else "sem_dado")
-    return {"status": status, "marcas_com_dado": com, "marcas_total": len(marcas), "marcas_sem_dado": sem}
+    out = {"status": status, "marcas_com_dado": com, "marcas_total": len(marcas), "marcas_sem_dado": sem}
+    if maturando_field is not None:
+        out["marcas_maturando"] = sorted(
+            r["brand"] for r in marcas if r.get(base_field) is None and r.get(maturando_field) == "maturando"
+        )
+    return out
 
 
 def get_financeiro(
@@ -1445,13 +1568,26 @@ def get_financeiro(
             tk_gmv = _f(tk["gmv"])
             tk_fees = abs(_f(tk["total_fees"]))
             tk_settlement = _f(tk["total_settlement"])
+            # T-0115 (B1-07): repasse abaixo do limiar = maturando. Taxa e
+            # repasse vem do mesmo extrato por pedido: os dois viram ausentes
+            # e saem do numerador e do denominador do consolidado. Taxa
+            # implausivel (< 1%) com repasse maduro tira so' a taxa.
+            maduro = _tiktok_repasse_maduro(tk_settlement, tk_gmv)
+            taxa_ok = maduro and _tiktok_taxa_plausivel(tk_fees, tk_gmv)
+            if maduro:
+                repasse_status = "maduro"
+            elif tk_settlement or tk_fees:
+                repasse_status = "maturando"
+            else:
+                repasse_status = "sem_dado"
             row.update({
                 "tiktok_gmv": tk_gmv or None,
-                "tiktok_settlement": tk_settlement or None,
-                "tiktok_fees": tk_fees or None,
+                "tiktok_settlement": (tk_settlement or None) if maduro else None,
+                "tiktok_fees": (tk_fees or None) if taxa_ok else None,
                 # T-0085: sem o valor-base, o % e' nulo (nunca 0,0%).
-                "tiktok_avg_fee_pct": _pct_da_marca(tk_fees, tk_gmv),
-                "tiktok_avg_settlement_pct": _pct_da_marca(tk_settlement, tk_gmv),
+                "tiktok_avg_fee_pct": _pct_da_marca(tk_fees, tk_gmv) if taxa_ok else None,
+                "tiktok_avg_settlement_pct": _pct_da_marca(tk_settlement, tk_gmv) if maduro else None,
+                "tiktok_repasse_status": repasse_status,
             })
 
         if ml:
@@ -1520,7 +1656,9 @@ def get_financeiro(
                 "shopee_avg_fee_pct": _pct_da_marca(sh_fees, sh_gmv),
                 "shopee_avg_settlement_pct": _pct_da_marca(sh_settlement, sh_gmv),
                 "shopee_ad_spend": sh_spend or None,
-                "shopee_ad_revenue": sh_revenue or None,
+                # T-0115 (B1-08): receita de Ads so' com investimento medido;
+                # assim o ROAS consolidado fica so' sobre as marcas com Ads.
+                "shopee_ad_revenue": (sh_revenue or None) if sh_spend else None,
                 "shopee_roas": round(sh_revenue / sh_spend, 2) if sh_spend > 0 else None,
                 "shopee_shipping_cost": sh_shipping or None,
                 "shopee_shipping_pct_of_gmv": round(sh_shipping / sh_gmv * 100, 2) if sh_gmv > 0 else None,
@@ -1559,8 +1697,13 @@ def get_financeiro(
         # cobertura (`*_cobertura`) diz quantas marcas entraram.
         "tiktok_avg_fee_pct": _pct_coberto(brand_rows, "tiktok_fees", "tiktok_gmv"),
         "tiktok_avg_settlement_pct": _pct_coberto(brand_rows, "tiktok_settlement", "tiktok_gmv"),
-        "tiktok_fee_cobertura": _cobertura_marcas(brand_rows, "tiktok_fees", "tiktok_gmv"),
-        "tiktok_settlement_cobertura": _cobertura_marcas(brand_rows, "tiktok_settlement", "tiktok_gmv"),
+        # T-0115: marca com repasse imaturo aparece em `marcas_maturando`.
+        "tiktok_fee_cobertura": _cobertura_marcas(
+            brand_rows, "tiktok_fees", "tiktok_gmv", "tiktok_repasse_status",
+        ),
+        "tiktok_settlement_cobertura": _cobertura_marcas(
+            brand_rows, "tiktok_settlement", "tiktok_gmv", "tiktok_repasse_status",
+        ),
         "ml_gmv": ml_gmv_t or None,
         "ml_ad_spend": ml_spend_t or None,
         "ml_ad_revenue": ml_rev_t or None,
@@ -1578,8 +1721,11 @@ def get_financeiro(
         "shopee_avg_settlement_pct": _pct_coberto(brand_rows, "shopee_settlement", "shopee_gmv"),
         "shopee_fee_cobertura": _cobertura_marcas(brand_rows, "shopee_fees", "shopee_gmv"),
         "shopee_settlement_cobertura": _cobertura_marcas(brand_rows, "shopee_settlement", "shopee_gmv"),
+        # T-0115 (B1-08): o total e o ROAS somam so' as marcas com Ads; a
+        # cobertura diz quantas (e quais faltam).
         "shopee_ad_spend": sh_spend_t or None,
         "shopee_roas": round(sh_rev_t / sh_spend_t, 2) if sh_spend_t > 0 else None,
+        "shopee_ads_cobertura": _cobertura_marcas(brand_rows, "shopee_ad_spend", "shopee_gmv"),
     }
 
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
@@ -1872,10 +2018,10 @@ def get_pedidos(
         end = date.today()
         start = end - timedelta(days=days_back - 1)
 
-    # Pedidos so cobre TikTok e ML na fonte atual (Shopee nao integrada nesta
-    # tela) — interseccao com o canal pedido, nunca ignora um filtro invalido
-    # silenciosamente: canal=shopee isolado retorna zero honesto, nao TK+ML.
-    mkt_ids = [i for i in parse_marketplace_param(marketplace) if i in (TIKTOK_ID, ML_ID)]
+    # T-0116: a Shopee entra (o mart tem orders = pagos, canceled_orders,
+    # delivered_orders e gmv da Shopee via `daily_shopee`/API). O canal pedido
+    # e' respeitado como veio: canal=shopee isolado devolve so' a Shopee.
+    mkt_ids = parse_marketplace_param(marketplace)
 
     params: dict = {"start": start, "end": end, "mkt_ids": mkt_ids}
     brand_filter = _brand_filter_sql(brand_keys, params)
@@ -1926,63 +2072,48 @@ def get_pedidos(
     daily_raw = db.execute(sql_daily, params).mappings().all()
     brand_raw = db.execute(sql_brand, params).mappings().all()
 
-    tk = kpis_by_mkt.get(TIKTOK_ID, {})
-    ml = kpis_by_mkt.get(ML_ID, {})
+    # Sem dado != 0 (T-0111/B1-10): canal pedido sem NENHUMA linha no recorte
+    # sai com os campos null; zero so' quando a fonte tem linha com 0.
+    present = [m for m in mkt_ids if m in kpis_by_mkt]
+    missing = [m for m in mkt_ids if m not in kpis_by_mkt]
 
-    tk_orders = int(_f(tk.get("orders")))
-    tk_canceled = int(_f(tk.get("canceled_orders")))
-    tk_gmv = _f(tk.get("gmv"))
-    # canceled/(paid+canceled) — denominador padrão; None quando sem cobertura (canceled=0)
-    tk_denom = tk_orders + tk_canceled
-    tk_cancel_rate = round(tk_canceled / tk_denom * 100, 2) if (tk_canceled > 0 and tk_denom > 0) else None
-
-    ml_orders = int(_f(ml.get("orders")))
-    ml_canceled = int(_f(ml.get("canceled_orders")))
-    ml_total = ml_orders + ml_canceled
-    ml_gmv = _f(ml.get("gmv"))
-    # canceled/(paid+canceled) — mesmo denominador que overview/brands/quality
-    ml_cancel_rate = round(ml_canceled / ml_total * 100, 2) if ml_total > 0 else None
-
-    total_paid = tk_orders + ml_orders
-    total_canceled = tk_canceled + ml_canceled
+    total_paid = sum(int(_f(kpis_by_mkt[m].get("orders"))) for m in present)
+    total_canceled = sum(int(_f(kpis_by_mkt[m].get("canceled_orders"))) for m in present)
     total_all = total_paid + total_canceled
-    total_gmv = tk_gmv + ml_gmv
+    total_gmv = sum(_f(kpis_by_mkt[m].get("gmv")) for m in present)
 
-    # Daily
+    # Daily — canal sem linha no dia sai null (nunca 0 inventado).
     daily_map: dict[date, dict] = {}
     for r in daily_raw:
+        prefix = _PEDIDOS_PREFIX.get(r["marketplace_id"])
+        if prefix is None:
+            continue
         d = r["date"]
         if d not in daily_map:
             daily_map[d] = {
                 "date": str(d)[:10],
-                "tiktok_orders": 0, "tiktok_canceled": 0,
-                "ml_orders": 0, "ml_canceled": 0,
+                "tiktok_orders": None, "tiktok_canceled": None,
+                "ml_orders": None, "ml_canceled": None,
+                "shopee_orders": None, "shopee_canceled": None,
                 "total_orders": 0, "total_gmv": 0.0,
             }
-        if r["marketplace_id"] == TIKTOK_ID:
-            daily_map[d]["tiktok_orders"] = int(_f(r["orders"]))
-            daily_map[d]["tiktok_canceled"] = int(_f(r["canceled_orders"]))
-        elif r["marketplace_id"] == ML_ID:
-            daily_map[d]["ml_orders"] = int(_f(r["orders"]))
-            daily_map[d]["ml_canceled"] = int(_f(r["canceled_orders"]))
+        orders_d = int(_f(r["orders"]))
+        daily_map[d][f"{prefix}_orders"] = orders_d
+        daily_map[d][f"{prefix}_canceled"] = int(_f(r["canceled_orders"]))
+        daily_map[d]["total_orders"] += orders_d  # pagos (liquido) dos canais com linha no dia
         daily_map[d]["total_gmv"] = round(daily_map[d]["total_gmv"] + _f(r["gmv"]), 2)
-
-    for v in daily_map.values():
-        v["total_orders"] = v["tiktok_orders"] + v["ml_orders"]
 
     # By brand
     brand_map: dict[str, dict[int, dict]] = {}
     for r in brand_raw:
-        brand = r["brand_key"]
-        if brand not in brand_map:
-            brand_map[brand] = {}
-        brand_map[brand][r["marketplace_id"]] = dict(r)
+        brand_map.setdefault(r["brand_key"], {})[r["marketplace_id"]] = dict(r)
 
     brands = []
     for brand in sorted(brand_map.keys()):
         bm = brand_map[brand]
         tk_b = bm.get(TIKTOK_ID, {})
         ml_b = bm.get(ML_ID, {})
+        sh_b = bm.get(SHOPEE_ID, {})
 
         tk_o = int(_f(tk_b["orders"])) if tk_b else None
         tk_c = int(_f(tk_b["canceled_orders"])) if tk_b else None
@@ -1993,7 +2124,12 @@ def get_pedidos(
         ml_total_b = (ml_o or 0) + (ml_c or 0)
         ml_g = round(_f(ml_b["gmv"]), 2) if ml_b else None
 
-        # canceled/(paid+canceled) para ambos; None quando canceled=0 (sem cobertura TikTok)
+        sh_o = int(_f(sh_b["orders"])) if sh_b else None
+        sh_c = int(_f(sh_b["canceled_orders"])) if sh_b else None
+        sh_g = round(_f(sh_b["gmv"]), 2) if sh_b else None
+        sh_denom_b = (sh_o or 0) + (sh_c or 0)
+
+        # canceled/(paid+canceled) para os 3; TikTok: None quando canceled=0 (sem cobertura TikTok)
         tk_denom_b = (tk_o or 0) + (tk_c or 0)
         brands.append({
             "brand": brand,
@@ -2006,9 +2142,28 @@ def get_pedidos(
             "ml_canceled": ml_c,
             "ml_cancel_rate_pct": round(ml_c / ml_total_b * 100, 2) if (ml_c is not None and ml_total_b > 0) else None,
             "ml_gmv": ml_g,
-            "total_orders": (tk_o or 0) + ml_total_b,
-            "total_gmv": round((tk_g or 0) + (ml_g or 0), 2),
+            # Shopee: orders = pagos (liquido); 0 real quando ha linha com 0 cancelado.
+            "shopee_orders": sh_o,
+            "shopee_canceled": sh_c,
+            "shopee_cancel_rate_pct": round(sh_c / sh_denom_b * 100, 2) if (sh_c is not None and sh_denom_b > 0) else None,
+            "shopee_gmv": sh_g,
+            # Contrato existente: TikTok liquido + ML bruto (o web desconta ml_canceled) + Shopee liquido.
+            "total_orders": (tk_o or 0) + ml_total_b + (sh_o or 0),
+            "total_gmv": round((tk_g or 0) + (ml_g or 0) + (sh_g or 0), 2),
         })
+
+    warnings: list[str] = []
+    missing_labels = ", ".join(_PEDIDOS_LABEL[m] for m in missing)
+    if missing and present:
+        present_labels = ", ".join(_PEDIDOS_LABEL[m] for m in present)
+        warnings.append(
+            f"sem_dado: {missing_labels} sem linha na fonte no periodo; "
+            f"totais parciais (soma so' de {present_labels})."
+        )
+    elif missing:
+        warnings.append(
+            f"sem_dado: nenhum canal pedido ({missing_labels}) tem linha na fonte no periodo; totais null, nao 0."
+        )
 
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
     return {
@@ -2018,27 +2173,50 @@ def get_pedidos(
         "filters": {"channels": marketplace, "brands": brand_keys},
         "refreshed_at": refreshed_at,
         "kpis": {
-            "total_orders": total_all,
-            "total_gmv": round(total_gmv, 2),
-            "avg_ticket": round(total_gmv / total_paid, 2) if total_paid > 0 else 0.0,
+            # Contrato existente: total_orders BRUTO (pagos + cancelados); o web desconta os cancelados.
+            "total_orders": total_all if present else None,
+            "total_gmv": round(total_gmv, 2) if present else None,
+            "avg_ticket": round(total_gmv / total_paid, 2) if total_paid > 0 else None,
             "cancel_rate_pct": round(total_canceled / total_all * 100, 2) if total_all > 0 else None,
         },
-        "tiktok": {
-            "orders": tk_orders,
-            "canceled": tk_canceled,
-            "gmv": round(tk_gmv, 2),
-            "cancel_rate_pct": tk_cancel_rate,
-            "delivered": int(_f(tk.get("delivered_orders"))) or None,
-        },
-        "ml": {
-            "orders": ml_total,
-            "canceled": ml_canceled,
-            "gmv": round(ml_gmv, 2),
-            "cancel_rate_pct": ml_cancel_rate,
-            "delivered": int(_f(ml.get("delivered_orders"))) or None,
-        },
+        "tiktok": _pedidos_canal(kpis_by_mkt.get(TIKTOK_ID), TIKTOK_ID),
+        "ml": _pedidos_canal(kpis_by_mkt.get(ML_ID), ML_ID),
+        "shopee": _pedidos_canal(kpis_by_mkt.get(SHOPEE_ID), SHOPEE_ID),
         "daily": [v for _, v in sorted(daily_map.items())],
         "by_brand": brands,
+        "canais_sem_dado": [_PEDIDOS_PREFIX[m] for m in missing],
+        "warnings": warnings,
+    }
+
+
+_PEDIDOS_PREFIX = {TIKTOK_ID: "tiktok", ML_ID: "ml", SHOPEE_ID: "shopee"}
+_PEDIDOS_LABEL = {TIKTOK_ID: "TikTok Shop", ML_ID: "Mercado Livre", SHOPEE_ID: "Shopee"}
+
+
+def _pedidos_canal(row: dict | None, mkt_id: int) -> dict:
+    """KPIs de um canal em Pedidos. Sem linha na fonte -> todos os campos null.
+
+    Bases (contrato existente, ver docs/kpi_dictionary.md §Pedidos):
+      - TikTok e Shopee: `orders` = pagos (liquido);
+      - ML: `orders` = pagos + cancelados (bruto; o web desconta `canceled`).
+    Taxa = canceled / (paid + canceled). No TikTok, canceled=0 -> null (sem
+    cobertura de cancelamento na fonte); no ML e na Shopee, 0 real e' 0.
+    """
+    if row is None:
+        return {"orders": None, "canceled": None, "gmv": None, "cancel_rate_pct": None, "delivered": None}
+    paid = int(_f(row.get("orders")))
+    canceled = int(_f(row.get("canceled_orders")))
+    denom = paid + canceled
+    if mkt_id == TIKTOK_ID:
+        rate = round(canceled / denom * 100, 2) if (canceled > 0 and denom > 0) else None
+    else:
+        rate = round(canceled / denom * 100, 2) if denom > 0 else None
+    return {
+        "orders": denom if mkt_id == ML_ID else paid,
+        "canceled": canceled,
+        "gmv": round(_f(row.get("gmv")), 2),
+        "cancel_rate_pct": rate,
+        "delivered": int(_f(row.get("delivered_orders"))) or None,
     }
 
 

@@ -218,3 +218,75 @@ def test_agregado_sem_suspensao_mantem_a_soma():
     m = total["margem_contribuicao_conhecida"]
     assert m["suspensa"] is False and total["celulas_suspensas"] == 0
     assert m["valor"] == pytest.approx(2 * (1_000_000 - 150_000 - 40_000 - 130_000 - 300_000))
+
+
+# ---------------------------------------------------------------------------
+# T-0112 (A2-23): taxa ou CMV sem valor utilizavel tambem suspende
+# ---------------------------------------------------------------------------
+# Medido no VAL-A2: kokeshi Shopee out/26 com a taxa `indisponivel` saiu com
+# margem "conhecida" de 51% — a taxa ficava fora da soma. Agora suspende como
+# na T-0101, com motivo sem data (republicar nao resolve).
+
+def test_taxa_indisponivel_com_receita_suspende():
+    c = celula("ml", m=mart("ml", fees=None, fees_n=0))
+    tx = c["componentes"]["taxas"]
+    assert tx["status"] == dre.INDISPONIVEL and tx["motivo"]
+    _suspensa(c["margem_contribuicao_conhecida"], f"taxa indisponível: {tx['motivo']}; margem suspensa")
+    assert c["margem_contribuicao_conhecida"]["_suspensa_desde"] is None
+    assert c["componentes"]["receita"]["valor"] == 1_000_000.0  # receita segue visivel
+
+
+def test_cmv_indisponivel_com_receita_suspende():
+    c = celula("ml", c=cmv("ml", custo=None))
+    cm = c["componentes"]["cmv"]
+    assert cm["status"] == dre.INDISPONIVEL
+    _suspensa(c["margem_contribuicao_conhecida"], f"CMV indisponível: {cm['motivo']}; margem suspensa")
+
+
+def test_taxa_sinal_inesperado_suspende():
+    c = celula("ml", m=mart("ml", fees_neg_n=1))
+    tx = c["componentes"]["taxas"]
+    assert tx["status"] == dre.SINAL_INESPERADO
+    _suspensa(c["margem_contribuicao_conhecida"], f"taxa com sinal inesperado: {tx['motivo']}; margem suspensa")
+
+
+def test_taxa_nao_aplicavel_nao_suspende():
+    comps = {"taxas": {"status": dre.NAO_APLICAVEL, "motivo": None},
+             "cmv": {"status": dre.DISPONIVEL, "motivo": None}}
+    assert dre._suspensao_da_celula(comps) is None
+
+
+def test_taxa_parcial_nao_suspende_contraprova():
+    c = celula("ml", m=mart("ml", fees_n=5))
+    assert c["componentes"]["taxas"]["status"] == dre.COBERTURA_PARCIAL
+    m = c["margem_contribuicao_conhecida"]
+    assert m["suspensa"] is False and m["valor"] is not None and m["componentes_parciais"] == ["taxas"]
+
+
+def test_indisponivel_e_vencido_juntos_mantem_a_data():
+    c = celula("ml", m=mart("ml", fees=None, fees_n=0), c=cmv("ml", publicado_em=VELHO))
+    tx = c["componentes"]["taxas"]
+    _suspensa(c["margem_contribuicao_conhecida"], f"insumo vencido: cmv; taxa indisponível: {tx['motivo']}; {FECHO}")
+
+
+def test_estimada_da_celula_com_taxa_indisponivel_fica_nao_calculavel():
+    body, _ = _montar([mart("ml", "kokeshi", dias=31, fees=None, fees_n=0)], cmv("ml", "kokeshi"),
+                      premissas=prem(JUL, "kokeshi"))
+    cen = body["celulas_base"][0]["cenario_premissas"]
+    assert cen["estado"] == DP.NAO_CALCULAVEL and cen["margem_contribuicao_estimada"] is None
+    assert cen["suspensa"] is True and cen["motivo_suspensao"].startswith("taxa indisponível: ")
+
+
+def test_agregado_com_uma_celula_suspensa_por_indisponivel():
+    rows = [mart("ml", "kokeshi", dias=31, fees=None, fees_n=0), mart("ml", "barbours", dias=31)]
+    body, validado = _montar(rows, [*cmv("ml", "kokeshi"), *cmv("ml", "barbours")],
+                             premissas=[*prem(JUL, "kokeshi"), *prem(JUL, "barbours")])
+    total = body["total"]
+    motivo = "1 de 2 células com margem suspensa (taxa ou CMV indisponível); margem suspensa"
+    _suspensa(total["margem_contribuicao_conhecida"], motivo)
+    assert total["celulas_suspensas"] == 1 and validado["total"]["celulas_suspensas"] == 1
+    cen = total["cenario_premissas"]
+    assert cen["suspensa"] is True and cen["celulas_suspensas"] == 1
+    assert cen["margem_contribuicao_estimada"] is None
+    assert cen["motivo_suspensao"] == ("1 de 2 células com margem estimada suspensa "
+                                       "(taxa ou CMV sem valor utilizável); margem suspensa")

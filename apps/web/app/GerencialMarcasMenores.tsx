@@ -150,7 +150,7 @@ export default function GerencialMarcasMenores({
             loading={false}
             error={false}
             gmv={overview.gmv}
-            prevGmv={comparar && overview.prev_gmv > 0 ? overview.prev_gmv : null}
+            prevGmv={comparar && overview.prev_gmv != null && overview.prev_gmv > 0 ? overview.prev_gmv : null}
             momPct={comparar ? overview.gmv_mom_pct : null}
             compareActive={comparar}
             channels={canais}

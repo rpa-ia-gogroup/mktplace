@@ -82,11 +82,11 @@ function KpiReference({
   overview: OverviewData;
   comparacao?: { deltaPct: number | null; reference: string | null; deltaTone?: string };
 }) {
-  const gmv = kind === "gmv" && comparacao != null && overview.gmv_mom_pct != null;
+  const gmv = kind === "gmv" && comparacao != null && overview.gmv_mom_pct != null && overview.prev_gmv != null;
   const outra = kind !== "gmv" && comparacao?.deltaPct != null && comparacao.reference ? comparacao : null;
   if (!gmv && !outra) return null;
   const pct = gmv ? overview.gmv_mom_pct! : outra!.deltaPct!;
-  const antes = gmv ? fmtBrlCurto(overview.prev_gmv) : outra!.reference!;
+  const antes = gmv ? fmtBrlCurto(overview.prev_gmv!) : outra!.reference!;
   const neutro = kind === "ad_spend" || outra?.deltaTone === "neutral";
   const sobe = pct >= 0;
   const Seta = sobe ? ArrowUpRight : ArrowDownRight;

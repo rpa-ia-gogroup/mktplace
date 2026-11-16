@@ -53,6 +53,15 @@ export const CANONICAL_MCP_RESOURCE = "https://mktplace-ten.vercel.app/api/mcp";
  */
 export const CANONICAL_ORACLE_SCOPE = "oracle:read";
 
+/**
+ * Scope OIDC que pede ao Auth0 um refresh token (exige "Allow Offline Access"
+ * ligado na API). So' e' ANUNCIADO — no PRM e no `scope` do desafio — para que
+ * o cliente MCP o inclua no pedido de autorizacao e consiga renovar o access
+ * token sem reautorizar. O verificador NAO o exige: o refresh token nunca chega
+ * a esta rota, e o access token continua autorizado so' por `oracle:read`.
+ */
+export const OFFLINE_ACCESS_SCOPE = "offline_access";
+
 /** Unico algoritmo de assinatura aceito. Exclui `none` e toda a familia HS*. */
 export const ALLOWED_JWT_ALGORITHMS = ["RS256"] as const;
 
@@ -154,6 +163,17 @@ export function parseOAuthConfig(env: OAuthEnv): OAuthConfig | null {
 // Protected Resource Metadata (RFC 9728)
 // ---------------------------------------------------------------------------
 
+/**
+ * Scopes que o cliente deve pedir, na ordem anunciada: a permission exigida e
+ * `offline_access`. Fonte unica para o PRM (`scopes_supported`) e para o
+ * `scope` do desafio `WWW-Authenticate` — pela estrategia de selecao de scope
+ * da spec MCP, o cliente usa primeiro o `scope` do desafio e, na falta dele,
+ * todo o `scopes_supported`. Anunciar so' nos dois lugares, nunca exigir.
+ */
+export function advertisedScopes(cfg: OAuthConfig): string[] {
+  return [cfg.requiredScope, OFFLINE_ACCESS_SCOPE];
+}
+
 export type ProtectedResourceMetadata = {
   resource: string;
   authorization_servers: string[];
@@ -174,7 +194,7 @@ export function protectedResourceMetadata(cfg: OAuthConfig): ProtectedResourceMe
   return {
     resource: cfg.audience,
     authorization_servers: [cfg.issuer],
-    scopes_supported: [cfg.requiredScope],
+    scopes_supported: advertisedScopes(cfg),
     bearer_methods_supported: ["header"],
   };
 }

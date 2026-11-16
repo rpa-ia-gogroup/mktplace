@@ -407,8 +407,10 @@ export function TrendBucketDrilldownContent({
 
   const marcas = brandsUsable ? state.brands!.filter((b) => b.total_gmv > 0).sort((a, b) => b.total_gmv - a.total_gmv) : [];
   const somaMarcas = marcas.reduce((a, b) => a + b.total_gmv, 0);
-  const ticket =
-    overviewUsable && state.overview!.orders > 0 ? state.overview!.gmv / state.overview!.orders : null;
+  // T-0111: total nulo = sem linha no recorte; ticket so' com GMV e pedidos medidos.
+  const ovGmv = overviewUsable ? state.overview!.gmv : null;
+  const ovPedidos = overviewUsable ? state.overview!.orders : null;
+  const ticket = ovGmv != null && ovPedidos != null && ovPedidos > 0 ? ovGmv / ovPedidos : null;
 
   return (
     <div className="flex flex-col gap-4 text-sm">
@@ -497,8 +499,8 @@ export function TrendBucketDrilldownContent({
           </p>
         ) : overviewUsable ? (
           <ul className="flex flex-col">
-            <EvidenceRow label="GMV" value={fmtBrlFull(state.overview!.gmv)} />
-            <EvidenceRow label="Pedidos" value={fmtNumber(state.overview!.orders)} />
+            <EvidenceRow label="GMV" value={ovGmv != null ? fmtBrlFull(ovGmv) : "—"} />
+            <EvidenceRow label="Pedidos" value={ovPedidos != null ? fmtNumber(ovPedidos) : "—"} />
             {ticket != null && <EvidenceRow label="Ticket médio" value={fmtBrlFull(ticket)} />}
           </ul>
         ) : (

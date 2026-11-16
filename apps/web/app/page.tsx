@@ -797,6 +797,7 @@ function GerencialComGrandes() {
         notaMenores={notaDasMenores}
         notaVendas={notaBase(overview, filters.channels)}
         linhaMenores={linhaMenores}
+        semDadoNoRecorte={overview != null && overview.gmv == null}
         compareActive={comparar || compHoje != null}
         rotuloComparacao={compHoje?.rotulo ?? null}
         detalheComparacao={compHoje?.detalhe ?? null}

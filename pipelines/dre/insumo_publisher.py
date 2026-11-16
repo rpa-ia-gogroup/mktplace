@@ -380,6 +380,12 @@ SQL_CMV = text("""
 #:     codigo de anuncio do Full (rituaria) so' casa via `sku_canonico` com
 #:     linha de outro canal. Intercompany fica fora (preco de transferencia).
 #: O casamento (codigo, senao sku) e a conta sao feitos em `estimar_cmv`, pura.
+#: T-0091b: so' roda nos meses x marcas que a pre-consulta `SQL_CMV_LACUNAS`
+#: achou (`:competencias`/`:marcas` sao os da lacuna, nao os do lote). O custo
+#: unitario e' lido num UNICO scan, ja' restrito por semi-join aos SKUs de
+#: `sem_custo` (codigo OU sku) e agregado por mes x marca x codigo x sku; as
+#: duas somas por chave saem desse agregado (pequeno), sem reler a gold. Soma
+#: de soma parcial e' exata (numeric), entao o valor e' o mesmo de antes.
 SQL_CMV_ESTIMADO = text("""
     WITH sem_custo AS (
         SELECT data_mes, marca, plataforma, codigo_produto, sku_canonico,
@@ -397,7 +403,8 @@ SQL_CMV_ESTIMADO = text("""
           AND custo IS NULL
         GROUP BY data_mes, marca, plataforma, codigo_produto, sku_canonico
     ), com_custo AS (
-        SELECT data_mes, marca, codigo_produto, sku_canonico, custo, quantidade_item
+        SELECT data_mes, marca, codigo_produto, sku_canonico,
+               SUM(quantidade_item) AS quantidade, SUM(custo) AS custo, COUNT(*) AS linhas
         FROM gold.nf_vendas_unificada_v2
         WHERE data_mes = ANY(:competencias)
           AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
@@ -405,22 +412,42 @@ SQL_CMV_ESTIMADO = text("""
           AND intercompany IS NOT TRUE
           AND custo IS NOT NULL
           AND quantidade_item > 0
+          AND (codigo_produto IN (SELECT codigo_produto FROM sem_custo)
+               OR sku_canonico IN (SELECT sku_canonico FROM sem_custo))
+        GROUP BY data_mes, marca, codigo_produto, sku_canonico
     )
     SELECT 'sem_custo'::text AS tipo, data_mes AS competencia, marca, plataforma, codigo_produto, sku_canonico,
            receita, receita_estimavel, quantidade, NULL::numeric AS custo, linhas
     FROM sem_custo
     UNION ALL
     SELECT 'codigo_produto'::text, data_mes, marca, NULL::text, codigo_produto, NULL::text,
-           NULL::numeric, NULL::numeric, SUM(quantidade_item), SUM(custo), COUNT(*)
+           NULL::numeric, NULL::numeric, SUM(quantidade), SUM(custo), SUM(linhas)::bigint
     FROM com_custo
     WHERE codigo_produto IN (SELECT codigo_produto FROM sem_custo)
     GROUP BY data_mes, marca, codigo_produto
     UNION ALL
     SELECT 'sku_canonico'::text, data_mes, marca, NULL::text, NULL::text, sku_canonico,
-           NULL::numeric, NULL::numeric, SUM(quantidade_item), SUM(custo), COUNT(*)
+           NULL::numeric, NULL::numeric, SUM(quantidade), SUM(custo), SUM(linhas)::bigint
     FROM com_custo
     WHERE sku_canonico IN (SELECT sku_canonico FROM sem_custo)
     GROUP BY data_mes, marca, sku_canonico
+""")
+
+#: T-0091b: pre-consulta da estimativa. Os meses x marcas com linha SEM custo,
+#: com os MESMOS filtros de celula do `SQL_CMV` (e o `data_emissao` da janela).
+#: Vazia: o `SQL_CMV_ESTIMADO` nem roda (nada a estimar; o lote sai como sem
+#: lacuna). E' o mesmo scan do `SQL_CMV` (paginas quentes logo depois dele).
+SQL_CMV_LACUNAS = text("""
+    SELECT data_mes AS competencia, marca
+    FROM gold.nf_vendas_unificada_v2
+    WHERE data_mes = ANY(:competencias)
+      AND data_emissao >= :inicio AND data_emissao < :fim_exclusivo
+      AND canal = 'marketplace'
+      AND plataforma = ANY(:plataformas)
+      AND marca = ANY(:marcas)
+      AND intercompany IS NOT TRUE
+      AND custo IS NULL
+    GROUP BY data_mes, marca
 """)
 
 #: Contraprova: o agregado que o Data Mart materializa a partir da base de
@@ -1608,6 +1635,18 @@ def ler_impostos(fonte_engine, comps: list[date], canais: list[str], marcas: lis
     return linhas, "lido"
 
 
+def params_lacunas(lacunas: list[dict], plataformas: list[str]) -> dict:
+    """Parametros do `SQL_CMV_ESTIMADO` a partir das linhas de `SQL_CMV_LACUNAS`
+    (T-0091b). PURA. So' os meses e as marcas com lacuna; a janela de emissao
+    vai do 1o mes ao fim do ultimo. Marca x mes sem lacuna que entra pelo
+    produto cartesiano nao muda nada: `estimar_cmv` so' usa o custo unitario
+    do mes x marca de um SKU sem custo."""
+    meses = sorted({_mes_de(r["competencia"]) for r in lacunas})
+    return {"competencias": meses, "plataformas": plataformas,
+            "marcas": sorted({r["marca"] for r in lacunas}),
+            "inicio": meses[0], "fim_exclusivo": somar_meses(meses[-1], 1)}
+
+
 def ler_cmv_estimado(fonte_engine, comps: list[date], canais: list[str],
                      marcas: list[str]) -> tuple[Optional[list], str]:
     """Insumo do custo estimado (T-0091): leitura PROPRIA, READ ONLY, com timeout.
@@ -1616,18 +1655,25 @@ def ler_cmv_estimado(fonte_engine, comps: list[date], canais: list[str],
     derruba a publicacao: erro de SQL vira `(None, "indisponivel: <classe>")` e
     o lote sai como antes (CMV so' com o custo real, cobertura real). So'
     `SQLAlchemyError` e' engolido; qualquer outra excecao sobe.
+
+    T-0091b: antes, a pre-consulta das lacunas (meses x marcas com custo nulo).
+    Sem lacuna, a leitura pesada nao roda e volta `([], "lido")`, o mesmo que
+    ela devolveria. Com lacuna, ela roda so' nesses meses e marcas.
     """
     if fonte_engine is None or not marcas:
         return None, "nao avaliado: sem Data Mart ou sem marca no escopo"
+    plataformas = [PLATAFORMA_FISCAL[c] for c in canais]
     params = {
-        "competencias": comps, "plataformas": [PLATAFORMA_FISCAL[c] for c in canais], "marcas": marcas,
+        "competencias": comps, "plataformas": plataformas, "marcas": marcas,
         "inicio": comps[0], "fim_exclusivo": somar_meses(comps[-1], 1),
     }
     try:
         with fonte_engine.connect() as conn:
             conn.execute(text("SET TRANSACTION READ ONLY"))
             conn.execute(text("SET LOCAL statement_timeout = '600s'"))
-            linhas = _rows(conn, SQL_CMV_ESTIMADO, params)
+            lacunas = _rows(conn, SQL_CMV_LACUNAS, params)
+            linhas = (_rows(conn, SQL_CMV_ESTIMADO, params_lacunas(lacunas, plataformas))
+                      if lacunas else [])
             conn.rollback()
     except SQLAlchemyError as exc:
         return None, f"indisponivel: {type(exc).__name__}"

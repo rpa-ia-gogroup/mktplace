@@ -7,6 +7,7 @@ import type { HojePorHora } from "./gerencial/hoje-por-hora";
 import type { BaseVendas, EcoBase } from "./base-vendas.ts";
 import { torreFetch } from "./torre-fetch.ts";
 import { calcMoM } from "./formatters";
+import { totaisDoOverview } from "./overview-sem-dado.ts";
 import {
   ALL_MARKETPLACE_SELECTION,
   isMarketplaceSelected,
@@ -29,12 +30,13 @@ export type Filter = MarketplaceSelection;
 // ---------- tipos espelhando a API ----------
 
 export interface OverviewData extends EcoBase {
-  gmv: number;
+  /** T-0111: `null` = sem linha na fonte no recorte (nunca 0 fabricado). */
+  gmv: number | null;
   tiktok_gmv: number | null;
   ml_gmv: number | null;
   shopee_gmv: number | null;
-  orders: number;
-  avg_ticket: number;
+  orders: number | null;
+  avg_ticket: number | null;
   ad_spend: number | null;
   ml_roas: number | null;
   ml_cancel_rate_pct: number | null;
@@ -42,8 +44,13 @@ export interface OverviewData extends EcoBase {
   tiktok_customers: number | null;
   ml_unique_buyers: number | null;
   shopee_unique_buyers: number | null;
+  /** T-0115: marcas Shopee com Ads no recorte. Opcional: API antiga nao envia. */
+  shopee_ads_cobertura?: CoberturaMarcas | null;
   gmv_mom_pct: number | null;
-  prev_gmv: number;
+  /** `null` = periodo anterior sem linha (ou comparacao nao pedida). */
+  prev_gmv: number | null;
+  /** T-0111: o recorte atual nao tem linha na fonte (API nova: null; antiga: 0 sem refreshed_at). */
+  sem_dado?: boolean;
   /**
    * KPIS-COMPARACAO-1 — o restante do periodo anterior, que o contrato
    * (`previous: KpiSummary`) ja' trazia e a tela ignorava. Opcionais: o mock
@@ -337,12 +344,12 @@ export function fetchOverview(
 ): Promise<{ data: OverviewData; live: boolean; meta: ResponseMeta }> {
   interface ApiResp {
     current: {
-      gmv: number;
+      gmv: number | null;
       tiktok_gmv?: number | null;
       ml_gmv?: number | null;
       shopee_gmv?: number | null;
-      orders: number;
-      avg_ticket: number;
+      orders: number | null;
+      avg_ticket: number | null;
       ad_spend: number | null;
       ml_roas?: number | null;
       ml_cancel_rate_pct?: number | null;
@@ -350,9 +357,11 @@ export function fetchOverview(
       tiktok_customers?: number | null;
       ml_unique_buyers?: number | null;
       shopee_unique_buyers?: number | null;
+      shopee_ads_cobertura?: CoberturaMarcas | null;
     };
+    /** T-0111: `null` inteiro quando `compare` nao foi pedido. */
     previous: {
-      gmv: number;
+      gmv: number | null;
       orders?: number | null;
       avg_ticket?: number | null;
       ad_spend?: number | null;
@@ -361,7 +370,7 @@ export function fetchOverview(
       tiktok_gmv?: number | null;
       ml_gmv?: number | null;
       shopee_gmv?: number | null;
-    };
+    } | null;
     gmv_mom_pct: number | null;
     base?: EcoBase["base"];
     nao_pago_disponivel?: EcoBase["nao_pago_disponivel"];
@@ -376,16 +385,18 @@ export function fetchOverview(
   return withCache(`overview:${qs.toString()}`, async () => {
     const raw = await apiFetch<ApiResp>(`/api/v1/performance/overview?${qs.toString()}`);
     if (raw) {
+      // T-0111: ausencia vira null aqui, nas duas formas da API (nova e antiga).
+      const t = totaisDoOverview(raw.current, raw.previous, raw.gmv_mom_pct, raw.refreshed_at);
       return {
         live: true,
         meta: metaFromResponse(raw),
         data: {
-          gmv: raw.current.gmv,
+          gmv: t.gmv,
           tiktok_gmv: raw.current.tiktok_gmv ?? null,
           ml_gmv: raw.current.ml_gmv ?? null,
           shopee_gmv: raw.current.shopee_gmv ?? null,
-          orders: raw.current.orders,
-          avg_ticket: raw.current.avg_ticket,
+          orders: t.orders,
+          avg_ticket: t.avg_ticket,
           ad_spend: raw.current.ad_spend,
           ml_roas: raw.current.ml_roas ?? null,
           ml_cancel_rate_pct: raw.current.ml_cancel_rate_pct ?? null,
@@ -393,16 +404,18 @@ export function fetchOverview(
           tiktok_customers: raw.current.tiktok_customers ?? null,
           ml_unique_buyers: raw.current.ml_unique_buyers ?? null,
           shopee_unique_buyers: raw.current.shopee_unique_buyers ?? null,
-          gmv_mom_pct: raw.gmv_mom_pct,
-          prev_gmv: raw.previous.gmv,
-          prev_orders: raw.previous.orders ?? null,
-          prev_avg_ticket: raw.previous.avg_ticket ?? null,
-          prev_ad_spend: raw.previous.ad_spend ?? null,
-          prev_ml_roas: raw.previous.ml_roas ?? null,
-          prev_shopee_roas: raw.previous.shopee_roas ?? null,
-          prev_tiktok_gmv: raw.previous.tiktok_gmv ?? null,
-          prev_ml_gmv: raw.previous.ml_gmv ?? null,
-          prev_shopee_gmv: raw.previous.shopee_gmv ?? null,
+          shopee_ads_cobertura: raw.current.shopee_ads_cobertura ?? null,
+          gmv_mom_pct: t.gmv_mom_pct,
+          prev_gmv: t.prev_gmv,
+          prev_orders: t.prev_orders,
+          prev_avg_ticket: t.prev_avg_ticket,
+          sem_dado: t.sem_dado,
+          prev_ad_spend: raw.previous?.ad_spend ?? null,
+          prev_ml_roas: raw.previous?.ml_roas ?? null,
+          prev_shopee_roas: raw.previous?.shopee_roas ?? null,
+          prev_tiktok_gmv: raw.previous?.tiktok_gmv ?? null,
+          prev_ml_gmv: raw.previous?.ml_gmv ?? null,
+          prev_shopee_gmv: raw.previous?.shopee_gmv ?? null,
           base: raw.base ?? null,
           nao_pago_disponivel: raw.nao_pago_disponivel ?? null,
         },
@@ -1477,6 +1490,8 @@ export interface FinanceiroKpis {
   ml_fee_cobertura?: CoberturaMarcas | null;
   shopee_fee_cobertura?: CoberturaMarcas | null;
   shopee_settlement_cobertura?: CoberturaMarcas | null;
+  /** T-0115: marcas Shopee com Ads; total e ROAS so' sobre elas. */
+  shopee_ads_cobertura?: CoberturaMarcas | null;
 }
 
 /** T-0085: cobertura por marca de um % consolidado do Financeiro. */
@@ -1486,6 +1501,8 @@ export interface CoberturaMarcas {
   marcas_com_dado: number;
   marcas_total: number;
   marcas_sem_dado?: string[];
+  /** T-0115: sem dado porque o repasse ainda esta' maturando (subconjunto de marcas_sem_dado). */
+  marcas_maturando?: string[];
 }
 
 /** O texto "parcial (N de M marcas)" vem de `textoCoberturaFinanceiro` (src/lib/full-visao-geral.ts). */
@@ -1835,27 +1852,31 @@ export function fetchBrandDetail(
 
 // ---------- Pedidos ----------
 
+// T-0116 (sem dado != 0): canal sem linha na fonte vem com os campos null; os
+// totais vem null quando nenhum canal pedido tem linha. Null aparece como "—".
 export interface PedidosKpis {
-  total_orders: number;
-  total_gmv: number;
-  avg_ticket: number;
+  total_orders: number | null;
+  total_gmv: number | null;
+  avg_ticket: number | null;
   cancel_rate_pct: number | null;
 }
 
 export interface PedidosCanalKpis {
-  orders: number;
-  canceled: number;
-  gmv: number;
+  orders: number | null;
+  canceled: number | null;
+  gmv: number | null;
   cancel_rate_pct: number | null;
   delivered: number | null;
 }
 
 export interface PedidosDailyRow {
   date: string;
-  tiktok_orders: number;
-  tiktok_canceled: number;
-  ml_orders: number;
-  ml_canceled: number;
+  tiktok_orders: number | null;
+  tiktok_canceled: number | null;
+  ml_orders: number | null;
+  ml_canceled: number | null;
+  shopee_orders?: number | null;
+  shopee_canceled?: number | null;
   total_orders: number;
   total_gmv: number;
 }
@@ -1871,6 +1892,10 @@ export interface PedidosBrandRow {
   ml_canceled: number | null;
   ml_cancel_rate_pct: number | null;
   ml_gmv: number | null;
+  shopee_orders?: number | null;
+  shopee_canceled?: number | null;
+  shopee_cancel_rate_pct?: number | null;
+  shopee_gmv?: number | null;
   total_orders: number;
   total_gmv: number;
 }
@@ -1880,8 +1905,13 @@ export interface PedidosData {
   kpis: PedidosKpis;
   tiktok: PedidosCanalKpis;
   ml: PedidosCanalKpis;
+  shopee?: PedidosCanalKpis | null;
   daily: PedidosDailyRow[];
   by_brand: PedidosBrandRow[];
+  /** Canais pedidos sem linha na fonte no recorte ("tiktok" | "ml" | "shopee"). */
+  canais_sem_dado?: string[];
+  /** Avisos da API; o motivo de ausencia comeca por `sem_dado:`. */
+  warnings?: string[];
   date_from?: string | null;
   date_to?: string | null;
   refreshed_at?: string | null;
@@ -2122,6 +2152,14 @@ export interface OperacoesData {
   creators: CreatorRow[];
   lives: LiveRow[];
   tk_daily: TkDailyRow[];
+  /**
+   * T-0117 (C1-202): ultima data com dado por bloco ('YYYY-MM-DD'; `null` =
+   * sem linha no escopo). Ausente com API anterior. Grandeza distinta de
+   * `refreshed_at` (hora da carga).
+   */
+  dados_ate?: { ml: string | null; tiktok: string | null } | null;
+  /** T-0117: D-1 operacional (BRT), teto das janelas. Dado antes disso = atrasado. */
+  esperado_ate?: string | null;
 }
 
 export function fetchOperacoes(): Promise<{ data: OperacoesData | null; live: boolean }> {
@@ -2165,10 +2203,11 @@ export interface RegioesCoberturaCampos {
 }
 
 export interface RegioesSummaryData extends RegioesCoberturaCampos {
-  gmv: number;
-  orders: number;
-  units_sold: number;
-  ufs_com_venda: number;
+  /** T-0111: `null` = sem linha na fonte no recorte (nunca 0). */
+  gmv: number | null;
+  orders: number | null;
+  units_sold: number | null;
+  ufs_com_venda: number | null;
   uf_known_orders: number;
   uf_eligible_orders: number;
   uf_fill_pct: number | null;

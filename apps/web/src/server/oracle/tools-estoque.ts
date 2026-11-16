@@ -466,14 +466,15 @@ async function shopeeFbs(
 
   // Janela sem nenhum dia na serie (ex.: antes do inicio da esteira): a fonte
   // devolve "0" com periodo efetivo nulo. Isso e' ausencia, nao venda zero.
-  const semSerie = !p.meta.effective_date_from || p.totals.created_orders === 0;
+  // T-0111: a API nova manda os totais `null` sem linha; a antiga, 0. Os dois sao ausencia.
+  const semSerie = !p.meta.effective_date_from || p.totals.created_orders == null || p.totals.created_orders === 0;
   const n = (v: number | null) => (semSerie ? null : v);
   return {
     estado: semSerie ? "sem_dado" : "medido",
     escopo: p.meta.scope_label,
     periodo_efetivo: { start: p.meta.effective_date_from ?? null, end: p.meta.effective_date_to ?? null },
     gmv_bruto: n(decOrNull(p.totals.gross_gmv)),
-    pedidos_criados: n(p.totals.created_orders),
+    pedidos_criados: n(p.totals.created_orders ?? null),
     taxa_cancelamento: n(numOrNull(p.rates.cancellation_rate)),
     share_fbs_gmv: n(numOrNull(p.shares.share_fbs_gmv)),
     share_fbs_pedidos: n(numOrNull(p.shares.share_fbs_orders)),
@@ -667,14 +668,15 @@ async function mlFull(
   );
   // Nenhum pedido pago no escopo (ex.: marca sem loja no ML): a fonte devolve
   // GMV "0". Isso e' ausencia de registro, nao venda zero.
-  const semRegistro = p.paid_orders_total === 0;
+  // T-0111: total `null` (API nova) e 0 (antiga) sao ausencia de registro.
+  const semRegistro = p.paid_orders_total == null || p.paid_orders_total === 0;
   const n = (v: number | null) => (semRegistro ? null : v);
   return {
     estado: semRegistro ? "sem_dado" : "medido",
     periodo_efetivo: { start: p.date_from, end: p.date_to },
     marcas: p.brands,
     gmv_pago_total: n(decOrNull(p.paid_gmv_total)),
-    pedidos_pagos: n(p.paid_orders_total),
+    pedidos_pagos: n(p.paid_orders_total ?? null),
     share_full_gmv: n(numOrNull(p.share_full_gmv)),
     share_full_pedidos: n(numOrNull(p.share_full_orders)),
     share_full_unidades: n(numOrNull(p.share_full_units)),

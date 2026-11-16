@@ -22,12 +22,12 @@ import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { useTema } from "@/components/theme/ThemeProvider";
 import { temaDoGrafico } from "@/lib/chart-theme";
 import { fmtBrlCurto, fmtPctSimples, fmtNumCurto } from "@/lib/formatters";
-import { paraPedidosLiquidos, pedidosLiquidosDaMarca, seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
+import { avisoParcial, canaisSemDado, canalOuNulo, kpisOuNulo, paraPedidosLiquidos, pedidosLiquidosDaMarca, rotuloConsolidado, ROTULO_CANAL, seriesDoPeriodo, TITULO_DETALHE, type ChaveDetalhe } from "@/lib/pedidos-cartoes";
 import { fmtPeriodo } from "@/lib/filters/format";
 import { useSortableTable } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
 import TableScrollHint from "@/components/TableScrollHint";
-import { avisoCoberturaShopee, buildPedidosRequestKey, computePedidosCoverage } from "@/lib/pedidos-request-key";
+import { buildPedidosRequestKey } from "@/lib/pedidos-request-key";
 import { computeRequestStatus } from "@/lib/request-freshness";
 
 function fmtNum(v: number | null): string {
@@ -64,6 +64,10 @@ function getBrandSortValue(row: PedidosBrandRow, column: string): string | numbe
       return row.ml_orders;
     case "ml_cancel":
       return row.ml_cancel_rate_pct;
+    case "sh_orders":
+      return row.shopee_orders ?? null;
+    case "sh_cancel":
+      return row.shopee_cancel_rate_pct ?? null;
     case "total_orders":
       return pedidosLiquidosDaMarca(row);
     case "total_gmv":
@@ -79,6 +83,8 @@ const BRAND_COLUMN_TYPES: Record<string, "numeric" | "text"> = {
   tk_cancel: "numeric",
   ml_orders: "numeric",
   ml_cancel: "numeric",
+  sh_orders: "numeric",
+  sh_cancel: "numeric",
   total_orders: "numeric",
   total_gmv: "numeric",
 };
@@ -92,6 +98,7 @@ function pesos(valores: (number | null)[]): (number | null)[] {
 const COR = {
   tiktok: "rgb(var(--tc-canal-tiktok))",
   ml: "rgb(var(--tc-canal-ml))",
+  shopee: "rgb(var(--tc-canal-shopee))",
   pedidos: "rgb(var(--tc-kpi-pedidos))",
   gmv: "rgb(var(--tc-kpi-gmv))",
 } as const;
@@ -103,15 +110,16 @@ function CelulaNum({ texto, peso, cor }: { texto: string; peso: number | null; c
 }
 
 /** `showTotais`: Total e GMV somam os canais, entao so' aparecem na Visao geral (na aba de canal, misturariam canais). */
-function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; showTotais: boolean; loading: boolean }) {
+function BrandTable({ rows, showTiktok, showMl, showShopee, showTotais, loading }: { rows: PedidosBrandRow[]; showTiktok: boolean; showMl: boolean; showShopee: boolean; showTotais: boolean; loading: boolean }) {
   const { sort, toggleSort, sortedRows, resetSortIfColumnMissing } = useSortableTable(rows, getBrandSortValue, BRAND_COLUMN_TYPES);
   useEffect(() => {
     // coluna escondida nao pode continuar ordenando a tabela
-    resetSortIfColumnMissing(["brand", ...(showTiktok ? ["tk_orders", "tk_cancel"] : []), ...(showMl ? ["ml_orders", "ml_cancel"] : []), ...(showTotais ? ["total_orders", "total_gmv"] : [])]);
-  }, [showTiktok, showMl, showTotais]); // eslint-disable-line react-hooks/exhaustive-deps
-  const colSpan = 1 + (showTotais ? 2 : 0) + (showTiktok ? 2 : 0) + (showMl ? 2 : 0);
+    resetSortIfColumnMissing(["brand", ...(showTiktok ? ["tk_orders", "tk_cancel"] : []), ...(showMl ? ["ml_orders", "ml_cancel"] : []), ...(showShopee ? ["sh_orders", "sh_cancel"] : []), ...(showTotais ? ["total_orders", "total_gmv"] : [])]);
+  }, [showTiktok, showMl, showShopee, showTotais]); // eslint-disable-line react-hooks/exhaustive-deps
+  const colSpan = 1 + (showTotais ? 2 : 0) + (showTiktok ? 2 : 0) + (showMl ? 2 : 0) + (showShopee ? 2 : 0);
   const pTk = pesos(sortedRows.map((r) => r.tiktok_orders));
   const pMl = pesos(sortedRows.map((r) => r.ml_orders));
+  const pSh = pesos(sortedRows.map((r) => r.shopee_orders ?? null));
   const pTotal = pesos(sortedRows.map((r) => pedidosLiquidosDaMarca(r)));
   const pGmv = pesos(sortedRows.map((r) => r.total_gmv));
   return (
@@ -130,6 +138,12 @@ function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: P
               <>
                 <SortableHeader label="ML · Pedidos" column="ml_orders" sort={sort} onSort={toggleSort} />
                 <SortableHeader label="ML · Cancelamento" column="ml_cancel" sort={sort} onSort={toggleSort} />
+              </>
+            )}
+            {showShopee && (
+              <>
+                <SortableHeader label="Shopee · Pedidos" column="sh_orders" sort={sort} onSort={toggleSort} />
+                <SortableHeader label="Shopee · Cancelamento" column="sh_cancel" sort={sort} onSort={toggleSort} />
               </>
             )}
             {showTotais && (
@@ -167,6 +181,14 @@ function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: P
                   </td>
                 </>
               )}
+              {showShopee && (
+                <>
+                  <CelulaNum texto={fmtNum(row.shopee_orders ?? null)} peso={pSh[i]} cor={COR.shopee} />
+                  <td className={TD}>
+                    <span className={`font-semibold ${cancelColor(row.shopee_cancel_rate_pct ?? null)}`}>{fmtRate(row.shopee_cancel_rate_pct ?? null)}</span>
+                  </td>
+                </>
+              )}
               {showTotais && (
                 <>
                   <CelulaNum texto={fmtNum(pedidosLiquidosDaMarca(row))} peso={pTotal[i]} cor={COR.pedidos} />
@@ -181,7 +203,7 @@ function BrandTable({ rows, showTiktok, showMl, showTotais, loading }: { rows: P
   );
 }
 
-type VisaoPedidos = "geral" | "tiktok" | "ml";
+type VisaoPedidos = "geral" | "tiktok" | "ml" | "shopee";
 
 /** As ancoras de antes das abas continuam valendo: o link antigo abre a Visao geral. */
 const ANCORAS_ANTIGAS = new Set(["#resumo", "#por-canal", "#tendencia", "#por-marca"]);
@@ -208,10 +230,7 @@ function PedidosPageInner() {
   const showTiktokSel = isMarketplaceSelected(filters.channels, "tiktok");
   const showMlSel = isMarketplaceSelected(filters.channels, "ml");
   const showShopeeSel = isMarketplaceSelected(filters.channels, "shopee");
-  // Esta fonte cobre apenas TikTok Shop e Mercado Livre — nunca Shopee.
-  const { showShopeeOnly, showShopeeMixed } = computePedidosCoverage({
-    showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel,
-  });
+  // T-0116: a fonte (fact_marketplace_daily_performance) cobre os 3 canais; a Shopee entra como TikTok e ML.
 
   const requestKey = useMemo(
     () => buildPedidosRequestKey({ channels: filters.channels, brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, retryKey }),
@@ -224,18 +243,6 @@ function PedidosPageInner() {
     setLoading(true);
     setError(null);
     const key = buildPedidosRequestKey({ channels: filters.channels, brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo, retryKey });
-
-    if (showShopeeOnly) {
-      // Fonte nao cobre Shopee — nunca dispara fetch para essa selecao (evita
-      // pedir dado a um endpoint que nao suporta o canal e arriscar
-      // interpretar a ausencia como falha de rede em vez de indisponibilidade
-      // de cobertura).
-      setData(null);
-      setIsLive(false);
-      setResolvedKey(key);
-      setLoading(false);
-      return () => { ignore = true; };
-    }
 
     const opts = { brands: filters.brands, dateFrom: filters.dateFrom, dateTo: filters.dateTo };
     fetchPedidos(filters.channels, opts)
@@ -262,7 +269,7 @@ function PedidosPageInner() {
         setLoading(false);
       });
     return () => { ignore = true; };
-  }, [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, retryKey, showShopeeOnly]);
+  }, [filters.channels, filters.brands, filters.dateFrom, filters.dateTo, retryKey]);
 
   // FINDING 2 (Gate U4) — loading/error/fresh SEPARADOS: depois de um erro
   // definitivo, `dataIsFresh` fica `false` para sempre, mas `isLoadingState`
@@ -277,9 +284,11 @@ function PedidosPageInner() {
   const displayData = dataIsFresh ? data : null;
   const displayIsLive = dataIsFresh ? isLive : false;
 
-  const kpis = displayData?.kpis;
-  const tk = showTiktokSel ? displayData?.tiktok : undefined;
-  const ml = showMlSel ? displayData?.ml : undefined;
+  // Sem dado != 0 (T-0116/B1-10): canal ou total sem linha na fonte vira null ("—"), nunca 0.
+  const kpis = displayData ? kpisOuNulo(displayData.kpis) : undefined;
+  const tk = showTiktokSel && displayData ? canalOuNulo(displayData.tiktok) : undefined;
+  const ml = showMlSel && displayData ? canalOuNulo(displayData.ml) : undefined;
+  const sh = showShopeeSel && displayData ? canalOuNulo(displayData.shopee) : undefined;
   const daily = displayData?.daily ?? [];
   const brandRows = displayData?.by_brand ?? [];
   const periodLabel = fmtPeriodo(filters.dateFrom, filters.dateTo);
@@ -289,30 +298,38 @@ function PedidosPageInner() {
     { id: "geral", rotulo: "Visão geral" },
     ...(showTiktokSel ? [{ id: "tiktok" as const, rotulo: "TikTok Shop", ponto: "bg-canal-tiktok" }] : []),
     ...(showMlSel ? [{ id: "ml" as const, rotulo: "Mercado Livre", ponto: "bg-canal-ml" }] : []),
+    ...(showShopeeSel ? [{ id: "shopee" as const, rotulo: "Shopee", ponto: "bg-canal-shopee" }] : []),
   ];
   const visaoAtiva: VisaoPedidos = visoes.some((v) => v.id === visao) ? visao : "geral";
-  const verTiktok = showTiktokSel && visaoAtiva !== "ml";
-  const verMl = showMlSel && visaoAtiva !== "tiktok";
+  const verTiktok = showTiktokSel && (visaoAtiva === "geral" || visaoAtiva === "tiktok");
+  const verMl = showMlSel && (visaoAtiva === "geral" || visaoAtiva === "ml");
+  const verShopee = showShopeeSel && (visaoAtiva === "geral" || visaoAtiva === "shopee");
+  const canaisVisiveis = [verTiktok, verMl, verShopee].filter(Boolean).length;
 
   const chartData = daily.map((r) => ({
     date: shortDate(r.date),
     ...(verTiktok ? { tiktok: r.tiktok_orders } : {}),
     ...(verMl ? { ml: r.ml_orders } : {}),
+    ...(verShopee ? { shopee: r.shopee_orders ?? null } : {}),
   }));
 
-  const selecao = { tiktok: showTiktokSel, ml: showMlSel };
-  const series = useMemo(() => seriesDoPeriodo(daily, selecao), [daily, showTiktokSel, showMlSel]); // eslint-disable-line react-hooks/exhaustive-deps
+  const selecao = { tiktok: showTiktokSel, ml: showMlSel, shopee: showShopeeSel };
+  const series = useMemo(() => seriesDoPeriodo(daily, selecao), [daily, showTiktokSel, showMlSel, showShopeeSel]); // eslint-disable-line react-hooks/exhaustive-deps
   // B1-04: pedidos liquidos (sem cancelados) em toda a tela, como o grafico e o ticket.
-  const dadosCartoes = paraPedidosLiquidos({ kpis, tk, ml });
+  const dadosCartoes = paraPedidosLiquidos({ kpis, tk, ml, sh });
+  // Canal selecionado sem linha na fonte: total parcial, com aviso (padrao `sem_dado:` da T-0111).
+  const aviso = dataIsFresh ? avisoParcial(canaisSemDado(displayData, selecao), selecao) : null;
 
-  const canalDados = visaoAtiva === "tiktok" ? tk : visaoAtiva === "ml" ? ml : null;
-  const faixa = isErrorState || showShopeeOnly ? null : isLoadingState ? (
+  const canalDados = visaoAtiva === "tiktok" ? tk : visaoAtiva === "ml" ? ml : visaoAtiva === "shopee" ? sh : null;
+  const faixa = isErrorState ? null : isLoadingState ? (
     <FaixaCarregando cartoes={4} className={GRADE_PEDIDOS} />
   ) : visaoAtiva === "geral" ? (
-    <FaixaTotais dados={dadosCartoes} series={series} onAbrir={setDetalhe} />
+    <FaixaTotais dados={dadosCartoes} series={series} onAbrir={setDetalhe} consolidado={rotuloConsolidado(selecao)} />
   ) : canalDados ? (
     visaoAtiva === "tiktok" ? (
       <GrupoCanal dados={canalDados} serieOrders={series.tkPedidos} serieCancelados={series.tkCancelados} chaveOrders="tk_pedidos" chaveGmv="tk_gmv" chaveCancelados="tk_cancelados" onAbrir={setDetalhe} />
+    ) : visaoAtiva === "shopee" ? (
+      <GrupoCanal dados={canalDados} serieOrders={series.shPedidos} serieCancelados={series.shCancelados} chaveOrders="sh_pedidos" chaveGmv="sh_gmv" chaveCancelados="sh_cancelados" onAbrir={setDetalhe} />
     ) : (
       <GrupoCanal dados={canalDados} serieOrders={series.mlPedidos} serieCancelados={series.mlCancelados} chaveOrders="ml_pedidos" chaveGmv="ml_gmv" chaveCancelados="ml_cancelados" onAbrir={setDetalhe} />
     )
@@ -324,25 +341,17 @@ function PedidosPageInner() {
     <>
       <Aba
         titulo="Pedidos"
-        visoes={showShopeeOnly ? undefined : visoes}
+        visoes={visoes}
         visao={visaoAtiva}
         onVisao={setVisao}
-        selo={
-          // FINDING 2 (rodada de correcao) — Shopee isolada nunca chama fetch:
-          // "API offline" implicaria falha de rede; e' so' uma fonte sem cobertura Shopee.
-          dataIsFresh && showShopeeOnly ? (
-            <span className="rounded-full border border-line px-2 py-0.5 text-xs text-ink-muted">Shopee sem cobertura nesta visão</span>
-          ) : (
-            <SeloAtualizado aoVivo={dataIsFresh ? displayIsLive : null} em={dataIsFresh ? (displayData?.refreshed_at ?? null) : null} carregando={isLoadingState} />
-          )
-        }
+        selo={<SeloAtualizado aoVivo={dataIsFresh ? displayIsLive : null} em={dataIsFresh ? (displayData?.refreshed_at ?? null) : null} carregando={isLoadingState} />}
         filtros={<GlobalFilterControls filters={filters} onChange={setFilters} hideCompare loading={isLoadingState} padrao={padrao} />}
         faixa={faixa ? <div aria-busy={isLoadingState}>{faixa}</div> : undefined}
         atencao={
-          // Selecao mista: os numeros nunca incluem Shopee.
-          showShopeeMixed && visaoAtiva === "geral" ? (
+          // T-0116: canal do filtro sem linha na fonte -> total parcial (soma so' dos presentes), escrito.
+          aviso && visaoAtiva === "geral" ? (
             <p className="w-fit rounded-lg bg-warn-soft px-3 py-1.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
-              {avisoCoberturaShopee({ showTiktok: showTiktokSel, showMl: showMlSel, showShopee: showShopeeSel })}
+              {aviso}
             </p>
           ) : undefined
         }
@@ -352,8 +361,6 @@ function PedidosPageInner() {
             ? "Carregando dados de pedidos..."
             : isErrorState
             ? "Falha ao carregar."
-            : showShopeeOnly
-            ? "Pedidos não possui cobertura Shopee nesta fonte."
             : "Dados de pedidos carregados."}
         </span>
 
@@ -364,8 +371,6 @@ function PedidosPageInner() {
             descricao={error}
             acao={<RetryButton onClick={() => { setError(null); setRetryKey((k) => k + 1); }} />}
           />
-        ) : showShopeeOnly ? (
-          <StateBlock tipo="indisponivel" titulo="Sem cobertura de Shopee em Pedidos." descricao="Selecione TikTok Shop ou Mercado Livre." />
         ) : (
           <>
             <Panel titulo="Volume diário de pedidos">
@@ -379,25 +384,27 @@ function PedidosPageInner() {
                       cursor={{ fill: tema.grade, opacity: 0.45 }}
                       contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 12, fontSize: 12, color: tema.tooltipTinta }}
                       labelStyle={{ fontWeight: 600, color: tema.tooltipTinta }}
-                      formatter={(value: number, name: string) => [fmtNum(value), name === "tiktok" ? "TikTok Shop" : "Mercado Livre"]}
+                      formatter={(value: number, name: string) => [fmtNum(value ?? null), ROTULO_CANAL[name as keyof typeof ROTULO_CANAL] ?? name] as [string, string]}
                     />
                     {verTiktok && <Bar dataKey="tiktok" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.tiktok} radius={[0, 0, 0, 0]} />}
-                    {verMl && <Bar dataKey="ml" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.ml} radius={[3, 3, 0, 0]} />}
+                    {verMl && <Bar dataKey="ml" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.ml} radius={verShopee ? [0, 0, 0, 0] : [3, 3, 0, 0]} />}
+                    {verShopee && <Bar dataKey="shopee" animationDuration={450} animationEasing="ease-out" stackId="orders" fill={tema.canais.shopee} radius={[3, 3, 0, 0]} />}
                   </BarChart>
                 </ResponsiveContainer>
               ) : (
                 dataIsFresh && <StateBlock tipo="vazio" compacto titulo="Sem série diária para o período e filtros selecionados." />
               )}
-              {chartData.length > 0 && verTiktok && verMl && (
+              {chartData.length > 0 && canaisVisiveis > 1 && (
                 <ul aria-label="Séries do gráfico" className="m-0 mt-2 flex list-none flex-wrap justify-center gap-x-5 gap-y-1 p-0">
-                  <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-tiktok" />TikTok Shop</li>
-                  <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-ml" />Mercado Livre</li>
+                  {verTiktok && <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-tiktok" />TikTok Shop</li>}
+                  {verMl && <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-ml" />Mercado Livre</li>}
+                  {verShopee && <li className="flex items-center gap-1.5 text-xs text-ink-muted"><span aria-hidden="true" className="h-2 w-2 rounded-full bg-canal-shopee" />Shopee</li>}
                 </ul>
               )}
             </Panel>
 
             <Panel titulo="Por marca" semPadding ajuda="Cancelamento: abaixo de 2% em verde, de 2% a 5% em âmbar, acima de 5% em vermelho. Pedidos e Total sem os cancelados.">
-              <BrandTable rows={brandRows} showTiktok={verTiktok} showMl={verMl} showTotais={visaoAtiva === "geral"} loading={isLoadingState} />
+              <BrandTable rows={brandRows} showTiktok={verTiktok} showMl={verMl} showShopee={verShopee} showTotais={visaoAtiva === "geral"} loading={isLoadingState} />
             </Panel>
 
             {dataIsFresh && !displayData && (

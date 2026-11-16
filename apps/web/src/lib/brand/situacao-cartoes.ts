@@ -54,7 +54,7 @@ export function cartoesSituacao(
   const pedidosOk = cur.orders != null;
   const adspend = positivo(cur.adSpend) ? cur.adSpend : null;
   return [
-    { chave: "gmv", valor: cur.gmv, ...comparar(cur.gmv, prev.gmv, temAnterior), serie: projetadas.map((r) => r.total_gmv) },
+    { chave: "gmv", valor: cur.gmv, ...comparar(cur.gmv, prev.gmv, temAnterior), serie: cur.gmv != null ? projetadas.map((r) => r.total_gmv) : [] },
     {
       chave: "pedidos",
       valor: cur.orders,
@@ -76,6 +76,17 @@ export function cartoesSituacao(
   ];
 }
 
+/**
+ * T-0111: legenda do Ad Spend ausente, pelo CANAL SELECIONADO. Antes dizia
+ * "N/D para TikTok Shop" ate' com so' o Mercado Livre na selecao.
+ */
+export function legendaAdsAusente(canais: readonly string[], semDado: boolean): string {
+  if (semDado) return "Sem dado no recorte";
+  const temMidia = canais.includes("ml") || canais.includes("shopee");
+  if (!temMidia) return canais.includes("tiktok") ? "N/D para TikTok Shop" : "Sem canal com Ads";
+  return "Sem Ads no período (ausência, não zero)";
+}
+
 const NUM = new Intl.NumberFormat("pt-BR");
 const BRL0 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
@@ -95,5 +106,5 @@ export const DICA_SITUACAO: Record<ChaveSituacao, string> = {
   gmv: "Soma do GMV dos canais selecionados no intervalo global.",
   pedidos: "Pedidos do intervalo global nos canais selecionados.",
   ticket: "GMV dividido pelos pedidos do intervalo global.",
-  adspend: "Investimento em anúncios do intervalo global. O ROAS é o GMV dividido por este valor, aproximado.",
+  adspend: "Investimento em anúncios do intervalo global. O ROAS é o GMV dos canais com Ads dividido pelo Ads desses mesmos canais, aproximado.",
 };

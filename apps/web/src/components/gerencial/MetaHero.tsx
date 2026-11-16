@@ -27,6 +27,7 @@ import { ROTULO_STATUS, type ProgressoMeta, type StatusMeta } from "@/lib/gerenc
 import { diaDaSemana, type ProgressoDia, type StatusDia } from "@/lib/metas-curva";
 import { MARCAS, fmtCompacto, rotuloMes } from "@/lib/metas";
 import { fmtPctBr } from "@/lib/formatters";
+import { SEM_DADO_NO_RECORTE, SEM_DADO_NO_RECORTE_DICA } from "@/lib/overview-sem-dado";
 import InfoDica from "@/components/ui/InfoDica";
 import type { TendenciaConsolidada } from "@/lib/gerencial/hoje-por-hora";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
@@ -101,6 +102,8 @@ interface Props {
   notaMenores?: string | null;
   /** (i) do GMV: o que a venda conta (pagos ou realizados). */
   notaVendas?: string;
+  /** T-0111: o recorte nao tem linha na fonte; o GMV mostra "—" e o aviso diz por que. */
+  semDadoNoRecorte?: boolean;
   /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
   linhaMenores?: { texto: string; aviso: boolean } | null;
   /** GMV de cada canal ao longo do periodo (os mesmos pontos do grafico de evolucao), para a mini tendencia. */
@@ -141,7 +144,7 @@ export default function MetaHero(props: Props) {
   );
 }
 
-function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, detalheComparacao, notaMenores, linhaMenores, notaVendas = SO_PAGOS }: Props) {
+function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, error, ultimoDia, onOpenGmv, aviso, rotuloComparacao, detalheComparacao, notaMenores, linhaMenores, semDadoNoRecorte, notaVendas = SO_PAGOS }: Props) {
   const ate = ultimoDia ? ` · até ${ultimoDia.slice(8, 10)}/${ultimoDia.slice(5, 7)}` : "";
   return (
     <div className="min-w-0">
@@ -167,6 +170,12 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
                 onde a duvida nasce; o texto inteiro esta' no detalhe. */}
             {aviso && <SeloAviso aviso={aviso} />}
           </p>
+          {semDadoNoRecorte && (
+            <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-warn-ink">
+              {SEM_DADO_NO_RECORTE}
+              <InfoDica texto={SEM_DADO_NO_RECORTE_DICA} />
+            </p>
+          )}
           {linhaMenores && (
             <p className={`mt-1 text-xs ${linhaMenores.aviso ? "font-semibold text-warn-ink" : "text-ink-muted"}`}>{linhaMenores.texto}</p>
           )}

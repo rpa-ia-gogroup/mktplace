@@ -180,9 +180,11 @@ class MLFulfillmentResponse(BaseModel):
     share_full_orders: Optional[float] = None
     share_full_units: Optional[float] = None
 
-    paid_gmv_total: Decimal
-    paid_orders_total: int
-    paid_units_total: int
+    #: T-0111: None quando a fato nao tem linha no recorte (marca sem conta
+    #: ML, D0). Ausencia, nao venda zero; vem com limitacao `sem_dado`.
+    paid_gmv_total: Optional[Decimal] = None
+    paid_orders_total: Optional[int] = None
+    paid_units_total: Optional[int] = None
 
     by_class: list[ModalBreakdown]
     by_logistic_type: list[LogisticTypeBreakdown]

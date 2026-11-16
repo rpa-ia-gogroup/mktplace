@@ -29,14 +29,23 @@ Guardrails aplicados aqui:
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Optional
+
 import psycopg2
 from dotenv import dotenv_values
 
 EXPECTED_SECRET_KEYS = frozenset({"DATAMART_GOLD_WRITE_URL", "I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"})
+
+# T-0109: origem explícita do segredo. Só com GOLD_WRITE_SECRET_SOURCE=env
+# (definida pela DAG) as variáveis de ambiente acima valem.
+SECRET_SOURCE_KEY = "GOLD_WRITE_SECRET_SOURCE"
+SECRET_SOURCE_ENV = "env"
 
 # Chave fixa e exclusiva desta ingestão — nunca reaproveitar para outra
 # finalidade em outro módulo (em particular, nunca a mesma chave usada por
@@ -48,6 +57,83 @@ ADVISORY_LOCK_KEY = 564738291056
 _GOLD_TABLES = ("marketplace_region_daily",)
 
 _CREDENTIAL_IN_MESSAGE_RE = re.compile(r"//[^/\s@]+:[^/\s@]+@")
+
+
+# ---------------------------------------------------------------------------
+# T-0109 (R193) — privilégios mínimos da carga incremental. Com a tabela
+# destino JÁ existente, o preflight não exige CREATE em `gold` (o DDL não
+# roda); exige o que `loader.execute_incremental_load` usa de fato pela MESMA
+# conexão de escrita: lê as fontes ML em `raw`, lê/insere na destino, cria a
+# staging TEMP e consome a sequence do `id BIGSERIAL`. A fonte Shopee em
+# `silver` é opcional (arquivada desde 29/09): só conta se o schema/tabela
+# existir — se o schema existir sem USAGE, o `to_regclass` do loader levanta.
+# Nunca exige UPDATE/DELETE/TRUNCATE nem superuser.
+#
+# Tudo por OID via pg_namespace/pg_class (catálogo legível sem USAGE): checar
+# por nome (`has_table_privilege('raw.x', ...)`) levantaria erro em vez de
+# devolver false quando falta USAGE no schema ou a relação não existe.
+# Cada expressão devolve true/false, ou NULL quando o objeto não existe.
+# ---------------------------------------------------------------------------
+
+def _schema_usage_expr(schema: str) -> str:
+    return (
+        "(SELECT has_schema_privilege(current_user, n.oid, 'USAGE') "
+        f"FROM pg_namespace n WHERE n.nspname = '{schema}')"
+    )
+
+
+def _table_priv_expr(schema: str, table: str, privilege: str) -> str:
+    return (
+        f"(SELECT has_table_privilege(current_user, c.oid, '{privilege}') "
+        "FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+        f"WHERE n.nspname = '{schema}' AND c.relname = '{table}')"
+    )
+
+
+# Sequence(s) dona(s) da tabela (serial = deptype 'a', identity = 'i').
+# bool_and sobre zero linhas = NULL = tabela sem sequence (nada a exigir).
+_GOLD_SEQUENCE_USAGE_EXPR = (
+    "(SELECT bool_and(has_sequence_privilege(current_user, s.oid, 'USAGE')) "
+    "FROM pg_depend d "
+    "JOIN pg_class s ON s.oid = d.objid AND s.relkind = 'S' "
+    "JOIN pg_class t ON t.oid = d.refobjid "
+    "JOIN pg_namespace n ON n.oid = t.relnamespace "
+    "WHERE d.classid = 'pg_class'::regclass AND d.refclassid = 'pg_class'::regclass "
+    "AND d.deptype IN ('a', 'i') "
+    "AND n.nspname = 'gold' AND t.relname = 'marketplace_region_daily')"
+)
+
+# (rótulo seguro, expressão SQL, objeto ausente (NULL) bloqueia?)
+INCREMENTAL_PRIVILEGE_CHECKS: tuple[tuple[str, str, bool], ...] = (
+    ("USAGE no schema raw", _schema_usage_expr("raw"), True),
+    ("SELECT em raw.ml_orders", _table_priv_expr("raw", "ml_orders", "SELECT"), True),
+    ("SELECT em raw.ml_shipments", _table_priv_expr("raw", "ml_shipments", "SELECT"), True),
+    ("SELECT em raw.ml_shipment_costs", _table_priv_expr("raw", "ml_shipment_costs", "SELECT"), True),
+    ("SELECT em gold.marketplace_region_daily",
+     _table_priv_expr("gold", "marketplace_region_daily", "SELECT"), True),
+    ("INSERT em gold.marketplace_region_daily",
+     _table_priv_expr("gold", "marketplace_region_daily", "INSERT"), True),
+    ("TEMP no banco", "has_database_privilege(current_user, current_database(), 'TEMP')", True),
+    ("USAGE na sequence de gold.marketplace_region_daily", _GOLD_SEQUENCE_USAGE_EXPR, False),
+    ("USAGE no schema silver (fonte Shopee)", _schema_usage_expr("silver"), False),
+    ("SELECT em silver.stg_shopee_order_item_snapshots",
+     _table_priv_expr("silver", "stg_shopee_order_item_snapshots", "SELECT"), False),
+)
+
+SQL_INCREMENTAL_PRIVILEGES = "SELECT " + ", ".join(
+    f"{expr} AS gold_incr_priv_{i}" for i, (_, expr, _) in enumerate(INCREMENTAL_PRIVILEGE_CHECKS)
+)
+
+
+def missing_incremental_privileges(row: tuple) -> list[str]:
+    """Traduz a linha de `SQL_INCREMENTAL_PRIVILEGES` nos rótulos dos
+    privilégios que faltam. `False` sempre falta; `NULL` (objeto ausente) só
+    falta quando o objeto é obrigatório."""
+    missing = []
+    for (label, _, absent_blocks), value in zip(INCREMENTAL_PRIVILEGE_CHECKS, row):
+        if value is False or (value is None and absent_blocks):
+            missing.append(label)
+    return missing
 
 
 class SecretLoadError(RuntimeError):
@@ -92,10 +178,56 @@ def _run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True)
 
 
+def _load_write_secret_from_environ(environ: Mapping[str, str]) -> Optional[dict[str, str]]:
+    """T-0109 — via do Airflow: o segredo chega como variáveis de ambiente
+    do subprocesso (Connection injetada), não como arquivo local.
+
+    A origem é EXPLÍCITA (revisão R193): o loader faz `load_dotenv(.env)` no
+    import, então a mera presença das 2 variáveis não prova que vieram da
+    DAG — podem ter vazado do `.env` principal. Por isso as variáveis só
+    valem com `GOLD_WRITE_SECRET_SOURCE=env`, que quem define é a DAG.
+
+    Fail-closed:
+      - `GOLD_WRITE_SECRET_SOURCE` ausente → devolve None e o chamador segue
+        para o arquivo local, IGNORANDO as 2 variáveis mesmo que existam;
+      - `GOLD_WRITE_SECRET_SOURCE` com valor diferente de `env` → recusa;
+      - `env` + as 2 chaves presentes (não vazias) → usa, sem ler arquivo;
+      - `env` + alguma chave faltando/vazia → recusa (nunca cai para o arquivo);
+      - consentimento != '1' → recusa.
+    Só lê; nunca escreve em `os.environ`. As mensagens citam só NOMES de
+    chave, nunca valores."""
+    if SECRET_SOURCE_KEY not in environ:
+        return None
+    if environ[SECRET_SOURCE_KEY] != SECRET_SOURCE_ENV:
+        raise SecretLoadError(
+            f"{SECRET_SOURCE_KEY} definida com valor não suportado — o único valor aceito é "
+            f"'{SECRET_SOURCE_ENV}' (sem a variável, vale o arquivo local)"
+        )
+    present = frozenset(k for k in EXPECTED_SECRET_KEYS if environ.get(k) not in (None, ""))
+    if present != EXPECTED_SECRET_KEYS:
+        missing = sorted(EXPECTED_SECRET_KEYS - present)
+        raise SecretLoadError(
+            f"{SECRET_SOURCE_KEY}={SECRET_SOURCE_ENV}, mas o segredo de escrita da gold está incompleto nas "
+            f"variáveis de ambiente (faltando: {missing}) — o arquivo local não é usado como complemento"
+        )
+    if environ["I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD"] != "1":
+        raise SecretLoadError("I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD != '1' (variável de ambiente)")
+    return {k: environ[k] for k in EXPECTED_SECRET_KEYS}
+
+
 def load_write_secret(env_path: Path, repo_root: Path) -> dict[str, str]:
-    """Lê `.env.gold-write.local` (ou caminho equivalente) para um dict
-    local, sem tocar em `os.environ`. Levanta SecretLoadError com uma
-    mensagem que NUNCA contém valores do arquivo."""
+    """Carrega o segredo de escrita da gold para um dict local.
+
+    Origem (T-0109): com `GOLD_WRITE_SECRET_SOURCE=env`, usa as variáveis de
+    ambiente `DATAMART_GOLD_WRITE_URL` + `I_UNDERSTAND_THIS_WRITES_DATAMART_GOLD`
+    (via Airflow; ver `_load_write_secret_from_environ`); sem essa flag, lê
+    `.env.gold-write.local` (ou caminho equivalente) com as checagens de
+    sempre, ignorando as variáveis. Nunca escreve em `os.environ`. Levanta SecretLoadError com uma
+    mensagem que NUNCA contém valores do segredo."""
+    from_env = _load_write_secret_from_environ(os.environ)
+    if from_env is not None:
+        return from_env
+
     if not env_path.is_file():
         raise SecretLoadError(f"arquivo de secret não encontrado: {env_path.name}")
 
@@ -277,6 +409,14 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
             )
             existing_gold_objects = [r[0] for r in cur.fetchall()]
 
+            # T-0109 (R193): carga sobre tabela existente → privilégios
+            # mínimos efetivamente usados, em vez de CREATE no schema.
+            incremental_mode = expect_table_exists and set(_GOLD_TABLES) <= set(existing_gold_objects)
+            missing_incremental = None
+            if incremental_mode:
+                cur.execute(SQL_INCREMENTAL_PRIVILEGES)
+                missing_incremental = missing_incremental_privileges(cur.fetchone())
+
             try:
                 cur.execute("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
                 row = cur.fetchone()
@@ -297,7 +437,16 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
         report.blocking_reasons.append(
             f"conexão de escrita não aponta para o mesmo cluster físico da leitura ({target_check_note})"
         )
-    if not can_create_in_gold or not can_use_gold:
+    if incremental_mode:
+        # Tabela já existe: o DDL não roda, CREATE em gold não é exigido.
+        if not can_use_gold:
+            missing_incremental = ["USAGE no schema gold", *missing_incremental]
+        if missing_incremental:
+            report.blocking_reasons.append(
+                f"privilégio(s) insuficiente(s) para a carga incremental: {missing_incremental}"
+            )
+    elif not can_create_in_gold or not can_use_gold:
+        # Tabela ausente: o DDL roda, CREATE continua obrigatório.
         report.blocking_reasons.append("permissão insuficiente no schema gold (CREATE/USAGE)")
 
     if expect_table_exists:
@@ -328,6 +477,7 @@ def run_preflight(write_url: str, expected_read_url: str, expect_table_exists: b
         "can_create_in_gold": can_create_in_gold,
         "can_use_gold": can_use_gold,
         "existing_gold_objects": existing_gold_objects,
+        "privilegios_incrementais_faltando": missing_incremental,
         "ssl_in_use": ssl_in_use,
         "server_version": server_version,
     }

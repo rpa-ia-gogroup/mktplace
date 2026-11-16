@@ -36,7 +36,7 @@ export default function PedidosDrilldownContent({
   const porMarca = linhasPorMarca(chave, marcas, sel);
   // Taxa: a variacao e' em pontos percentuais; contagem e valor, relativa.
   const variacao = t == null ? null : chave === "cancelamento" ? (variacaoEmPp(t.pontos) != null ? fmtDelta(variacaoEmPp(t.pontos)!, "pp") : null) : t.variacaoPct != null ? fmtPctBr(t.variacaoPct) : null;
-  const canalDoDetalhe = chave.startsWith("tk_") ? "tiktok" : chave.startsWith("ml_") ? "ml" : null;
+  const canalDoDetalhe = chave.startsWith("tk_") ? "tiktok" : chave.startsWith("ml_") ? "ml" : chave.startsWith("sh_") ? "shopee" : null;
   return (
     <div className="flex flex-col gap-4 text-sm">
       <div className="flex flex-col gap-2">

@@ -4,7 +4,7 @@
  * FAIL-CLOSED: somente a string EXATA "true" liga. Ausencia, string vazia,
  * "1", "TRUE", "yes" ou qualquer outra coisa mantem a superficie desligada.
  * O default e' desligado porque esta tela afirma algo delicado -- um total de
- * Shopee cuja cobertura de historico varia por conta (a Kokeshi so tem dados desde 11/2026).
+ * Shopee cuja cobertura de historico varia por conta (a Kokeshi so tem dados desde 31/08/2026).
  *
  * DUAS BARREIRAS, E A SEGUNDA NAO SUBSTITUI A PRIMEIRA
  * -----------------------------------------------------
@@ -57,5 +57,5 @@ export function shopeeFbsEnabled(override?: NodeJS.ProcessEnv): boolean {
 /** Motivo exibido quando a superficie esta desligada por decisao de negocio. */
 export const MOTIVO_DESLIGADA =
   "Superficie de FBS da Shopee ainda nao habilitada. A camada de dados existe " +
-  "e esta publicada, mas a cobertura e de cinco contas (Kokeshi desde 11/2026) " +
+  "e esta publicada, mas a cobertura e de cinco contas (Kokeshi desde 31/08/2026) " +
   "e a ativacao e decisao de negocio.";

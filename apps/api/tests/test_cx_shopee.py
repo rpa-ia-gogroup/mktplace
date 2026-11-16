@@ -61,23 +61,15 @@ class FonteCx:
 
 
 class TorreCx:
-    """Neon da Torre (Kokeshi pelo bot). Padrao: 036 ainda nao aplicada."""
+    """Neon da Torre: so' a Saude da Conta das contas do bot (Kokeshi), T-0114.
+    Padrao: 036 ainda nao aplicada."""
 
-    def __init__(self, tabelas=(False, False), falhas=(), saude=None, pedidos=None, motivos_canc=None,
-                 devolucoes=None, motivos=None, carga=None, nao_lidas=None):
+    def __init__(self, falhas=(), saude=None, resposta=None):
         self.falhas = set(falhas)
         self.po = base_po.FonteTorre(existe=saude is not None, shopee=saude or [],
                                      metricas=[dict(m, brand="kokeshi") for m in base_po._shopee_metricas()[:2]]
                                      if saude else [])
-        self.rotas = {
-            svc.SQL_TABELAS_CX_EXPORT: ("tabelas_cx_export", [{"returns": tabelas[0], "chat": tabelas[1]}]),
-            svc.SQL_SHOPEE_EXPORT_MARCAS: ("export_marcas", pedidos or []),
-            svc.SQL_SHOPEE_EXPORT_MOTIVOS: ("export_motivos", motivos_canc or []),
-            svc.SQL_DEVOLUCOES_COM_CARGA_EXPORT: ("carga", carga or []),
-            svc.SQL_DEVOLUCOES_MARCAS_EXPORT: ("devolucoes_marcas_export", devolucoes or []),
-            svc.SQL_DEVOLUCOES_MOTIVOS_EXPORT: ("devolucoes_motivos_export", motivos or []),
-            svc.SQL_NAO_LIDAS_EXPORT: ("nao_lidas_export", nao_lidas or []),
-        }
+        self.rotas = {svc.SQL_RESPOSTA_EXPORT: ("resposta_export", resposta or [])}
         self.chamadas = []
 
     def __call__(self, sql, params):
@@ -189,7 +181,7 @@ def test_devolucoes_com_motivo_valor_e_zero_medido_por_marca():
     assert rotulos["NOVO_MOTIVO_X"].mapeado is False
     assert d.motivos.excluidos == 1, "cancelados pelo comprador ficam fora dos motivos"
     params = dict(fonte.chamadas)["devolucoes_marcas"]
-    assert params["marcas"] == ["apice", "barbours", "lescent", "rituaria"]
+    assert params["marcas"] == ["apice", "barbours", "kokeshi", "lescent", "rituaria"]
     assert params["inicio"] == resp.janela.inicio and params["fim"] == resp.janela.fim
 
 
@@ -242,103 +234,6 @@ def test_sql_de_conversas_nao_quebra_sem_as_colunas_novas():
 
 
 # ---------------------------------------------------------------------------
-# Kokeshi pelo bot do Seller Centre (CX-KOKESHI-BOT, 05/11/2026)
-# ---------------------------------------------------------------------------
-def _torre_kokeshi(**kw):
-    saude = [dict(base_po._shopee()[0], brand="kokeshi", overall_rating=3)]
-    base = dict(
-        tabelas=(True, True), saude=saude,
-        pedidos=[{"marca": "kokeshi", "pedidos": 900, "cancelados": 18, "cancelados_comprador": None,
-                  "nao_pagos": 40, "atualizado_em": AGORA}],
-        motivos_canc=[{"motivo": "Solicitado pelo comprador: mudou de ideia", "quantidade": 12},
-                      {"motivo": "Falha na entrega", "quantidade": 6}],
-        carga=[{"marca": "kokeshi"}],
-        devolucoes=[{"marca": "kokeshi", "devolucoes": 7, "aceitas": 5, "em_andamento": 1, "canceladas": 1,
-                     "reembolsado": 300.0}],
-        motivos=[{"motivo": "CHANGE_MIND", "quantidade": 4, "canceladas": 1},
-                 {"motivo": "NOT_RECEIPT", "quantidade": 2, "canceladas": 0}],
-        nao_lidas=[{"marca": "kokeshi", "unread_count": 9, "captured_at": AGORA, "conversas_7d": 50,
-                    "conversas_30d": 210, "aguardando_resposta": 4, "conversas_truncado": None}],
-    )
-    base.update(kw)
-    return TorreCx(**base)
-
-
-def test_kokeshi_entra_em_todos_os_blocos_da_aba_cx():
-    resp, _ = _montar(torre=_torre_kokeshi())
-    # chat: Saude da Conta do bot + nao lidas/conversas do bot
-    assert "kokeshi" in [c.marca for c in resp.chat.contas]
-    nl = {n.marca: n for n in resp.chat.nao_lidas}
-    assert (nl["kokeshi"].valor, nl["kokeshi"].conversas_30d, nl["kokeshi"].aguardando_resposta) == (9, 210, 4)
-    assert nl["apice"].valor == 12 and resp.chat.nao_lidas_estado == "dado"
-    # cancelamentos: export de pedidos, motivo em portugues legivel (mapeado)
-    k = {m.marca: m for m in resp.atendimento.marcas}["kokeshi"]
-    assert (k.pedidos, k.cancelamentos, k.cancelamentos_comprador, k.em_devolucao) == (900, 18, None, None)
-    rot = {i.rotulo: i for i in resp.atendimento.motivos.itens}
-    assert rot["Solicitado pelo comprador: mudou de ideia"].natureza == "comprador"
-    assert rot["Falha na entrega"].natureza == "logistica" and rot["Falha na entrega"].mapeado
-    assert resp.atendimento.cobertura.fora == []
-    # devolucoes: somadas com as lojas de app, motivos juntos
-    d = resp.devolucoes
-    assert d.estado == "dado" and d.total == 6 + 7 and d.reembolsado == round(120.5 + 300.0, 2)
-    assert {m.marca: m.devolucoes for m in d.marcas}["kokeshi"] == 7
-    mud = {i.codigo: i.quantidade for i in d.motivos.itens}
-    assert mud["change_mind"] == 2 + 4 and mud["not_receipt"] == 2
-
-
-def test_kokeshi_sem_036_fica_ausente_e_as_outras_seguem():
-    resp, _ = _montar()
-    nl = {n.marca for n in resp.chat.nao_lidas}
-    assert "kokeshi" not in nl and resp.chat.nao_lidas_estado == "dado"
-    d = resp.devolucoes
-    assert d.estado == "dado" and {m.marca: m.devolucoes for m in d.marcas}["kokeshi"] is None
-    assert d.total == 6, "a Kokeshi sem carga nao entra como zero"
-
-
-def test_kokeshi_sem_carga_de_devolucoes_e_ausente_nao_zero():
-    resp, _ = _montar(torre=_torre_kokeshi(carga=[], devolucoes=[], motivos=[]))
-    assert {m.marca: m.devolucoes for m in resp.devolucoes.marcas}["kokeshi"] is None
-
-
-def test_neon_caido_nao_derruba_as_lojas_com_app():
-    torre = _torre_kokeshi(falhas={"export_marcas", "nao_lidas_export", "carga"})
-    resp, _ = _montar(torre=torre)
-    k = {m.marca: m for m in resp.atendimento.marcas}["kokeshi"]
-    assert k.pedidos is None and k.cancelamentos is None
-    assert resp.atendimento.indicadores[0].estado == "dado"
-    assert resp.chat.nao_lidas_estado == "dado"
-    assert resp.devolucoes.estado == "dado"
-    assert base_cx.SEGREDO not in resp.model_dump_json()
-
-
-def test_filtro_so_kokeshi_nao_toca_o_data_mart_do_cx():
-    resp, fonte = _montar(brands=["kokeshi"], torre=_torre_kokeshi())
-    assert fonte.chamadas == [] and fonte.cx.chamadas == []
-    assert [m.marca for m in resp.atendimento.marcas] == ["kokeshi"]
-    assert resp.devolucoes.estado == "dado" and resp.devolucoes.total == 7
-    assert [n.marca for n in resp.chat.nao_lidas] == ["kokeshi"]
-
-
-def test_rotulo_pt_do_export():
-    assert svc.rotular_shopee_pt("Cancelado pelo vendedor: sem estoque")[2] == "vendedor"
-    assert svc.rotular_shopee_pt("-") == ("sem_motivo", "Sem motivo informado", "plataforma", True)
-    assert svc.rotular_shopee_pt("Outro motivo")[1:] == ("Outro motivo", "plataforma", True)
-
-
-def test_sql_do_export_tira_o_nao_pago_e_usa_o_dia_de_brasilia():
-    for sql in (svc.SQL_SHOPEE_EXPORT_MARCAS, svc.SQL_SHOPEE_EXPORT_MOTIVOS):
-        assert "marts.expedicao_shopee_export_pedido" in sql and "nao pago" in sql
-        assert "pay_time IS NULL OR" in sql, "cancelado sem pagamento = nao pago, sem depender do texto"
-        assert "AT TIME ZONE 'America/Sao_Paulo'" in sql
-    assert "NULL::int AS cancelados_comprador" in svc.SQL_SHOPEE_EXPORT_MARCAS
-
-
-def test_so_kokeshi_com_neon_caido_e_erro_nao_vazio():
-    resp, _ = _montar(brands=["kokeshi"], torre=_torre_kokeshi(falhas={"export_marcas"}))
-    assert resp.atendimento.indicadores[0].estado == "erro"
-
-
-# ---------------------------------------------------------------------------
 # GERENCIAL-CX-V2 (07/11/2026): cancelamento na janela anterior
 # ---------------------------------------------------------------------------
 def test_cancelamento_anterior_so_das_lojas_com_app_e_falha_vira_nulo():
@@ -356,14 +251,16 @@ def test_cancelamento_anterior_so_das_lojas_com_app_e_falha_vira_nulo():
                          "nao_pagos": 5, "atualizado_em": AGORA}]
             return super().__call__(sql, params)
 
-    resp, fonte = _montar(fonte=ComAnterior(), torre=_torre_kokeshi())
+    resp, fonte = _montar(fonte=ComAnterior())
     # 30 dias ate' 03/11 = 05/10..03/11; anterior = 05/09..04/10
     assert (resp.janela_anterior.inicio, resp.janela_anterior.fim) == (date(2026, 9, 5), date(2026, 10, 4))
     m = {x.marca: x for x in resp.atendimento.marcas}
     assert (m["barbours"].pedidos_anterior, m["barbours"].cancelamentos_anterior) == (700, 21)
     assert (m["apice"].pedidos_anterior, m["apice"].cancelamentos_anterior) == (0, 0)
-    assert m["kokeshi"].pedidos_anterior is None, "export da Kokeshi sem historico: nunca zero"
-    assert [p["marcas"] for n, p in fonte.chamadas if n == "anterior"] == [["apice", "barbours", "lescent", "rituaria"]]
+    # Silver da Kokeshi desde 31/08 cobre a anterior (05/09): sem linha = zero medido
+    assert (m["kokeshi"].pedidos_anterior, m["kokeshi"].cancelamentos_anterior) == (0, 0)
+    assert [p["marcas"] for n, p in fonte.chamadas if n == "anterior"] == [
+        ["apice", "barbours", "kokeshi", "lescent", "rituaria"]]
     assert m["barbours"].pedidos == 800, "a janela atual segue igual"
 
     caiu, _ = _montar(fonte=ComAnterior(falhas_coleta={"anterior"}))

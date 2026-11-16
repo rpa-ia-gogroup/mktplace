@@ -1044,16 +1044,31 @@ export function cenarioSuspenso(c: object | null | undefined): { suspensa: boole
 export const ROTULO_MARGEM_SUSPENSA = "Margem suspensa";
 
 /**
- * "Margem suspensa: insumo vencido desde 09/11/2026" (ou "insumo ausente").
- * A data vem do motivo da API; sem ela, de `publicadoEm` (ex.:
+ * "Margem suspensa: insumo vencido desde 09/11/2026" (ou "insumo ausente",
+ * "taxa indisponível", "CMV indisponível", "taxa ou CMV indisponível").
+ * A causa sai do motivo da API; com mais de uma, vale a vencida (tem data).
+ * A data vem do motivo; sem ela, de `publicadoEm` (ex.:
  * `fontes.insumos_dre.publicado_em`); sem nenhuma, a frase sem data.
+ * Motivo sem causa reconhecida: so' "Margem suspensa" — nunca "insumo
+ * vencido" para o que nao venceu (T-0112: taxa/CMV indisponivel nao tem data).
  */
 export function textoSuspensao(motivo: string | null | undefined, publicadoEm?: string | null): string {
   const m = motivo ?? "";
-  if (/insumo ausente/.test(m) && !/vencido/.test(m)) return `${ROTULO_MARGEM_SUSPENSA}: insumo ausente`;
-  const doMotivo = /publicado em (\d{2}\/\d{2}\/\d{4})/.exec(m)?.[1] ?? null;
-  const data = doMotivo ?? (publicadoEm ? fmtInstanteBrt(publicadoEm).slice(0, 10) : null);
-  return `${ROTULO_MARGEM_SUSPENSA}: insumo vencido${data ? ` desde ${data}` : ""}`;
+  // "insumo vencido" cobre tambem o agregado "(insumo vencido ou ausente)".
+  if (/insumo vencido/.test(m)) {
+    const doMotivo = /publicado em (\d{2}\/\d{2}\/\d{4})/.exec(m)?.[1] ?? null;
+    const data = doMotivo ?? (publicadoEm ? fmtInstanteBrt(publicadoEm).slice(0, 10) : null);
+    return `${ROTULO_MARGEM_SUSPENSA}: insumo vencido${data ? ` desde ${data}` : ""}`;
+  }
+  // So' "insumo ausente": o motivo de um componente pode dizer "ausente no mart".
+  if (/insumo ausente/.test(m)) return `${ROTULO_MARGEM_SUSPENSA}: insumo ausente`;
+  // T-0112: celula "taxa indisponível: …" / "CMV indisponível: …"; agregado "(taxa ou CMV indisponível)".
+  const taxa = /taxa indisponível/.test(m);
+  const cmv = /CMV indisponível/.test(m);
+  if (/taxa ou CMV indisponível/.test(m) || (taxa && cmv)) return `${ROTULO_MARGEM_SUSPENSA}: taxa ou CMV indisponível`;
+  if (taxa) return `${ROTULO_MARGEM_SUSPENSA}: taxa indisponível`;
+  if (cmv) return `${ROTULO_MARGEM_SUSPENSA}: CMV indisponível`;
+  return ROTULO_MARGEM_SUSPENSA;
 }
 
 /** Celula sem margem: classificacao nao calculavel ou valor nulo. */
@@ -1078,11 +1093,27 @@ export function textoMargemPct(c: CelulaDRE): string {
 export const ROTULO_MARGEM_ESTIMADA_PREVIA = "Margem de contribuição estimada";
 
 /**
+ * T-0117 (A2-201) — o que a margem conhecida deixa de fora, lido de `faltam`
+ * da API (custos que nao entraram na conta). Nada de lista fixa: desde 13/11
+ * impostos e devolucoes entram na conhecida, e o texto fixo "sem impostos,
+ * devoluções e parte do CMV" passou a mentir. Num agregado `faltam` e'
+ * "ausente em ao menos uma celula" (ver `rotuloAusentes`) e a legenda diz
+ * isso. Nada faltando: string vazia, sem parentese.
+ * Ex.: " (sem devoluções e Ads em ao menos um canal)".
+ */
+export function legendaConhecida(c: CelulaDRE): string {
+  const faltam = custosAusentes(c);
+  if (faltam.length === 0) return "";
+  const escopo = c.canal && c.marca ? "" : c.canal ? " em ao menos uma marca" : " em ao menos um canal";
+  return ` (sem ${juntarNomes(faltam)}${escopo})`;
+}
+
+/**
  * T-0090 (supervisor, delegada pelo Mario) — qual margem e' o DESTAQUE.
  *
  * Na PREVIA com cenario estimado (premissa publicada e margem estimada com
- * numero), a ESTIMADA e' o numero principal: a conhecida, sem impostos,
- * devolucoes e parte do CMV, vira detalhe secundario. Mes maduro
+ * numero), a ESTIMADA e' o numero principal: a conhecida vira detalhe
+ * secundario, com o que ela deixa de fora (`legendaConhecida`). Mes maduro
  * (COMPLETA/PARCIAL) e PREVIA sem cenario: o destaque continua a conhecida.
  */
 export type MargemPrincipal =
@@ -1098,7 +1129,7 @@ export function margemPrincipal(c: CelulaDRE): MargemPrincipal {
     rotulo: ROTULO_MARGEM_ESTIMADA_PREVIA,
     valor: fmtReais(v),
     pct: fmtPctDre(cen.margem_contribuicao_estimada_pct) ?? "Sem %",
-    secundaria: `Conhecida: ${textoMargemPct(c)} (sem impostos, devoluções e parte do CMV)`,
+    secundaria: `Conhecida: ${textoMargemPct(c)}${legendaConhecida(c)}`,
   };
 }
 

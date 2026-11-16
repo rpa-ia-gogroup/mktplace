@@ -42,16 +42,21 @@ const refMonth = z.string().regex(REF_MONTH);
 
 export const overviewContract = z.object({
   // `current` e' obrigatorio: sem ele nao existe resposta de desempenho.
+  // T-0111: `gmv`/`orders` passam a vir `null` sem linha no recorte (API nova);
+  // a antiga manda 0 com `refreshed_at` nulo. As duas sao validas aqui; a
+  // ausencia e' decidida por `totaisDoOverview`, nunca por `?? 0`.
   current: z.object({
-    gmv: num,
-    orders: num,
+    gmv: optNum,
+    orders: optNum,
     avg_ticket: optNum,
     tiktok_gmv: optNum,
     ml_gmv: optNum,
     shopee_gmv: optNum,
   }),
-  previous: z.object({ gmv: optNum }).nullish(),
+  previous: z.object({ gmv: optNum, orders: optNum, avg_ticket: optNum }).nullish(),
   gmv_mom_pct: optNum,
+  compare_date_from: z.string().nullish(),
+  compare_date_to: z.string().nullish(),
   filters: optFilters,
   refreshed_at: optStamp,
 });

@@ -285,7 +285,14 @@ def test_dry_run_nao_audita_nao_trava_e_nao_publica(monkeypatch):
                   neon_factory=neon, dm_factory=dm)
     assert res["applied"] is False
     assert not t.tem("lock:"), "dry-run nao toma lock"
-    assert not t.tem("audit:"), "dry-run nao audita"
+    # T-0107b: o dry-run incremental abre UMA sessao Neon so' para LER as
+    # contas do destino (no fake ela recebe o rotulo da primeira sessao,
+    # "audit"). Nada de auditoria, escrita ou commit.
+    assert not t.tem("audit:INSERT INTO audit"), "dry-run nao audita"
+    assert not t.tem("audit:UPDATE audit"), "dry-run nao audita"
+    assert not any("COMMIT" in e or "DELETE" in e or "INSERT" in e
+                   for e in t.eventos), t.eventos
+    assert t.tem("audit:ROLLBACK"), "a leitura do destino termina em rollback"
     assert not t.tem("pub:"), "dry-run nao abre transacao gravavel"
     assert t.tem("dm:"), "dry-run le a fonte"
 

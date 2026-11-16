@@ -332,7 +332,8 @@ def get_summary(
             COALESCE(SUM(f.uf_eligible_orders), 0)            AS uf_eligible_orders,
             COALESCE(SUM(f.shipping_cost_covered_orders), 0)  AS shipping_cost_covered_orders,
             COALESCE(SUM(f.shipping_cost_eligible_orders), 0) AS shipping_cost_eligible_orders,
-            SUM(f.seller_shipping_cost)                       AS seller_shipping_cost
+            SUM(f.seller_shipping_cost)                       AS seller_shipping_cost,
+            COUNT(*)                                          AS linhas
         FROM {REGION_TABLE} f
         JOIN marts.dim_loja l ON l.loja_id = f.loja_id
         WHERE f.date BETWEEN :start AND :end
@@ -340,6 +341,10 @@ def get_summary(
           {brand_filter}{uf_sql}
     """)
     row = db.execute(sql, params).mappings().first() or {}
+    # T-0111 (sem dado != 0): o agregado sem GROUP BY sempre devolve uma linha,
+    # e o COALESCE transformava "nenhuma linha regional no escopo" em 0.
+    # `linhas` ausente conta como 0: sem prova de linha, nao ha' total.
+    sem_linha = int(_f(row.get("linhas"))) == 0
 
     uf_known = int(_f(row.get("uf_known_orders")))
     uf_eligible = int(_f(row.get("uf_eligible_orders")))
@@ -351,10 +356,10 @@ def get_summary(
     cob = _cobertura(db, mkt_ids, brand_keys, period, hoje)
     level = pior_coverage_level(uf_level, coverage_level_frescor(cob["cobertura_por_canal"]))
     return {
-        "gmv": round(_f(row.get("gmv")), 2),
-        "orders": int(_f(row.get("orders"))),
-        "units_sold": int(_f(row.get("units_sold"))),
-        "ufs_com_venda": int(_f(row.get("ufs_com_venda"))),
+        "gmv": None if sem_linha else round(_f(row.get("gmv")), 2),
+        "orders": None if sem_linha else int(_f(row.get("orders"))),
+        "units_sold": None if sem_linha else int(_f(row.get("units_sold"))),
+        "ufs_com_venda": None if sem_linha else int(_f(row.get("ufs_com_venda"))),
         "uf_known_orders": uf_known,
         "uf_eligible_orders": uf_eligible,
         "uf_fill_pct": uf_fill_pct,

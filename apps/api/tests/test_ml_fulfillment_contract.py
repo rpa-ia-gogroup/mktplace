@@ -231,7 +231,9 @@ def test_classe_ausente_nao_vira_linha_de_zeros():
 
 def test_resposta_vazia_nao_quebra_e_marca_incompleto():
     r = bloco({})
-    assert r["paid_gmv_total"] == 0
+    # T-0111: sem linha no recorte o total e' null (ausencia), nunca 0.
+    assert r["paid_gmv_total"] is None
+    assert r["paid_orders_total"] is None
     assert r["share_full_gmv"] is None
     assert r["by_class"] == []
     assert r["quality"]["is_complete"] is False

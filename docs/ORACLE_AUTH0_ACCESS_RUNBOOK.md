@@ -246,7 +246,8 @@ Passos do proprietário, **nesta ordem** (só nomes de variável aqui, nunca val
 - `GET https://mktplace-ten.vercel.app/.well-known/oauth-protected-resource/api/mcp` → **200**, com `resource` igual
   ao URL novo;
 - `POST https://mktplace-ten.vercel.app/api/mcp` sem bearer → **401**, com `WWW-Authenticate` contendo
-  `resource_metadata` (no domínio novo) e `scope="oracle:read"`;
+  `resource_metadata` (no domínio novo) e `scope="oracle:read"` (desde o T-0108: `scope="oracle:read
+  offline_access"`, ver §9);
 - Vincular no Claude e `tools/list` com bearer → **9** tools com o T-0080 P2 (`torre_dre`) no deploy; **8** se o
   deploy ainda for só da P1.
 
@@ -270,3 +271,35 @@ Espelho no repo: `infra/auth0/actions/oracle-corporate-access.js` = Action "Orac
   Google (`google-oauth2`), e-mail `@gocase.com`/`@gobeaute.com.br` **verificado** e `hd` (`idp_tenant_domain`)
   concordante quando presente. Revogar uma organização tirando o Client ID da allowlist **não** basta se ela pedir a
   audience: o bloqueio é de conta (offboarding, §5) ou de aplicação (apagar/bloquear o cliente DCR).
+
+## 9. Offline Access (13/11/2026)
+
+**Sintoma.** O conector GoMarktplace passava a responder 401 quando o access token (86400 s) vencia. O MCP só
+anunciava `oracle:read`, então o cliente não pedia `offline_access`. Além disso, o Offline Access estava desligado na
+API, e por isso não vinha refresh token.
+
+**Código (T-0108).** O PRM (`scopes_supported`) e o `scope` do `WWW-Authenticate` (401 e 403) passam a anunciar
+`oracle:read offline_access`. A spec MCP (seleção de scope) diz que o cliente usa primeiro o `scope` do desafio e, na
+falta dele, todo o `scopes_supported` do PRM. O verificador **não mudou**: ele continua exigindo só `oracle:read`. Token
+sem `offline_access` continua aceito, e `offline_access` sozinho dá 403. O refresh token nunca chega ao `/api/mcp`.
+
+**Auth0 (proprietário, no painel).**
+
+1. APIs → "ORÁCULO MCP (mktplace-ten)" → Settings → **Allow Offline Access = ON**.
+2. Recomendado, nas configurações de refresh token (tenant/aplicação):
+   - **Refresh Token Rotation = ON**;
+   - expiração **absoluta** (ex.: 30 dias);
+   - expiração **por inatividade** (ex.: 7 dias).
+3. Cada refresh reexecuta a Action "Oraculo — acesso corporativo" (`oauth2-refresh-token`, §2), e o claim corporativo é
+   reavaliado a cada renovação. O offboarding continua exigindo revogar o grant (§5): o refresh token emitido vive até
+   expirar ou ser revogado.
+
+**Verificação.**
+
+- Smoke: `POST /api/mcp` sem bearer → 401 com `scope="oracle:read offline_access"`, e o PRM com
+  `"scopes_supported": ["oracle:read", "offline_access"]`.
+- Reautorizar o conector **uma vez**, porque o grant antigo não tem refresh token. Cerca de 24 h depois, conferir que
+  ele ainda responde sem pedir login.
+- Nos logs do Auth0, conferir que o cliente DCR do GoMarktplace troca token com `grant_type=refresh_token`
+  (evento de troca de refresh token bem-sucedida) e não com um login novo.
+- Registrar aqui apenas nomes (API, Action, cliente). Nunca registrar valores de token ou de segredo.

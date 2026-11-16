@@ -41,6 +41,8 @@ import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
+import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
+import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
@@ -64,7 +66,6 @@ import {
   MARCAS_ML,
   PROXIMO_PASSO_ML,
   ROTULO_SEM_ESTOQUE_FULL_ML,
-  SEM_DADO,
   TITULO_INDISPONIVEL_ML,
   buildQueryML,
   avisoTopoML,
@@ -77,7 +78,6 @@ import {
   fmtCobertura,
   fmtData,
   fmtDecimal,
-  fmtFracao,
   fmtInt,
   fmtOpcional,
   frescorLabelML,
@@ -173,83 +173,24 @@ function RegiaoRolavel({
   );
 }
 
-/** Cobertura por marca: com fotografia, sem fotografia (ausencia), leitura. */
-function TabelaMarcas({ marcas }: { marcas: MarcaML[] }) {
-  return (
-    <div className="bg-surface rounded-2xl border border-line overflow-hidden">
-      <TableScrollHint>
-        <RegiaoRolavel rotulo="Cobertura por marca (role na horizontal para ver todas as colunas)">
-          <table className="w-full text-sm">
-            <caption className="sr-only">Cobertura e estoque Full por marca</caption>
-            <thead>
-              <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
-                <th scope="col" className="px-4 py-3">Marca</th>
-                <th scope="col" className="px-4 py-3">Fotografia</th>
-                <th scope="col" className="px-4 py-3 text-right">Disponível Full</th>
-                <th scope="col" className="px-4 py-3 text-right">Inventários lidos</th>
-                <th scope="col" className="px-4 py-3 text-right">Sem leitura</th>
-                <th scope="col" className="px-4 py-3 text-right">Compartilhados</th>
-                <th scope="col" className="px-4 py-3 text-right">Vendas alocadas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {marcas.map((m) => (
-                <tr key={m.brand} className="border-b border-line last:border-0">
-                  <td className="px-4 py-3 font-medium text-ink">{tituloMarca(m.brand)}</td>
-                  <td className="px-4 py-3 text-xs text-ink-muted whitespace-nowrap">
-                    {m.tem_fotografia_no_dia ? (
-                      fmtData(m.ultima_fotografia)
-                    ) : (
-                      <span className="text-warn-ink">
-                        Sem fotografia no dia
-                        {m.ultima_fotografia
-                          ? ` (última: ${fmtData(m.ultima_fotografia)})`
-                          : " (nunca publicada)"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-ink">
-                    {/* Tres estados: sem estoque Full (zero medido, tom neutro),
-                        saldo disponivel 0 (com o fisico nao disponivel) e
-                        ausencia (travessao). */}
-                    {estadoExibicaoMarcaML(m) === "sem_estoque_full" ? (
-                      <span className="font-medium text-ink-muted whitespace-nowrap">
-                        {ROTULO_SEM_ESTOQUE_FULL_ML}
-                      </span>
-                    ) : (
-                      <>
-                        {fmtOpcional(m.disponivel_full)}
-                        {subtextoSaldoZeroML(m) && (
-                          <span className="block text-xs font-normal text-ink-faint whitespace-nowrap">
-                            {subtextoSaldoZeroML(m)}
-                          </span>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
-                    {m.leitura
-                      ? `${fmtInt(m.leitura.inventarios_lidos)} de ${fmtInt(m.leitura.inventarios)}`
-                      : SEM_DADO}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
-                    {m.leitura ? fmtInt(m.leitura.inventarios_sem_leitura) : SEM_DADO}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
-                    {fmtOpcional(m.inventarios_compartilhados)}
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
-                    {fmtFracao(m.cobertura_da_alocacao)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </RegiaoRolavel>
-      </TableScrollHint>
-    </div>
-  );
+/**
+ * Estado da marca no cabecalho da grade (a tabela por marca saiu, pedido da
+ * Nathalia 13/11): sem fotografia = ausencia; sem estoque Full = zero medido.
+ */
+function notaMarcaML(m: MarcaML): string | null {
+  if (estadoExibicaoMarcaML(m) === "sem_fotografia") {
+    return `Sem fotografia no dia${m.ultima_fotografia ? ` (última: ${fmtData(m.ultima_fotografia)})` : " (nunca publicada)"}`;
+  }
+  if (estadoExibicaoMarcaML(m) === "sem_estoque_full") return ROTULO_SEM_ESTOQUE_FULL_ML;
+  // Leitura parcial: o disponivel soma menos; dito no cabecalho, nunca calado.
+  const semLeitura = m.leitura && m.leitura.inventarios_sem_leitura > 0 ? `${fmtInt(m.leitura.inventarios_sem_leitura)} sem leitura` : null;
+  return [semLeitura, subtextoSaldoZeroML(m)].filter(Boolean).join(" · ") || null;
 }
+
+/** Classe da grade curva x marca: as mesmas dos cartoes Ruptura, Estoque baixo e Excesso. */
+const CLASSE_GRADE_ML: Partial<Record<InventarioML["classificacao_torre"], ClasseGrade>> = {
+  RUPTURA_CANDIDATA: "ruptura", BAIXO_CANDIDATO: "baixo", EXCESSO_CANDIDATO: "excesso",
+};
 
 /** Ruptura + estoque baixo: o mesmo recorte do cartao "Exigem ação". */
 const exigeAcaoML = (i: InventarioML) =>
@@ -666,7 +607,21 @@ export default function MLFullEstoqueClient() {
             parcial={!!parcial}
           />
 
-          <TabelaMarcas marcas={payload.marcas} />
+          {(
+            <GradeCurvaMarca
+              itens={payload.inventarios.filter((i) => i.eh_full && !i.situacao).map((i) => ({
+                brand: i.brand, curva: i.curva, disponivel: i.disponivel,
+                mediaDiaria: i.media_diaria_28d, classe: CLASSE_GRADE_ML[i.classificacao_torre] ?? null,
+                rotulo: identificacaoML(i).texto, cobertura: i.cobertura_torre_dias,
+              }))}
+              marcas={payload.marcas.map((m) => m.brand)}
+              rotuloMarca={tituloMarca}
+              notaMarca={(b) => { const m = payload.marcas.find((x) => x.brand === b); return m ? notaMarcaML(m) : null; }}
+              item="inventários"
+              comCurva={comCurva}
+              ressalva={payload.truncado ? "Lista truncada: grade parcial" : null}
+            />
+          )}
 
           {avisoCurvaIndisponivel(metaCurva) && (
             <Aviso tom="info">{avisoCurvaIndisponivel(metaCurva)}</Aviso>

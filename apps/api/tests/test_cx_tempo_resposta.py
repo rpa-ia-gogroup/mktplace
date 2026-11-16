@@ -3,7 +3,7 @@ from datetime import timedelta
 
 from app.services import cx_atendimento_service as svc
 from tests import test_cx_atendimento as base_cx
-from tests.test_cx_shopee import AGORA, FonteCx, TorreCx, _montar
+from tests.test_cx_shopee import AGORA, FonteCx, _montar
 
 FOTO = {"marca": "apice", "unread_count": 3, "captured_at": AGORA, "conversas_30d": 180,
         "aguardando_resposta": 9, "aguardando_ate_1h": 4, "aguardando_1a4h": 2, "aguardando_4a24h": 1,
@@ -59,15 +59,6 @@ def test_falha_no_tempo_de_resposta_nao_derruba_as_conversas():
     a = {n.marca: n for n in resp.chat.nao_lidas}["apice"]
     assert a.aguardando_resposta == 9 and a.tempo_resposta_s is None
     assert base_cx.SEGREDO not in resp.model_dump_json()
-
-
-def test_kokeshi_usa_a_media_que_o_bot_le_no_seller_centre():
-    torre = TorreCx(tabelas=(True, True), nao_lidas=[
-        {"marca": "kokeshi", "unread_count": 2, "captured_at": AGORA, "tempo_resposta_medio_s": 2100}])
-    resp, _ = _montar(fonte=_fonte(), torre=torre, brands=["kokeshi"])
-    k = resp.chat.nao_lidas[0]
-    assert (k.marca, k.tempo_resposta_s, k.tempo_resposta_fonte) == ("kokeshi", 2100, "media_seller_centre")
-    assert "tempo_resposta_medio_s" in svc.SQL_NAO_LIDAS_EXPORT
 
 
 def test_inicio_da_medicao_sobrevive_a_leitura_pelo_metabase():

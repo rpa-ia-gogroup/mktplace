@@ -52,6 +52,16 @@ Legenda de disponibilidade:
 | Pedidos atribuÃ­dos | Pedidos de vendas via ad | â€” | dia/brand | â“ | âœ… `ad_units_sold` |
 | % investimento s/ GMV | ad_spend / gmv | â€” | dia/brand | â“ | ðŸ”¶ |
 
+### ROAS da Marca 360 (cartão Ad Spend, T-0113)
+
+- **Fórmula:** Σ GMV ÷ Σ Ads, só dos canais selecionados que tiveram Ads > 0 no período. O GMV de canal sem Ads
+  não entra no numerador. Nenhum canal com Ads → "—", nunca 0.
+- **Filtros:** canais selecionados e período (intervalo global da página).
+- **Fonte:** `/api/v1/performance/daily` (`ml_ad_spend` e `shopee_ad_spend` por dia; null = sem linha de Ads, não 0).
+  Cálculo em `apps/web/src/lib/brand-roas.ts`.
+- **Exibição:** aproximado, com o rótulo dos canais usados (ex.: "ROAS ~12,0x (só Shopee)").
+- **Limitação:** o TikTok não tem Ads na série diária, então nunca entra no ROAS da Marca 360.
+
 ---
 
 ## TikTok â€” GMV comercial (Gate DQ-TK1, 2026-08-25)
@@ -543,3 +553,94 @@ Limitacoes conhecidas:
 - Se a API passar a mandar liquido, o desconto do web tem de sair (risco de descontar duas vezes). O ideal e'
   alinhar a API e remover `paraPedidosLiquidos`.
 - A **taxa de cancelamento continua sobre o bruto**, como a API calcula.
+
+### Shopee em Pedidos e sem dado ≠ 0 (T-0116, B1-10, 2026-11-13)
+
+A Shopee entra na tela nos cartões (aba própria), na série diária e na tabela por marca. Antes, `get_pedidos`
+intersectava o filtro com TikTok/ML (commit b91f7861, quando a Shopee não tinha pedidos no mart) e `channels=shopee`
+devolvia zero.
+
+Fonte da Shopee: `marts.fact_marketplace_daily_performance` com `marketplace_id = SHOPEE_ID`, carregada pelo
+`daily_shopee` (API da Shopee), todas as contas. `orders` = pedidos **líquidos = pagos** (sem cancelados),
+`canceled_orders`, `delivered_orders` e `gmv`.
+
+| Campo (API) | Fórmula | Base |
+|---|---|---|
+| `shopee.orders` | `SUM(orders)` | líquido (pagos), como `tiktok.orders` |
+| `shopee.canceled` / `shopee.delivered` / `shopee.gmv` | `SUM(canceled_orders)` / `SUM(delivered_orders)` (0 vira null, como TK/ML) / `SUM(gmv)` | — |
+| `shopee.cancel_rate_pct` | `canceled / (paid + canceled) * 100` | mesmo denominador do ML; 0 real é 0 |
+| `daily[].shopee_orders`, `shopee_canceled` | por dia | líquido |
+| `by_brand[].shopee_orders`, `shopee_canceled`, `shopee_cancel_rate_pct`, `shopee_gmv` | por marca | líquido |
+| `kpis.total_orders` | `Σ (paid + canceled)` dos canais com linha | bruto (contrato existente; o web desconta os cancelados dos 3) |
+| `kpis.total_gmv` / `kpis.avg_ticket` | `Σ gmv` / `Σ gmv ÷ Σ paid` | ticket sobre pagos |
+| `kpis.cancel_rate_pct` | `Σ canceled / Σ (paid + canceled)` | — |
+| `by_brand[].total_orders` | `tiktok_orders + ml_orders + ml_canceled + shopee_orders` | o web desconta só `ml_canceled` |
+
+No web, `paraPedidosLiquidos` passa a descontar `tk.canceled + ml.canceled + sh.canceled` do total; o cartão da
+Shopee não é descontado (já é líquido). O texto de ajuda do GMV total diz os canais do filtro:
+"Consolidado (TikTok Shop + Mercado Livre + Shopee)".
+
+**Sem dado ≠ 0** (mesma regra da seção seguinte, T-0111):
+- canal pedido sem nenhuma linha no recorte: o bloco `tiktok`/`ml`/`shopee` vem com todos os campos `null`; na
+  marca, os campos do canal vêm `null`; na série, o canal sem linha naquele dia vem `null`;
+- nenhum canal pedido com linha: `kpis.total_orders`, `total_gmv`, `avg_ticket` e `cancel_rate_pct` vêm `null`
+  (antes: 0 e ticket 0,0 — B1-10, ÁPICE × ML);
+- `avg_ticket` `null` também quando há linha mas nenhum pedido pago;
+- total com canal ausente: soma só os presentes; a resposta traz `canais_sem_dado` (`"tiktok"`/`"ml"`/`"shopee"`)
+  e `warnings` com `sem_dado: … totais parciais (soma só de …)`. A tela mostra "<canal> sem dado no período ·
+  total parcial, só de …";
+- zero real (linha com 0) continua 0. Na tela, `null` aparece como "—", nunca "0" ou "R$ 0,00".
+
+Medição de referência (VAL-B1, out/26): TikTok + ML = 282.376 pagos (TikTok 223.761, ML 58.615); a Shopee tem
+94.568 pagos e 18.191 cancelados na fonte. Com a Shopee no filtro, o card de pedidos passa a somar os três.
+
+## Sem dado ≠ 0 (T-0111, validação da Torre de 13/11/2026)
+
+Regra da API (mesmo padrão do C2-01 e da T-0085):
+
+- **Sem linha na fonte** para o recorte pedido (canal × marca × período): o valor sai `null`, nunca `0`. Onde a
+  resposta já tem campo de aviso, ele traz o motivo começando por `sem_dado`.
+- **Total com parte ausente:** soma só quem tem linha. Onde o schema já tem `parcial`/lista de ausentes, ele é usado;
+  nenhuma estrutura nova foi criada.
+- **0 só quando a fonte tem linha com 0.** Média ou share sem base (denominador 0) é `null`.
+- **Delta de comparação:** base `null` ou `0` → delta `null`.
+
+Campos afetados:
+
+| Rota | Campos que passam a poder vir `null` | Quando | Aviso |
+|---|---|---|---|
+| `GET /api/v1/performance/overview` | `current.gmv`, `current.orders`, `current.avg_ticket`, `previous.gmv`, `previous.orders`, `previous.avg_ticket` (e `gmv_mom_pct`, que já era opcional) | nenhum canal pedido tem linha na `fact_marketplace_daily_performance`; `previous` também sem `compare=true`; `avg_ticket` também quando `orders = 0` | — |
+| `GET /api/v1/regioes/summary` | `gmv`, `orders`, `units_sold`, `ufs_com_venda` | `COUNT(*) = 0` na `fact_marketplace_region_daily` para o escopo | `cobertura_por_canal` (já existente) |
+| `GET /api/v1/performance/ml-fulfillment` | `paid_gmv_total`, `paid_orders_total`, `paid_units_total` | nenhuma linha na `fact_ml_fulfillment_daily` no recorte (marca sem conta ML, D0) | `quality.limitations` ganha `sem_dado: …` |
+| `GET /api/v1/performance/shopee-fbs` | `totals.gross_gmv`, `gross_units`, `created_orders`, `eligible_orders`, `cancelled_orders`, `to_return_orders`, `to_return_gmv`, `unpaid_orders`, `unpaid_gmv` | nenhuma linha na `fact_shopee_fbs_daily` no recorte | `meta.warnings` ganha `sem_dado: …` |
+
+`/performance/shopee-fbs` com `brands=`: `meta.expected_accounts` e `meta.missing_accounts` passam a considerar só as
+contas das marcas pedidas (mapa `ACCOUNT_BRAND` no serviço). Antes, `brands=apice` listava as outras 4 contas como
+"sem linha na janela" (B2-10).
+
+O `/performance/executive-summary` mantém o contrato (`health.gmv`/`orders`/`avg_ticket` numéricos): ausência
+continua virando `status = critical` com risco `missing_data`.
+
+## Taxa/repasse TikTok em maturação e cobertura do Ads Shopee (T-0115)
+
+Fonte: `total_settlement` e `total_fees` vêm da `gold.tiktok_brand_daily` (Data Mart), via
+`marts.fact_marketplace_daily_performance`. Regras em `apps/api/app/services/performance_service.py`.
+
+**1. Maturação do repasse TikTok** (`/financeiro`, por marca no período)
+- Repasse abaixo de `_TIKTOK_REPASSE_MADURO_MIN_PCT` = 30% do GMV → marca "maturando": taxa e repasse viram `null`
+  (`tiktok_repasse_status = "maturando"`), a marca sai do numerador e do denominador do agregado e entra em
+  `marcas_maturando` (subconjunto de `marcas_sem_dado`) de `tiktok_fee_cobertura` e `tiktok_settlement_cobertura`.
+- Repasse maduro, mas taxa abaixo de `_TIKTOK_TAXA_PLAUSIVEL_MIN_PCT` = 1% do GMV → só a taxa vira `null`.
+- Por quê: num mês maduro o repasse fica em torno de 67% do GMV; a comissão de plataforma sozinha, em torno de 6%.
+- `/canais`: TikTok maturando sai com `marketplace_cost_available=false` e `marketplace_cost_pct=null`, fica fora da
+  mediana e do p75 e o sinal vira `sem_dado` — não dispara "custo alto".
+- Limitação conhecida: período antigo com muitos reembolsos (repasse < 30%) também sai como "maturando".
+- Causa conhecida do repasse ausente em nov/26: a `gold.tiktok_brand_daily` congela o `total_settlement` no dia em
+  que calcula a linha. A correção é na gold (time de Dados).
+
+**2. Cobertura do Ads Shopee**
+- `shopee_ads_cobertura` (`{status, marcas_com_dado, marcas_total, marcas_sem_dado}`): no `/financeiro` (em `kpis`)
+  e no `/overview` (só em `current`, só com Shopee no filtro) — marcas com Ads e marcas sem.
+- O ROAS consolidado da Shopee é calculado só sobre as marcas com Ads.
+- `/canais`: Shopee sem Ads sai com `ads_missing_reason`.
+- A web mostra "parcial (k de n marcas)".

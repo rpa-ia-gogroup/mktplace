@@ -108,9 +108,10 @@ export interface MLFulfillmentResponse {
   share_full_gmv: number | null;
   share_full_orders: number | null;
   share_full_units: number | null;
-  paid_gmv_total: string;
-  paid_orders_total: number;
-  paid_units_total: number;
+  // T-0111: `null` = sem linha no recorte (motivo em quality.limitations "sem_dado:").
+  paid_gmv_total: string | null;
+  paid_orders_total: number | null;
+  paid_units_total: number | null;
   by_class: ModalBreakdown[];
   by_logistic_type: LogisticTypeBreakdown[];
   daily: DailyPoint[];

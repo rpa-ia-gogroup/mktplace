@@ -93,8 +93,9 @@ def fixar(monkeypatch):
 def test_c01_payload_tem_exatamente_cinco_blocos(fixar):
     out = gs.get_operacoes(db=None)
     # T-0097: + `refreshed_at`, aditivo, depois dos cinco blocos.
+    # T-0117: + `dados_ate` e `esperado_ate`, aditivos, no fim.
     assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily",
-                                "refreshed_at"]
+                                "refreshed_at", "dados_ate", "esperado_ate"]
 
 
 def test_c02_listas_vazias_sao_listas_e_nao_none(fixar):
@@ -440,8 +441,9 @@ def test_c27_endpoint_funciona_com_datamart_engine_ausente(monkeypatch):
     monkeypatch.setattr(gs, "datamart_engine", None)
     sessao = SessaoFalsa()
     out = gs.get_operacoes(db=sessao)
+    # T-0117: + `dados_ate` e `esperado_ate`, aditivos, no fim.
     assert list(out.keys()) == ["alertas", "ml_velocity", "creators", "lives", "tk_daily",
-                                "refreshed_at"]
+                                "refreshed_at", "dados_ate", "esperado_ate"]
     assert all(out[k] == [] for k in ("alertas", "ml_velocity", "creators", "lives", "tk_daily"))
     assert out["refreshed_at"] is None, "sem linha em fonte alguma: frescor nulo, nunca now()"
     assert len(sessao.consultas) == 6, "as seis consultas passaram pela Session"
@@ -531,6 +533,9 @@ def test_c25_payload_completo_congelado(fixar):
             {"brand": "barbours", "ref_date": "2026-07-30", "gmv": 500.0, "orders": 5},
         ],
         "refreshed_at": None,
+        # T-0117 (C1-202): aditivos. Sem linha de frescor: data nula, nunca hoje.
+        "dados_ate": {"ml": None, "tiktok": None},
+        "esperado_ate": "2026-08-10",
     }
 
 
@@ -677,5 +682,6 @@ def test_c37_frescor_le_synced_at_das_tres_fontes_no_escopo_da_tela(monkeypatch)
                 "marts.fact_tiktok_brand_content_daily"):
         assert rel in sql
     assert f"ref_date >= '{D7}'" in sql and f"date >= '{D30}'" in sql
-    assert sql.count(f"<= '{D_FECHADO}'") == 3
+    # 3 de `synced_at` + 3 de `dados_ate` (T-0117), todos com o mesmo teto D-1.
+    assert sql.count(f"<= '{D_FECHADO}'") == 6
     assert "now()" not in sql.lower() and f"'{HOJE}'" not in sql

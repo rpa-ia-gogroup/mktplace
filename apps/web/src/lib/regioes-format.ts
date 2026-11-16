@@ -45,7 +45,8 @@ export function semCoberturaAviso(channelsSemCobertura: string[]): string | null
 
 /** Participação (%) de um valor sobre o total do escopo filtrado — null
  * quando o total e' 0 (nunca divide por zero, nunca mostra 0% enganoso). */
-export function fmtShareOfTotalPct(value: number, total: number): number | null {
-  if (total <= 0) return null;
+export function fmtShareOfTotalPct(value: number, total: number | null): number | null {
+  // T-0111: total nulo = escopo sem linha na fonte; sem base, sem participacao.
+  if (total == null || total <= 0) return null;
   return Math.round((value / total) * 1000) / 10;
 }

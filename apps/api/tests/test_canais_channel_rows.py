@@ -40,7 +40,7 @@ class FakeMappingSession:
 def _row(
     brand_key, marketplace_id, *, gmv=0, orders=0,
     ad_spend=0, ad_revenue=0, ad_spend_n=0,
-    total_fees=0, total_fees_n=0,
+    total_fees=0, total_fees_n=0, total_settlement=0,
     seller_shipping_cost=0, seller_shipping_cost_n=0,
     unique_buyers=0, new_buyers=0, repeat_buyers=0,
     visitors=0, canceled_orders=0, avg_conversion_rate=None,
@@ -54,6 +54,7 @@ def _row(
         "avg_conversion_rate": avg_conversion_rate,
         "ad_spend": ad_spend, "ad_revenue": ad_revenue, "ad_spend_n": ad_spend_n,
         "total_fees": total_fees, "total_fees_n": total_fees_n,
+        "total_settlement": total_settlement,
         "seller_shipping_cost": seller_shipping_cost, "seller_shipping_cost_n": seller_shipping_cost_n,
     }
 
@@ -72,7 +73,9 @@ def _row_for(rows, brand, channel):
 # ---------------------------------------------------------------------------
 
 def test_tiktok_ads_e_aplicavel_sem_dado_e_frete_segue_nao_aplicavel():
-    rows = [_row("barbours", perf_svc.TIKTOK_ID, gmv=1000, total_fees=-300, total_fees_n=30)]
+    # T-0115: repasse maduro (>= 30% do GMV); abaixo disso o custo e' "maturando".
+    rows = [_row("barbours", perf_svc.TIKTOK_ID, gmv=1000, total_fees=-300, total_fees_n=30,
+                 total_settlement=670)]
     db = FakeMappingSession([rows])
     result = perf_svc.get_canais(db, "tiktok", 2026, 5)
 
@@ -112,7 +115,8 @@ def test_tiktok_ads_nao_e_comissao_de_afiliado():
 
 def test_tiktok_ads_quando_o_mart_tiver_dado_fica_disponivel_sem_motivo():
     rows = [_row("barbours", perf_svc.TIKTOK_ID, gmv=1000, ad_spend=100,
-                 ad_revenue=800, ad_spend_n=30, total_fees=-300, total_fees_n=30)]
+                 ad_revenue=800, ad_spend_n=30, total_fees=-300, total_fees_n=30,
+                 total_settlement=670)]
     db = FakeMappingSession([rows])
     tk = _row_for(perf_svc.get_canais(db, "tiktok", 2026, 5)["channel_rows"],
                   "barbours", "tiktok")
@@ -142,7 +146,8 @@ def test_schema_aceita_cliente_antigo_sem_ads_missing_reason():
 
 
 def test_tiktok_fees_negativo_vira_abs_e_carrega_aviso_de_base():
-    rows = [_row("barbours", perf_svc.TIKTOK_ID, gmv=1000, total_fees=-300, total_fees_n=30)]
+    rows = [_row("barbours", perf_svc.TIKTOK_ID, gmv=1000, total_fees=-300, total_fees_n=30,
+                 total_settlement=670)]
     db = FakeMappingSession([rows])
     result = perf_svc.get_canais(db, "tiktok", 2026, 5)
 
@@ -298,7 +303,10 @@ def test_custo_alto_nao_dispara_quando_custo_do_canal_e_zero_em_todas_as_marcas(
 
     for brand in ("apice", "barbours", "kokeshi"):
         tk = _row_for(result["channel_rows"], brand, "tiktok")
-        assert tk["marketplace_cost_pct"] == 0.0, "zero real segue sendo exibido como 0,0%"
+        # T-0115 (A1-12): taxa TikTok 0% sem repasse e' repasse imaturo, nao
+        # custo zero -- sai como sem dado (antes: 0,0% com available true).
+        assert tk["marketplace_cost_pct"] is None
+        assert tk["marketplace_cost_available"] is False
         assert "custo_alto" not in tk["signals"], f"{brand}: custo zero nunca sustenta custo_alto"
 
 

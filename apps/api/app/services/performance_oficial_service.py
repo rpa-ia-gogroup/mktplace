@@ -32,6 +32,7 @@ from app.schemas.performance_oficial import (
     MetricaOficial,
     PerformanceOficialResponse,
 )
+from app.services.cx_atendimento_service import SHOPEE_MARCAS, SHOPEE_SAUDE_EXPORT
 from app.services.gold_service import BRANDS_IN_SCOPE, ML_BRANDS, TZ_OPERACIONAL
 
 logger = logging.getLogger(__name__)
@@ -39,10 +40,10 @@ logger = logging.getLogger(__name__)
 Consultar = Callable[[str, dict], list[dict]]
 
 MARCAS_PERMITIDAS: tuple[str, ...] = tuple(BRANDS_IN_SCOPE)
-SHOPEE_MARCAS: tuple[str, ...] = ("apice", "barbours", "lescent", "rituaria")
-#: Lojas Shopee sem app, lidas do que o bot do Seller Centre grava no Neon
-#: (CX-KOKESHI-BOT, migration 036), na MESMA forma do Data Mart.
-SHOPEE_EXPORT: tuple[str, ...] = ("kokeshi",)
+# Lojas Shopee: a fonte unica e' `cx_atendimento_service.SHOPEE_MARCAS` (T-0114).
+# A Saude da Conta das contas de `SHOPEE_SAUDE_EXPORT` vem do que o bot do Seller
+# Centre grava no Neon (CX-KOKESHI-BOT, migration 036), na MESMA forma do Data
+# Mart: `raw.shopee_account_health_*` ainda nao tem a Kokeshi (C1-102).
 CANAIS: tuple[str, ...] = ("mercadolivre", "shopee", "tiktokshop")
 
 LIMITE_DIAS_FOTO = 2
@@ -414,7 +415,7 @@ def montar_performance_oficial(*, canal: str, brands: Optional[list[str]] = None
         cobertura = _cobertura(marcas, tuple(ML_BRANDS), "Sem conta Mercado Livre integrada.")
         tabela, fonte = TABELA_ML, FONTE_ML
     else:
-        cobertura = _cobertura(marcas, SHOPEE_MARCAS + SHOPEE_EXPORT, "Sem app Shopee.")
+        cobertura = _cobertura(marcas, SHOPEE_MARCAS, "Sem app Shopee.")
         tabela, fonte = TABELA_SHOPEE, FONTE_SHOPEE
         return _shopee(consultar, consultar_torre, cobertura, agora, hoje)
 
@@ -456,8 +457,8 @@ def _shopee(consultar: Consultar, consultar_torre: Consultar, cobertura: Cobertu
     canal, fonte = "shopee", FONTE_SHOPEE
     if not cobertura.marcas:
         return _resposta_base(canal, agora, fonte, cobertura, estado="dado")
-    api = [m for m in cobertura.marcas if m in SHOPEE_MARCAS]
-    exp = [m for m in cobertura.marcas if m in SHOPEE_EXPORT]
+    api = [m for m in cobertura.marcas if m not in SHOPEE_SAUDE_EXPORT]
+    exp = [m for m in cobertura.marcas if m in SHOPEE_SAUDE_EXPORT]
 
     contas: list[ContaOficial] = []
     sem_foto: list[ContaSemFoto] = []

@@ -65,25 +65,28 @@ for (const [label, segments] of PAGES_WITH_ONE_FAILURE_BLOCK) {
   });
 }
 
-test("Pedidos: a selecao Shopee-isolada tambem marca setResolvedKey(key) (nunca fica presa em loading ao pular o fetch)", () => {
+test("Pedidos (T-0116): sem branch que pula o fetch para a Shopee; a Shopee isolada busca e marca setResolvedKey(key)", () => {
   const src = readSource("app", "pedidos", "page.tsx");
-  const idx = src.indexOf("showShopeeOnly) {");
-  assert.notEqual(idx, -1, "branch de showShopeeOnly nao encontrado");
-  const block = src.slice(idx, idx + 400);
-  assert.match(block, /setResolvedKey\(key\)/, "branch showShopeeOnly nao marca setResolvedKey(key)");
-  assert.match(block, /setLoading\(false\);/, "branch showShopeeOnly nao encerra o loading");
+  assert.doesNotMatch(src, /showShopeeOnly/, "a Shopee entrou em Pedidos: nao ha' mais selecao sem fetch");
+  const idx = src.indexOf("fetchPedidos(filters.channels");
+  assert.notEqual(idx, -1, "o fetch real continua");
+  const block = src.slice(idx, idx + 900);
+  assert.equal((block.match(/setResolvedKey\(key\)/g) ?? []).length, 2, "sucesso e falha marcam a chave resolvida");
 });
 
 test("Pedidos: cards/series de canal nao selecionado nunca aparecem (gating por showTiktokSel/showMlSel)", () => {
   const src = readSource("app", "pedidos", "page.tsx");
   // ALVO-GRADE: um canal por aba; os cartoes do canal vem de `tk`/`ml`, que ja' nascem da selecao.
-  assert.match(src, /const tk = showTiktokSel \? displayData\?\.tiktok : undefined;/);
-  assert.match(src, /const ml = showMlSel \? displayData\?\.ml : undefined;/);
-  assert.match(src, /visaoAtiva === "tiktok" \? tk : visaoAtiva === "ml" \? ml : null/, "cartoes do canal so' com o dado do canal selecionado");
+  assert.match(src, /const tk = showTiktokSel && displayData \? canalOuNulo\(displayData\.tiktok\) : undefined;/);
+  assert.match(src, /const ml = showMlSel && displayData \? canalOuNulo\(displayData\.ml\) : undefined;/);
+  assert.match(src, /const sh = showShopeeSel && displayData \? canalOuNulo\(displayData\.shopee\) : undefined;/);
+  assert.match(src, /visaoAtiva === "tiktok" \? tk : visaoAtiva === "ml" \? ml : visaoAtiva === "shopee" \? sh : null/, "cartoes do canal so' com o dado do canal selecionado");
   assert.match(src, /const verTiktok = showTiktokSel &&/, "serie do grafico (TikTok) condicionada a showTiktokSel");
   assert.match(src, /const verMl = showMlSel &&/, "serie do grafico (ML) condicionada a showMlSel");
   assert.match(src, /\{verTiktok && <Bar dataKey="tiktok"/);
   assert.match(src, /\{verMl && <Bar dataKey="ml"/);
+  assert.match(src, /const verShopee = showShopeeSel &&/, "serie do grafico (Shopee) condicionada a showShopeeSel");
+  assert.match(src, /\{verShopee && <Bar dataKey="shopee"/);
 });
 
 // CONTRATO INVERTIDO NO GATE V3-1A — leia antes de "corrigir" este teste.

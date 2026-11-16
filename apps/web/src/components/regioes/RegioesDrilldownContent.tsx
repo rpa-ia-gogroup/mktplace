@@ -25,7 +25,8 @@ export default function RegioesDrilldownContent({
   refreshedAt: string | null;
   notaDoEscopo?: string;
 }) {
-  const total = resumo ? (chave === "gmv" ? resumo.gmv : resumo.orders) : 0;
+  // T-0111: total nulo (sem linha) vira base 0, e a participacao por UF/marca sai nula, nunca 0%.
+  const total = (resumo ? (chave === "gmv" ? resumo.gmv : resumo.orders) : null) ?? 0;
   const exato = valorExato(chave, resumo);
   const porUf = ufs ? linhasPorUf(chave, ufs, total) : null;
   const porMarca = marcas ? linhasPorMarca(chave, marcas, total) : null;

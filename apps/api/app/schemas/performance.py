@@ -22,12 +22,14 @@ class FiltersEcho(BaseModel):
 
 
 class KpiSummary(BaseModel):
-    gmv: float
+    #: T-0111: `gmv`/`orders`/`avg_ticket` sao None quando nenhum canal tem
+    #: linha no recorte (sem dado != 0). `avg_ticket` tambem e' None sem pedido.
+    gmv: Optional[float] = None
     tiktok_gmv: Optional[float] = None
     ml_gmv: Optional[float] = None
     shopee_gmv: Optional[float] = None
-    orders: int
-    avg_ticket: float
+    orders: Optional[int] = None
+    avg_ticket: Optional[float] = None
     ad_spend: Optional[float] = None
     ml_roas: Optional[float] = None
     ml_cancel_rate_pct: Optional[float] = None
@@ -35,6 +37,9 @@ class KpiSummary(BaseModel):
     ml_unique_buyers: Optional[int] = None
     shopee_unique_buyers: Optional[int] = None
     shopee_roas: Optional[float] = None
+    #: T-0115: marcas Shopee com GMV que tem Ads no recorte. So' no `current`;
+    #: `None` = Shopee fora do filtro ou sem GMV. Opcional e aditivo.
+    shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class OverviewResponse(BaseModel):
@@ -177,6 +182,10 @@ class DailyRow(BaseModel):
     orders: int
     avg_ticket: Optional[float] = None
     ad_spend: Optional[float] = None
+    # T-0113, aditivo: Ads por canal (None = canal sem linha de Ads no dia),
+    # para o ROAS da Marca 360 usar so' os canais com Ads.
+    ml_ad_spend: Optional[float] = None
+    shopee_ad_spend: Optional[float] = None
     # T-0074, aditivo: o GMV TikTok deste dia ainda pode cair. None = TikTok
     # fora do escopo.
     tiktok_em_maturacao: Optional[bool] = None
@@ -392,6 +401,8 @@ class FinanceiroKpis(BaseModel):
     ml_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_fee_cobertura: Optional["CoberturaMarcas"] = None
     shopee_settlement_cobertura: Optional["CoberturaMarcas"] = None
+    # T-0115 (B1-08): marcas Shopee com Ads; total e ROAS so' sobre elas.
+    shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class CoberturaMarcas(BaseModel):
@@ -404,9 +415,15 @@ class CoberturaMarcas(BaseModel):
     marcas_com_dado: int
     marcas_total: int
     marcas_sem_dado: list[str] = []
+    #: T-0115: marcas sem dado porque o valor ficou abaixo do limiar de
+    #: maturacao (repasse TikTok). Subconjunto de `marcas_sem_dado`.
+    marcas_maturando: list[str] = []
 
 
 FinanceiroKpis.model_rebuild()
+# T-0115: o Overview tambem publica cobertura (Ads Shopee).
+KpiSummary.model_rebuild()
+OverviewResponse.model_rebuild()
 # T-0088: a Qualidade reusa o mesmo contrato de cobertura.
 QualityKpis.model_rebuild()
 QualityResponse.model_rebuild()
@@ -420,6 +437,8 @@ class FinanceiroBrandRow(BaseModel):
     tiktok_fees: Optional[float] = None
     tiktok_avg_fee_pct: Optional[float] = None
     tiktok_avg_settlement_pct: Optional[float] = None
+    #: T-0115: "maduro" | "maturando" (repasse < 30% do GMV) | "sem_dado".
+    tiktok_repasse_status: Optional[str] = None
     ml_gmv: Optional[float] = None
     ml_ad_spend: Optional[float] = None
     ml_ad_revenue: Optional[float] = None
@@ -948,26 +967,32 @@ class ProdutosShopeeSummaryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class PedidosKpis(BaseModel):
-    total_orders: int
-    total_gmv: float
-    avg_ticket: float
+    # T-0116 (sem dado != 0): null quando nenhum canal pedido tem linha na fonte;
+    # avg_ticket null tambem sem pedidos pagos.
+    total_orders: Optional[int] = None
+    total_gmv: Optional[float] = None
+    avg_ticket: Optional[float] = None
     cancel_rate_pct: Optional[float] = None
 
 
 class PedidosCanalKpis(BaseModel):
-    orders: int
-    canceled: int
-    gmv: float
+    # T-0116: canal sem linha na fonte no recorte -> todos os campos null (nunca 0).
+    orders: Optional[int] = None
+    canceled: Optional[int] = None
+    gmv: Optional[float] = None
     cancel_rate_pct: Optional[float] = None
     delivered: Optional[int] = None
 
 
 class PedidosDailyRow(BaseModel):
+    # T-0116: canal sem linha no dia -> null (nunca 0 inventado).
     date: str
-    tiktok_orders: int = 0
-    tiktok_canceled: int = 0
-    ml_orders: int = 0
-    ml_canceled: int = 0
+    tiktok_orders: Optional[int] = None
+    tiktok_canceled: Optional[int] = None
+    ml_orders: Optional[int] = None
+    ml_canceled: Optional[int] = None
+    shopee_orders: Optional[int] = None
+    shopee_canceled: Optional[int] = None
     total_orders: int = 0
     total_gmv: float = 0.0
 
@@ -983,6 +1008,10 @@ class PedidosBrandRow(BaseModel):
     ml_canceled: Optional[int] = None
     ml_cancel_rate_pct: Optional[float] = None
     ml_gmv: Optional[float] = None
+    shopee_orders: Optional[int] = None
+    shopee_canceled: Optional[int] = None
+    shopee_cancel_rate_pct: Optional[float] = None
+    shopee_gmv: Optional[float] = None
     total_orders: int = 0
     total_gmv: float = 0.0
 
@@ -998,6 +1027,11 @@ class PedidosResponse(BaseModel):
     date_to: Optional[date] = None
     filters: Optional[FiltersEcho] = None
     refreshed_at: Optional[str] = None
+    # T-0116 (aditivos): Shopee no mesmo formato de tiktok/ml; canais pedidos sem
+    # linha na fonte ("tiktok"/"ml"/"shopee") e avisos `sem_dado:` (total parcial).
+    shopee: Optional[PedidosCanalKpis] = None
+    canais_sem_dado: list[str] = []
+    warnings: list[str] = []
 
 
 # ---------------------------------------------------------------------------

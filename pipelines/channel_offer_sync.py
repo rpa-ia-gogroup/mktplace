@@ -43,6 +43,10 @@ de 16,5s entre a primeira e a ultima. Concluir `stale` comparando com o
 `MAX(ingested_at)` GLOBAL marcaria 572 linhas como atrasadas quando somente 3
 realmente estao. Por isso o watermark e' SEMPRE por conta.
 
+Dentro da conta, `current` e' "tocada pela ULTIMA carga", nao "carimbo igual ao
+watermark": a ingestao carimba por linha ao longo de ate' ~30 min (T-0117,
+A2-104). O inicio da carga sai dos carimbos — ver `SHOPEE_LOAD_GAP_MINUTES`.
+
 E `absent` so' e' afirmavel com fotografia COMPLETA da conta: carga parcial
 produz `partial_load` e conta que nao executou produz `account_did_not_run`.
 `absent` afirma remocao; os outros dois afirmam desconhecimento, e confundi-los
@@ -137,11 +141,19 @@ class AccountClock:
     rows_seen: int = 0
     batch_id: str | None = None
     complete: bool = True
+    #: Inicio da ULTIMA carga desta conta (T-0117, A2-104). A ingestao da
+    #: Shopee carimba `ingested_at` por linha ao longo de ate' ~30 min dentro
+    #: da mesma carga; comparar com o `watermark_at` exato marcava como
+    #: atrasadas linhas da propria carga. `None` (TikTok, relogios antigos):
+    #: vale o watermark, a regra anterior.
+    load_started_at: datetime | None = None
 
     def snapshot_status_for(self, row_ingested_at: datetime | None) -> str:
         """Estado de UMA linha contra o relogio da PROPRIA conta.
 
         Nunca compara com o maximo global — ver o cabecalho do modulo.
+        `current` = linha tocada pela ULTIMA carga da conta (a partir de
+        `load_started_at`); antes disso, `stale`.
         """
         if self.watermark_at is None:
             return dom.SNAPSHOT_ACCOUNT_DID_NOT_RUN
@@ -151,7 +163,12 @@ class AccountClock:
             return dom.SNAPSHOT_PARTIAL_LOAD
         if row_ingested_at is None:
             return dom.SNAPSHOT_STALE
-        return (dom.SNAPSHOT_CURRENT if row_ingested_at >= self.watermark_at
+        inicio = self.watermark_at
+        if self.load_started_at is not None:
+            # Nunca depois do fim da carga: um inicio inconsistente nao pode
+            # tornar a regra mais estrita que a antiga.
+            inicio = min(self.load_started_at, self.watermark_at)
+        return (dom.SNAPSHOT_CURRENT if row_ingested_at >= inicio
                 else dom.SNAPSHOT_STALE)
 
 
@@ -624,7 +641,18 @@ def summarize(records, index, internal_index=None) -> tuple[dict, dict]:
 # Nenhum adaptador toca `*_orders`, `*_order_items`, `*_payments` nem qualquer
 # relacao de comprador ou criador.
 
-SQL_SHOPEE_ACCOUNT_CLOCKS = """
+#: T-0117 (A2-104) — intervalo SEM nenhuma linha gravada que separa duas cargas
+#: da mesma conta. A fonte nao tem id de run nem instante de carga por linha
+#: (`batch_id` e' sempre None aqui), entao a carga e' identificada pelos
+#: proprios carimbos: o inicio da ultima carga e' a linha mais recente que vem
+#: depois de um buraco maior que este. Medido em 13/11: dentro da carga as
+#: linhas se espalham por ate' ~30 min (444 linhas entre 0 e 30 min antes do
+#: watermark), entre 30 min e 24 h ha' 0 linhas, e a carga e' diaria. 2 h fica
+#: com folga dos dois lados: 4x o espalhamento medido e 1/12 do intervalo
+#: entre cargas.
+SHOPEE_LOAD_GAP_MINUTES = 120
+
+SQL_SHOPEE_ACCOUNT_CLOCKS = f"""
 WITH observacoes AS (
     SELECT shop_account, ingested_at
       FROM silver.stg_shopee_products
@@ -632,11 +660,23 @@ WITH observacoes AS (
     UNION ALL
     SELECT shop_account, ingested_at
       FROM silver.stg_shopee_product_models
+),
+ordenadas AS (
+    SELECT shop_account,
+           ingested_at,
+           lag(ingested_at) OVER (PARTITION BY shop_account
+                                  ORDER BY ingested_at) AS anterior
+      FROM observacoes
 )
 SELECT shop_account,
        max(ingested_at) AS watermark_at,
-       count(*)         AS rows_seen
-  FROM observacoes
+       count(*)         AS rows_seen,
+       max(ingested_at) FILTER (
+           WHERE anterior IS NULL
+              OR ingested_at - anterior
+                 > interval '{SHOPEE_LOAD_GAP_MINUTES} minutes'
+       )                AS load_started_at
+  FROM ordenadas
  GROUP BY shop_account
 """
 
@@ -800,6 +840,8 @@ def load_shopee_account_clocks(conn) -> dict:
             rows_seen=linha["rows_seen"],
             batch_id=None,
             complete=True,
+            # `.get`: um leitor antigo sem a coluna cai na regra do watermark.
+            load_started_at=linha.get("load_started_at"),
         )
     return relogios
 

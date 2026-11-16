@@ -2,7 +2,9 @@ import type { DailyRow } from "./mock-daily";
 import { isAllSelected, type MarketplaceSelection } from "./marketplace-filter.ts";
 
 export interface DailySummary {
-  gmv: number;
+  /** T-0111: `null` = nenhum dia com valor nos canais selecionados (lista vazia
+   * ou canal sem linha). Soma de lista vazia NAO e' venda zero. */
+  gmv: number | null;
   /** null quando pedidos nao sao confiaveis para a selecao atual (ver
    * `isOrdersReliable`) — nunca um total estimado/rateado. */
   orders: number | null;
@@ -71,6 +73,13 @@ export function summarize(rows: DailyRow[], filter: MarketplaceSelection, orders
   const showTk = filter.includes("tiktok");
   const showMl = filter.includes("ml");
   const showSh = filter.includes("shopee");
+
+  // T-0111: sem nenhum valor dos canais selecionados, o recorte nao tem linha na
+  // fonte — GMV, pedidos, ticket e ads ficam ausentes, nunca 0.
+  const temLinha = rows.some(
+    (r) => (showTk && r.tiktok_gmv != null) || (showMl && r.ml_gmv != null) || (showSh && r.shopee_gmv != null),
+  );
+  if (!temLinha) return { gmv: null, orders: null, adSpend: null, avgTicket: null };
 
   const gmv = rows.reduce((s, r) => {
     let v = 0;

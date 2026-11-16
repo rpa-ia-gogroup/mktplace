@@ -177,21 +177,21 @@ def test_get_summary_denominador_zero_vira_null_nao_zero_pct():
     assert result["seller_shipping_cost"] is None
 
 
-def test_get_summary_tiktok_marca_sem_cobertura_regional_gmv_zero_honesto():
-    # TikTok nunca tem linha na tabela -- a query real retornaria 0 linhas,
-    # aqui simulado com uma linha totalmente zerada (COALESCE aplicado no SQL).
+def test_get_summary_tiktok_marca_sem_cobertura_regional_gmv_null_nao_zero():
+    # TikTok nunca tem linha na tabela -- a query real retorna a linha do
+    # agregado com COALESCE em 0 e COUNT(*) = 0. T-0111: sem linha -> null.
     summary_row = [{
         "gmv": 0.0, "orders": 0, "units_sold": 0, "ufs_com_venda": 0,
         "uf_known_orders": 0, "uf_eligible_orders": 0,
         "shipping_cost_covered_orders": 0, "shipping_cost_eligible_orders": 0,
-        "seller_shipping_cost": None,
+        "seller_shipping_cost": None, "linhas": 0,
     }]
     refreshed_row = [{"refreshed_at": None}]
     db = FakeMappingSession([summary_row, DADOS_ATE_EM_DIA, refreshed_row])
 
     result = svc.get_summary(db, [TIKTOK_ID], None, PERIOD, channels="tiktok")
 
-    assert result["gmv"] == 0.0
+    assert result["gmv"] is None
     assert result["channels_sem_cobertura_regional"] == ["tiktok"]
 
 
@@ -288,7 +288,7 @@ def test_barbours_jan_2026_baixa_cobertura_aparece_como_low_nao_erro():
         "gmv": 300000.0, "orders": 9036, "units_sold": 9036, "ufs_com_venda": 5,
         "uf_known_orders": 155, "uf_eligible_orders": 9036,
         "shipping_cost_covered_orders": 155, "shipping_cost_eligible_orders": 9036,
-        "seller_shipping_cost": 5000.0,
+        "seller_shipping_cost": 5000.0, "linhas": 31,
     }]
     db = FakeMappingSession([rows, DADOS_ATE_EM_DIA, [{"refreshed_at": None}]])
     result = svc.get_summary(db, [ML_ID], ["barbours"], PERIOD, channels="ml")

@@ -18,9 +18,15 @@ const NUM = new Intl.NumberFormat("pt-BR");
 const BRL0 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 
 /** Valor EXATO para o topo do detalhe ("R$ 13.110.234", "140.412"); o cartao mostra o curto. */
-export function valorExato(chave: ChaveRegioes, r: { gmv: number; orders: number } | null | undefined): string | null {
+export function valorExato(
+  chave: ChaveRegioes,
+  r: { gmv: number | null; orders: number | null } | null | undefined,
+): string | null {
   if (r == null) return null;
-  return chave === "gmv" ? BRL0.format(r.gmv) : NUM.format(r.orders);
+  // T-0111: total nulo = sem linha na fonte; o detalhe mostra ausencia, nunca "R$ 0".
+  const v = chave === "gmv" ? r.gmv : r.orders;
+  if (v == null) return null;
+  return chave === "gmv" ? BRL0.format(v) : NUM.format(v);
 }
 
 export const TITULO_DETALHE: Record<ChaveRegioes, string> = {

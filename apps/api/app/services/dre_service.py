@@ -126,7 +126,16 @@ REQUISITOS_PARCIAL = ("receita", "taxas", "cmv")
 #: T-0101: dado VELHO nao e' dado PARCIAL. Custo obrigatorio (`REQUISITOS_PARCIAL`
 #: sem a receita) com o insumo publicado vencido ou ausente SUSPENDE a margem
 #: conhecida e a estimada: ficar fora da soma deixava a margem do TikTok em 100%.
-STATUS_SUSPENDEM_MARGEM = (SNAPSHOT_VENCIDO, SNAPSHOT_AUSENTE)
+STATUS_INSUMO_VELHO = (SNAPSHOT_VENCIDO, SNAPSHOT_AUSENTE)
+#: T-0112 (A2-23): custo obrigatorio SEM valor utilizavel (`indisponivel`,
+#: `sinal_inesperado`) numa celula com receita tambem suspende: fora da soma, a
+#: margem saia "conhecida" e inflada (kokeshi Shopee out/26 em 51% sem a taxa).
+#: `nao_aplicavel` nao suspende; os de `STATUS_PARCIAIS` seguem entrando (T-0090).
+STATUS_SEM_VALOR = (INDISPONIVEL, SINAL_INESPERADO)
+STATUS_SUSPENDEM_MARGEM = STATUS_INSUMO_VELHO + STATUS_SEM_VALOR
+#: Rotulo de cada custo obrigatorio e de cada status sem valor, no motivo da suspensao.
+ROTULO_SUSPENSAO = {"taxas": "taxa", "cmv": "CMV"}
+PALAVRA_SEM_VALOR = {INDISPONIVEL: "indisponível", SINAL_INESPERADO: "com sinal inesperado"}
 
 #: Contrato §7 / D5: mes M so' fecha depois que M+2 terminou.
 MESES_MATURACAO = 2
@@ -1124,8 +1133,8 @@ def _finalizar(celula: dict, agregado: dict | None = None) -> dict:
     }
 
     faltam = [c for c in aplicaveis if c not in usados]
-    # T-0101: suspensao (celula: custo obrigatorio vencido/ausente; agregado: alguma
-    # celula suspensa). Receita e componentes seguem visiveis; so' a margem some.
+    # T-0101/T-0112: suspensao (celula: custo obrigatorio vencido/ausente ou sem
+    # valor utilizavel; agregado: alguma celula suspensa). Receita e componentes seguem visiveis; so' a margem some.
     if agregado is None:
         suspensao = _suspensao_da_celula(comps) if receita is not None else None
     else:
@@ -1180,11 +1189,14 @@ def _texto_suspensao(desde) -> str:
 
 
 def _suspensao_da_celula(comps: dict) -> dict | None:
-    """T-0101: custo obrigatorio com insumo vencido/ausente suspende a margem. None = nao suspende.
+    """Custo obrigatorio sem valor confiavel suspende a margem. None = nao suspende.
 
-    So' `snapshot_vencido`/`snapshot_ausente` disparam: o parcial NAO vencido
-    segue entrando pelo valor medido ou extrapolado (T-0090). `desde` = o
-    `publicado_em` mais antigo dos componentes envolvidos (None se nenhum tem).
+    T-0101: `snapshot_vencido`/`snapshot_ausente` -> "insumo vencido: cmv; margem
+    suspensa até a republicação (publicado em ...)". T-0112: `indisponivel`/
+    `sinal_inesperado` -> "taxa indisponível: <motivo>; margem suspensa" (sem data:
+    republicar nao resolve). O parcial segue entrando pelo valor medido ou
+    extrapolado (T-0090). `desde` = o `publicado_em` mais antigo dos insumos
+    vencidos/ausentes (None se nenhum tem).
     """
     envolvidos = [n for n in REQUISITOS_PARCIAL if n != "receita" and comps[n]["status"] in STATUS_SUSPENDEM_MARGEM]
     if not envolvidos:
@@ -1194,10 +1206,16 @@ def _suspensao_da_celula(comps: dict) -> dict | None:
         nomes = [n for n in envolvidos if comps[n]["status"] == status]
         if nomes:
             partes.append(f"insumo {palavra}: {', '.join(nomes)}")
-    datas = [comps[n]["publicado_em"] for n in envolvidos if comps[n].get("publicado_em") is not None]
+    for n in envolvidos:
+        if comps[n]["status"] in STATUS_SEM_VALOR:
+            parte = f"{ROTULO_SUSPENSAO[n]} {PALAVRA_SEM_VALOR[comps[n]['status']]}"
+            partes.append(f"{parte}: {comps[n]['motivo']}" if comps[n].get("motivo") else parte)
+    velhos = [n for n in envolvidos if comps[n]["status"] in STATUS_INSUMO_VELHO]
+    datas = [comps[n]["publicado_em"] for n in velhos if comps[n].get("publicado_em") is not None]
     desde = min(datas) if datas else None
+    fecho = _texto_suspensao(desde) if velhos else "margem suspensa"
     tipos = {comps[n]["status"] for n in envolvidos}
-    return {"motivo": f"{'; '.join(partes)}; {_texto_suspensao(desde)}", "desde": desde, "tipos": tipos}
+    return {"motivo": f"{'; '.join(partes)}; {fecho}", "desde": desde, "tipos": tipos}
 
 
 def _suspensao_do_agregado(margens: list[dict]) -> dict | None:
@@ -1213,10 +1231,14 @@ def _suspensao_do_agregado(margens: list[dict]) -> dict | None:
     tipos: set[str] = set().union(*(m.get("_suspensa_tipos") or set() for m in suspensas))
     datas = [m["_suspensa_desde"] for m in suspensas if m.get("_suspensa_desde") is not None]
     desde = min(datas) if datas else None
-    palavra = ("vencido ou ausente" if len(tipos) > 1 else
-               "ausente" if tipos == {SNAPSHOT_AUSENTE} else "vencido")
-    motivo = (f"{len(suspensas)} de {len(margens)} células com margem suspensa (insumo {palavra}); "
-              f"{_texto_suspensao(desde)}")
+    causas = []
+    velhos = [p for s, p in ((SNAPSHOT_VENCIDO, "vencido"), (SNAPSHOT_AUSENTE, "ausente")) if s in tipos]
+    if velhos:
+        causas.append(f"insumo {' ou '.join(velhos)}")
+    # T-0112: sem valor utilizavel; republicar nao resolve, entao o fecho nao promete isso.
+    causas += [f"taxa ou CMV {PALAVRA_SEM_VALOR[s]}" for s in STATUS_SEM_VALOR if s in tipos]
+    fecho = _texto_suspensao(desde) if velhos else "margem suspensa"
+    motivo = f"{len(suspensas)} de {len(margens)} células com margem suspensa ({'; '.join(causas)}); {fecho}"
     return {"motivo": motivo, "desde": desde, "tipos": tipos, "celulas": len(suspensas)}
 
 

@@ -7,7 +7,7 @@ dia, situacao e valor reembolsado (devolucao).
 COMO FICA BARATO
 ----------------
 O codigo do motivo sai de um mapa em Python (`rotular_shopee`,
-`rotular_shopee_pt`, `rotular_devolucao`), entao o SQL nao sabe filtrar por
+`rotular_devolucao`), entao o SQL nao sabe filtrar por
 ele. Em vez de trazer todos os pedidos e filtrar aqui:
 
 1. a mesma consulta AGRUPADA do Pareto devolve os textos crus de motivo;
@@ -21,7 +21,8 @@ AS MESMAS REGRAS DO PARETO
 --------------------------
 * Cancelamento: sem os nao pagos que a Shopee cancela sozinha.
 * Devolucao: sem as que o proprio comprador cancelou.
-* Kokeshi pelo Neon (bot); falha numa fonte nao derruba a outra (`parcial`).
+* Lojas com app pelo Data Mart (`cx.SHOPEE_MARCAS`, Kokeshi inclusa desde
+  T-0114); falha na checagem das tabelas vira `parcial`.
 
 NUMERO DO PEDIDO
 ----------------
@@ -55,22 +56,10 @@ SELECT shop_account AS marca, order_sn, created_date_brt AS dia, cancel_by AS au
  LIMIT :teto
 """
 
-SQL_CANC_PEDIDOS_EXPORT = f"""
-SELECT shop_account AS marca, order_sn,
-       (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia, NULL::text AS autor
-  FROM marts.expedicao_shopee_export_pedido
- WHERE shop_account = ANY(:marcas)
-   AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
-   AND order_status = 'CANCELLED' AND NOT {cx._NAO_PAGO_EXPORT}
-   AND COALESCE(cancel_reason, '') = ANY(:textos)
- ORDER BY create_time DESC, order_sn
- LIMIT :teto
-"""
-
-_SQL_DEV_PEDIDOS = """
+SQL_DEV_PEDIDOS = """
 SELECT brand AS marca, order_sn, return_sn,
        (create_time AT TIME ZONE 'America/Sao_Paulo')::date AS dia, status, refund_amount
-  FROM {tabela}
+  FROM raw.shopee_returns
  WHERE brand = ANY(:marcas)
    AND (create_time AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
    AND status IS DISTINCT FROM 'CANCELLED'
@@ -78,8 +67,6 @@ SELECT brand AS marca, order_sn, return_sn,
  ORDER BY create_time DESC, return_sn
  LIMIT :teto
 """
-SQL_DEV_PEDIDOS = _SQL_DEV_PEDIDOS.format(tabela="raw.shopee_returns")
-SQL_DEV_PEDIDOS_EXPORT = _SQL_DEV_PEDIDOS.format(tabela="marts.shopee_returns_export")
 
 #: Situacao da devolucao em portugues (status da Shopee).
 SITUACAO_DEVOLUCAO = {
@@ -133,27 +120,20 @@ def _textos_do_codigo(linhas: list[dict], rotular, codigo: str, *, com_autor: bo
     return sorted(textos), total, rotulo
 
 
-def _cancelamentos(consultar: Consultar, marcas: list[str], params: dict, codigo: str, exp: bool):
-    """(pedidos, total, rotulo) de uma fonte, ou None se ela falhou."""
+def _cancelamentos(consultar: Consultar, marcas: list[str], params: dict, codigo: str):
+    """(pedidos, total, rotulo), ou None se a fonte falhou."""
     if not marcas:
         return [], 0, None
     p = dict(params, marcas=marcas, nao_pago=cx.SHOPEE_NAO_PAGO)
-    if exp:
-        agrup = cx._rodar(consultar, "pedidos_canc_motivos_export", cx.SQL_SHOPEE_EXPORT_MOTIVOS, p)
-        if agrup is None:
-            return None
-        textos, total, rotulo = _textos_do_codigo(agrup, cx.rotular_shopee_pt, codigo)
-    else:
-        agrup = cx._rodar(consultar, "pedidos_canc_motivos", cx.SQL_SHOPEE_MOTIVOS, p)
-        if agrup is None:
-            return None
-        textos, total, rotulo = _textos_do_codigo(
-            agrup, cx.rotular_shopee, codigo, com_autor=True,
-            excluir=lambda r: str(r.get("motivo") or "").strip().lower() == cx.SHOPEE_NAO_PAGO)
+    agrup = cx._rodar(consultar, "pedidos_canc_motivos", cx.SQL_SHOPEE_MOTIVOS, p)
+    if agrup is None:
+        return None
+    textos, total, rotulo = _textos_do_codigo(
+        agrup, cx.rotular_shopee, codigo, com_autor=True,
+        excluir=lambda r: str(r.get("motivo") or "").strip().lower() == cx.SHOPEE_NAO_PAGO)
     if not textos:
         return [], 0, None
-    linhas = cx._rodar(consultar, "pedidos_canc", SQL_CANC_PEDIDOS_EXPORT if exp else SQL_CANC_PEDIDOS,
-                       dict(p, textos=textos, teto=TETO + 1))
+    linhas = cx._rodar(consultar, "pedidos_canc", SQL_CANC_PEDIDOS, dict(p, textos=textos, teto=TETO + 1))
     if linhas is None:
         return None
     pedidos = [
@@ -166,19 +146,17 @@ def _cancelamentos(consultar: Consultar, marcas: list[str], params: dict, codigo
     return pedidos, total, rotulo
 
 
-def _devolucoes(consultar: Consultar, marcas: list[str], params: dict, codigo: str, exp: bool):
+def _devolucoes(consultar: Consultar, marcas: list[str], params: dict, codigo: str):
     if not marcas:
         return [], 0, None
     p = dict(params, marcas=marcas)
-    agrup = cx._rodar(consultar, "pedidos_dev_motivos",
-                      cx.SQL_DEVOLUCOES_MOTIVOS_EXPORT if exp else cx.SQL_DEVOLUCOES_MOTIVOS, p)
+    agrup = cx._rodar(consultar, "pedidos_dev_motivos", cx.SQL_DEVOLUCOES_MOTIVOS, p)
     if agrup is None:
         return None
     textos, total, rotulo = _textos_do_codigo(agrup, cx.rotular_devolucao, codigo)
     if not textos:
         return [], 0, None
-    linhas = cx._rodar(consultar, "pedidos_dev", SQL_DEV_PEDIDOS_EXPORT if exp else SQL_DEV_PEDIDOS,
-                       dict(p, textos=textos, teto=TETO + 1))
+    linhas = cx._rodar(consultar, "pedidos_dev", SQL_DEV_PEDIDOS, dict(p, textos=textos, teto=TETO + 1))
     if linhas is None:
         return None
     pedidos = []
@@ -197,29 +175,22 @@ def _devolucoes(consultar: Consultar, marcas: list[str], params: dict, codigo: s
 
 def montar_pedidos_motivo(*, tipo: Tipo, codigo: str, brands: Optional[list[str]] = None,
                           dias: int = cx.JANELA_PADRAO_DIAS, consultar: Optional[Consultar] = None,
-                          consultar_torre: Optional[Consultar] = None,
                           agora: Optional[datetime] = None) -> PedidosMotivoResponse:
     agora = agora or datetime.now(timezone.utc)
     consultar = consultar or cx.consultar_datamart
-    consultar_torre = consultar_torre or cx.consultar_torre_padrao
     janela = cx.calcular_janela(dias, agora)
     marcas = [m for m in cx.MARCAS_PERMITIDAS if brands is None or m in brands]
     api = [m for m in marcas if m in cx.SHOPEE_MARCAS]
-    exp = [m for m in marcas if m in cx.SHOPEE_EXPORT]
     params = {"inicio": janela.inicio, "fim": janela.fim}
 
     if tipo == "devolucao":
         tab = cx._tabelas_cx(consultar) if api else {"returns": True}
-        tab_exp = cx._tabelas_cx_export(consultar_torre, exp)
         api_ok = api if (tab or {}).get("returns") else []
-        exp_ok = exp if (tab_exp or {}).get("returns") else []
-        falhou = (api and tab is None) or (exp and tab_exp is None)
-        partes = [_devolucoes(consultar, api_ok, params, codigo, False),
-                  _devolucoes(consultar_torre, exp_ok, params, codigo, True)]
+        falhou = bool(api and tab is None)
+        partes = [_devolucoes(consultar, api_ok, params, codigo)]
     else:
         falhou = False
-        partes = [_cancelamentos(consultar, api, params, codigo, False),
-                  _cancelamentos(consultar_torre, exp, params, codigo, True)]
+        partes = [_cancelamentos(consultar, api, params, codigo)]
 
     ok = [p for p in partes if p is not None]
     falhou = bool(falhou) or len(ok) < len(partes)

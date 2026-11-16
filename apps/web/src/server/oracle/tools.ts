@@ -16,7 +16,7 @@ import {
 import { toolError } from "./errors.ts";
 import {
   ALWAYS_APPLICABLE, gmvMaturing, ML_COMMISSION_PARTIAL_WINDOW, ML_PRODUCTS_CUMULATIVE,
-  mlCommissionMissing, scopeWarningToLimitation,
+  mlCommissionMissing, scopeWarningToLimitation, semDadoNoRecorte,
   REGIONAL_COVERAGE, REGIONAL_UNITS_NOT_MEASURED,
   TIKTOK_ADS_SEM_FONTE, TIKTOK_CANCEL_NOT_MEASURED, TIKTOK_SETTLEMENT_DIRECTIONAL,
   type Limitation,
@@ -26,6 +26,7 @@ import {
   regioesInput, type Channel,
 } from "./schemas.ts";
 import { numOrNull } from "./torre-client.ts";
+import { totaisDoOverview } from "../../lib/overview-sem-dado.ts";
 import {
   asWindow, envelopeSchema, limitationSchema, ok, periodWarnings, safeResolvePeriod, safeText,
   windowSchema, type OracleTool,
@@ -244,7 +245,10 @@ export const desempenhoTool: OracleTool = {
     const brandsPayload = parseUpstream(brandsContract, brandsRaw);
 
     const current = overview.current;
-    const totalGmv = numOrNull(current.gmv);
+    // T-0111 (MCP-02): sem linha no recorte, total nulo — na API nova (null) e na
+    // antiga (0 com `refreshed_at` nulo). `numOrNull` sozinho preservava o 0.
+    const totais = totaisDoOverview(current, overview.previous, overview.gmv_mom_pct, overview.refreshed_at);
+    const totalGmv = totais.gmv;
 
     const requested: Channel[] = input.canais ?? ["tiktok", "ml", "shopee"];
     const byChannel = requested.map((c) => {
@@ -304,6 +308,25 @@ export const desempenhoTool: OracleTool = {
       );
     }
 
+    // T-0111: o recorte sem linha vira limitacao `sem_dado` nomeando canal, marca e janela.
+    const recorte = `${requested.map((c) => CHANNEL_LABELS[c]).join(" + ")} x ${
+      input.marcas && input.marcas.length > 0 ? [...input.marcas].sort().join(", ") : "todas as marcas"
+    }`;
+    const semDadoWarnings: string[] = [];
+    if (totais.sem_dado) {
+      limitations.push(semDadoNoRecorte(recorte, { start: period.start, end: period.end }, "atual"));
+      semDadoWarnings.push(
+        `Sem dado para ${recorte} de ${period.start} a ${period.end}: nenhuma linha na fonte. Total nulo, nao zero.`,
+      );
+    }
+    if (input.comparar && totais.anterior_sem_dado) {
+      const janelaAnterior =
+        overview.compare_date_from && overview.compare_date_to
+          ? { start: overview.compare_date_from, end: overview.compare_date_to }
+          : null;
+      limitations.push(semDadoNoRecorte(recorte, janelaAnterior, "anterior"));
+    }
+
     const env = buildEnvelope({
       period: asWindow(period),
       filtersApplied: echoFilters(overview.filters, {
@@ -314,14 +337,14 @@ export const desempenhoTool: OracleTool = {
       refreshedAt: overview.refreshed_at ?? null,
       coverage: "universo completo dos canais e marcas no escopo",
       returnedCount: byChannel.length + byBrand.length,
-      warnings: periodWarnings(period, maturacaoWarnings),
+      warnings: periodWarnings(period, [...semDadoWarnings, ...maturacaoWarnings]),
       data: {
         total: {
           gmv: totalGmv,
-          orders: numOrNull(current.orders),
-          avg_ticket: numOrNull(current.avg_ticket),
-          gmv_previous: input.comparar ? numOrNull(overview.previous?.gmv) : null,
-          change_pct: input.comparar ? numOrNull(overview.gmv_mom_pct) : null,
+          orders: totais.orders,
+          avg_ticket: totais.avg_ticket,
+          gmv_previous: input.comparar ? totais.prev_gmv : null,
+          change_pct: input.comparar ? totais.gmv_mom_pct : null,
         },
         by_channel: byChannel,
         by_brand: byBrand,

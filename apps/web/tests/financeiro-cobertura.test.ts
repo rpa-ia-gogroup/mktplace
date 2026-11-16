@@ -43,3 +43,65 @@ test("T-0085 o tipo publica os campos de cobertura como opcionais", () => {
     assert.ok(src.includes(`${campo}?: CoberturaMarcas | null;`), campo);
   }
 });
+
+// ---------------------------------------------------------------------------
+// T-0115 — "parcial sem aviso" (VAL-B1 B1-07/B1-08, VAL-A1 A1-12/A1-14)
+// ---------------------------------------------------------------------------
+import { buildKpiBand, notaAdsShopeeParcial } from "../src/lib/gerencial/kpi-band.ts";
+import { buildChannelDiagnosis } from "../src/lib/channel-signal-reasons.ts";
+import type { CanaisChannelRow, OverviewData } from "../src/lib/api-client.ts";
+
+const ADS_SHOPEE_NOV = {
+  status: "parcial", marcas_com_dado: 1, marcas_total: 5,
+  marcas_sem_dado: ["apice", "barbours", "lescent", "rituaria"],
+};
+
+function overviewNov(patch: Partial<OverviewData> = {}): OverviewData {
+  return {
+    gmv: 4_047_474.97, tiktok_gmv: null, ml_gmv: null, shopee_gmv: 4_047_474.97,
+    orders: 1000, avg_ticket: 40, ad_spend: 84_864.07,
+    ml_roas: null, ml_cancel_rate_pct: null, shopee_roas: 13.52,
+    tiktok_customers: null, ml_unique_buyers: null, shopee_unique_buyers: null,
+    gmv_mom_pct: null, prev_gmv: null,
+    ...patch,
+  };
+}
+
+test("T-0115 B1-08 o cartao de Ads da home declara Ads Shopee parcial", () => {
+  const band = buildKpiBand(overviewNov({ shopee_ads_cobertura: ADS_SHOPEE_NOV }), ["shopee"]);
+  const ads = band.find((k) => k.key === "ad_spend")!;
+  assert.match(ads.coverageNote ?? "", /Ads Shopee parcial \(1 de 5 marcas\)/);
+  // cobertura completa ou API antiga (sem o campo): nenhuma nota de parcial
+  const completa = buildKpiBand(
+    overviewNov({ shopee_ads_cobertura: { status: "completa", marcas_com_dado: 5, marcas_total: 5 } }), ["shopee"],
+  ).find((k) => k.key === "ad_spend")!;
+  assert.doesNotMatch(completa.coverageNote ?? "", /parcial/);
+  assert.equal(notaAdsShopeeParcial(undefined), null);
+});
+
+test("T-0115 B1-08 o Financeiro liga a cobertura do Ads Shopee ao cartao e o tipo a publica", () => {
+  const src = fonte("app/financeiro/page.tsx");
+  assert.ok(src.includes("textoCoberturaFinanceiro(k?.shopee_ads_cobertura)"));
+  const tipos = fonte("src/lib/api-client.ts");
+  assert.ok(tipos.includes("shopee_ads_cobertura?: CoberturaMarcas | null;"));
+  assert.ok(tipos.includes("shopee_ads_cobertura: raw.current.shopee_ads_cobertura ?? null"));
+  assert.equal(textoCoberturaFinanceiro(ADS_SHOPEE_NOV), "parcial (1 de 5 marcas)");
+});
+
+test("T-0115 A1-12 marca TikTok com repasse maturando: motivo de maturacao, sem 'custo alto'", () => {
+  // Forma da linha que a API publica agora (custo indisponivel + aviso de maturacao).
+  const row = {
+    brand: "barbours", label: "BARBOURS", channel: "tiktok", channel_label: "TikTok Shop",
+    gmv: 900_000, orders: 100, ad_spend: null, ad_revenue: null, ads_gmv_pct: null, roas: null,
+    acos_pct: null, marketplace_cost_pct: null, seller_shipping_pct: null,
+    ads_available: false, marketplace_cost_available: false, seller_shipping_available: false,
+    ads_applicable: true, marketplace_cost_applicable: true, seller_shipping_applicable: false,
+    ads_missing_reason: null,
+    data_warning: "Repasse do TikTok ainda nao consolidado para esta marca no periodo",
+    signals: ["sem_dado"],
+  } as CanaisChannelRow;
+  assert.ok(!row.signals.includes("custo_alto"));
+  const d = buildChannelDiagnosis(row, null);
+  assert.doesNotMatch(d.headline, /custo alto/i);
+  assert.match(d.explanations.map((e) => e.reason).join(" "), /Repasse do TikTok ainda nao consolidado/);
+});
