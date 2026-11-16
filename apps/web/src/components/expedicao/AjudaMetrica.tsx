@@ -7,7 +7,7 @@
  *
  * E' o mesmo `InfoDica` do resto da Torre: focavel (Tab ou toque), com o
  * texto no `aria-label` e no balao. So' `<span>`: o "ⓘ" mora dentro de `<p>`
- * (a linha de comparacao do KpiTile).
+ * (a linha de apoio do CartaoIndicador).
  *
  * EXPEDICAO-DICA-LEGIVEL: no balao, o nome da metrica em negrito, a definicao
  * e a ressalva separada embaixo. O leitor de tela continua lendo
@@ -33,7 +33,7 @@ export default function AjudaMetrica({
   /** EXPEDICAO-SEM-TEXTAO: ressalvas que vem da RESPOSTA (limitacoes da API,
    * o que ficou fora da contagem). Entram no balao, nunca soltas na tela. */
   extras?: readonly string[];
-  /** IDENTIDADE-GERENCIAL: dentro do cartao-botao (KpiTile gerencial com onAbrir). */
+  /** IDENTIDADE-GERENCIAL: dentro do cartao-botao (CartaoIndicador com onAbrir). */
   emControle?: boolean;
 }) {
   const def = definicaoDe(chave);

@@ -442,7 +442,7 @@ test("serie sem vencimento fechado troca o grafico por uma linha", () => {
 });
 
 test("LDR sem taxa nao e' pintada de verde", () => {
-  assert.match(TIKTOK, /tom=\{ldr\.rate === null \? "ausente" : ldr\.above_target \? "critico" : "bom"\}/);
+  assert.match(TIKTOK, /pilula=\{ldr\.rate === null \? null : ldr\.above_target \? \{ texto: "Acima da meta", tom: "crit" \} : \{ texto: "Dentro da meta", tom: "ok" \}\}/);
 });
 
 test("sem vencimento fechado, base e atrasados sao ausencia, nao zero", () => {
@@ -451,7 +451,8 @@ test("sem vencimento fechado, base e atrasados sao ausencia, nao zero", () => {
   assert.match(TIKTOK, /const semVencimentoFechado = ldr \? ldr\.mature_due_days === 0 : false;/);
   assert.match(TIKTOK, /valor=\{semVencimentoFechado \? VALOR_SEM_TAXA : formatarInteiro\(ldr\.base\)\}/);
   assert.match(TIKTOK, /valor=\{semVencimentoFechado \? VALOR_SEM_TAXA : formatarInteiro\(ldr\.late\)\}/);
-  assert.match(TIKTOK, /tom=\{semVencimentoFechado \? "ausente" : ldr\.late > 0 \? "critico" : "bom"\}/);
+  assert.match(TIKTOK, /ausente=\{semVencimentoFechado\}/);
+  assert.match(TIKTOK, /pilula=\{semVencimentoFechado \? null : ldr\.late > 0 \? \{ texto: "Com atraso", tom: "crit" \} : \{ texto: "Em dia", tom: "ok" \}\}/);
 });
 
 test("lojas sem base nao desenham tabela vazia", () => {

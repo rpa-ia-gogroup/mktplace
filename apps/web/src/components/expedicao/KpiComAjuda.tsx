@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * T-0010 — o `KpiTile` da Expedicao com o "ⓘ" da metrica.
+ * T-0010 — o cartao da Expedicao com o "ⓘ" da metrica (desde a F1, so' o `CartaoIndicador`).
  *
  * EXPEDICAO-VENCE-AMANHA: o "ⓘ" sai do fim da linha de comparacao e vai para
  * o lado do rotulo, como no destaque de vencidos. No rodape ele ficava solto
@@ -10,7 +10,6 @@
 import type { ComponentProps } from "react";
 
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
-import KpiTile from "@/components/ui/KpiTile";
 import type { ChaveMetrica } from "@/lib/expedicao-definicoes";
 import { TEXTO_INDISPONIVEL, partesDoPercentualComBase } from "@/lib/expedicao-formato";
 
@@ -18,17 +17,6 @@ import AjudaMetrica from "./AjudaMetrica";
 
 /** Reexportado para quem so' precisa do "ⓘ" (titulo de painel, cabecalho). */
 export { AjudaMetrica as Ajuda };
-
-export function KpiComAjuda({
-  ajuda,
-  ...props
-}: Omit<ComponentProps<typeof KpiTile>, "ajuda"> & { ajuda: ChaveMetrica | null }) {
-  // Cartao-botao (gerencial com onAbrir): o "ⓘ" nao pode ser focavel dentro dele.
-  const emControle = props.variante === "gerencial" && Boolean(props.onAbrir);
-  return <KpiTile {...props} ajuda={ajuda ? <AjudaMetrica chave={ajuda} emControle={emControle} /> : undefined} />;
-}
-
-export default KpiComAjuda;
 
 /** ALVO-GRADE: o cartao da faixa (`CartaoIndicador`) com o "ⓘ" do catalogo da Expedicao. */
 export function CartaoComAjuda({

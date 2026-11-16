@@ -359,7 +359,8 @@ import {
 import { montarKpis } from "../src/lib/expedicao-contract.ts";
 
 const { default: AjudaMetrica } = await import("../src/components/expedicao/AjudaMetrica.tsx");
-const { KpiComAjuda } = await import("../src/components/expedicao/KpiComAjuda.tsx");
+const { CartaoComAjuda } = await import("../src/components/expedicao/KpiComAjuda.tsx");
+const { Inbox } = await import("lucide-react");
 
 test("catalogo: toda metrica exibida tem os seis campos, curtos", () => {
   for (const [canal, chaves] of Object.entries(METRICAS_POR_CANAL)) {
@@ -595,12 +596,12 @@ test("LDR por loja: Venciam, Atrasados e LDR com ⓘ; Loja segue no SortHeader",
 });
 
 // EXPEDICAO-VENCE-AMANHA: o ⓘ saiu da linha de comparacao para o lado do rotulo.
-test("KpiComAjuda poe o ⓘ ao lado do rotulo do KPI", () => {
+test("CartaoComAjuda poe o ⓘ ao lado do rotulo do KPI", () => {
   const html = renderToStaticMarkup(
-    h(KpiComAjuda, { ajuda: "shopee.backlog", rotulo: "Backlog total", valor: "1.820", comparacao: "Fila aberta." }),
+    h(CartaoComAjuda, { ajuda: "shopee.backlog", rotulo: "Backlog total", icone: Inbox, cor: "rgb(var(--tc-kpi-gmv))", valor: "1.820", legenda: "Fila aberta." }),
   );
-  assert.match(html, /Backlog total<span tabindex="0" role="img" aria-label="Cada pedido pago que ainda não foi expedido\./);
-  assert.match(html, /<p class="mt-1\.5 text-xs leading-snug text-ink-muted">Fila aberta\.<\/p>/);
+  assert.match(html, /Backlog total<\/span><span tabindex="0" role="img" aria-label="Cada pedido pago que ainda não foi expedido\./);
+  assert.match(html, /<span class="min-w-0">Fila aberta\.<\/span>/);
 });
 
 // ===========================================================================
@@ -787,4 +788,18 @@ test("SeletorPeriodo: gatilho com o atalho ou 'Últimos N dias'", async () => {
   const livre = renderToStaticMarkup(h(SeletorPeriodo, { ...base, valor: "personalizado", dias: 10 }));
   assert.match(livre, />Últimos 10 dias</);
   assert.match(livre, /CAMPO/);
+});
+
+// F1 (UI padronizada): a Expedicao so' usa o cartao unico; o KpiTile nao volta.
+test("Expedicao sem KpiTile/StatCard/KpiComAjuda como cartao", () => {
+  for (const rel of [
+    "app/expedicao/ExpedicaoClient.tsx",
+    "src/components/expedicao/KpiComAjuda.tsx",
+    "src/components/expedicao/LdrShopeePanel.tsx",
+    "src/components/expedicao/TikTokDispatchPanel.tsx",
+    "src/components/expedicao/TikTokPedidosAbertos.tsx",
+    "src/components/expedicao/TravadosDialog.tsx",
+  ]) {
+    assert.doesNotMatch(fonte(rel), /<(KpiTile|StatCard|KpiComAjuda)\b|import KpiTile\b/, rel);
+  }
 });

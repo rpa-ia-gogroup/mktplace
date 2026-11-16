@@ -64,11 +64,10 @@ import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaA
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import InfoDica from "@/components/ui/InfoDica";
-import { Ajuda, CartaoComAjuda, KpiComAjuda } from "@/components/expedicao/KpiComAjuda";
+import { Ajuda, CartaoComAjuda } from "@/components/expedicao/KpiComAjuda";
 import Note from "@/components/ui/Note";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
-import type { Tom } from "@/components/ui/tone";
 import { comMarcaNaQuery, type Visao } from "@/lib/expedicao-ux";
 import { brandLabel } from "@/lib/filters/brands";
 
@@ -267,10 +266,7 @@ const ICONE_DA_MEDIDA: Partial<Record<string, LucideIcon>> = {
   stalled: PauseCircle,
 };
 
-/**
- * CARDS-KPIBAND — cor de IDENTIDADE de cada medida (a mesma em toda aba; nao
- * diz bom ou ruim) e a coluna da serie horaria que alimenta o card.
- */
+/** Cor de identidade do popup de Travados (o `KpiDrilldownDialog` ainda pede o token). */
 const IDENTIDADE_DA_MEDIDA: Partial<Record<string, IdentidadeKpi>> = {
   due_soon: "pedidos",
   over48h: "prazo",
@@ -354,64 +350,36 @@ function dataCurta(iso: string | null): string {
 // T-0010: o numero da fila usa o formato unico da Expedicao.
 const numero = formatarInteiro;
 
-/**
- * Severidade do KPI.
- *
- * `ausente` NAO e' uma nota ruim: e' a marca de que a medida nao existe na
- * fonte. O numero sai apagado, com moldura tracejada, em vez de verde — zero
- * seria uma medicao, e ausencia nao e'.
- */
-function tomDoKpi(kpi: Kpi): Tom {
-  if (kpi.valorTexto !== undefined) return "ausente";
-  return kpi.alerta ? "atencao" : "neutro";
-}
-
 function CelulaKpi({
   kpi,
-  destaque,
   canal,
   base = null,
 }: {
   kpi: Kpi;
-  destaque: boolean;
   canal: Canal;
   /** Backlog total: a barra do cartao mostra a fatia da fila (so' com os dois medidos). */
   base?: number | null;
 }) {
   const ausente = kpi.valorTexto !== undefined || kpi.valor === null;
-  // ALVO-GRADE: os 4 principais do detalhe sao o mesmo cartao da faixa do gestor.
-  if (destaque) {
-    return (
-      <CartaoComAjuda
-        ajuda={chaveDoKpiDaFila(canal, kpi.chave)}
-        rotulo={ROTULO_CURTO[kpi.chave] ?? kpi.rotulo}
-        icone={ICONE_DA_MEDIDA[kpi.chave] ?? Inbox}
-        cor={COR_DA_MEDIDA[kpi.chave] ?? "rgb(var(--tc-kpi-gmv))"}
-        valor={ausente ? null : numero(kpi.valor ?? 0)}
-        // A mesma pilula da visao do gestor; indicador sem regra de estado fica sem pilula.
-        pilula={
-          !ausente && kpi.chave === "overdue"
-            ? (kpi.valor ?? 0) > 0
-              ? { texto: "Com atraso", tom: "crit" }
-              : { texto: "Em dia", tom: "ok" }
-            : null
-        }
-        progresso={!ausente && base && kpi.chave !== "backlog" && kpi.chave !== "marcas_alerta" ? (kpi.valor ?? 0) / base : null}
-        // So' o numero na tela; a nota fica para o leitor de tela e a definicao, no "ⓘ".
-        legenda={ausente ? (kpi.valorTexto ?? kpi.nota) : kpi.nota ? <span className="sr-only">{kpi.nota}</span> : undefined}
-      />
-    );
-  }
+  // ALVO-GRADE: todo cartao da Expedicao e' o mesmo da faixa do gestor (rotulo curto; o resto fica no "ⓘ").
   return (
-    <KpiComAjuda
+    <CartaoComAjuda
       ajuda={chaveDoKpiDaFila(canal, kpi.chave)}
-      rotulo={kpi.rotulo}
-      valor={kpi.valorTexto ?? (kpi.valor === null ? "—" : numero(kpi.valor))}
-      contexto={kpi.nota}
-      tom={tomDoKpi(kpi)}
-      variante="gerencial"
-      icone={ICONE_DA_MEDIDA[kpi.chave]}
-      identidade={IDENTIDADE_DA_MEDIDA[kpi.chave]}
+      rotulo={ROTULO_CURTO[kpi.chave] ?? kpi.rotulo}
+      icone={ICONE_DA_MEDIDA[kpi.chave] ?? Inbox}
+      cor={COR_DA_MEDIDA[kpi.chave] ?? "rgb(var(--tc-kpi-gmv))"}
+      valor={ausente ? null : numero(kpi.valor ?? 0)}
+      // A mesma pilula da visao do gestor; indicador sem regra de estado fica sem pilula.
+      pilula={
+        !ausente && kpi.chave === "overdue"
+          ? (kpi.valor ?? 0) > 0
+            ? { texto: "Com atraso", tom: "crit" }
+            : { texto: "Em dia", tom: "ok" }
+          : null
+      }
+      progresso={!ausente && base && kpi.chave !== "backlog" && kpi.chave !== "marcas_alerta" ? (kpi.valor ?? 0) / base : null}
+      // So' o numero na tela; a nota fica para o leitor de tela e a definicao, no "ⓘ".
+      legenda={ausente ? (kpi.valorTexto ?? kpi.nota) : kpi.nota ? <span className="sr-only">{kpi.nota}</span> : undefined}
     />
   );
 }
@@ -432,11 +400,12 @@ function BlocoFbs({ divisao }: { divisao: DivisaoDaFila }) {
           <InfoDica texto={textoDaReconciliacao(divisao)} />
         </span>
       </h4>
-      <FaixaKpis rotulo="Pedidos FBS" secundaria>
-        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Em aberto (FBS)" valor={numero(f.backlog_count)} />
-        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Vencidos (FBS)" valor={numero(f.overdue_count)} />
-        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Acima de 48 h (FBS)" valor={numero(f.over_48h_count)} />
-        <KpiComAjuda variante="gerencial" ajuda="shopee.fbs" rotulo="Travados (FBS)" valor={numero(f.stalled_count)} />
+      <FaixaKpis rotulo="Pedidos FBS">
+        {/* Sem cor de alerta: o FBS e' da Shopee, o vendedor nao age sobre ele. */}
+        <CartaoComAjuda ajuda="shopee.fbs" rotulo="Em aberto (FBS)" icone={Inbox} cor="rgb(var(--tc-kpi-gmv))" valor={numero(f.backlog_count)} />
+        <CartaoComAjuda ajuda="shopee.fbs" rotulo="Vencidos (FBS)" icone={AlertTriangle} cor="rgb(var(--tc-kpi-pedidos))" valor={numero(f.overdue_count)} />
+        <CartaoComAjuda ajuda="shopee.fbs" rotulo="Acima de 48 h (FBS)" icone={Hourglass} cor="rgb(var(--tc-kpi-prazo))" valor={numero(f.over_48h_count)} />
+        <CartaoComAjuda ajuda="shopee.fbs" rotulo="Travados (FBS)" icone={PauseCircle} cor="rgb(var(--tc-kpi-ads))" valor={numero(f.stalled_count)} />
       </FaixaKpis>
     </section>
   );
@@ -1103,7 +1072,6 @@ export default function ExpedicaoClient({
           key={k.chave}
           kpi={k}
           canal={filtros.channel}
-          destaque
           base={principais.find((p) => p.chave === "backlog")?.valor ?? null}
         />
       ))}
@@ -2011,7 +1979,7 @@ export default function ExpedicaoClient({
             <MaisDetalhes resumo="indicadores secundários">
               <FaixaKpis rotulo="Indicadores secundários" secundaria>
                 {secundarios.map((k) => (
-                  <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} destaque={false} />
+                  <CelulaKpi key={k.chave} kpi={k} canal={filtros.channel} />
                 ))}
               </FaixaKpis>
             </MaisDetalhes>

@@ -215,7 +215,9 @@ test("tela: risco do vendedor com a divisao; aviso de FBS sem ela; FBS em bloco 
 
 test("o painel sempre mostra o aviso de que nao e' oficial e nao pinta a taxa de severidade", () => {
   assert.match(PAINEL, /data-testid="exp-ldr-shopee-aviso"/);
-  assert.match(PAINEL, /tom=\{l\.rate === null \? "ausente" : "neutro"\}/);
+  // Taxa sem pilula de estado (bom/ruim so' existe na pilula do CartaoIndicador).
+  assert.match(PAINEL, /ausente=\{l\.rate === null\}/);
+  assert.doesNotMatch(PAINEL, /pilula=/);
   assert.doesNotMatch(PAINEL, /meta|dentro da meta/i);
 });
 
