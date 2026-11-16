@@ -303,3 +303,10 @@ def test_pipeline_nao_tem_caminho_de_escrita():
                   if isinstance(n, ast.Call) and getattr(n.func, "attr", None) == "add_argument"
                   for a in n.args if isinstance(a, ast.Constant)]
     assert argumentos == ["--ref-date"]
+
+
+def test_vendas_full_janela_em_dias_brt_porque_date_created_e_menos_4h():
+    """[janela_inicio, janela_fim) sao dias BRT; `date_created` e' -04:00 sem fuso."""
+    sql = str(mod.SQL_VENDAS_FULL)
+    assert "o.date_created >= CAST(:janela_inicio AS date) - interval '1 hour'" in sql
+    assert "o.date_created <  CAST(:janela_fim AS date) - interval '1 hour'" in sql

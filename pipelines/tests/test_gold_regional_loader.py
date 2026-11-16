@@ -499,8 +499,8 @@ def test_create_temp_table_on_commit_drop_nao_e_falso_positivo_destrutivo():
 
 _SQL_MAX_DATE_GOLD_NORM = "SELECT MARKETPLACE_ID, MAX(DATE) AS MAX_DATE FROM GOLD.FCT_MARKETPLACE_REGION_DAILY GROUP BY MARKETPLACE_ID"
 _SQL_MAX_DATE_ML_NORM = (
-    "SELECT MAX(DATE_CREATED::DATE) AS MAX_GLOBAL, "
-    "MAX(DATE_CREATED::DATE) FILTER (WHERE DATE_CREATED::DATE <= %(DATE_TO)S) AS MAX_ELIGIBLE "
+    "SELECT MAX((DATE_CREATED + INTERVAL '1 HOUR')::DATE) AS MAX_GLOBAL, "
+    "MAX((DATE_CREATED + INTERVAL '1 HOUR')::DATE) FILTER (WHERE (DATE_CREATED + INTERVAL '1 HOUR')::DATE <= %(DATE_TO)S) AS MAX_ELIGIBLE "
     "FROM RAW.ML_ORDERS WHERE STATUS IN ('PAID', 'CANCELLED')"
 )
 _SQL_MAX_DATE_SHOPEE_NORM = (
@@ -753,7 +753,7 @@ def _happy_incremental_only_ml_conn(**overrides):
             (_inc_contains("IS NULL OR MARKETPLACE_ID IS NULL"), (0,)),
             (_inc_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), (0,)),
             (_inc_contains(f"WHERE MARKETPLACE_ID = {loader.ML_MARKETPLACE_ID}"), (Decimal("500.00"),)),
-            (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND DATE_CREATED"), (Decimal("500.00"),)),
+            (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND (DATE_CREATED"), (Decimal("500.00"),)),
             (_inc_contains(f"WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}"), (0,)),
             (_inc_exact("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY"), (30,)),
         ],
@@ -849,7 +849,7 @@ def test_execute_incremental_load_aborta_se_gmv_ml_nao_reconcilia(monkeypatch):
         (_inc_contains("IS NULL OR MARKETPLACE_ID IS NULL"), (0,)),
         (_inc_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), (0,)),
         (_inc_contains(f"WHERE MARKETPLACE_ID = {loader.ML_MARKETPLACE_ID}"), (Decimal("500.00"),)),
-        (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND DATE_CREATED"), (Decimal("400.00"),)),  # diverge
+        (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND (DATE_CREATED"), (Decimal("400.00"),)),  # diverge
         (_inc_exact("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY"), (30,)),
     ]
     monkeypatch.setattr(loader, "psycopg2", _FakePsycopg2Module(fake_conn))
@@ -1155,7 +1155,7 @@ def test_dqd2_os_dois_selects_aplicam_o_teto_no_SQL():
         assert "<= '2026-09-07'::date" in sql
         assert "> '2026-09-02'::date" in sql
     # A coluna filtrada e' a MESMA que ja delimitava o piso, nunca outra.
-    assert ml.count("date_created::date") >= 2
+    assert ml.count("(date_created + interval '1 hour')::date") >= 2
     assert sh.count("o.order_date") >= 2
 
 
@@ -2035,7 +2035,7 @@ def _shopee_ausente_conn(ml_fonte=date(2026, 10, 15), **overrides):
             (_inc_contains("IS NULL OR MARKETPLACE_ID IS NULL"), (0,)),
             (_inc_contains("UF_KNOWN_ORDERS > UF_ELIGIBLE_ORDERS"), (0,)),
             (_inc_contains(f"WHERE MARKETPLACE_ID = {loader.ML_MARKETPLACE_ID}"), (Decimal("900.00"),)),
-            (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND DATE_CREATED"), (Decimal("900.00"),)),
+            (_inc_contains("RAW.ML_ORDERS WHERE STATUS = 'PAID' AND (DATE_CREATED"), (Decimal("900.00"),)),
             (_inc_contains(f"WHERE MARKETPLACE_ID = {loader.TIKTOK_MARKETPLACE_ID}"), (0,)),
             (_inc_exact("SELECT COUNT(*) FROM STG_MARKETPLACE_REGION_DAILY"), (321,)),
         ],
@@ -2203,3 +2203,14 @@ def test_rsr1_diagnose_cli_nomeia_a_fonte_indisponivel(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "shopee: FONTE INDISPONIVEL" in out
     assert "max_date_gold=2026-08-24" in out
+
+
+def test_ml_order_date_e_o_dia_brt_em_todas_as_consultas():
+    """`date_created` e' -04:00 sem fuso: staging, incremental, MAX da fonte e
+    recalculo de GMV usam o MESMO dia BRT (+1h), senao a reconciliacao diverge."""
+    dia = "(date_created + interval '1 hour')::date"
+    inc = loader._ml_incremental_select(date(2026, 9, 2), date(2026, 9, 7))
+    rec = loader._ml_gmv_source_recalc_incremental(date(2026, 9, 2), date(2026, 9, 7))
+    for sql in (loader.SQL_INSERT_ML_STAGING, inc, rec, loader.SQL_MAX_DATE_ML_SOURCE):
+        assert dia in sql
+        assert "date_created::date" not in sql

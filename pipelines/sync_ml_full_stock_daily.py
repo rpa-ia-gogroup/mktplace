@@ -23,7 +23,7 @@ O que ele NAO faz (de proposito)
   vem de NF do Bling e e' outro fato.
 
 Vendas: mesmo contrato do `sync_ml_fulfillment_daily`. Pedido `paid` por
-`date_created::date`, envio Full pelo `logistic_type` da versao mais recente
+dia BRT `(date_created + 1h)::date` (date_created e' -04:00 sem fuso), envio Full pelo `logistic_type` da versao mais recente
 do shipment, unidade de `api.ml_order_line_items`, chaveada por
 (marca, item, variacao).
 """
@@ -73,7 +73,10 @@ WITH pedidos AS (
     SELECT o.brand, o.order_id, o.shipping_id
       FROM api.ml_orders o
      WHERE o.status = 'paid'
-       AND o.date_created >= :janela_inicio AND o.date_created < :janela_fim
+       -- date_created e' -04:00 sem fuso (parse_ts do airflow corta o offset): a janela
+       -- de dias BRT [inicio, fim) comeca 1h antes no relogio do ML
+       AND o.date_created >= CAST(:janela_inicio AS date) - interval '1 hour'
+       AND o.date_created <  CAST(:janela_fim AS date) - interval '1 hour'
        AND o.brand = ANY(:marcas)
 ),
 envio AS (

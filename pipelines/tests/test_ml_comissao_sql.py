@@ -299,39 +299,43 @@ def test_dia_sem_pedido_pago_devolve_null_e_preserva_a_linha_da_gold(banco):
 # ---------------------------------------------------------------------------
 
 def test_pedido_no_ultimo_instante_do_dia_final_entra_na_janela(banco):
-    """`date_created` é timestamp. Com `<= :date_to`, 23:59:59 do último dia
-    ficaria de fora e a comissão daquele dia sairia truncada."""
+    """`date_created` é timestamp -04:00 sem fuso: 22:59:59 no relógio do ML é
+    23:59:59 BRT do último dia, e tem de entrar (senão a comissão sai truncada)."""
     with banco.begin() as conn:
         _gold(conn, "2026-07-31", "kokeshi", 1000)
         _pedido(conn, 900010, "kokeshi", "paid", 1000,
-                "2026-07-31 23:59:59", [(1, 1, 1000, 170)])
+                "2026-07-31 22:59:59", [(1, 1, 1000, 170)])
 
     rows = _rodar(banco, date_from="2026-07-01", date_to="2026-07-31")
     assert float(rows[0]["marketplace_fee"]) == 170.0
 
 
 def test_pedido_do_primeiro_instante_do_dia_seguinte_fica_fora(banco):
+    """23:00:00 -04:00 = 00:00:00 BRT do dia seguinte: fica fora da janela."""
     with banco.begin() as conn:
         _gold(conn, "2026-07-31", "kokeshi", 1000)
         _pedido(conn, 900011, "kokeshi", "paid", 1000,
-                "2026-08-01 00:00:00", [(1, 1, 1000, 170)])
+                "2026-07-31 23:00:00", [(1, 1, 1000, 170)])
 
     rows = _rodar(banco, date_from="2026-07-01", date_to="2026-07-31")
     assert rows[0]["marketplace_fee"] is None
 
 
 def test_comissao_cai_no_dia_do_date_created_nao_no_dia_seguinte(banco):
-    """Atribuição de competência: o pedido das 23:00 pertence ao seu próprio
-    dia. Um deslocamento de fuso apareceria aqui como comissão no dia errado."""
+    """Competência no dia BRT: `date_created` é -04:00 sem fuso (o parse_ts do
+    airflow corta o offset). 22:59 -04:00 = 23:59 BRT fica no dia; 23:00 -04:00
+    = 00:00 BRT vai para o dia seguinte, como em gold.ml_gestao_diaria."""
     with banco.begin() as conn:
         _gold(conn, "2026-07-10", "kokeshi", 1000)
         _gold(conn, "2026-07-11", "kokeshi", 2000)
         _pedido(conn, 900012, "kokeshi", "paid", 1000,
-                "2026-07-10 23:00:00", [(1, 1, 1000, 170)])
+                "2026-07-10 22:59:00", [(1, 1, 1000, 170)])
+        _pedido(conn, 900015, "kokeshi", "paid", 2000,
+                "2026-07-10 23:00:00", [(1, 1, 2000, 340)])
 
     por_dia = _por_chave(_rodar(banco))
     assert float(por_dia[("2026-07-10", "kokeshi")]["marketplace_fee"]) == 170.0
-    assert por_dia[("2026-07-11", "kokeshi")]["marketplace_fee"] is None
+    assert float(por_dia[("2026-07-11", "kokeshi")]["marketplace_fee"]) == 340.0
 
 
 def test_comissao_nao_vaza_entre_marcas_no_mesmo_dia(banco):

@@ -28,7 +28,12 @@ BRANDS_IN_SCOPE = ("barbours", "kokeshi", "lescent", "rituaria")
 #     quantidade. Somar `sale_fee` cru subestima a comissao em ~2,5%.
 #  2. O join e' por `order_id`. `api.ml_orders.id` e' surrogate sequencial e
 #     devolve ZERO correspondencia em silencio.
-#  3. A populacao da Torre e' `status = 'paid'` por `date_created::date`.
+#  3. A populacao da Torre e' `status = 'paid'` pelo dia BRT do pedido:
+#     `(date_created + 1h)::date`. `date_created` e' timestamp SEM fuso em
+#     -04:00 (o `parse_ts` da ingestao do airflow corta o offset que a API
+#     manda), uma hora atras de Brasilia. TEM de bater com o dia de
+#     `gold.ml_gestao_diaria` (migration 64 do airflow), senao o guardrail de
+#     reconciliacao aborta a carga.
 #     Medido em jul+ago/2026: identico a `gold.ml_gestao_diaria` em 248 de 248
 #     celulas dia x marca, GMV e pedidos, diferenca maxima 0,00.
 #
@@ -50,7 +55,7 @@ BRANDS_IN_SCOPE = ("barbours", "kokeshi", "lescent", "rituaria")
 ML_FEES_CTE = """
 WITH ml_fees AS (
     SELECT
-        o.date_created::date            AS ref_date,
+        (o.date_created + interval '1 hour')::date AS ref_date,
         o.brand                         AS brand,
         SUM(li.sale_fee * li.quantity)  AS marketplace_fee,
         COUNT(DISTINCT o.order_id)      AS fee_orders
@@ -59,8 +64,8 @@ WITH ml_fees AS (
       ON li.order_id = o.order_id
     WHERE o.status = 'paid'
       AND o.brand IN :brands
-      AND o.date_created >= :date_from
-      AND o.date_created < (CAST(:date_to AS date) + 1)
+      AND o.date_created >= CAST(:date_from AS date) - interval '1 hour'
+      AND o.date_created < (CAST(:date_to AS date) + 1) - interval '1 hour'
     GROUP BY 1, 2
 ),
 -- Populacao paga SEM passar pelos itens: e' o denominador da reconciliacao.
@@ -69,15 +74,15 @@ WITH ml_fees AS (
 -- aparece em vez de se esconder.
 ml_paid AS (
     SELECT
-        o.date_created::date        AS ref_date,
+        (o.date_created + interval '1 hour')::date AS ref_date,
         o.brand                     AS brand,
         SUM(o.total_amount)         AS paid_gmv,
         COUNT(DISTINCT o.order_id)  AS paid_orders_src
     FROM api.ml_orders o
     WHERE o.status = 'paid'
       AND o.brand IN :brands
-      AND o.date_created >= :date_from
-      AND o.date_created < (CAST(:date_to AS date) + 1)
+      AND o.date_created >= CAST(:date_from AS date) - interval '1 hour'
+      AND o.date_created < (CAST(:date_to AS date) + 1) - interval '1 hour'
     GROUP BY 1, 2
 )
 """
