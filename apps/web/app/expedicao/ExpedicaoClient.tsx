@@ -42,9 +42,13 @@ import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
 import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
 import type { LinhaDaFila } from "@/components/expedicao/EvolucaoPorMarca";
 import LdrShopeePanel, { useLdrShopee } from "@/components/expedicao/LdrShopeePanel";
+import EvolucaoPorVencimento from "@/components/expedicao/EvolucaoPorVencimento";
+import { META_TETO } from "@/lib/expedicao-ldr-topo";
 import {
   AVISO_FILA_COM_FBS,
   DIAS_LDR_SHOPEE,
+  ROTULO_SEVERIDADE_SHOPEE,
+  severidadeDoDiaShopee,
   divisaoDaFila,
   textoDaReconciliacao,
   type DivisaoDaFila,
@@ -1995,6 +1999,16 @@ export default function ExpedicaoClient({
             prazo={painelPrazo}
             atencao={filaDeAtencao}
             backlog={painelEvolucao}
+            evolucao={
+              ldrNaSecao && ldr.resposta?.ldr ? (
+                <EvolucaoPorVencimento
+                  dias={ldr.resposta.ldr.daily}
+                  severidade={severidadeDoDiaShopee}
+                  rotulos={ROTULO_SEVERIDADE_SHOPEE}
+                  linha={{ valor: META_TETO.shopee.meta, rotulo: "Meta" }}
+                />
+              ) : null
+            }
             ldr={faixaTopo}
             maisDetalhes={maisDetalhes}
           />

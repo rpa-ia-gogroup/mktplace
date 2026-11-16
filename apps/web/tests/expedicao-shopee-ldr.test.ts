@@ -23,6 +23,7 @@ import {
   montarExclusoes,
   motivoDaTaxaAusente,
   queryDaLdrShopee,
+  severidadeDoDiaShopee,
   textoDaCobertura,
   textoDoEstado,
   type RespostaLdrShopee,
@@ -230,4 +231,24 @@ test("a LDR do TikTok nao foi tocada", () => {
 test("painel da LDR nao mostra os avisos de fila (pedido de 04/11/2026)", () => {
   assert.match(PAINEL, /const AVISOS_DE_FILA = new Set\(\["pendentes_vencidos", "em_risco"\]\);/);
   assert.match(PAINEL, /a\.severity !== "info" && !AVISOS_DE_FILA\.has\(a\.code\)/);
+});
+
+test("evolucao da Shopee: severidade pela meta/teto, parcial antes de tudo", () => {
+  const dia = (rate: number | null, is_mature = true) =>
+    ({ due_date: "2026-11-10", rate, is_mature }) as Parameters<typeof severidadeDoDiaShopee>[0];
+  assert.equal(severidadeDoDiaShopee(dia(0.02)), "ok", "meta exata conta como dentro");
+  assert.equal(severidadeDoDiaShopee(dia(0.03)), "fora_da_meta");
+  assert.equal(severidadeDoDiaShopee(dia(0.05)), "fora_da_meta", "teto exato nao e' critico");
+  assert.equal(severidadeDoDiaShopee(dia(0.06)), "critico");
+  assert.equal(severidadeDoDiaShopee(dia(0.5, false)), "parcial");
+});
+
+test("evolucao por vencimento: um grafico so', comum a TikTok e Shopee", () => {
+  const comum = fonte("src/components/expedicao/EvolucaoPorVencimento.tsx");
+  assert.match(comum, /titulo="Evolução por dia de vencimento"/);
+  assert.match(TIKTOK, /<EvolucaoPorVencimento/);
+  assert.match(CLIENTE, /evolucao=\{\s*ldrNaSecao && ldr\.resposta\?\.ldr \? \(\s*<EvolucaoPorVencimento\s+dias=\{ldr\.resposta\.ldr\.daily\}/);
+  for (const f of [TIKTOK, CLIENTE]) {
+    assert.doesNotMatch(f, /function Grafico|COR_SEVERIDADE =/, "grafico duplicado fora do componente comum");
+  }
 });

@@ -377,12 +377,12 @@ export function marcasForaDaMeta(marcas: TikTokMarca[]): TikTokMarca[] {
  * ficariam invisiveis e o operador nao veria a variacao que importa. Piso de
  * 2% para que um dia com taxa pequena, mas nao nula, continue visivel.
  */
-export function alturaDaBarra(dia: TikTokLdrDia, maximo: number): number {
+export function alturaDaBarra(dia: Pick<TikTokLdrDia, "rate">, maximo: number): number {
   if (dia.rate === null || maximo <= 0) return 0;
   return Math.max(2, (dia.rate / maximo) * 100);
 }
 
-export function taxaMaxima(dias: TikTokLdrDia[]): number {
+export function taxaMaxima(dias: readonly Pick<TikTokLdrDia, "rate">[]): number {
   return dias.reduce((max, d) => (d.rate !== null && d.rate > max ? d.rate : max), 0);
 }
 
@@ -511,7 +511,7 @@ export function montarBarraDeQualidadeTikTok(p: TikTokPayload | null): BarraQual
  * util, que era o que a tela mostrava com a fonte vencida. Nesse caso a tela
  * troca o grafico por uma linha que diz por que nao ha o que desenhar.
  */
-export function serieTemDiaMedido(dias: TikTokLdrDia[]): boolean {
+export function serieTemDiaMedido(dias: readonly Pick<TikTokLdrDia, "rate" | "is_mature">[]): boolean {
   return dias.some((d) => d.is_mature && d.rate !== null);
 }
 

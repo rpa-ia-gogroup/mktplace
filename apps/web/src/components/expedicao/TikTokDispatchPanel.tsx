@@ -83,6 +83,7 @@ import LayoutExpedicao, {
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import { Ajuda, KpiComAjuda, TaxaComBase } from "@/components/expedicao/KpiComAjuda";
 import PainelAtencao from "@/components/expedicao/PainelAtencao";
+import EvolucaoPorVencimento, { TEXTO_SEVERIDADE } from "@/components/expedicao/EvolucaoPorVencimento";
 import { FaixaKpis, SecaoGerencial } from "@/components/expedicao/SecoesExpedicao";
 import Chip from "@/components/ui/Chip";
 import FilaAtencao, { type ItemAtencao as ItemFila } from "@/components/ui/FilaAtencao";
@@ -110,8 +111,6 @@ import {
   ROTULO_SEVERIDADE,
   TITULO_FLUXO,
   VALOR_SEM_TAXA,
-  alturaDaBarra,
-  alturaDaMeta,
   explicarIndisponivelComMarca,
   deltaDaLdr,
   formatarDiaCurto,
@@ -125,12 +124,8 @@ import {
   montarAtencaoDoTikTok,
   montarBarraDeQualidadeTikTok,
   queryDoTikTok,
-  serieTemDiaMedido,
   severidadeDoDia,
-  taxaMaxima,
   type Evento,
-  type Severidade,
-  type TikTokLdrDia,
   type TikTokMarca,
   type TikTokPayload,
 } from "@/lib/expedicao-tiktok-contract";
@@ -160,25 +155,6 @@ function janelaInicial(): { dias: number; descartado: boolean } {
   return lerDiasDaUrl(window.location.search, REGRA);
 }
 
-/**
- * Severidade -> token. `parcial` continua HACHURADO de proposito: coorte
- * parcial nao pode parecer um resultado fechado, nem bom nem ruim.
- */
-const COR_SEVERIDADE: Record<Severidade, string> = {
-  ok: "bg-ok",
-  fora_da_meta: "bg-warn",
-  critico: "bg-crit",
-  parcial:
-    "bg-[repeating-linear-gradient(45deg,rgb(var(--tc-line-strong))_0px,rgb(var(--tc-line-strong))_4px,transparent_4px,transparent_8px)]",
-};
-
-const TEXTO_SEVERIDADE: Record<Severidade, string> = {
-  ok: "text-ok-ink",
-  fora_da_meta: "text-warn-ink",
-  critico: "text-crit-ink",
-  parcial: "text-ink-faint",
-};
-
 // T-0010: CLASSE_TABELA e CLASSE_CABECALHO vem do esqueleto comum.
 
 const COLUNAS_MARCA: Record<string, SortColumnType> = {
@@ -193,100 +169,6 @@ function valorDaMarca(m: TikTokMarca, coluna: string): string | number | null {
   if (coluna === "base") return m.base;
   if (coluna === "late") return m.late;
   return m.rate;
-}
-
-// ---------------------------------------------------------------------------
-// Grafico
-// ---------------------------------------------------------------------------
-
-function Grafico({
-  dias,
-  aoClicar,
-  clicavel,
-}: {
-  dias: TikTokLdrDia[];
-  /** EXPEDICAO-TIKTOK-COLETA-PERDIDA: clicar na barra abre os vencidos do dia. */
-  aoClicar?: (dia: string) => void;
-  clicavel?: (dia: string) => boolean;
-}) {
-  const maximo = taxaMaxima(dias);
-  const meta = alturaDaMeta(maximo);
-  if (!dias.length) return null;
-  return (
-    <div>
-      {/* `items-stretch` e nao `items-end`: com `items-end` cada coluna e'
-          dimensionada pelo CONTEUDO, o `flex-1` de dentro nao recebe altura e
-          a barra desaparece — o grafico renderiza numeros e datas sobre um
-          retangulo vazio. Ja aconteceu neste componente. */}
-      <div className="relative">
-        {meta !== null ? (
-          <div
-            className="pointer-events-none absolute inset-x-0 z-10 border-t border-dashed border-warn"
-            style={{ bottom: `calc(${meta}% + 1.25rem)` }}
-            aria-hidden="true"
-          >
-            <span className="absolute -top-4 right-0 rounded bg-warn-soft px-1.5 py-0.5 text-xs font-medium text-warn-ink ring-1 ring-inset ring-warn/30">
-              {ROTULO_META} {formatarTaxa(META_TIKTOK_LDR, 0)}
-            </span>
-          </div>
-        ) : null}
-        <div
-          className="flex h-56 items-stretch gap-1 overflow-x-auto pb-1"
-          role={aoClicar ? "group" : "img"}
-          aria-label={`Taxa por dia de vencimento.${aoClicar ? " Clique num dia para ver os pedidos vencidos." : ""} Máximo da série: ${formatarTaxa(
-            maximo,
-          )}. Referência do TikTok: ${formatarTaxa(META_TIKTOK_LDR, 0)}.`}
-        >
-          {dias.map((d) => {
-            const sev = severidadeDoDia(d);
-            const podeClicar = Boolean(aoClicar) && (clicavel?.(d.due_date) ?? true);
-            const Coluna = podeClicar ? "button" : "div";
-            return (
-              <Coluna
-                key={d.due_date}
-                {...(podeClicar
-                  ? {
-                      type: "button" as const,
-                      onClick: () => aoClicar?.(d.due_date),
-                      "aria-label": `Ver os pedidos vencidos em ${formatarDiaLongo(d.due_date)} (${formatarTaxa(d.rate)})`,
-                    }
-                  : {})}
-                className={`flex min-w-[38px] flex-1 flex-col items-center gap-1 ${
-                  podeClicar
-                    ? "cursor-pointer rounded-md hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                    : ""
-                }`}
-              >
-                <span className={`text-xs tabular-nums ${TEXTO_SEVERIDADE[sev]}`}>
-                  {d.rate === null ? VALOR_SEM_TAXA : `${Math.round(d.rate * 100)}`}
-                </span>
-                <div className="flex w-full flex-1 items-end">
-                  <div
-                    className={`w-full rounded-t ${COR_SEVERIDADE[sev]}`}
-                    style={{ height: `${alturaDaBarra(d, maximo)}%` }}
-                    title={`${formatarDiaLongo(d.due_date)} · ${formatarTaxa(d.rate)} · ${
-                      ROTULO_SEVERIDADE[sev]
-                    }`}
-                  />
-                </div>
-                <span className="text-xs tabular-nums text-ink-faint">
-                  {formatarDiaCurto(d.due_date)}
-                </span>
-              </Coluna>
-            );
-          })}
-        </div>
-      </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-        {(["ok", "fora_da_meta", "critico", "parcial"] as Severidade[]).map((s) => (
-          <span key={s} className="inline-flex items-center gap-1.5">
-            <span className={`inline-block h-2.5 w-2.5 rounded-sm ${COR_SEVERIDADE[s]}`} />
-            {ROTULO_SEVERIDADE[s]}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -400,7 +282,6 @@ export default function TikTokDispatchPanel({
   const fotografia = fotografiaDoTikTok(dados);
   const barra = montarBarraDeQualidadeTikTok(dados);
   const atencao = montarAtencaoDoTikTok(dados);
-  const temDiaMedido = ldr ? serieTemDiaMedido(ldr.daily) : false;
   const semVencimentoFechado = ldr ? ldr.mature_due_days === 0 : false;
   const publicadaEm = dados?.snapshot
     ? new Date(dados.snapshot.effective_at).toLocaleString("pt-BR", {
@@ -566,25 +447,21 @@ export default function TikTokDispatchPanel({
   // 6. EVOLUCAO — quando comecou. Sem nenhum vencimento fechado o grafico
   // seria um retangulo sem barra: a tela diz por que nao ha o que desenhar.
   const painelEvolucao = ldr ? (
-    <Panel titulo="Evolução por dia de vencimento" className="h-full">
-      {temDiaMedido ? (
-        <Grafico
-          dias={ldr.daily}
-          // So' a coleta tem a lista por pedido; o despacho segue so' no grafico.
-          aoClicar={evento === "coleta" ? setDiaVencido : undefined}
-          clicavel={diaDentroDaJanelaDaLista}
-        />
-      ) : (
-        <p role="status" className="text-sm text-ink-muted">
-          Nenhum vencimento da janela tem taxa fechada para desenhar.
-          {fotografia?.desatualizada
-            ? ` A série está desatualizada${publicadaEm ? ` (publicada em ${publicadaEm})` : ""}.`
-            : ldr.partial_due_days > 0
-              ? ` ${ldr.partial_due_days} dia(s) seguem no prazo (parcial).`
-              : ""}
-        </p>
-      )}
-    </Panel>
+    <EvolucaoPorVencimento
+      dias={ldr.daily}
+      severidade={severidadeDoDia}
+      linha={{ valor: META_TIKTOK_LDR, rotulo: ROTULO_META }}
+      // So' a coleta tem a lista por pedido; o despacho segue so' no grafico.
+      aoClicar={evento === "coleta" ? setDiaVencido : undefined}
+      clicavel={diaDentroDaJanelaDaLista}
+      vazio={
+        fotografia?.desatualizada
+          ? ` A série está desatualizada${publicadaEm ? ` (publicada em ${publicadaEm})` : ""}.`
+          : ldr.partial_due_days > 0
+            ? ` ${ldr.partial_due_days} dia(s) seguem no prazo (parcial).`
+            : null
+      }
+    />
   ) : null;
 
   // 7. CONCENTRACAO — lojas, nas duas profundidades.

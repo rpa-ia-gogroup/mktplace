@@ -283,7 +283,28 @@ function ldrShopee(c: CenarioDemo): RespostaLdrShopee {
       pending_at_risk: 170,
       mature_due_days: c === "vazio" ? 0 : 7,
       partial_due_days: c === "parcial" ? 2 : 1,
-      daily: [],
+      // Demo: 7 dias fechados (dentro, acima da meta, acima do teto) + 1 parcial.
+      daily:
+        c === "vazio"
+          ? []
+          : [0.012, 0.018, 0.031, 0.064, 0.042, 0.015, 0.02, null].map((rate, i) => {
+              const base = 850 - i * 10;
+              const late = rate === null ? 0 : Math.round(base * rate);
+              return {
+                due_date: `2026-10-${String(19 + i).padStart(2, "0")}`,
+                base,
+                late,
+                shipped_on_time: base - late,
+                shipped_late: late,
+                pending_overdue: 0,
+                pending_on_time: rate === null ? 170 : 0,
+                excluded_fbs: 30,
+                excluded_cancelled: 6,
+                shipped_without_pickup: 0,
+                rate,
+                is_mature: rate !== null,
+              };
+            }),
     },
     exclusions: {
       fbs: 210,
