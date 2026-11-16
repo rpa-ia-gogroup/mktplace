@@ -380,6 +380,37 @@ export const DEFINICOES = {
     cobertura: COB_ML,
     limitacoes: "Contexto, não alerta: um backlog legítimo sempre tem pedido velho.",
   },
+  // Concentração por marca do ML (mesma rota da faixa "LDR · últimos 7 dias").
+  "mercadolivre.ldr": {
+    nome: "LDR do Mercado Livre",
+    origem: "torre",
+    definicao: "Parte dos envios com prazo vencido que foram coletados depois do dia do prazo, marcados com atraso pelo ML ou seguem sem coleta.",
+    formula: "Atrasados ÷ envios que venciam (só dias fechados).",
+    fonte: "raw.ml_shipments (SLA oficial de despacho), pelo Data Mart.",
+    janela: "Últimos 7 dias fechados de prazo; série desde 03/11/2026.",
+    cobertura: "Envios com coleta (cross docking, agência), sem cancelados sem coleta.",
+    limitacoes: "Cálculo da Torre, não a métrica oficial de reputação do ML (60 dias, na Performance).",
+  },
+  "mercadolivre.ldr_base": {
+    nome: "Venciam no período",
+    origem: "torre",
+    definicao: "Envios cujo prazo oficial de despacho venceu num dia fechado da janela.",
+    formula: "Envios com prazo no dia − cancelados sem coleta − enviados sem marco de coleta.",
+    fonte: "raw.ml_shipments, pelo Data Mart.",
+    janela: "Últimos 7 dias fechados de prazo.",
+    cobertura: "Envios com coleta.",
+    limitacoes: "Sem dia fechado, não há base: a tela mostra “—”.",
+  },
+  "mercadolivre.ldr_atrasados": {
+    nome: "Atrasados",
+    origem: "torre",
+    definicao: "Coletados depois do dia do prazo, marcados com atraso pelo ML ou ainda sem coleta.",
+    formula: "Numerador da LDR do Mercado Livre.",
+    fonte: "raw.ml_shipments, pelo Data Mart.",
+    janela: "Últimos 7 dias fechados de prazo.",
+    cobertura: "Envios com coleta.",
+    limitacoes: "Cálculo da Torre, não a métrica oficial de reputação do ML.",
+  },
 
   "tiktok.pendente_vencido": {
     nome: "Venceram e não saíram",
@@ -512,6 +543,12 @@ export const AJUDA_CANAL_SEM_PRAZO = {
   maisAntigo: "mercadolivre.mais_antigo",
 } as const satisfies Record<string, ChaveMetrica>;
 
+/** "ⓘ" das colunas da Concentração por marca, por canal com meta/teto. */
+export const AJUDAS_CONCENTRACAO = {
+  shopee: { base: "shopee.ldr_base", late: "shopee.ldr_atrasados", rate: "shopee.ldr" },
+  mercadolivre: { base: "mercadolivre.ldr_base", late: "mercadolivre.ldr_atrasados", rate: "mercadolivre.ldr" },
+} as const satisfies Record<string, { base: ChaveMetrica; late: ChaveMetrica; rate: ChaveMetrica }>;
+
 /** As metricas exibidas em cada canal — o teste cobre o catalogo com isto. */
 export const METRICAS_POR_CANAL: Record<"shopee" | "mercadolivre" | "tiktokshop", readonly ChaveMetrica[]> = {
   shopee: [
@@ -527,6 +564,7 @@ export const METRICAS_POR_CANAL: Record<"shopee" | "mercadolivre" | "tiktokshop"
     "mercadolivre.prazo_situacao",
     "mercadolivre.over48h", "mercadolivre.stalled", "mercadolivre.slow", "mercadolivre.zombie",
     "mercadolivre.marcas_alerta", "mercadolivre.prazo", "mercadolivre.mais_antigo",
+    "mercadolivre.ldr", "mercadolivre.ldr_base", "mercadolivre.ldr_atrasados",
     "jornada.fila_aberta",
   ],
   tiktokshop: [

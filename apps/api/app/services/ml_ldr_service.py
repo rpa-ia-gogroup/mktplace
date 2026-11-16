@@ -46,10 +46,11 @@ JANELA_MAX_DIAS = 30
 LOGISTICAS_COM_COLETA = ("cross_docking", "xd_drop_off", "drop_off")
 SUBSTATUS_COLETADO = ("picked_up", "dropped_off", "in_hub")
 
-SQL_LDR_ML = """
+#: Envios com SLA na janela, um por `shipment_id`. Comum a' taxa e a' lista do dia.
+_CTE_ML = """
 WITH s AS (
     SELECT DISTINCT ON (shipment_id)
-           shipment_id, brand, status, sla_expected_date, sla_status,
+           shipment_id, order_id, brand, status, sla_expected_date, sla_status,
            (sla_expected_date AT TIME ZONE 'America/Sao_Paulo')::date AS dia_prazo,
            (SELECT min((e->>'date')::timestamptz)
               FROM jsonb_array_elements(COALESCE(substatus_history, '[]'::jsonb)) e
@@ -67,15 +68,33 @@ WITH s AS (
            (coletado_em IS NULL AND status IN ('shipped', 'delivered', 'not_delivered')) AS sem_marco
       FROM s
 )
-SELECT brand AS marca, dia_prazo AS dia,
-       COUNT(*) FILTER (WHERE NOT cancelado_sem_coleta AND NOT sem_marco) AS base,
-       COUNT(*) FILTER (WHERE NOT cancelado_sem_coleta AND NOT sem_marco AND (
+"""
+
+#: Atrasado na regra do cabecalho (mesma condicao na taxa e na lista).
+_ATRASADO_ML = """NOT cancelado_sem_coleta AND NOT sem_marco AND (
               coletado_em >= ((dia_prazo + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo')
            OR sla_status = 'delayed'
-           OR coletado_em IS NULL)) AS atrasados,
+           OR coletado_em IS NULL)"""
+
+SQL_LDR_ML = _CTE_ML + f"""
+SELECT brand AS marca, dia_prazo AS dia,
+       COUNT(*) FILTER (WHERE NOT cancelado_sem_coleta AND NOT sem_marco) AS base,
+       COUNT(*) FILTER (WHERE {_ATRASADO_ML}) AS atrasados,
        COUNT(*) FILTER (WHERE sem_marco) AS sem_marco
   FROM c
  GROUP BY brand, dia_prazo
+"""
+
+#: Os atrasados de UM dia de prazo, numa linha so' (json_agg): a reserva pelo
+#: Metabase corta em linhas, e a pagina sai da memoria (mesmo padrao do TikTok).
+SQL_ATRASADOS_DIA_ML = _CTE_ML + f"""
+SELECT json_agg(json_build_object(
+           'brand', brand, 'order_id', order_id, 'status', status,
+           'prazo', sla_expected_date AT TIME ZONE 'America/Sao_Paulo',
+           'coletado_em', coletado_em AT TIME ZONE 'America/Sao_Paulo')
+         ORDER BY brand, sla_expected_date, shipment_id) AS pedidos
+  FROM c
+ WHERE {_ATRASADO_ML}
 """
 
 

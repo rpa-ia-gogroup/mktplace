@@ -42,13 +42,21 @@ import BarraDeQualidade from "@/components/expedicao/BarraDeQualidade";
 import EvolucaoPorMarca from "@/components/expedicao/EvolucaoPorMarca";
 import type { LinhaDaFila } from "@/components/expedicao/EvolucaoPorMarca";
 import LdrShopeePanel, { useLdrShopee } from "@/components/expedicao/LdrShopeePanel";
+import ConcentracaoPorMarca from "@/components/expedicao/ConcentracaoPorMarca";
 import EvolucaoPorVencimento from "@/components/expedicao/EvolucaoPorVencimento";
-import { META_TETO, ROTULO_SEVERIDADE_META_TETO, severidadePelaMetaTeto } from "@/lib/expedicao-ldr-topo";
-import { useDiariaLdrMl } from "@/components/expedicao/LdrTopo";
+import PopupAtrasadosDoDia from "@/components/expedicao/PopupAtrasadosDoDia";
+import {
+  META_TETO,
+  ROTULO_SEVERIDADE_META_TETO,
+  linhasDeConcentracao,
+  severidadePelaMetaTeto,
+} from "@/lib/expedicao-ldr-topo";
+import { AJUDAS_CONCENTRACAO } from "@/lib/expedicao-definicoes";
+import { diaFechado } from "@/lib/expedicao-atrasados-dia";
+import { useLdrMl } from "@/components/expedicao/LdrTopo";
 import {
   AVISO_FILA_COM_FBS,
   DIAS_LDR_SHOPEE,
-  severidadeDoDiaShopee,
   divisaoDaFila,
   textoDaReconciliacao,
   type DivisaoDaFila,
@@ -187,9 +195,6 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 // EXPEDICAO-SHOPEE-LDR-1: a LDR operacional da Shopee nasce DESLIGADA. Com a
 // flag off, a secao "Prazo" fica exatamente como antes — inclusive o aviso de
 // que a LDR ainda nao e' calculada. Literal inline para o Next embutir.
-/** Severidade do dia do ML contra meta 3% / teto 6% (confirmados em 04/11/2026). */
-const severidadeDoDiaMl = (d: { rate: number | null; is_mature: boolean }) =>
-  severidadePelaMetaTeto(d, META_TETO.mercadolivre);
 const LDR_SHOPEE_LIGADA = process.env.NEXT_PUBLIC_EXPEDICAO_SHOPEE_LDR_ENABLED === "true";
 
 // A flag do Mercado Livre (`NEXT_PUBLIC_EXPEDICAO_ML_ENABLED`) mora na casca
@@ -711,7 +716,10 @@ export default function ExpedicaoClient({
   // ML (o outro canal desta fila; o literal do canal so' existe atras das flags):
   // a serie diaria vem da mesma rota da faixa do topo (requisicao compartilhada).
   // So' com a faixa ligada (`faixaTopo`): sem ela a rota nem e' consultada.
-  const diariaMl = useDiariaLdrMl(API, marcaAtiva, Boolean(faixaTopo) && filtros.channel !== "shopee");
+  const ldrMl = useLdrMl(API, marcaAtiva, Boolean(faixaTopo) && filtros.channel !== "shopee");
+  // Dia clicado na evolucao (popup dos atrasados daquele vencimento).
+  const [diaAtrasado, setDiaAtrasado] = useState<string | null>(null);
+  useEffect(() => setDiaAtrasado(null), [filtros.channel]);
 
   const temFiltro =
     filtros.brands.length > 0 || filtros.accounts.length > 0 || filtros.situacao.length > 0;
@@ -1100,6 +1108,14 @@ export default function ExpedicaoClient({
   // Heroi -> faixa -> "O que exige atenção agora" -> backlog por marca -> LDR
   // -> "Mais detalhes". Percentual antes do absoluto; ausencia e' "—".
   const ldrNaSecao = LDR_SHOPEE_LIGADA && filtros.channel === "shopee";
+  // Faixa "Evolução + Concentração" (o mesmo desenho do TikTok): Shopee pela
+  // LDR operacional, ML pela rota da faixa do topo. Meta/teto do canal.
+  const ladoLdr =
+    ldrNaSecao && ldr.resposta?.ldr
+      ? { dias: ldr.resposta.ldr.daily, marcas: ldr.resposta.brands, mt: META_TETO.shopee, rotulo: "Meta da Shopee" }
+      : filtros.channel !== "shopee" && ldrMl.dias
+        ? { dias: ldrMl.dias, marcas: ldrMl.marcas, mt: META_TETO.mercadolivre, rotulo: "Meta do ML" }
+        : null;
   const backlogRisco = totaisRisco?.backlog_count ?? null;
   const valorHeroi = destaque?.valor ?? null;
   const pctHeroi = valorHeroi !== null && backlogRisco !== null ? percentualDaFila(valorHeroi, backlogRisco) : null;
@@ -1893,6 +1909,15 @@ export default function ExpedicaoClient({
       icone={medidaDoAlvo ? ICONE_DA_MEDIDA[medidaDoAlvo] : undefined}
       identidade={medidaDoAlvo ? IDENTIDADE_DA_MEDIDA[medidaDoAlvo] : undefined}
     />
+    {diaAtrasado ? (
+      <PopupAtrasadosDoDia
+        api={API}
+        canal={filtros.channel}
+        marca={marcaAtiva}
+        vencimento={diaAtrasado}
+        aoFechar={() => setDiaAtrasado(null)}
+      />
+    ) : null}
     <LayoutExpedicao
       moldura={moldura}
       // 1-2. SELO, FILTROS E PROFUNDIDADE (compartilhado). O canal e' a aba
@@ -1975,19 +2000,26 @@ export default function ExpedicaoClient({
             atencao={filaDeAtencao}
             backlog={painelEvolucao}
             evolucao={
-              ldrNaSecao && ldr.resposta?.ldr ? (
+              ladoLdr ? (
                 <EvolucaoPorVencimento
-                  dias={ldr.resposta.ldr.daily}
-                  severidade={severidadeDoDiaShopee}
+                  dias={ladoLdr.dias}
+                  severidade={(d) => severidadePelaMetaTeto(d, ladoLdr.mt)}
                   rotulos={ROTULO_SEVERIDADE_META_TETO}
-                  linha={{ valor: META_TETO.shopee.meta, rotulo: "Meta" }}
+                  linha={{ valor: ladoLdr.mt.meta, rotulo: ladoLdr.rotulo }}
+                  // A lista por pedido mora na rota da faixa do topo: sem ela, so' o grafico.
+                  aoClicar={faixaTopo ? setDiaAtrasado : undefined}
+                  // So' dia fechado E maduro: o parcial ainda nao tem a lista definitiva.
+                  clicavel={(dia) => diaFechado(dia) && ladoLdr.dias.some((d) => d.due_date === dia && d.is_mature)}
                 />
-              ) : diariaMl ? (
-                <EvolucaoPorVencimento
-                  dias={diariaMl}
-                  severidade={severidadeDoDiaMl}
-                  rotulos={ROTULO_SEVERIDADE_META_TETO}
-                  linha={{ valor: META_TETO.mercadolivre.meta, rotulo: "Meta" }}
+              ) : null
+            }
+            concentracao={
+              ladoLdr?.marcas ? (
+                <ConcentracaoPorMarca
+                  linhas={linhasDeConcentracao(ladoLdr.marcas, ladoLdr.mt, brandLabel)}
+                  ajudas={AJUDAS_CONCENTRACAO[filtros.channel]}
+                  dica={`Marcas com vencimento fechado no período. Cor pela meta (${Math.round(ladoLdr.mt.meta * 100)}%) e pelo teto (${Math.round(ladoLdr.mt.teto * 100)}%) do canal.`}
+                  vazio="Nenhuma marca com vencimento fechado no período."
                 />
               ) : null
             }

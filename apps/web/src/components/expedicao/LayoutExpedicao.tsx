@@ -106,7 +106,7 @@ export default function LayoutExpedicao({
  * ALVO-GRADE (aprovado em 12/11/2026) — a grade unica das abas:
  *   faixa de 4 cartoes -> fila por situacao de prazo | "O que exige atenção"
  *   (lado a lado) -> backlog por marca (largura total) -> evolucao |
- *   concentracao (7/12 | 5/12, so' o TikTok) -> LDR 7 dias -> "Mais detalhes".
+ *   concentracao (7/12 | 5/12, nos tres canais) -> LDR 7 dias -> "Mais detalhes".
  * O heroi virou o 1o cartao; o convite ao detalhe saiu (o seletor da barra ja' leva la').
  */
 export function CorpoGestor({
@@ -126,7 +126,7 @@ export function CorpoGestor({
   backlog: ReactNode;
   /** Evolucao por dia de vencimento (TikTok 7/12; Shopee largura toda). */
   evolucao?: ReactNode;
-  /** TikTok: concentracao por marca (5/12). */
+  /** Concentracao por marca (5/12), ao lado da evolucao. */
   concentracao?: ReactNode;
   /** CX-MKT-3: LDR de 7 dias por marca (LdrTopo), o unico da visao do gestor. */
   ldr?: ReactNode;

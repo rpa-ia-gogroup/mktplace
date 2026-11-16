@@ -280,8 +280,10 @@ test("as secoes tem o mesmo titulo nos tres canais", () => {
   for (const f of [CLIENTE, TIKTOK]) {
     assert.match(f, /titulo="Prazo"/);
   }
-  assert.match(TIKTOK, /Concentração por marca/);
-  assert.match(CLIENTE, /Concentração por marca/);
+  // Um componente so' para os tres canais (mesmo titulo por construcao).
+  assert.match(fonte("src/components/expedicao/ConcentracaoPorMarca.tsx"), /Concentração por marca/);
+  assert.match(TIKTOK, /<ConcentracaoPorMarca/);
+  assert.match(CLIENTE, /<ConcentracaoPorMarca/);
 });
 
 test("'Fonte avançou' virou linguagem de gestor", () => {
@@ -306,8 +308,10 @@ test("TikTok com marca sem serie: nao diz 'nenhuma fotografia publicada'", () =>
 
 test("TikTok: lojas acima da meta sem base suficiente e' ausencia", () => {
   // O cartao virou o chip da Concentracao: sem base, o chip nao existe (nunca "0").
-  assert.match(TIKTOK, /\{dados\?\.brands\.length \? \(\s*<Chip/);
-  assert.match(TIKTOK, /title=\{`De \$\{formatarInteiro\(dados\.brands\.length\)\} com base suficiente\.`\}/);
+  const conc = fonte("src/components/expedicao/ConcentracaoPorMarca.tsx");
+  assert.match(conc, /\{linhas\.length \? \(\s*<Chip/);
+  assert.match(conc, /title=\{`De \$\{formatarInteiro\(linhas\.length\)\} com base\.`\}/);
+  assert.match(TIKTOK, /linhas=\{\(dados\?\.brands \?\? \[\]\)\.map/);
 });
 
 // ===========================================================================
@@ -582,15 +586,18 @@ test("LDR por loja: ⓘ nos cabecalhos ordenaveis, fora do botao de ordenar", ()
 });
 
 test("LDR por loja: Venciam, Atrasados e LDR com ⓘ; Loja segue no SortHeader", () => {
-  const ini = TIKTOK.indexOf("LDR por loja no período");
-  const tabela = TIKTOK.slice(ini, TIKTOK.indexOf("</thead>", ini));
-  for (const [coluna, chave] of [["base", "tiktok.venciam"], ["late", "tiktok.atrasaram"], ["rate", "tiktok.ldr"]]) {
+  const conc = fonte("src/components/expedicao/ConcentracaoPorMarca.tsx");
+  const ini = conc.indexOf("LDR por loja no per");
+  const tabela = conc.slice(ini, conc.indexOf("</thead>", ini));
+  for (const coluna of ["base", "late", "rate"]) {
     assert.match(
       tabela,
-      new RegExp(`<SortHeaderComAjuda\\s+rotulo="[^"]+"\\s+coluna="${coluna}"[^>]*ajuda="${chave.replace(".", "\\.")}"`),
+      new RegExp(`<SortHeaderComAjuda\\s+rotulo="[^"]+"\\s+coluna="${coluna}"[^>]*ajuda=\\{ajudas\\.${coluna}\\}`),
       coluna,
     );
   }
+  // As chaves de cada canal: TikTok no painel, Shopee e ML no catalogo.
+  assert.match(TIKTOK, /ajudas=\{\{ base: "tiktok\.venciam", late: "tiktok\.atrasaram", rate: "tiktok\.ldr" \}\}/);
   assert.match(tabela, /<SortHeader\s+rotulo="Loja"/);
   assert.doesNotMatch(tabela, /<SortHeader rotulo="(Venciam|Atrasados|LDR)"/);
 });

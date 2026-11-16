@@ -113,6 +113,27 @@ export function lerDiariaLdr(json: unknown): DiaLdr[] | null {
   return dias;
 }
 
+/**
+ * Linhas da "Concentração por marca" (Shopee e ML): so' marca com base (sem
+ * vencimento fechado nao ha' taxa a ranquear), severidade pela meta/teto do canal.
+ */
+export function linhasDeConcentracao(
+  marcas: readonly LinhaLdrMarca[],
+  mt: MetaTeto,
+  nome: (brand: string) => string,
+): { chave: string; nome: string; base: number; late: number; rate: number | null; severidade: Severidade }[] {
+  return marcas
+    .filter((m) => m.base > 0)
+    .map((m) => ({
+      chave: m.brand,
+      nome: nome(m.brand),
+      base: m.base,
+      late: m.late,
+      rate: m.rate,
+      severidade: severidadePelaMetaTeto({ rate: m.rate, is_mature: true }, mt),
+    }));
+}
+
 export type Faixa = "dentro" | "entre" | "acima";
 
 /** Onde a taxa cai em relação à meta e ao teto. Limite exato conta como dentro. */

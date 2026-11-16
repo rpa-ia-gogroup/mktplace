@@ -433,7 +433,10 @@ test("LDR do TikTok e da Shopee (KPI e tabelas) usam TaxaComBase", async () => {
   assert.match(tk, /\{formatarTaxa\(ldr\.rate, 1\)\}/);
   assert.match(tk, /title=\{`\$\{formatarInteiro\(ldr\.late\)\} de \$\{formatarInteiro\(ldr\.base\)\}`\}/);
   assert.match(tk, /<span className="sr-only">\s*\{" "\}· \{formatarInteiro\(ldr\.late\)\} de \{formatarInteiro\(ldr\.base\)\}/);
-  assert.match(tk, /<TaxaComBase numerador=\{m\.late\} base=\{m\.base\} taxa=\{m\.rate\} linha \/>/);
+  // A celula da concentracao mora no componente comum (TikTok, Shopee e ML).
+  const conc = lerFonte(juntar(raiz, "src/components/expedicao/ConcentracaoPorMarca.tsx"), "utf8");
+  assert.match(conc, /<TaxaComBase numerador=\{m\.late\} base=\{m\.base\} taxa=\{m\.rate\} linha \/>/);
+  assert.match(tk, /<ConcentracaoPorMarca/);
   assert.match(tk, /<TaxaComBase numerador=\{d\.late\} base=\{d\.base\} taxa=\{d\.rate\} linha \/>/);
   assert.match(tk, /<TaxaComBase numerador=\{f\.late\} base=\{f\.base\} taxa=\{f\.rate\} linha \/>/);
   assert.match(sh, /valor=\{<TaxaComBase numerador=\{l\.late\} base=\{l\.base\} taxa=\{l\.rate\} \/>\}/);
@@ -465,8 +468,7 @@ test("concentracao por marca: a celula empilhada le '3,35% · 199 de 5.940' (sep
     renderToStaticMarkup(h(TaxaComBase, { numerador: 1, base: 100000, taxa: 0.00001, linha: true })).replace(/<[^>]+>/g, ""),
     "&lt;0,01% · 1 de 100.000",
   );
-  const tk = lerFonte(juntar(import.meta.dirname, "..", "src/components/expedicao/TikTokDispatchPanel.tsx"), "utf8");
-  const concentracao = tk.slice(tk.indexOf("Concentração por marca"), tk.indexOf("// 8. DETALHE"));
+  const concentracao = lerFonte(juntar(import.meta.dirname, "..", "src/components/expedicao/ConcentracaoPorMarca.tsx"), "utf8");
   assert.match(concentracao, /<TaxaComBase numerador=\{m\.late\} base=\{m\.base\} taxa=\{m\.rate\} linha \/>/);
 });
 

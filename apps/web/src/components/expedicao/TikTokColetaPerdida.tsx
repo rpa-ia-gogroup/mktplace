@@ -96,6 +96,50 @@ export function BotaoCsvCompleto({
   );
 }
 
+/** "Anterior · Página N de M · Próxima" das listas paginadas da Expedição. */
+export function NavPaginas({
+  pagina,
+  total,
+  tamanho,
+  temMais,
+  ocupado,
+  aoMudar,
+}: {
+  pagina: number;
+  total: number;
+  tamanho: number;
+  temMais: boolean;
+  ocupado: boolean;
+  aoMudar: (pagina: number) => void;
+}) {
+  if (!temMais && pagina <= 1) return null;
+  return (
+    <nav aria-label="Páginas da lista" className="mt-2 flex items-center justify-between gap-3">
+      <button
+        type="button"
+        onClick={() => aoMudar(Math.max(1, pagina - 1))}
+        disabled={pagina <= 1 || ocupado}
+        className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
+      >
+        <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+        Anterior
+      </button>
+      <span className="text-xs tabular-nums text-ink-muted" aria-live="polite">
+        Página {formatarInteiro(pagina)} de {formatarInteiro(Math.max(pagina, Math.ceil(total / tamanho)))}
+      </span>
+      <button
+        type="button"
+        onClick={() => aoMudar(pagina + 1)}
+        disabled={!temMais || ocupado}
+        className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
+      >
+        Próxima
+        <ChevronRight aria-hidden="true" className="h-4 w-4" />
+      </button>
+    </nav>
+  );
+}
+
 async function buscarPagina(
   api: string,
   vencimento: string,
@@ -290,7 +334,7 @@ export function PopupColetaPerdida({
                       label={brandLabel(b.brand)}
                       pct={(b.missed / total) * 100}
                       barra="bg-crit"
-                      value={`${formatarInteiro(b.missed)} · ${formatarInteiro(b.still_waiting)} ainda sem coleta`}
+                      value={`${formatarInteiro(b.missed)} ${b.missed === 1 ? "atrasado" : "atrasados"} · ${formatarInteiro(b.still_waiting)} sem coleta`}
                     />
                   ))}
                 </ul>
@@ -355,31 +399,14 @@ export function PopupColetaPerdida({
                   </tbody>
                 </table>
               </div>
-              {dados.has_more || pagina > 1 ? (
-                <nav aria-label="Páginas da lista" className="mt-2 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPagina((n) => Math.max(1, n - 1))}
-                    disabled={pagina <= 1 || carga.tipo === "carregando"}
-                    className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
-                  >
-                    <ChevronLeft aria-hidden="true" className="h-4 w-4" />
-                    Anterior
-                  </button>
-                  <span className="text-xs tabular-nums text-ink-muted" aria-live="polite">
-                    Página {formatarInteiro(pagina)} de {formatarInteiro(Math.max(pagina, Math.ceil(total / dados.page_size)))}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setPagina((n) => n + 1)}
-                    disabled={!dados.has_more || carga.tipo === "carregando"}
-                    className="inline-flex min-h-11 items-center gap-1 rounded-md border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-line-strong disabled:cursor-default disabled:opacity-40"
-                  >
-                    Próxima
-                    <ChevronRight aria-hidden="true" className="h-4 w-4" />
-                  </button>
-                </nav>
-              ) : null}
+              <NavPaginas
+                pagina={pagina}
+                total={total}
+                tamanho={dados.page_size}
+                temMais={dados.has_more}
+                ocupado={carga.tipo === "carregando"}
+                aoMudar={setPagina}
+              />
             </DrilldownSecao>
           </>
         ) : null}
