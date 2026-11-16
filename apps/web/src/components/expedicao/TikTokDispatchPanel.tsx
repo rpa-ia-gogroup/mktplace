@@ -523,7 +523,9 @@ export default function TikTokDispatchPanel({
           ({ldr.days} {ldr.days === 1 ? "dia" : "dias"} + hoje)
         </p>
         <FaixaKpis rotulo="Indicadores da janela" colunas={comLdr ? 3 : 4}>
-          {comLdr ? cartaoLdr : null}
+          {/* A LDR ocupa a coluna da esquerda (2 linhas) e os 4 irmaos fecham 2x2: sem buraco.
+              O invólucro tira a linha dela de "irma" dos outros, que nao herdam a reserva oca. */}
+          {comLdr ? <div className="min-[480px]:col-span-2 lg:col-span-1 lg:row-span-2">{cartaoLdr}</div> : null}
           {/* `base` e `late` da LDR somam SO' vencimentos fechados. Sem nenhum
               fechado (o caso da serie vencida) eles valem zero por construcao,
               nao por medicao: a tela mostra ausencia, nao "0 venciam". */}
@@ -547,7 +549,8 @@ export default function TikTokDispatchPanel({
           />
           <CartaoComAjuda
             ajuda="tiktok.vence_hoje_amanha"
-            rotulo="Vencem hoje ou amanhã (janela da LDR)"
+            extras={["Contados na janela da LDR, não na fila ao vivo."]}
+            rotulo="Vencem hoje/amanhã"
             icone={CalendarClock}
             cor="rgb(var(--tc-kpi-pedidos))"
             valor={formatarInteiro(ldr.pending_at_risk)}

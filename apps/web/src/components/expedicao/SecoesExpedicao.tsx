@@ -35,7 +35,8 @@ export function FaixaKpis({
     : colunas === 6
       ? "grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-6"
       : colunas === 3
-        ? "grid grid-cols-1 gap-2 sm:grid-cols-3"
+        ? // F1: 2 colunas no meio e 3 a partir de `lg`, com o gap das outras faixas.
+          "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 lg:grid-cols-3"
         : colunas === 2
           ? "grid grid-cols-1 gap-2 sm:grid-cols-2"
           : // ALVO-GRADE: a faixa dos 4 cartoes, a mesma grade da Gerencial.
