@@ -124,7 +124,7 @@ export function CorpoGestor({
   prazo?: ReactNode;
   atencao: ReactNode;
   backlog: ReactNode;
-  /** TikTok: evolucao por dia de vencimento (7/12). */
+  /** Evolucao por dia de vencimento (TikTok 7/12; Shopee largura toda). */
   evolucao?: ReactNode;
   /** TikTok: concentracao por marca (5/12). */
   concentracao?: ReactNode;
@@ -143,7 +143,10 @@ export function CorpoGestor({
       {backlog}
       {evolucao || concentracao ? (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-          {evolucao ? <div className="min-w-0 lg:col-span-7">{evolucao}</div> : null}
+          {/* Sem concentracao ao lado (Shopee), a evolucao ocupa a largura toda. */}
+          {evolucao ? (
+            <div className={`min-w-0 ${concentracao ? "lg:col-span-7" : "lg:col-span-12"}`}>{evolucao}</div>
+          ) : null}
           {concentracao ? <div className="min-w-0 lg:col-span-5">{concentracao}</div> : null}
         </div>
       ) : null}

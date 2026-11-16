@@ -437,8 +437,11 @@ test("o TikTok nao empilha mais banners antes do primeiro numero", () => {
 
 test("serie sem vencimento fechado troca o grafico por uma linha", () => {
   // EXPEDICAO-TIKTOK-COLETA-PERDIDA: o grafico ganhou o clique por dia.
-  assert.match(TIKTOK, /\{temDiaMedido \? \(\s*<Grafico\s+dias=\{ldr\.daily\}[\s\S]*?\/>\s*\) : \(/);
-  assert.match(TIKTOK, /Nenhum vencimento da janela tem taxa fechada para desenhar\./);
+  // O grafico saiu para o componente comum (TikTok + Shopee).
+  const comum = readFileSync(join(RAIZ, "src/components/expedicao/EvolucaoPorVencimento.tsx"), "utf8");
+  assert.match(comum, /\{serieTemDiaMedido\(dias\) \? \(\s*<Grafico/);
+  assert.match(comum, /Nenhum vencimento da janela tem taxa fechada para desenhar\./);
+  assert.match(TIKTOK, /<EvolucaoPorVencimento\s+dias=\{ldr\.daily\}/);
 });
 
 test("LDR sem taxa nao e' pintada de verde", () => {
