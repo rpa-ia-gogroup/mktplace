@@ -527,6 +527,30 @@ O cancelamento Shopee NAO muda: `Σ cancelados / (Σ pedidos + Σ cancelados)` d
 Exemplo (out/26, 5 marcas, so' a kokeshi com devolucao): antes, 260 / 95.945 = **0,27%** (diluido); depois,
 260 / 69.073 = **0,38%**, "parcial (1 de 5 marcas)".
 
+### `/api/v1/performance/quality` — não entregue Mercado Livre (T-0118, 2026-11-16)
+
+Fonte: `gold.ml_gestao_diaria` (`total_shipments`, `delivered_shipments`) → conector ML →
+`marts.fact_marketplace_daily_performance.total_shipments` (migration 047) e `.delivered_orders` (que já era
+`delivered_shipments`). Filtros: `marketplace_id = 2`, período e marcas do filtro global. Grão: dia × marca,
+somado no período por marca. Atualização: pipeline diário do ML (`daily_performance --source ml`); histórico
+pelo backfill `pipelines/sync_ml_total_shipments.py` (só `UPDATE`, dry-run por padrão).
+
+| Campo | Fórmula | Nulo quando |
+|---|---|---|
+| `ml_not_delivered_shipments` (marca) | `GREATEST(Σ total_shipments − Σ delivered_orders[dias com total_shipments], 0)` | `Σ total_shipments` nulo ou 0 |
+| `ml_not_delivered_rate_pct` (marca) | `ml_not_delivered_shipments / Σ total_shipments * 100` | idem |
+| `ml_total_shipments` (marca, opcional) | `Σ total_shipments` | nenhum dia do recorte com envios |
+| `ml_not_delivered_rate_pct` (consolidado) | `Σ não entregues / Σ envios`, só nas marcas com envios (numerador E denominador) | nenhuma marca com envios |
+
+Mesma fórmula da gold (`gold_service`, aba Qualidade gold). Os entregues do numerador saem só dos dias com
+`total_shipments` (`FILTER`), para os dois lados cobrirem os mesmos dias enquanto o histórico não é recarregado.
+A Gerencial (`ml_nao_entregue_torre`, rótulo "envios não entregues / envios") recalcula com a mesma fórmula a
+partir das linhas por marca e lista as marcas fora da cobertura.
+
+**Ressalva de população:** pedido ≠ envio. Um envio pode juntar vários pedidos (pack/carrinho), então o
+denominador antigo (pedidos pagos) inflava a taxa: out/26 saía 3,01% contra ~0,6% na gold. **Sem dado = null**,
+nunca 0: dia sem `total_shipments` (antes da migration/backfill) fica fora da conta.
+
 ---
 
 ## Pedidos (sem cancelados) — tela /pedidos (T-0095, QA B1-04, PR #386, 2026-11-11)
