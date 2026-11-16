@@ -102,7 +102,7 @@ function Grafico<D extends DiaVencimento>({
                       "aria-label": `Ver os pedidos vencidos em ${formatarDiaLongo(d.due_date)} (${formatarTaxa(d.rate)})`,
                     }
                   : {})}
-                className={`flex min-w-[38px] flex-1 flex-col items-center gap-1 ${
+                className={`flex min-w-[34px] flex-1 flex-col items-center gap-1 ${
                   podeClicar
                     ? "cursor-pointer rounded-md hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                     : ""
@@ -111,7 +111,7 @@ function Grafico<D extends DiaVencimento>({
                 <span
                   className={`text-xs tabular-nums ${d.rate === null ? "text-ink-faint" : TEXTO_SEVERIDADE[sev]}`}
                 >
-                  {d.rate === null ? VALOR_SEM_TAXA : `${Math.round(d.rate * 100)}`}
+                  {d.rate === null ? VALOR_SEM_TAXA : formatarTaxa(d.rate, 1)}
                 </span>
                 <div className="flex w-full flex-1 items-end">
                   <div
