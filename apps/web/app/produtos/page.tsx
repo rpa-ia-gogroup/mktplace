@@ -34,7 +34,7 @@ import {
 } from "@/lib/produtos-tab-transition";
 import { initialChannelState, startFetch, resolveFetch, resolveFetchError, type ChannelState } from "@/lib/async-channel-state";
 import { adsAteParcial, formatProdutosScope } from "@/lib/produtos-scope";
-import { chavePeriodo, mesShopee, periodoDoAtalho, rotuloPeriodo, type PeriodoProdutos } from "@/lib/produtos-periodo";
+import { chavePeriodo, mesShopee, periodoDoAtalho, periodoDoMesProdutos, rotuloPeriodo, type PeriodoProdutos } from "@/lib/produtos-periodo";
 import { fmtBrlExato } from "@/lib/formatters";
 import {
   mlRowToExportRecord, tiktokRowToExportRecord, shopeeRowToExportRecord,
@@ -477,9 +477,8 @@ function ProdutosPageInner() {
     setShBucket(null);
   }
 
-  const periodLabel = tab === "shopee"
-    ? (monthOptions.find((m) => m.value === periodSh)?.label ?? periodSh)
-    : rotuloPeriodo(periodo, monthOptions);
+  // Shopee: o mes do periodo, no mesmo formato do atalho aceso ("Este mês · 01–15/11").
+  const periodLabel = rotuloPeriodo(tab === "shopee" ? periodoDoMesProdutos(periodSh) : periodo, monthOptions);
   const activeChannelLabel = TABS.find((t) => t.value === tab)?.label ?? tab;
   const brandOptionsForTab = tab === "ml" ? ML_BRANDS : TK_SH_BRANDS;
   const activeBrandLabel = brand ? (brandOptionsForTab.find((b) => b.value === brand)?.label ?? brand) : "Todas as marcas";

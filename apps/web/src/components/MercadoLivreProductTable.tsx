@@ -136,9 +136,9 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
               </p>
             )}
           </td>
-          <td className="px-4 py-3 max-w-[200px]">
+          <td className="px-3 py-3 max-w-[8rem]">
             {p.action_signal && (
-              <span title={p.action_signal} className={`inline-block whitespace-nowrap text-[10px] font-medium px-2 py-0.5 rounded border leading-tight ${signalStyle(p.action_signal)}`}>
+              <span title={p.action_signal} className={`inline-block max-w-[6rem] truncate align-middle whitespace-nowrap text-[10px] font-medium px-2 py-0.5 rounded border leading-tight ${signalStyle(p.action_signal)}`}>
                 {sinalCurto(p.action_signal)}
               </span>
             )}
