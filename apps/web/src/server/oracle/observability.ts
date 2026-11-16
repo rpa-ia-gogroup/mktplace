@@ -96,6 +96,8 @@ export type OracleMcpEvent = {
   jsonrpc_method: OracleJsonRpcMethod;
   failure_category: OracleFailureCategory;
   duration_ms: number;
+  /** So' em chamada autenticada por chave pessoal: nome e dono. Nunca a chave. */
+  chave_pessoal?: { nome: string; dono: string };
 };
 
 /**
