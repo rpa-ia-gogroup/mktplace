@@ -129,7 +129,11 @@ function Grafico<D extends DiaVencimento>({
         </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
-        {(["ok", "fora_da_meta", "critico", "parcial"] as Severidade[]).map((s) => (
+        {/* So' as severidades presentes na serie: legenda sem barra correspondente
+            faz o gestor procurar o que nao existe. Dia sem taxa nao conta. */}
+        {(["ok", "fora_da_meta", "critico", "parcial"] as Severidade[])
+          .filter((s) => dias.some((d) => (d.rate !== null || !d.is_mature) && severidade(d) === s))
+          .map((s) => (
           <span key={s} className="inline-flex items-center gap-1.5">
             <span className={`inline-block h-2.5 w-2.5 rounded-sm ${COR_SEVERIDADE[s]}`} />
             {rotulos[s]}
