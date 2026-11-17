@@ -93,7 +93,7 @@ import {
   type ProdutoEstoque,
 } from "@/lib/estoque-full";
 import { brandLabel } from "@/lib/filters/brands";
-import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, classeDaCategoria, textoChip } from "@/lib/estoque-categorias";
+import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, classeDaCategoria, contagensNaCurva, CARDS_NA_CURVA, textoChip } from "@/lib/estoque-categorias";
 
 const CHAVES_CATEGORIA = CATEGORIAS_SHOPEE.map((c) => c.chave);
 
@@ -400,7 +400,7 @@ export default function EstoqueFullClient() {
     setBuscaDigitada("");
     const classe = classeDaCategoria(chave);
     setFiltros((f) => ({ ...FILTROS_VAZIOS, brands: f.brands, classificacoes: classe ? [classe] : [] }));
-    setCurvas([]);
+    if (!(CARDS_NA_CURVA as readonly string[]).includes(chave)) setCurvas([]);
     pedidoRolagem.current = true;
     setCategoria(chave);
   };
@@ -415,6 +415,9 @@ export default function EstoqueFullClient() {
   const lista = categoria
     ? abrirCategoria(naCurva, categoria)
     : comCurva ? ordenarPorCurva(naCurva, (p) => p.cobertura_torre_dias) : naCurva;
+  // Com curva filtrada, os 4 cards de contagem seguem o filtro (numero = lista que o card abre).
+  // So' com a lista inteira (sem truncar, sem classificacao filtrada): senao o numero nao seria o da curva e fica o da fotografia.
+  const naCurvaCards = filtroCurva.length > 0 && payload && !isIndisponivel(payload) && !payload.truncado && filtros.classificacoes.length === 0 ? contagensNaCurva(CATEGORIAS_SHOPEE, CARDS_NA_CURVA, naCurva) : null;
   const algumFiltro = temFiltroAtivo(filtros) || filtroCurva.length > 0 || !!categoria;
 
   // Ausencia de conta NUNCA vira zero: so' contas presentes viram filtro, e
@@ -571,7 +574,7 @@ export default function EstoqueFullClient() {
             <>
               {/* Parcial: o aviso do topo; nos cards so' title + leitor de tela. */}
               <FaixaCategorias
-                cards={cardsShopee(payload)}
+                cards={cardsShopee(payload, naCurvaCards)}
                 faixa={["exigem-acao", "ruptura", "baixo", "excesso"]}
                 ativa={chaveCategoria}
                 aoEscolher={escolherCategoria}
@@ -594,6 +597,7 @@ export default function EstoqueFullClient() {
                   rotuloMarca={tituloMarca}
                   item="produtos"
                   comCurva={comCurva}
+                  curvas={curvas}
                   ressalva={payload.truncado ? "Lista truncada: grade parcial" : filtros.classificacoes.length > 0 ? "Só as classificações filtradas" : null}
                 />
               )}
@@ -658,8 +662,9 @@ export default function EstoqueFullClient() {
 }
 
 /** Os 8 cards da aba, na ordem de antes. Cor = familia (identidade), nao status. */
-function cardsShopee(payload: EstoqueFullOk): CardCategoria[] {
-  const i = payload.indicadores;
+function cardsShopee(payload: EstoqueFullOk, na: Record<string, number> | null = null): CardCategoria[] {
+  const i = { ...payload.indicadores };
+  if (na) { i.produtos_exigem_acao = na["exigem-acao"]; i.produtos_ruptura = na.ruptura; i.produtos_baixo = na.baixo; i.produtos_excesso = na.excesso; }
   const l = payload.limites;
   return [
     { chave: "unidades", rotulo: "Unidades vendáveis", valor: fmtInt(i.unidades_vendaveis_operacional),

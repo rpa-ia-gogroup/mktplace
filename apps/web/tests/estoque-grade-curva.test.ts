@@ -6,6 +6,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { passaCurva, rotuloDasCurvas } from "../src/lib/estoque-curva.ts";
+import { abrirCategoria, CARDS_NA_CURVA, CATEGORIAS_ML, contagensNaCurva } from "../src/lib/estoque-categorias.ts";
 import { descreverPartes, fmtPermanencia, linhaDaCurva, montarGrade, ordenarPorAcao, TOTAL, type ItemGrade } from "../src/lib/estoque-grade-curva.ts";
 
 const it = (o: Partial<ItemGrade>): ItemGrade => ({
@@ -139,4 +141,58 @@ test("barra: excesso em tom fraco (nao o roxo cheio); na visao rapida vira demai
   const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
   assert.match(rapida, /Impacto potencial \{p !== null/); // % primeiro, depois R$/dia, com a palavra "potencial"
   assert.equal(descreverPartes({ itens: 5, ruptura: 0, baixo: 0, excesso: 0, demais: 5 }), "5 itens: 5 demais");
+});
+
+test("curva unica: a grade segue o filtro do topo (varias curvas juntas; vazio = todas)", () => {
+  const xs = [
+    it({ curva: "AA", classe: "ruptura" }), it({ curva: "A", classe: "baixo" }),
+    it({ curva: "B", classe: "ruptura" }), it({ curva: "C" }), it({ curva: null, classe: "excesso" }),
+  ];
+  const total = (f: Parameters<typeof passaCurva>[1]) => montarGrade(xs.filter((i) => passaCurva(i.curva, f)), ["barbours"]).totalMarca.barbours;
+  assert.deepEqual([total([]).itens, total([]).ruptura], [5, 2]); // sem filtro: todas
+  assert.deepEqual([total(["aa_a"]).itens, total(["aa_a"]).ruptura, total(["aa_a"]).baixo], [2, 1, 1]);
+  assert.deepEqual([total(["aa_a", "b"]).itens, total(["aa_a", "b"]).ruptura], [3, 2]); // multi-escolha da caixa
+  assert.equal(total(["sem"]).excesso, 1);
+});
+
+test("curva unica: o painel nao tem filtro proprio e as duas abas passam o filtro do topo", () => {
+  const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
+  const ml = readFileSync(join(import.meta.dirname, "../app/estoque-ml-full/MLFullEstoqueClient.tsx"), "utf8");
+  const sh = readFileSync(join(import.meta.dirname, "../app/estoque-full/EstoqueFullClient.tsx"), "utf8");
+  assert.doesNotMatch(grade, /Segmented|setCurva/);
+  assert.match(grade, /descricao=\{comCurva/); // a curva escolhida aparece no subtitulo do painel
+  assert.match(ml, /<GradeCurvaMarca[\s\S]*?curvas=\{curvas\}/);
+  assert.match(sh, /<GradeCurvaMarca[\s\S]*?curvas=\{curvas\}/);
+});
+
+test("subtitulo do painel: Curva AA/A / Curvas AA/A + B / Todas as curvas", () => {
+  assert.equal(rotuloDasCurvas([]), "Todas as curvas");
+  assert.equal(rotuloDasCurvas(["aa_a"]), "Curva AA/A");
+  assert.equal(rotuloDasCurvas(["b", "aa_a"]), "Curvas AA/A + B"); // ordem da caixa, nao do clique
+  assert.equal(rotuloDasCurvas(["sem"]), "Curva Sem curva");
+});
+
+test("cards de contagem seguem a curva: numero = lista que o card abre, no recorte da curva", () => {
+  const inv = (curva: "AA" | "A" | "B" | "C" | null, c: string) => ({ curva, classificacao_torre: c, eh_full: true } as never);
+  const todos = [inv("AA", "RUPTURA_CANDIDATA"), inv("A", "BAIXO_CANDIDATO"), inv("B", "RUPTURA_CANDIDATA"), inv("C", "EXCESSO_CANDIDATO"), inv(null, "RUPTURA_CANDIDATA"), inv("AA", "SUFICIENTE")];
+  const naCurva = todos.filter((i: { curva: never }) => passaCurva(i.curva, ["aa_a"]));
+  const n = contagensNaCurva(CATEGORIAS_ML, CARDS_NA_CURVA, naCurva);
+  assert.deepEqual(n, { "exigem-acao": 2, ruptura: 1, baixo: 1, excesso: 0 }); // so' AA/A
+  for (const k of CARDS_NA_CURVA) {
+    const cat = CATEGORIAS_ML.find((c) => c.chave === k)!;
+    assert.equal(n[k], abrirCategoria(naCurva, cat).length); // card = lista
+  }
+  const todas = contagensNaCurva(CATEGORIAS_ML, CARDS_NA_CURVA, todos);
+  assert.deepEqual(todas, { "exigem-acao": 4, ruptura: 3, baixo: 1, excesso: 1 }); // sem filtro: o recorte inteiro
+  assert.deepEqual(CARDS_NA_CURVA, ["exigem-acao", "ruptura", "baixo", "excesso"]);
+});
+
+test("cards seguem a curva: as duas abas usam o recorte e so' sem lista truncada", () => {
+  const ml = readFileSync(join(import.meta.dirname, "../app/estoque-ml-full/MLFullEstoqueClient.tsx"), "utf8");
+  const sh = readFileSync(join(import.meta.dirname, "../app/estoque-full/EstoqueFullClient.tsx"), "utf8");
+  for (const t of [ml, sh]) {
+    assert.match(t, /contagensNaCurva\(CATEGORIAS_\w+, CARDS_NA_CURVA, naCurva\)/);
+    assert.match(t, /!payload\.truncado/);
+    assert.match(t, /cards=\{cards\w+\(payload, naCurvaCards\)\}/);
+  }
 });
