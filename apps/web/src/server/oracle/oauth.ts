@@ -294,7 +294,75 @@ export type VerifierOptions = {
    * usem chaves sinteticas geradas em runtime, sem rede e sem PEM versionado.
    */
   keyResolver?: Parameters<typeof jwtVerify>[1];
+  /** Valida chave pessoal (`torre_pat_...`) na API. Ausente = chave pessoal recusada. */
+  validatePersonalKey?: PersonalKeyValidator;
 };
+
+// ---------------------------------------------------------------------------
+// Chave pessoal (CHAVES-PESSOAIS)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bearer com este prefixo e' chave pessoal, validada na API da Torre (que guarda
+ * so' o hash, controla prazo e revogacao). Qualquer outro bearer segue o JWT.
+ * A trava de token de maquina nao se aplica: a chave sempre tem um dono humano.
+ */
+export const PERSONAL_KEY_PREFIX = "torre_pat_";
+
+/** Dono da chave pessoal. Nunca a chave. `expiraEm` em segundos epoch. */
+export type PersonalKeyOwner = { nome: string; dono: string; expiraEm: number };
+export type PersonalKeyValidator = (token: string) => Promise<PersonalKeyOwner | null>;
+
+const PERSONAL_KEY_TIMEOUT_MS = 5000;
+
+/**
+ * Validador que pergunta a API (`POST /api/v1/chaves/validar`, so' com a chave
+ * de servico). Qualquer resposta que nao seja 200 com o formato esperado = `null`.
+ */
+export function apiPersonalKeyValidator(
+  backendBaseUrl: string,
+  serviceKey: string | undefined,
+  fetchImpl: typeof fetch = fetch,
+): PersonalKeyValidator {
+  return async (token) => {
+    if (!serviceKey) return null;
+    const res = await fetchImpl(`${new URL(backendBaseUrl).origin}/api/v1/chaves/validar`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-torre-service-key": serviceKey },
+      body: JSON.stringify({ chave: token }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(PERSONAL_KEY_TIMEOUT_MS),
+    });
+    if (res.status !== 200) return null;
+    const j = (await res.json()) as { nome?: unknown; dono_email?: unknown; expira_em?: unknown };
+    if (typeof j.nome !== "string" || typeof j.dono_email !== "string" || typeof j.expira_em !== "number") {
+      return null;
+    }
+    return { nome: j.nome, dono: j.dono_email, expiraEm: j.expira_em };
+  };
+}
+
+async function verifyPersonalKey(
+  token: string,
+  cfg: OAuthConfig,
+  validate: PersonalKeyValidator | undefined,
+): Promise<AuthInfo> {
+  let owner: PersonalKeyOwner | null = null;
+  try {
+    owner = validate ? await validate(token) : null;
+  } catch {
+    // Rede, timeout ou corpo invalido: mesma resposta de chave invalida.
+  }
+  if (owner === null) throw invalidToken("token invalido");
+  return {
+    token,
+    clientId: "torre_pat",
+    scopes: [cfg.requiredScope],
+    expiresAt: owner.expiraEm,
+    // Unico `extra` do AuthInfo: nome e dono da chave, para o log da chamada.
+    extra: { chave_pessoal: { nome: owner.nome, dono: owner.dono } },
+  };
+}
 
 /**
  * Constroi o verificador de token no contrato `OAuthTokenVerifier` do SDK.
@@ -315,6 +383,9 @@ export function createAuth0Verifier(
   return {
     async verifyAccessToken(token: string): Promise<AuthInfo> {
       if (!present(token)) throw invalidToken("token ausente");
+      if (token.startsWith(PERSONAL_KEY_PREFIX)) {
+        return verifyPersonalKey(token, cfg, opts.validatePersonalKey);
+      }
 
       let payload: JWTPayload;
       try {

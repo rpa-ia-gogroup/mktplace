@@ -44,6 +44,7 @@ import {
 } from "./observability.ts";
 import {
   advertisedScopes,
+  apiPersonalKeyValidator,
   createAuth0Verifier,
   protectedResourceMetadataUrl,
   type OAuthConfig,
@@ -167,6 +168,7 @@ export async function handleMcpRequest(
     httpStatus: number | null,
     jsonRpcMethod: OracleJsonRpcMethod,
     failureCategory: OracleFailureCategory,
+    chavePessoal?: { nome: string; dono: string },
   ): void {
     if (alreadyEmitted) return;
     alreadyEmitted = true;
@@ -181,6 +183,7 @@ export async function handleMcpRequest(
         jsonrpc_method: jsonRpcMethod,
         failure_category: failureCategory,
         duration_ms: Math.max(0, Date.now() - startedAt),
+        ...(chavePessoal ? { chave_pessoal: chavePessoal } : {}),
       },
       opts.logger,
     );
@@ -202,8 +205,16 @@ export async function handleMcpRequest(
   // 2. AUTENTICACAO, antes de instanciar o MCP e antes do backend.
   //    `decision.auth` e' non-null sempre que OAuth esta configurado — e em
   //    contexto hospedado isso e' garantido pela propria fronteira.
+  let chavePessoal: { nome: string; dono: string } | undefined;
   if (decision.auth !== null) {
-    const auth = await authenticate(request, decision.auth, opts.verifierOptions ?? {});
+    const auth = await authenticate(request, decision.auth, {
+      validatePersonalKey: apiPersonalKeyValidator(
+        decision.backendBaseUrl,
+        decision.backendServiceKey,
+        opts.fetchImpl,
+      ),
+      ...opts.verifierOptions,
+    });
     if (auth instanceof Response) {
       // 403 significa token verificado, porem sem a permission: e' autorizacao.
       // Qualquer outra negacao e' autenticacao. A categoria vem da FORMA do
@@ -222,6 +233,7 @@ export async function handleMcpRequest(
       emit(isForbidden ? "authorization" : "authentication", "denied", auth.status, "unknown", category);
       return auth;
     }
+    chavePessoal = (auth.extra as { chave_pessoal?: { nome: string; dono: string } } | undefined)?.chave_pessoal;
     // O `AuthInfo` verificado NAO e' repassado adiante: as tools sao
     // read-only e single-tenant, e o bearer encerra sua funcao nesta
     // fronteira. Nada do token viaja para o `torre-client`.
@@ -247,14 +259,14 @@ export async function handleMcpRequest(
 
     const response = await handler.fetch(request);
     const { outcome, failureCategory } = classifyProtocolStatus(response.status);
-    emit("protocol", outcome, response.status, jsonRpcMethod, failureCategory);
+    emit("protocol", outcome, response.status, jsonRpcMethod, failureCategory, chavePessoal);
     return response;
   } catch (err) {
     // Registra e RE-LANCA: o tratamento HTTP existente e' preservado tal como
     // esta. Observabilidade nao converte excecao em resposta — e por isso o
     // status vai `null`: nenhuma `Response` foi observada por esta camada.
     const { outcome, failureCategory } = classifyProtocolStatus(null);
-    emit("protocol", outcome, null, jsonRpcMethod, failureCategory);
+    emit("protocol", outcome, null, jsonRpcMethod, failureCategory, chavePessoal);
     throw err;
   } finally {
     // Fecha o leg moderno mesmo em erro: nada de transporte pendurado entre
