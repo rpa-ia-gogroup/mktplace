@@ -131,7 +131,7 @@ export default function Segmented<T extends string>({
             aria-checked={ativo}
             aria-label={o.descricao}
             title={o.descricao}
-            tabIndex={ativo ? 0 : -1}
+            tabIndex={ativo || (indiceAtivo < 0 && i === 0) ? 0 : -1}
             onClick={() => aoEscolher(o.valor)}
             onKeyDown={(e) => {
               if (e.key === "ArrowRight" || e.key === "ArrowDown") {

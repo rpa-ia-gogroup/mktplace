@@ -508,7 +508,7 @@ test("radiogroup cumpre o teclado que o papel ARIA promete", () => {
     assert.ok(SEGMENTED.includes(tecla), `sem tratamento de ${tecla}`);
   }
   // tabIndex rovente: o grupo e' UM ponto de tabulacao, nao um por opcao.
-  assert.match(SEGMENTED, /tabIndex=\{ativo \? 0 : -1\}/);
+  assert.match(SEGMENTED, /tabIndex=\{ativo(?: \|\| \(indiceAtivo < 0 && i === 0\))? \? 0 : -1\}/);
 });
 
 test("todo seletor da Expedicao usa o MESMO componente", () => {

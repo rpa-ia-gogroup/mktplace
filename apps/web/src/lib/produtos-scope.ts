@@ -32,3 +32,10 @@ export function formatProdutosScope(input: ProdutosScopeInput): string {
   }
   return parts.join(" · ");
 }
+
+/** "Ads até dd/mm" quando o relatório de Ads do ML não cobre o período inteiro
+ * (D-1, ou atraso no relatório); null quando os Ads vão até o último dia. */
+export function adsAteParcial(fim: string, adsAte: string | null | undefined): string | null {
+  if (!adsAte) return null;
+  return adsAte < fim ? `Ads até ${adsAte.slice(8, 10)}/${adsAte.slice(5, 7)}` : null;
+}

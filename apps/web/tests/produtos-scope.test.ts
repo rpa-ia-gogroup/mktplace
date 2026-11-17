@@ -1,7 +1,7 @@
 // Testes da linha compacta "Escopo atual" da aba Produtos (Gate U4).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatProdutosScope } from "../src/lib/produtos-scope.ts";
+import { adsAteParcial, formatProdutosScope } from "../src/lib/produtos-scope.ts";
 
 test("ML: sem periodo mensal — mostra 'ranking acumulado atual'", () => {
   const line = formatProdutosScope({
@@ -39,4 +39,11 @@ test("ultima pagina parcial trunca o 'ate' no total, nao no offset+limit", () =>
     total: 110, offset: 100, limit: 25,
   });
   assert.equal(line, "Mercado Livre · Todas as marcas · ranking acumulado atual · 101–110 de 110 produtos");
+});
+
+test("adsAteParcial: marca so' quando o Ads nao cobre o periodo inteiro", () => {
+  assert.equal(adsAteParcial("2026-11-15", "2026-11-14"), "Ads até 14/11");
+  assert.equal(adsAteParcial("2026-10-31", "2026-10-31"), null);
+  assert.equal(adsAteParcial("2026-11-15", "2026-11-15"), null);
+  assert.equal(adsAteParcial("2026-10-31", null), null);
 });

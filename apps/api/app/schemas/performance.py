@@ -880,6 +880,8 @@ class ProdutoMLRow(BaseModel):
     pareto_bucket: Optional[str] = None
     revenue_velocity: Optional[str] = None
     ad_roas: Optional[float] = None
+    # Periodo: ROAS so' da venda direta do anuncio (o ad_roas inclui a indireta, como no ML).
+    ad_roas_direto: Optional[float] = None
     ad_acos_pct: Optional[float] = None
     ad_spend: Optional[float] = None
     ad_efficiency: Optional[str] = None
@@ -896,6 +898,11 @@ class ProdutosMLResponse(BaseModel):
     items: list[ProdutoMLRow]
     scope: str = "ranking_acumulado_atual"
     refreshed_at: Optional[str] = None
+    # Com periodo (scope "mes"): intervalo, competencia (so' mes inteiro) e ultimo dia com Ads no relatorio do ML.
+    ref_month: Optional[str] = None
+    data_inicio: Optional[str] = None
+    data_fim: Optional[str] = None
+    ads_ate: Optional[str] = None
 
 
 class ParetoBucketSummary(BaseModel):
@@ -923,6 +930,11 @@ class ProdutosMLSummaryResponse(BaseModel):
     # total_gmv / total_units do escopo elegivel (GMV>0) — media ponderada,
     # NUNCA media simples de avg_price por linha (ver produtos_audit.md 10.5).
     avg_price_weighted: Optional[float] = None
+    # Com periodo (scope "mes"): intervalo, competencia (so' mes inteiro) e ultimo dia com Ads no relatorio do ML.
+    ref_month: Optional[str] = None
+    data_inicio: Optional[str] = None
+    data_fim: Optional[str] = None
+    ads_ate: Optional[str] = None
 
 
 class ProdutoTikTokRow(BaseModel):

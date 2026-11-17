@@ -5,36 +5,7 @@
 // unica chave global (tabela e resumo continuam podendo carregar de forma
 // independente, ver FINDING 3).
 
-export interface MlTableKeyInput {
-  brand: string;
-  bucket: string | null;
-  signal: string;
-  status: string;
-  velocity: string;
-  offset: number;
-  sortColumn: string | null;
-  sortDirection: string | null;
-}
-
-export function buildMlTableKey(input: MlTableKeyInput): string {
-  return [
-    input.brand, input.bucket ?? "", input.signal, input.status, input.velocity,
-    input.offset, input.sortColumn ?? "", input.sortDirection ?? "",
-  ].join("|");
-}
-
-export interface MlSummaryKeyInput {
-  brand: string;
-  signal: string;
-  status: string;
-  velocity: string;
-}
-
-export function buildMlSummaryKey(input: MlSummaryKeyInput): string {
-  return [input.brand, input.signal, input.status, input.velocity].join("|");
-}
-
-/** TikTok e Shopee compartilham exatamente o mesmo contrato de parametros
+/** ML, TikTok e Shopee compartilham exatamente o mesmo contrato de parametros
  * de tabela (marca + periodo + bucket + offset + sort) — uma unica funcao,
  * mas cada canal guarda seu PROPRIO estado/chave (nunca comparados entre
  * si). */
@@ -45,22 +16,26 @@ export interface PeriodTableKeyInput {
   offset: number;
   sortColumn: string | null;
   sortDirection: string | null;
+  /** So' ML: sinal de acao filtrado. */
+  signal?: string;
 }
 
 export function buildPeriodTableKey(input: PeriodTableKeyInput): string {
   return [
     input.brand, input.period, input.bucket ?? "", input.offset,
     input.sortColumn ?? "", input.sortDirection ?? "",
+    ...(input.signal ? [input.signal] : []),
   ].join("|");
 }
 
 export interface PeriodSummaryKeyInput {
   brand: string;
   period: string;
+  signal?: string;
 }
 
 export function buildPeriodSummaryKey(input: PeriodSummaryKeyInput): string {
-  return [input.brand, input.period].join("|");
+  return [input.brand, input.period, ...(input.signal ? [input.signal] : [])].join("|");
 }
 
 /**

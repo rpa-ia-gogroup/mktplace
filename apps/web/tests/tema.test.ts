@@ -430,7 +430,7 @@ test("o seletor de tema e' um radiogroup com as tres opcoes", () => {
   assert.match(seg, /role="radiogroup"/);
   assert.match(seg, /role="radio"/);
   assert.match(seg, /aria-checked=\{ativo\}/);
-  assert.match(seg, /tabIndex=\{ativo \? 0 : -1\}/);
+  assert.match(seg, /tabIndex=\{ativo(?: \|\| \(indiceAtivo < 0 && i === 0\))? \? 0 : -1\}/);
   for (const tecla of ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Home", "End"]) {
     assert.ok(seg.includes(tecla), `sem tratamento de ${tecla}`);
   }
