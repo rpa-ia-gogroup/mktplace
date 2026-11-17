@@ -89,7 +89,9 @@ import EvolutionCard from "@/components/gerencial/EvolutionCard";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
 import TopProdutosMarca from "@/components/gerencial/TopProdutosMarca";
-import CxResumo, { notasDoTile } from "@/components/gerencial/CxResumo";
+import CxResumo, { janelaGerencialCx, notasDoTile } from "@/components/gerencial/CxResumo";
+import CxResumoMl from "@/components/gerencial/CxResumoMl";
+import AvisoCanaisSemDado from "@/components/ui/AvisoCanaisSemDado";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
 import { ROTULO_INDICADOR, hrefCx, type IndicadorCx, type JanelaDias, type ResumoCx } from "@/lib/cx";
 import MovementsPanels from "@/components/gerencial/MovementsPanels";
@@ -727,7 +729,9 @@ function GerencialComGrandes() {
   // O detalhe de um KPI herda o icone e a cor do cartao que o abriu.
   const kpiDoDialogo = dialog?.kind === "kpi" ? IDENTIDADE_DO_KPI[dialog.key] : undefined;
 
-  const temCx = isMarketplaceSelected(filters.channels, "shopee");
+  const cxShopee = isMarketplaceSelected(filters.channels, "shopee");
+  const cxMl = isMarketplaceSelected(filters.channels, "ml");
+  const temCx = cxShopee || cxMl;
   const visoes = [
     { id: "geral" as const, rotulo: "Visão geral" },
     { id: "produtos" as const, rotulo: "Produtos" },
@@ -972,16 +976,21 @@ function GerencialComGrandes() {
         </>
       )}
 
-      {/* CX so' existe para a Shopee: sem ela no filtro de canal, a secao some. */}
+      {/* CX existe para Shopee e Mercado Livre: um painel por canal no filtro; sem nenhum dos dois, a secao some. */}
       {visaoAtiva === "cx" && (
-        <CxResumo
-          brands={filters.brands}
-          canais={filters.channels}
-          // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
-          dateFrom={filters.dateFrom}
-          dateTo={filters.dateTo}
-          onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
-        />
+        <div className="flex flex-col gap-4">
+          <AvisoCanaisSemDado selecao={filters.channels} cobertos={CX_CANAIS_COBERTOS} />
+          {cxShopee && (
+            <CxResumo
+              brands={filters.brands}
+              // o CX segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa)
+              dateFrom={filters.dateFrom}
+              dateTo={filters.dateTo}
+              onOpen={(indicador, resumo, geradoEm, dias) => setDialog({ kind: "cx", indicador, resumo, geradoEm, dias })}
+            />
+          )}
+          {cxMl && <CxResumoMl brands={filters.brands} {...janelaGerencialCx(filters.dateFrom, filters.dateTo)} />}
+        </div>
       )}
 
       {/* ---- Shell UNICO de dialogo, para todos os drill-downs ---- */}
@@ -1160,6 +1169,9 @@ function GerencialInner() {
   if (escopoDeMarcas(filters.brands).soMenores) return <GerencialMarcasMenores filters={filters} onChange={setFilters} padrao={padrao} />;
   return <GerencialComGrandes />;
 }
+
+/** Fontes do CX: Shopee (`/api/v1/cx/shopee`) e Mercado Livre (`/api/v1/cx/mercadolivre`). */
+const CX_CANAIS_COBERTOS: readonly Marketplace[] = ["shopee", "ml"];
 
 export default function Gerencial() {
   return (

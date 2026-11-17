@@ -215,6 +215,13 @@ function serieDe(d: CxMlResponse, i: IndicadorTaxa): number[] | null {
   return taxas.every((t): t is number => t != null) ? taxas : null;
 }
 
+export const SEM_DADO_ML = "Sem dado";
+
+/** Valor de cartao do ML: a taxa, ou "Sem dado" quando o ML nao mediu (nunca 0). */
+export function valorMl(v: number | null): string {
+  return v == null ? SEM_DADO_ML : pctCx(v);
+}
+
 export interface ResumoMl {
   pedidos: number | null;
   /** Taxa (% dos pedidos) e contagem de cada indicador no periodo. */
