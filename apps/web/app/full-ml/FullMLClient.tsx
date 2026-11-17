@@ -233,6 +233,7 @@ function FullMLPageInner() {
     <div className="flex min-w-0 flex-wrap items-center gap-2">
       <BrandFilter
         variante="menu"
+        rotulo="Marca"
         opcoes={MARCAS.filter((m) => m.key).map((m) => ({ value: m.key, label: m.label }))}
         value={marca ? [marca] : []}
         // A API le' UMA marca: vale a ultima escolhida (como na CX e na Expedicao).

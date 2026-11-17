@@ -460,14 +460,14 @@ export default function EstoqueFullClient() {
       </span>
       {comCurva && <FiltroCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
 
-      <label className="flex items-center gap-2 text-sm text-ink-muted">
+      <label className="flex w-full items-center gap-2 text-sm text-ink-muted sm:w-auto">
           <span className="sr-only">Buscar por SKU ou produto</span>
           <input
             type="search"
             value={buscaDigitada}
             onChange={(e) => setBuscaDigitada(e.target.value)}
             placeholder="Buscar SKU ou produto"
-            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint min-h-11 px-3 text-sm w-64 max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint min-h-11 px-3 text-sm w-full sm:w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">

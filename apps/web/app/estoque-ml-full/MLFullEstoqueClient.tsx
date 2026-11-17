@@ -456,6 +456,7 @@ export default function MLFullEstoqueClient() {
       <span ref={marcaRef} className="contents">
         <BrandFilter
           variante="menu"
+          rotulo="Marca"
           opcoes={MARCAS_ML.map((m) => ({ value: m, label: tituloMarca(m) }))}
           value={filtros.brands}
           onChange={(brands) => setFiltros((f) => ({ ...f, brands }))}
