@@ -37,6 +37,8 @@ import {
   AvisoTopo, ChipCategoria, FaixaCategorias, useCategoriaNaUrl, useRolarAteChip, type CardCategoria,
 } from "@/components/full/CategoriasEstoque";
 import TableScrollHint from "@/components/TableScrollHint";
+import SortHeader from "@/components/ui/SortHeader";
+import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
@@ -202,7 +204,13 @@ const CLASSE_GRADE_ML: Partial<Record<InventarioML["classificacao_torre"], Class
 const exigeAcaoML = (i: InventarioML) =>
   i.classificacao_torre === "RUPTURA_CANDIDATA" || i.classificacao_torre === "BAIXO_CANDIDATO";
 
+const COLUNAS_ML: Record<string, SortColumnType> = { disponivel: "numeric" };
+const valorOrdenacaoML = (i: InventarioML) => i.disponivel;
+
 function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioML[]; comCurva: boolean }) {
+  // Brinde/descontinuado nao e' ruptura: vai para o fim. Clicar em "Disponivel" ordena por ele (sem leitura no fim).
+  const base = useMemo(() => [...inventarios].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)), [inventarios]);
+  const { sort, toggleSort, sortedRows } = useSortableTable(base, valorOrdenacaoML, COLUNAS_ML);
   return (
     <div className="bg-surface rounded-2xl border border-line overflow-hidden">
       <TableScrollHint>
@@ -218,12 +226,10 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                 <th scope="col" className="px-4 py-3">Marca</th>
                 <th scope="col" className="px-4 py-3">Identificação</th>
                 {comCurva && <th scope="col" className="hidden px-4 py-3 sm:table-cell">Curva</th>}
-                <th scope="col" className="px-4 py-3 text-right">
-                  <span className="inline-flex items-center gap-1">
-                    Disponível
-                    <InfoDica texto={AVISO_AUSENCIA_ML} />
-                  </span>
-                </th>
+                <SortHeader
+                  coluna="disponivel" sort={sort} aoOrdenar={toggleSort}
+                  rotulo={<span className="inline-flex items-center gap-1">Disponível<InfoDica texto={AVISO_AUSENCIA_ML} emControle /></span>}
+                />
                 <th scope="col" className="px-4 py-3 text-right">
                   <span className="inline-flex items-center gap-1">
                     Não disponível
@@ -243,8 +249,7 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
             </thead>
             <tbody>
               {/* key = ordinal da resposta: o ID do inventario nao sai na API publica. */}
-              {/* Brinde/descontinuado nao e' ruptura: vai para o fim e mostra a situacao no lugar da classificacao. */}
-              {[...inventarios].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)).map((i) => {
+              {sortedRows.map((i) => {
                 const ident = identificacaoML(i);
                 const selo = seloAnunciosExtrasML(i.anuncios_extras);
                 return (

@@ -49,6 +49,8 @@ import { CelulaCurva, FiltroCurva } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
 import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
+import SortHeader from "@/components/ui/SortHeader";
+import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import { EstoqueFullError, fetchEstoqueFull } from "@/lib/api-client";
@@ -192,7 +194,13 @@ function PorCD({ produto }: { produto: ProdutoEstoque }) {
   );
 }
 
+const COLUNAS_SHOPEE: Record<string, SortColumnType> = { disponivel: "numeric" };
+const valorOrdenacaoShopee = (p: ProdutoEstoque) => p.full_stock_saleable;
+
 function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: boolean }) {
+  // Brinde/descontinuado nao e' ruptura: vai para o fim. Clicar no estoque ordena por ele.
+  const base = useMemo(() => [...produtos].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)), [produtos]);
+  const { sort, toggleSort, sortedRows } = useSortableTable(base, valorOrdenacaoShopee, COLUNAS_SHOPEE);
   return (
     <div className="bg-surface rounded-2xl border border-line overflow-x-auto">
       <table className="w-full text-sm">
@@ -206,7 +214,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
             <th scope="col" className="px-4 py-3">Conta / marca<span className="sr-only"> e Fotografia</span></th>
             <th scope="col" className="px-4 py-3">SKU e produto</th>
             {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
-            <th scope="col" className="px-4 py-3 text-right">Estoque Full vendável</th>
+            <SortHeader coluna="disponivel" sort={sort} aoOrdenar={toggleSort} rotulo="Estoque Full vendável" />
             <th scope="col" className="px-4 py-3 text-right">Demanda 28d</th>
             <th scope="col" className="px-4 py-3 text-right">
               <span className="inline-flex items-center gap-1">
@@ -225,8 +233,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
           </tr>
         </thead>
         <tbody>
-          {/* Brinde/descontinuado nao e' ruptura: vai para o fim e mostra a situacao no lugar da classificacao. */}
-          {[...produtos].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)).map((p) => (
+          {sortedRows.map((p) => (
             <tr
               key={`${p.shop_account}-${p.item_id}-${p.model_id}`}
               className="border-b border-line last:border-0 align-top"
