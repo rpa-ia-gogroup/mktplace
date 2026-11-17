@@ -417,7 +417,7 @@ test("cartao de impacto: % no valor, R$ na comparacao, por canal; ausencia nunca
   // janela do % deslocada (faturamento atrasado): o subtitulo diz o recorte; na vespera da foto, nao
   const desloc = { ...IMPACTO, ml: { ...IMPACTO.ml, janela_gmv_inicio: "2026-10-06", janela_gmv_fim: "2026-11-02" } as CanalImpactoOk };
   assert.equal(sp(kpiImpacto("ml", desloc).comparacao), "R$ 13,3 mil/dia");
-  assert.equal(kpiImpacto("ml", desloc).detalhe, "do faturamento Full · % de 06/10 a 02/11");
+  assert.equal(kpiImpacto("ml", desloc).detalhe, "do faturamento Full · % de 06/10–02/11");
   const vespera = { ...IMPACTO, ml: { ...IMPACTO.ml, janela_gmv_inicio: "2026-10-07", janela_gmv_fim: "2026-11-03" } as CanalImpactoOk };
   assert.equal(kpiImpacto("ml", vespera).detalhe, "do faturamento Full");
   assert.equal(janelaDeslocada({ ref_date: "2026-11-08", janela_gmv_inicio: null, janela_gmv_fim: null }), "", "sem janela: nada");
