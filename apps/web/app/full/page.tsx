@@ -4,6 +4,7 @@ import MLFullEstoqueClient from "../estoque-ml-full/MLFullEstoqueClient";
 import EstoqueFullClient from "../estoque-full/EstoqueFullClient";
 import FullMLClient from "../full-ml/FullMLClient";
 import FullShopeeClient from "../full-shopee/FullShopeeClient";
+import SlowMovingClient from "../full-slow-moving/SlowMovingClient";
 import VisaoGeralFull from "./VisaoGeralFull";
 
 /**
@@ -23,6 +24,7 @@ const CONTEUDO: Record<AbaFull, () => React.ReactNode> = {
   "estoque-ml": () => <MLFullEstoqueClient />,
   "estoque-shopee": () => <EstoqueFullClient />,
   "envio-ml": () => <FullMLClient />,
+  "slow-moving": () => <SlowMovingClient />,
   "desempenho-shopee": () => <FullShopeeClient />,
 };
 

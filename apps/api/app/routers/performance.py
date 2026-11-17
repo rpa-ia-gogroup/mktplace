@@ -57,6 +57,8 @@ from app.services import full_situacao_service as situacao_svc
 from app.schemas.full_impacto import ImpactoRupturaResponse
 from app.services import full_curva_abc_service as curva_abc_svc
 from app.schemas.full_curva_abc import CurvaAbcResponse, CurvaMeta
+from app.services import full_slow_moving_service as slow_svc
+from app.schemas.full_slow_moving import SlowMovingResponse
 from app.services.ml_fulfillment_service import (
     MLFulfillmentUnavailable,
     get_ml_fulfillment_block,
@@ -1329,6 +1331,17 @@ def full_curva_abc(db: Session = Depends(get_db)):
     o /full segue sem curva. So' leitura.
     """
     return curva_abc_svc.get_curva_abc(db)
+
+
+@router.get("/full-slow-moving", response_model=SlowMovingResponse)
+def full_slow_moving():
+    """SKUs parados no Marketplace pela regra do Supply (Painel S&OE): curva B/C,
+    descontinuado ou brinde com mais de 120 dias de cobertura. So' leitura do Data Mart."""
+    try:
+        return slow_svc.get_slow_moving(datamart_leitura.consultar)
+    except Exception as exc:  # noqa: BLE001 -- texto do banco nunca sai
+        logger.exception("full-slow-moving falhou")
+        raise HTTPException(503, "Base do Supply indisponivel.") from exc
 
 
 @router.get("/full-impacto-ruptura", response_model=ImpactoRupturaResponse)
