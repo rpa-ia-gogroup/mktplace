@@ -86,6 +86,10 @@ def validar_chave(
     except SQLAlchemyError as exc:
         logger.error("chave_pessoal validar falhou (%s)", type(exc).__name__)
         raise HTTPException(503, "Banco de dados indisponivel.") from None
+    # dono que saiu da lista de acesso perde a chave na hora, no MCP tambem (o gate faz o mesmo na REST)
+    if dono is not None and not email_permitido(dono.dono_email, dominios_permitidos(settings.allowed_email_domains)):
+        logger.warning("chave_pessoal recusada via=mcp id=%s dono=%s motivo=dono_fora_da_lista", dono.id, dono.dono_email)
+        dono = None
     if dono is None:
         raise HTTPException(401, "Chave invalida.")
     logger.info("chave_pessoal uso via=mcp id=%s nome=%s dono=%s", dono.id, dono.nome, dono.dono_email)

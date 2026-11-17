@@ -213,3 +213,34 @@ def test_gate_aceita_chave_pessoal_como_bearer(gate, caplog):
 def test_gate_nega_chave_invalida_e_bearer_que_nao_e_chave(gate):
     for h in (f"Bearer torre_pat_{'B' * 43}", f"Bearer x{CHAVE_BOA}", "Bearer eyJ.a.b", f"Basic {CHAVE_BOA}"):
         assert gate.get("/api/v1/x", headers={"Authorization": h}).status_code == 401, h
+
+
+def test_gate_recusa_chave_de_dono_fora_da_lista(gate, monkeypatch, caplog):
+    # o dono (n@gocase.com) saiu da lista: a chave para de valer na hora, sem revogar
+    monkeypatch.setattr(settings, "allowed_email_domains", "gobeaute.com.br")
+    caplog.set_level(logging.INFO)
+    r = gate.get("/api/v1/x", headers={"Authorization": f"Bearer {CHAVE_BOA}"})
+    assert r.status_code == 401
+    assert "dono_fora_da_lista" in caplog.text and CHAVE_BOA not in caplog.text
+    # e-mail convidado na lista volta a valer
+    monkeypatch.setattr(settings, "allowed_email_domains", "gobeaute.com.br,n@gocase.com")
+    assert gate.get("/api/v1/x", headers={"Authorization": f"Bearer {CHAVE_BOA}"}).status_code == 200
+
+
+def test_admin_padrao_vazio_ninguem_administra():
+    from app.config import Settings
+
+    assert Settings.model_fields["torre_admin_emails"].default == ""
+
+
+def test_validar_mcp_recusa_dono_fora_da_lista(cli, monkeypatch):
+    adm = _como(cli, ADMIN)
+    chave = adm.post("/api/v1/chaves", json={"nome": "Sim", "dono_email": "a@gocase.com"}).json()["chave"]
+    monkeypatch.setattr(settings, "allowed_email_domains", "gobeaute.com.br")
+    r = cli.post("/api/v1/chaves/validar", json={"chave": chave}, headers={"x-torre-service-key": CHAVE_SERVICO})
+    assert r.status_code == 401 and chave not in r.text
+
+
+def test_admin_vazio_barra_todo_mundo(cli, monkeypatch):
+    monkeypatch.setattr(settings, "torre_admin_emails", "")
+    assert _como(cli, ADMIN).get("/api/v1/chaves").status_code == 403

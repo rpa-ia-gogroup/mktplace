@@ -1,4 +1,4 @@
-"""CHAVES-PESSOAIS — chaves `torre_pat_...` do MCP e da API REST (migration 047).
+"""CHAVES-PESSOAIS — chaves `torre_pat_...` do MCP e da API REST (migration 049).
 
 A chave e' `torre_pat_` + 32 bytes aleatorios em base64url. Mostrada UMA vez,
 na criacao; o banco guarda so' o SHA-256. Nada aqui loga ou devolve a chave

@@ -24,7 +24,7 @@ import anyio
 from app.config import settings
 from app.services import chaves_pessoais
 from app.services.chaves_pessoais import PREFIXO as PREFIXO_CHAVE
-from app.sessao import SEGREDO_MINIMO, SESSION_COOKIE, dominios_permitidos, validar_sessao
+from app.sessao import SEGREDO_MINIMO, SESSION_COOKIE, dominios_permitidos, email_permitido, validar_sessao
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,10 @@ class GateDeSessao:
         chave = _bearer_pessoal(headers)
         if chave and not _publico(scope.get("path", "")):
             achada = await anyio.to_thread.run_sync(self.validar_chave, chave)
+            # dono que saiu da lista de acesso perde a chave na hora (fail-closed)
+            if achada is not None and not email_permitido(achada.dono_email, dominios_permitidos(settings.allowed_email_domains)):
+                logger.warning("chave_pessoal recusada via=api id=%s dono=%s motivo=dono_fora_da_lista", achada.id, achada.dono_email)
+                achada = None
             if achada is not None:
                 dono = achada.dono_email
                 logger.info(
