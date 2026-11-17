@@ -140,6 +140,10 @@ function PainelIndisponivel({
   );
 }
 
+function SeloSituacao({ rotulo }: { rotulo: string }) {
+  return <span className="inline-block whitespace-nowrap rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotulo}</span>;
+}
+
 function Etiqueta({ classe }: { classe: ClassificacaoML }) {
   return (
     <span
@@ -238,7 +242,8 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
             </thead>
             <tbody>
               {/* key = ordinal da resposta: o ID do inventario nao sai na API publica. */}
-              {inventarios.map((i) => {
+              {/* Brinde/descontinuado nao e' ruptura: vai para o fim e mostra a situacao no lugar da classificacao. */}
+              {[...inventarios].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)).map((i) => {
                 const ident = identificacaoML(i);
                 const selo = seloAnunciosExtrasML(i.anuncios_extras);
                 return (
@@ -263,9 +268,6 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                     )}
                     {ident.avisoVariacao && (
                       <span className="block text-xs text-ink-muted">{ident.avisoVariacao}</span>
-                    )}
-                    {rotuloSituacao(i.situacao) && (
-                      <span className="mr-1 mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotuloSituacao(i.situacao)}</span>
                     )}
                     {selo && (
                       <span className="mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">
@@ -300,7 +302,7 @@ function TabelaInventarios({ inventarios, comCurva }: { inventarios: InventarioM
                     {fmtCobertura(i.cobertura_torre_dias)}
                   </td>
                   <td className="px-4 py-3">
-                    <Etiqueta classe={i.classificacao_torre} />
+                    {rotuloSituacao(i.situacao) ? <SeloSituacao rotulo={rotuloSituacao(i.situacao)!} /> : <Etiqueta classe={i.classificacao_torre} />}
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                     {/* ASSOCIACAO, nao estoque: nunca multiplica o disponivel. */}

@@ -149,6 +149,10 @@ function PainelIndisponivel({
   );
 }
 
+function SeloSituacao({ rotulo }: { rotulo: string }) {
+  return <span className="inline-block whitespace-nowrap rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotulo}</span>;
+}
+
 function Etiqueta({ classe }: { classe: Classificacao }) {
   return (
     <span
@@ -221,7 +225,8 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
           </tr>
         </thead>
         <tbody>
-          {produtos.map((p) => (
+          {/* Brinde/descontinuado nao e' ruptura: vai para o fim e mostra a situacao no lugar da classificacao. */}
+          {[...produtos].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)).map((p) => (
             <tr
               key={`${p.shop_account}-${p.item_id}-${p.model_id}`}
               className="border-b border-line last:border-0 align-top"
@@ -238,9 +243,6 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
                 <span className="block text-xs text-ink-faint">
                   {nomeExibido(p)}
                 </span>
-                {rotuloSituacao(p.situacao) && (
-                  <span className="mt-1 inline-block rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotuloSituacao(p.situacao)}</span>
-                )}
               </td>
               {comCurva && (
                 <td className="px-4 py-3">
@@ -272,7 +274,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
                 )}
               </td>
               <td className="px-4 py-3">
-                <Etiqueta classe={p.classificacao_torre} />
+                {rotuloSituacao(p.situacao) ? <SeloSituacao rotulo={rotuloSituacao(p.situacao)!} /> : <Etiqueta classe={p.classificacao_torre} />}
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-ink-faint">
                 {/* CONTEXTO, nao estoque Full. */}
