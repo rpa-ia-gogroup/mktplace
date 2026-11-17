@@ -636,7 +636,7 @@ CENARIOS_FONTE_NAO_PRONTA = {
         "WHERE shop_account = 'barbours';"
         "UPDATE silver.stg_shopee_products SET ingested_at = '" + ONTEM_NOITE + "' "
         "WHERE shop_account = 'barbours'",
-        "barbours: catalogo FBS capturado"),
+        "barbours: catalogo gravado pela ultima vez"),
     # Catalogo gravou, dbt nao rodou: a Silver ficou na versao anterior.
     "silver_nao_reconstruida": (
         "UPDATE silver.stg_shopee_products SET ingested_at = '" + ONTEM_NOITE + "' "
@@ -687,20 +687,18 @@ def test_portao_ignora_fbs_unlist_parado_caso_kokeshi_16_11(banco):
     assert _contagens(banco)["prod_linhas"] > 0
 
 
-def test_portao_ainda_recusa_fbs_listado_de_ontem(banco):
-    """O mesmo item, LISTADO, segue barrando: e' catalogo que nao rodou."""
+def test_portao_ignora_fbs_listado_parado(banco):
+    """Item LISTADO sem mudanca tambem fica com o `ingested_at` de ontem (lescent
+    16/11, 1 item normal). Com o resto da conta gravado hoje, o catalogo rodou."""
     _estragar(banco,
-        "UPDATE raw.shopee_products r SET ingested_at = '" + ONTEM_NOITE + "' "
-        "  FROM silver.stg_shopee_products s "
-        " WHERE s.shop_account = r.shop_account AND s.item_id = r.item_id "
-        "   AND s.item_id = (SELECT MIN(item_id) FROM silver.stg_shopee_products "
-        "                    WHERE shop_account = 'barbours' AND is_fulfillment_by_shopee);"
+        "UPDATE raw.shopee_products SET ingested_at = '" + ONTEM_NOITE + "' "
+        "WHERE item_id = (SELECT MIN(item_id) FROM silver.stg_shopee_products "
+        "                 WHERE shop_account = 'barbours' AND is_fulfillment_by_shopee);"
         "UPDATE silver.stg_shopee_products s SET ingested_at = r.ingested_at "
         "  FROM raw.shopee_products r "
         " WHERE s.shop_account = r.shop_account AND s.item_id = r.item_id")
-    with pytest.raises(P.FonteNaoProntaError, match="barbours: catalogo FBS capturado"):
-        P.run(apply=True)
-    _nada_aconteceu(banco)
+    P.run(apply=True)
+    assert _contagens(banco)["prod_linhas"] > 0
 
 
 def test_portao_recusa_tambem_no_dry_run(banco):

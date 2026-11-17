@@ -532,7 +532,7 @@ HOJE_06H = datetime(2026, 10, 22, 6, 1, tzinfo=BRT)
 
 def _linha(conta, **mudar):
     base = {"shop_account": conta, "produtos_fbs": 10, "fbs_sem_stock_info": 0,
-            "fbs_capturado_min": HOJE_06H, "silver_divergente": 0,
+            "catalogo_gravado_max": HOJE_06H, "silver_divergente": 0,
             "pedidos_ingeridos_max": HOJE_06H}
     base.update(mudar)
     return base
@@ -552,13 +552,13 @@ def test_54_corte_e_meia_noite_brt_do_ref_date():
     assert corte == datetime(2026, 10, 22, 0, 0, tzinfo=BRT)
     # 23:59 BRT de ontem = 02:59 UTC de hoje: a data UTC NAO salva o catalogo.
     ontem_tarde = datetime(2026, 10, 22, 2, 59, tzinfo=timezone.utc)
-    assert mod.avaliar_portao(_todas(fbs_capturado_min=ontem_tarde), REF)
-    assert mod.avaliar_portao(_todas(fbs_capturado_min=corte), REF) == []
+    assert mod.avaliar_portao(_todas(catalogo_gravado_max=ontem_tarde), REF)
+    assert mod.avaliar_portao(_todas(catalogo_gravado_max=corte), REF) == []
 
 
 @pytest.mark.parametrize("mudar, trecho", [
-    ({"fbs_capturado_min": HOJE_06H - timedelta(days=1)}, "catalogo FBS capturado"),
-    ({"fbs_capturado_min": None}, "catalogo FBS capturado"),
+    ({"catalogo_gravado_max": HOJE_06H - timedelta(days=1)}, "catalogo gravado pela ultima vez"),
+    ({"catalogo_gravado_max": None}, "catalogo gravado pela ultima vez"),
     ({"silver_divergente": 3}, "Silver fora da versao"),
     ({"pedidos_ingeridos_max": HOJE_06H - timedelta(hours=7)}, "pedidos"),
     ({"pedidos_ingeridos_max": None}, "pedidos"),
@@ -597,8 +597,8 @@ def test_59_portao_le_raw_silver_e_pedidos_pela_mesma_chave_do_pipeline():
     assert "r.ingested_at IS DISTINCT FROM s.ingested_at" in sql
     assert "s.is_fulfillment_by_shopee" in sql
     assert "silver.stg_shopee_orders" in sql
-    # frescor so' por item listado (falso negativo da kokeshi em 16/11)
-    assert "FILTER (WHERE lower(s.item_status) = 'normal')" in sql
+    # frescor pela ultima gravacao da conta, nao por item (kokeshi 16/11)
+    assert "MAX(ingested_at) AS catalogo_gravado_max" in sql
 
 
 def test_60_codigos_de_saida_sao_distintos_e_evitam_o_2_do_argparse():
