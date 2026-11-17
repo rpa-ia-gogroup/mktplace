@@ -10,6 +10,7 @@
  *
  * Funcoes puras testadas em node --test; a pagina so' desenha a visao.
  */
+import { fmtBrlCurto } from "./formatters.ts";
 import {
   JANELA_PADRAO,
   JANELAS_DIAS,
@@ -325,6 +326,11 @@ export function inteiro(v: number | null | undefined): string {
 
 function pct(v: number | null | undefined): string {
   return v == null || !Number.isFinite(v) ? "—" : `${FMT_PCT.format(v)}%`;
+}
+
+/** Reais no formato curto da Gerencial ("R$ 240,7 mil"); "—" sem valor. */
+export function reaisCurto(v: number | null | undefined): string {
+  return v == null || !Number.isFinite(v) ? "—" : fmtBrlCurto(v);
 }
 
 export function reais(v: number | null | undefined): string {
@@ -983,6 +989,8 @@ export interface ResumoCx {
   respostaMeta: string | null;
   cancelamento: string;
   reembolsado: string;
+  /** O mesmo valor no formato curto da Gerencial ("R$ 240,7 mil"); "—" sem dado. */
+  reembolsadoCurto: string;
   /** Reembolsos aceitos ÷ pedidos; null quando nao da para tirar do payload. */
   reembolsoPct: string | null;
   /** Marcas com pedido e sem conversas lidas: fora do contact rate. */
@@ -1212,6 +1220,7 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
     respostaMeta: metas.length === 1 ? metaCurta(metas[0]) : null,
     cancelamento: pct(totais.cancelamento),
     reembolsado: devOk ? reais(dev.reembolsado) : "—",
+    reembolsadoCurto: devOk ? reaisCurto(dev.reembolsado) : "—",
     reembolsoPct: totais.reembolso == null ? null : pct(totais.reembolso),
     semChat: atendimento.marcas.filter((m) => m.pedidos && conv(m.marca) == null).map((m) => rotuloMarca(m.marca)),
     cancelamentoDelta: delta,

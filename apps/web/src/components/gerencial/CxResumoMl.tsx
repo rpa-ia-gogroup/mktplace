@@ -17,12 +17,14 @@ import InfoDica from "@/components/ui/InfoDica";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Panel from "@/components/ui/Panel";
 import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
-import { MOTIVO_REENVIO, ROTULO_INDICADOR, hrefCx, reais, type ComparacaoCard, type JanelaDias } from "@/lib/cx";
+import { MOTIVO_REENVIO, ROTULO_INDICADOR, hrefCx, reaisCurto, type ComparacaoCard, type JanelaDias } from "@/lib/cx";
 import { AJUDA_ML, ROTULO_ML, carregarCxMl, resumoMl, valorMl, type IndicadorTaxa, type ResultadoMl, type ResumoMl } from "@/lib/cx-ml";
 import { torreFetch } from "@/lib/torre-fetch";
 
 import { LinhaSemComparacao, pilula, type RodapeCard } from "./CxResumo";
 
+/** Rotulo proprio: no ML a taxa e' de reclamacoes, nao de chats — nao comparar com o contact rate da Shopee ao lado. */
+export const AJUDA_RECLAMACOES_GERENCIAL = "Reclamações abertas ÷ pedidos do período. Não é comparável ao contact rate da Shopee, que conta chats.";
 const SEM_LINHA = <span aria-hidden="true">&nbsp;</span>;
 const SPAN_TOPO = "sm:col-span-2 lg:col-span-1";
 const SPAN_BASE = "sm:col-span-3 lg:col-span-1";
@@ -125,7 +127,7 @@ function TilesMl({ r, abrir }: { r: ResumoMl; abrir: () => void }) {
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-6 lg:grid-cols-5" data-testid="cx-resumo-ml">
-      {card("contactRate", SPAN_TOPO, ROTULO_INDICADOR.contactRate, r.taxa.reclamacao, AJUDA_ML.reclamacao, null, taxa("reclamacao"))}
+      {card("contactRate", SPAN_TOPO, "Reclamações", r.taxa.reclamacao, AJUDA_RECLAMACOES_GERENCIAL, null, taxa("reclamacao"))}
       {card("resposta", SPAN_TOPO, "Resposta pré-venda", r.resposta, `${ROTULO_ML.resposta} das perguntas de pré-venda. ${AJUDA_ML.resposta}`, null, rodape(r.resposta, r.respostaComparacao, r.semAnterior.resposta))}
       {card("cancelamento", SPAN_TOPO, ROTULO_INDICADOR.cancelamento, r.taxa.cancelamento, AJUDA_ML.cancelamento, null, taxa("cancelamento"))}
       {card(
@@ -134,7 +136,7 @@ function TilesMl({ r, abrir }: { r: ResumoMl; abrir: () => void }) {
         ROTULO_INDICADOR.reembolso,
         r.taxa.reembolso,
         AJUDA_ML.reembolso,
-        r.taxa.reembolso != null && r.valorReembolsado != null ? `${reais(r.valorReembolsado)} reembolsado` : null,
+        r.taxa.reembolso != null && r.valorReembolsado != null ? `${reaisCurto(r.valorReembolsado)} reembolsado` : null,
         taxa("reembolso"),
       )}
       <div className={`min-w-0 rounded-xl [&>div]:h-full [&>div]:justify-start ${SPAN_BASE}`}>

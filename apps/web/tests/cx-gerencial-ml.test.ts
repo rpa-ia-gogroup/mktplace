@@ -37,6 +37,7 @@ test("Gerencial: visao CX aparece com Shopee OU ML no filtro; um painel por cana
   const ml = readFileSync(new URL("../src/components/gerencial/CxResumoMl.tsx", import.meta.url), "utf8");
   // os mesmos cinco cartoes da Shopee, na mesma grade
   assert.match(ml, /grid grid-cols-1 gap-3 sm:grid-cols-6 lg:grid-cols-5/);
-  for (const r of ["ROTULO_INDICADOR.contactRate", "ROTULO_INDICADOR.cancelamento", "ROTULO_INDICADOR.reembolso", '"Reenvio"']) assert.ok(ml.includes(r), r);
+  assert.ok(ml.includes(`"Reclamações"`) && ml.includes("Não é comparável ao contact rate da Shopee"));
+  for (const r of ["ROTULO_INDICADOR.cancelamento", "ROTULO_INDICADOR.reembolso", '"Reenvio"']) assert.ok(ml.includes(r), r);
   assert.match(ml, /hrefCx\(\{ marca: brands\.length === 1 \? brands\[0\] : null, dias \}, "ml"\)/);
 });

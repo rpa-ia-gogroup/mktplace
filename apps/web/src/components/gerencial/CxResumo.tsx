@@ -294,7 +294,7 @@ function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: I
       {card("resposta", SPAN_TOPO, r.resposta, null, rodapeComparacao(r, "resposta"))}
       {card("cancelamento", SPAN_TOPO, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
       {/* % antes do absoluto, como na /cx: a taxa no numero, o R$ embaixo (texto que quebra: nunca atras do grafico) */}
-      {card("reembolso", SPAN_BASE, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
+      {card("reembolso", SPAN_BASE, r.reembolsoPct ?? "—", r.reembolsadoCurto !== "—" ? `${r.reembolsadoCurto} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
       <div className={`${CARD} ${SPAN_BASE}`}>
         <KpiTile
           variante="gerencial"
