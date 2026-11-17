@@ -52,7 +52,7 @@ import {
   avisoCoberturaCurva, avisoCurvaIndisponivel, curvaNaTela, ordenarPorCurva, passaCurva, resumoAcao,
   type OpcaoCurva,
 } from "@/lib/estoque-curva";
-import { abrirCategoria, CATEGORIAS_ML, categoriaPorChave, textoChip } from "@/lib/estoque-categorias";
+import { abrirCategoria, CATEGORIAS_ML, categoriaPorChave, contagensNaCurva, CARDS_NA_CURVA, textoChip } from "@/lib/estoque-categorias";
 
 const CHAVES_CATEGORIA = CATEGORIAS_ML.map((c) => c.chave);
 import {
@@ -396,7 +396,8 @@ export default function MLFullEstoqueClient() {
   /** Card: aplica a categoria (contagem = lista: o filtro de curva sai); de novo, limpa. */
   const escolherCategoria = (chave: string) => {
     if (chave === chaveCategoria) return setCategoria(null);
-    setCurvas([]);
+    // Os 4 cards de contagem seguem a curva (numero = lista): o filtro fica. Os outros sao panorama: o filtro sai.
+    if (!(CARDS_NA_CURVA as readonly string[]).includes(chave)) setCurvas([]);
     pedidoRolagem.current = true;
     setCategoria(chave);
   };
@@ -447,6 +448,9 @@ export default function MLFullEstoqueClient() {
         const base = filtros.incluirForaDoFull ? naCurva : naCurva.filter((i) => i.eh_full);
         return comCurva ? ordenarPorCurva(base, (i) => i.cobertura_torre_dias) : base;
       })();
+  // Com curva filtrada, os 4 cards de contagem seguem o filtro (numero = lista que o card abre).
+  // So' com a lista inteira (sem truncar): senao o numero nao seria o da curva e fica o da fotografia.
+  const naCurvaCards = filtroCurva.length > 0 && payload && !isIndisponivelML(payload) && !payload.truncado ? contagensNaCurva(CATEGORIAS_ML, CARDS_NA_CURVA, naCurva) : null;
   const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria;
 
   const fotoEmUso = payload && !isIndisponivelML(payload) ? payload.frescor.ref_date : "";
@@ -580,7 +584,7 @@ export default function MLFullEstoqueClient() {
 
           {/* O aviso acima e' o UNICO; nos cards so' title + leitor de tela. */}
           <FaixaCategorias
-            cards={cardsML(payload)}
+            cards={cardsML(payload, naCurvaCards)}
             faixa={["exigem-acao", "ruptura", "baixo", "excesso"]}
             ativa={chaveCategoria}
             aoEscolher={escolherCategoria}
@@ -661,8 +665,9 @@ export default function MLFullEstoqueClient() {
 
 
 /** Os 8 cards da aba, na ordem de antes. Cor = familia (identidade), nao status. */
-function cardsML(payload: MLFullEstoqueOk): CardCategoria[] {
-  const i = payload.indicadores;
+function cardsML(payload: MLFullEstoqueOk, na: Record<string, number> | null = null): CardCategoria[] {
+  const i = { ...payload.indicadores };
+  if (na) { i.inventarios_exigem_acao = na["exigem-acao"]; i.inventarios_ruptura = na.ruptura; i.inventarios_baixo = na.baixo; i.inventarios_excesso = na.excesso; }
   const l = payload.limites;
   return [
     { chave: "disponivel", rotulo: "Disponível Full", valor: fmtOpcional(i.disponivel_full),

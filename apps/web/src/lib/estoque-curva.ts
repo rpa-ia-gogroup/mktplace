@@ -33,6 +33,13 @@ export const OPCOES_CURVA: { valor: OpcaoCurva; texto: string }[] = [
   { valor: "sem", texto: "Sem curva" },
 ];
 
+/** Subtitulo do painel e titulo do pop-up: "Curva AA/A" / "Curvas AA/A + B" / "Todas as curvas". */
+export function rotuloDasCurvas(escolhidas: readonly OpcaoCurva[]): string {
+  if (!escolhidas.length) return "Todas as curvas";
+  const nomes = OPCOES_CURVA.filter((o) => escolhidas.includes(o.valor)).map((o) => o.texto).join(" + ");
+  return `${escolhidas.length > 1 ? "Curvas" : "Curva"} ${nomes}`;
+}
+
 export function passaCurva(c: Curva | null | undefined, filtro: readonly OpcaoCurva[]): boolean {
   if (!filtro.length) return true;
   const op: OpcaoCurva = c == null ? "sem" : c === "AA" || c === "A" ? "aa_a" : c === "B" ? "b" : "c";

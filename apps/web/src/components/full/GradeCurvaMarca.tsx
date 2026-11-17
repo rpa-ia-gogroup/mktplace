@@ -14,7 +14,7 @@ import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 
 import BarraItens, { LegendaBarra } from "@/components/full/BarraItens";
 import Panel from "@/components/ui/Panel";
-import { passaCurva, OPCOES_CURVA, type OpcaoCurva } from "@/lib/estoque-curva";
+import { passaCurva, rotuloDasCurvas, type OpcaoCurva } from "@/lib/estoque-curva";
 import {
   AJUDA_GRADE, fmtPermanencia, itensDaCelula, montarGrade, ordenarPorAcao, TOTAL,
   type CelulaGrade, type ItemGrade,
@@ -127,7 +127,7 @@ export default function GradeCurvaMarca({
   const celulas = useMemo(() => montarGrade(doFiltro, marcas).totalMarca, [doFiltro, marcas]);
   const ordem = useMemo(() => ordenarPorAcao(marcas, celulas), [marcas, celulas]);
   const daLista = aberta ? itensDaCelula(doFiltro, marcas, aberta.marca, "todas", aberta.classe) : [];
-  const rotuloCurva = escolhidas.length ? `curva ${OPCOES_CURVA.filter((o) => escolhidas.includes(o.valor)).map((o) => o.texto).join(" + ")}` : "todas as curvas";
+  const rotuloCurva = rotuloDasCurvas(escolhidas);
   const aoAbrir = (marca: string) => (classe: Classe) => setAberta({ marca, classe });
 
   return (
@@ -135,6 +135,7 @@ export default function GradeCurvaMarca({
       titulo={comCurva ? "Estoque por curva e marca" : "Estoque por marca"}
       icone={Grid3x3}
       ajuda={AJUDA_GRADE}
+      descricao={comCurva ? rotuloCurva : undefined}
       acao={ressalva ? <span className="rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn-ink">{ressalva}</span> : undefined}
       semPadding
     >
@@ -149,7 +150,7 @@ export default function GradeCurvaMarca({
           <span className="text-right">Disponível</span>
           <span className="text-right">Permanência</span>
         </div>
-        <ul aria-label={`${rotuloCurva[0].toUpperCase()}${rotuloCurva.slice(1)}: ruptura, estoque baixo, excesso, disponível Full e permanência por marca, em ${item}`}>
+        <ul aria-label={`${rotuloCurva}: ruptura, estoque baixo, excesso, disponível Full e permanência por marca, em ${item}`}>
           {ordem.map((m) => (
             <Linha key={m} nome={rotuloMarca(m)} nota={notaMarca?.(m) ?? null} c={celulas[m]}
               aberta={aberta?.marca === m ? aberta.classe : null} aoAbrir={aoAbrir(m)} />
@@ -160,7 +161,7 @@ export default function GradeCurvaMarca({
       <KpiDrilldownDialog
         open={!!aberta && comCurva}
         onClose={() => setAberta(null)}
-        title={aberta ? `${CLASSES.find((p) => p.chave === aberta.classe)!.rotulo} · ${aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · ${rotuloCurva}` : ""}
+        title={aberta ? `${CLASSES.find((p) => p.chave === aberta.classe)!.rotulo} · ${aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · ${rotuloCurva[0].toLowerCase()}${rotuloCurva.slice(1)}` : ""}
       >
         {aberta && (
           <>

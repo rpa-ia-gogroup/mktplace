@@ -98,6 +98,20 @@ export function medidaDaLista<T>(cat: Categoria<T>, lista: readonly T[]): number
   return cat.unidades ? lista.reduce((s, t) => s + cat.unidades!(t), 0) : lista.length;
 }
 
+/** Cards que seguem o filtro "Curva" do topo (os demais ficam no panorama da fotografia). */
+export const CARDS_NA_CURVA = ["exigem-acao", "ruptura", "baixo", "excesso"] as const;
+
+/**
+ * Cards de contagem com o filtro "Curva" ativo: o numero e' o tamanho da lista que o card
+ * abre (mesma regra de `medidaDaLista`), no recorte `naCurva`. Uma regra so' para a tela.
+ */
+export function contagensNaCurva<T>(cats: readonly Categoria<T>[], chaves: readonly string[], naCurva: readonly T[]): Record<string, number> {
+  return Object.fromEntries(chaves.map((k) => {
+    const cat = cats.find((c) => c.chave === k)!;
+    return [k, medidaDaLista(cat, naCurva.filter(cat.pertence))];
+  }));
+}
+
 /** Categoria lida da URL: chave desconhecida = nenhuma. */
 export function categoriaDaUrl(lida: string | null, validas: readonly string[]): string | null {
   return lida && validas.includes(lida) ? lida : null;
