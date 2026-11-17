@@ -34,6 +34,9 @@ import {
 } from "@/lib/expedicao-tiktok-abertos";
 import { brandLabel } from "@/lib/filters/brands";
 
+/** Abaixo de sm (celular) a lista mostra so' Pedido e Coleta, como no ML e na Shopee. */
+const SO_TELA_LARGA = "hidden sm:table-cell";
+
 export function baixarCsv(conteudo: string, nome: string): void {
   let url: string | null = null;
   try {
@@ -240,7 +243,7 @@ export function PopupColetaPerdida({
         </select>
       </label>
       <label className="flex items-center gap-2 text-xs text-ink-muted">
-        Status em {dia}
+        Situação em {dia}
         <select
           value={statusDiaSel ?? ""}
           onChange={(e) => setStatusDiaSel(e.target.value || null)}
@@ -257,7 +260,7 @@ export function PopupColetaPerdida({
         </select>
       </label>
       <label className="flex items-center gap-2 text-xs text-ink-muted">
-        Status hoje
+        Situação hoje
         <select
           value={statusSel ?? ""}
           onChange={(e) => setStatusSel(e.target.value || null)}
@@ -363,37 +366,37 @@ export function PopupColetaPerdida({
               }
             >
               <div className="max-h-[50vh] overflow-auto rounded-lg border border-line" aria-busy={carga.tipo === "carregando"}>
-                <table className="w-full text-sm [&_td]:px-3 [&_td]:py-1.5 [&_th]:whitespace-nowrap [&_th]:px-3 [&_th]:py-1.5">
+                <table className="w-full text-sm [&_td]:px-2 [&_td]:py-1.5 [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-1.5 [&_td:last-child]:pr-3 [&_th:last-child]:pr-3">
                   <caption className="sr-only">{titulo}</caption>
                   <thead className="sticky top-0 bg-raised text-left text-xs uppercase tracking-wide text-ink-faint">
                     <tr>
                       <th scope="col">Pedido</th>
-                      {variasMarcas ? <th scope="col">Marca</th> : null}
-                      <th scope="col" title="Como o pedido estava no fim desse dia: aguardando coleta se a etiqueta já estava pronta, senão aguardando envio.">
+                      <th scope="col">Coleta</th>
+                      {variasMarcas ? <th scope="col" className={SO_TELA_LARGA}>Marca</th> : null}
+                      <th scope="col" className={SO_TELA_LARGA} title="Como o pedido estava no fim desse dia: aguardando coleta se a etiqueta já estava pronta, senão aguardando envio.">
                         Em {dia}
                       </th>
-                      <th scope="col">Hoje</th>
-                      <th scope="col" title="Data do pagamento: é quando o TikTok libera o pedido para envio (sem NF-e, na mesa de embalo).">
-                        Aguardando envio desde
+                      <th scope="col" className={SO_TELA_LARGA}>Situação hoje</th>
+                      <th scope="col" className={SO_TELA_LARGA} title="Data do pagamento: é quando o TikTok libera o pedido para envio (sem NF-e, na mesa de embalo).">
+                        Pago em
                       </th>
-                      <th scope="col" title="Quando entrou em Aguardando coleta: embalado, com NF-e e etiqueta (rts_time do TikTok).">
-                        Aguardando coleta desde
+                      <th scope="col" className={SO_TELA_LARGA} title="Quando entrou em Aguardando coleta: embalado, com NF-e e etiqueta (rts_time do TikTok).">
+                        Pronto em
                       </th>
-                      <th scope="col">Coleta</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pedidos.map((p) => (
                       <tr key={p.order_id} className="border-t border-line">
                         <td className="whitespace-nowrap font-mono text-xs text-ink">{p.order_id}</td>
-                        {variasMarcas ? <td className="whitespace-nowrap text-ink">{brandLabel(p.brand)}</td> : null}
-                        <td className="whitespace-nowrap font-medium text-ink">{rotuloStatusTikTok(p.status_on_day)}</td>
-                        <td className="whitespace-nowrap text-ink-muted">{rotuloStatusTikTok(p.status)}</td>
-                        <td className="whitespace-nowrap tabular-nums text-ink-muted">{instanteCurto(p.paid_at)}</td>
-                        <td className="whitespace-nowrap tabular-nums text-ink-muted">{instanteCurto(p.ready_at)}</td>
                         <td className={`whitespace-nowrap tabular-nums ${p.collected_at ? "text-warn-ink" : "font-semibold text-crit-ink"}`}>
                           {p.collected_at ? `coletado ${instanteCurto(p.collected_at)}` : "ainda sem coleta"}
                         </td>
+                        {variasMarcas ? <td className={`${SO_TELA_LARGA} whitespace-nowrap text-ink`}>{brandLabel(p.brand)}</td> : null}
+                        <td className={`${SO_TELA_LARGA} whitespace-nowrap font-medium text-ink`}>{rotuloStatusTikTok(p.status_on_day)}</td>
+                        <td className={`${SO_TELA_LARGA} whitespace-nowrap text-ink-muted`}>{rotuloStatusTikTok(p.status)}</td>
+                        <td className={`${SO_TELA_LARGA} whitespace-nowrap tabular-nums text-ink-muted`}>{instanteCurto(p.paid_at)}</td>
+                        <td className={`${SO_TELA_LARGA} whitespace-nowrap tabular-nums text-ink-muted`}>{instanteCurto(p.ready_at)}</td>
                       </tr>
                     ))}
                   </tbody>
