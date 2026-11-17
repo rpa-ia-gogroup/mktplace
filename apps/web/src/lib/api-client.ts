@@ -672,6 +672,7 @@ export interface ProdutosMLResponse {
   data_fim?: string | null;
   ads_ate?: string | null;
   marcas_sem_ads?: string[] | null;
+  ads_sem_coleta?: boolean | null;
 }
 
 export interface ProdutoTikTokRow {

@@ -31,7 +31,8 @@ vendas AS (
            SUM(i.item_total) FILTER (WHERE o.is_sale) AS gross_revenue,
            COUNT(DISTINCT o.buyer_user_id) FILTER (WHERE o.is_sale) AS unique_buyers,
            COUNT(DISTINCT o.order_sn) FILTER (WHERE o.is_sale) AS pedidos,
-           COUNT(DISTINCT o.order_sn) FILTER (WHERE o.order_status = 'cancelled') AS cancelados,
+           -- so' cancelamento de pedido pago (como no ML): o nao pago que a Shopee cancela sozinha nao conta
+           COUNT(DISTINCT o.order_sn) FILTER (WHERE o.order_status = 'cancelled' AND o.pay_time IS NOT NULL) AS cancelados,
            -- brinde (preco 0) nao conta na variacao de preco
            MIN(i.discounted_price) FILTER (WHERE o.is_sale AND NOT i.is_freebie) AS min_price,
            MAX(i.discounted_price) FILTER (WHERE o.is_sale AND NOT i.is_freebie) AS max_price
@@ -86,6 +87,7 @@ def _ler(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
     sem_ads = frozenset(marcas) - set(com_ads.split(","))
     itens, meta = montar(linhas, ini, fim, ref_month, sem_ads)
     meta["marcas_sem_ads"] = sorted(sem_ads)
+    meta["ads_sem_coleta"] = sem_ads == frozenset(marcas)  # nenhuma loja do escopo com Ads
     return itens, meta
 
 

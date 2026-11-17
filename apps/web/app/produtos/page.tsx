@@ -92,7 +92,7 @@ function dicaMlMes(adsAte: string | null | undefined): string {
 function dicaShopee(r: { ads_ate?: string | null; marcas_sem_ads?: string[] | null } | null | undefined): string {
   const ate = r?.ads_ate ? `, até ${r.ads_ate.slice(8, 10)}/${r.ads_ate.slice(5, 7)}` : "";
   const sem = r?.marcas_sem_ads?.length ? ` Sem coleta de Ads: ${r.marcas_sem_ads.map((m) => brandLabel(m)).join(", ")} ("sem dado").` : "";
-  return `Por anúncio, pelo dia do pedido (horário de Brasília), só vendas. ROAS conforme relatório de Ads da Shopee, inclui venda indireta; D-1${ate}.${sem} Sinais recalculados no período com o ROAS total.`;
+  return `Por anúncio, pelo dia do pedido (horário de Brasília), só vendas. ROAS conforme relatório de Ads da Shopee, inclui venda indireta; D-1${ate}.${sem} Cancelamento só de pedido pago; os dos últimos 7 dias ainda podem mudar. Sinais recalculados no período com o ROAS total.`;
 }
 const DICA_BLING_TODAS =
   "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do período; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
@@ -643,6 +643,7 @@ function ProdutosPageInner() {
         {tab === "shopee" && !ehMenor && (
           <MercadoLivreProductTable
             canal="Shopee"
+            adsSemColeta={shDisplayData?.ads_sem_coleta === true}
             items={shDisplayData}
             loading={shTableAvail === "loading"}
             sort={shSort.sort}

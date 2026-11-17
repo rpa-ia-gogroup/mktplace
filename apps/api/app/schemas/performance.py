@@ -907,6 +907,7 @@ class ProdutosMLResponse(BaseModel):
     ads_ate: Optional[str] = None
     # Shopee: lojas sem coleta de Ads no periodo.
     marcas_sem_ads: Optional[list[str]] = None
+    ads_sem_coleta: Optional[bool] = None
 
 
 class ParetoBucketSummary(BaseModel):
@@ -941,6 +942,7 @@ class ProdutosMLSummaryResponse(BaseModel):
     ads_ate: Optional[str] = None
     # Shopee: lojas sem coleta de Ads no periodo.
     marcas_sem_ads: Optional[list[str]] = None
+    ads_sem_coleta: Optional[bool] = None
 
 
 class ProdutoTikTokRow(BaseModel):

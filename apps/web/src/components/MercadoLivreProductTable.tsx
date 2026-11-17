@@ -4,6 +4,7 @@ import SortableHeader from "@/components/SortableHeader";
 import ProductTableShell from "@/components/ProductTableShell";
 import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
 import { brandLabel } from "@/lib/filters/brands";
+import InfoDica from "@/components/ui/InfoDica";
 
 /** Decimal em pt-BR ("15,4"), no lugar de toFixed ("15.4"). */
 const dec = (v: number, casas = 1) => v.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
@@ -27,12 +28,13 @@ const SIGNAL_COLOR: Record<string, string> = {
 
 /** Sinal da API em chip curto, em portugues; o texto inteiro fica no title. */
 const SINAL_CURTO: [RegExp, string][] = [
-  [/aumentar investimento/i, "Aumentar investimento"],
+  // Curto para caber no chip sem reticencias; o texto inteiro vai no title e no filtro.
+  [/aumentar investimento/i, "Aumentar ads"],
   [/pausar ads/i, "Pausar ads?"],
-  [/cancelamento/i, "Cancelamento alto"],
-  [/vende organico/i, "Oportunidade orgânica"],
-  [/spend sem vendas/i, "Investe sem vender"],
-  [/variacao de preco/i, "Preço oscilando"],
+  [/cancelamento/i, "Cancel. alto"],
+  [/vende organico/i, "Orgânico"],
+  [/spend sem vendas/i, "Sem venda"],
+  [/variacao de preco/i, "Preço oscila"],
 ];
 export function sinalCurto(signal: string): string {
   return SINAL_CURTO.find(([re]) => re.test(signal))?.[1] ?? signal;
@@ -50,6 +52,8 @@ interface Props {
   onSort: (column: string) => void;
   pagination: { limit: number; offset: number; onChange: (offset: number) => void };
   canal?: "Mercado Livre" | "Shopee";
+  /** Nenhuma loja do escopo com coleta de Ads: avisa uma vez no cabecalho e as celulas ficam "—". */
+  adsSemColeta?: boolean;
 }
 
 /** Colunas especificas do Mercado Livre, no periodo: preco medio, cancelamento,
@@ -58,7 +62,7 @@ interface Props {
  * Nao inclui margem: `estimated_margin` tem formula desconhecida na fonte
  * (ver docs/sections/produtos_audit.md secao 10.3) e nunca deve ser exibido
  * como margem. */
-export default function MercadoLivreProductTable({ items, loading, sort, onSort, pagination, canal = "Mercado Livre" }: Props) {
+export default function MercadoLivreProductTable({ items, loading, sort, onSort, pagination, canal = "Mercado Livre", adsSemColeta = false }: Props) {
   const COL_COUNT = 9;
   return (
     <ProductTableShell<ProdutoMLRow>
@@ -76,7 +80,13 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
           <SortableHeader label="Unid." column="units_sold" sort={sort} onSort={onSort} align="right" />
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-center">Pareto</th>
           <SortableHeader label="Cancel." column="cancel_rate_pct" sort={sort} onSort={onSort} align="right" />
-          <SortableHeader label="Eficiência Ads" column="ad_roas" sort={sort} onSort={onSort} align="right" />
+          {adsSemColeta ? (
+            <th scope="col" className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider text-right whitespace-nowrap">
+              <span className="inline-flex items-center gap-1">Eficiência Ads <InfoDica texto={`Ads por produto da ${canal} ainda sem coleta.`} /></span>
+            </th>
+          ) : (
+            <SortableHeader label="Eficiência Ads" column="ad_roas" sort={sort} onSort={onSort} align="right" />
+          )}
           <th className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Sinal</th>
         </tr>
       }
@@ -125,7 +135,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
                 {dec(p.ad_roas, 1)}x ROAS
                 {p.ad_roas_direto != null && <span className="sr-only">, ROAS direto {dec(p.ad_roas_direto, 1)}x</span>}
               </span>
-            ) : p.ads_sem_dado ? (
+            ) : p.ads_sem_dado && !adsSemColeta ? (
               <span className="text-ink-faint" title="Loja sem coleta de Ads no período">Sem dado</span>
             ) : p.ad_spend == null && items?.ads_ate ? (
               <span className="text-ink-muted">Sem Ads</span>

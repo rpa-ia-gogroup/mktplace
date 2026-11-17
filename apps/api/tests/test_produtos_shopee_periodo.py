@@ -43,6 +43,7 @@ def test_ads_por_loja_sem_coleta_e_sem_dado_nunca_zero():
     assert por["333"]["ads_sem_dado"] is True and por["333"]["ad_spend"] is None and por["333"]["ad_roas"] is None
     assert por["333"]["action_signal"] is None
     assert r["marcas_sem_ads"] == ["apice", "barbours", "lescent", "rituaria"] and r["ads_ate"] == "2026-10-30"
+    assert r["ads_sem_coleta"] is False
 
 
 def test_raw_ausente_cai_para_so_vendas_com_ads_sem_dado():
@@ -56,6 +57,7 @@ def test_raw_ausente_cai_para_so_vendas_com_ads_sem_dado():
     r = svc.get_resumo(consultar, *OUT, "kokeshi")
     assert len(sqls) == 2 and sqls[1] == svc.SQL_SO_VENDAS
     assert r["marcas_sem_ads"] == ["kokeshi"] and r["ads_ate"] is None and r["total_gmv"] == 500
+    assert r["ads_sem_coleta"] is True  # nenhuma loja do escopo com Ads: a tela avisa uma vez, no cabecalho
     t = svc.get_tabela(consultar, *OUT, "kokeshi", None, 25, 0, None, None)
     assert t["items"][0]["ads_sem_dado"] is True and t["items"][0]["action_signal"] is None
 
@@ -74,21 +76,24 @@ def test_sql_shopee_item_texto_e_gasto_sem_replicar_entre_variacoes():
     try:
         db.execute(text("""
             CREATE TEMP TABLE stg_shopee_orders (shop_account text, order_sn text, brand text, order_status text,
-                is_sale boolean, buyer_user_id text, created_date_brt date, ingested_at timestamptz) ON COMMIT DROP;
+                is_sale boolean, buyer_user_id text, created_date_brt date, ingested_at timestamptz,
+                pay_time timestamptz) ON COMMIT DROP;
             CREATE TEMP TABLE stg_shopee_order_items (shop_account text, order_sn text, item_id text, model_id text,
                 item_name text, item_sku text, quantity int, discounted_price numeric, item_total numeric,
                 is_freebie boolean) ON COMMIT DROP;
             CREATE TEMP TABLE shopee_ads_items (brand varchar(50), item_id text, ref_date date, cost numeric(14,2),
                 direct_amount numeric(14,2), indirect_amount numeric(14,2)) ON COMMIT DROP;
             INSERT INTO stg_shopee_orders VALUES
-              ('k', 'A', 'kokeshi', 'completed', true,  'b1', '2026-10-05', '2026-10-06'),
-              ('k', 'B', 'kokeshi', 'completed', true,  'b2', '2026-10-06', '2026-10-06'),
-              ('k', 'C', 'kokeshi', 'cancelled', false, 'b3', '2026-10-06', '2026-10-06'),
-              ('k', 'D', 'kokeshi', 'completed', true,  'b4', '2026-11-01', '2026-11-01');
+              ('k', 'A', 'kokeshi', 'completed', true,  'b1', '2026-10-05', '2026-10-06', '2026-10-05'),
+              ('k', 'B', 'kokeshi', 'completed', true,  'b2', '2026-10-06', '2026-10-06', '2026-10-06'),
+              ('k', 'C', 'kokeshi', 'cancelled', false, 'b3', '2026-10-06', '2026-10-06', '2026-10-06'),
+              ('k', 'E', 'kokeshi', 'cancelled', false, 'b5', '2026-10-06', '2026-10-06', NULL),  -- nao pago: fora
+              ('k', 'D', 'kokeshi', 'completed', true,  'b4', '2026-11-01', '2026-11-01', '2026-11-01');
             INSERT INTO stg_shopee_order_items VALUES
               ('k', 'A', '22990011', 'm1', 'Batom', 'BAT', 1, 50, 50, false),
               ('k', 'B', '22990011', 'm2', 'Batom', 'BAT', 2, 50, 100, false),
               ('k', 'C', '22990011', 'm1', 'Batom', 'BAT', 1, 50, 50, false),
+              ('k', 'E', '22990011', 'm1', 'Batom', 'BAT', 1, 50, 50, false),
               ('k', 'D', '22990011', 'm1', 'Batom', 'BAT', 9, 50, 450, false);
             INSERT INTO shopee_ads_items VALUES
               ('kokeshi', '22990011', '2026-10-05', 10, 80, 20),
