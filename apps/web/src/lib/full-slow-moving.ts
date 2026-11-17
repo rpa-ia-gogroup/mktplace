@@ -25,13 +25,24 @@ export interface SkuSlowMoving {
   valor_parado: number;
   venda_dia: number;
   cobertura_dias: number | null;
+  /** Pecas por dia em `dias` (60, ate' ontem), por canal: "MKT" (ML, Shopee e outras) e "TT" (TikTok). */
+  serie: Partial<Record<CanalSlow, number[]>>;
+  receita_15d: Partial<Record<CanalSlow, number>>;
 }
+
+export type CanalSlow = "MKT" | "TT";
+/** Filtro de canal: o grafico e o faturamento seguem; media, tendencia e cobertura usam todos (igual ao Supply). */
+export type FiltroCanal = "todos" | "MKT" | "TT";
+export const ROTULO_CANAL: Record<FiltroCanal, string> = { todos: "Todos", MKT: "Sem TikTok", TT: "TikTok" };
+export type FiltroTendencia = "todos" | "melhorando" | "piorando";
 
 export interface SlowMovingResponse {
   status: "ok";
   fonte: string;
   atualizado_em: string | null;
   meta_dias: number;
+  dias: string[];
+  vendas_disponivel: boolean;
   skus: SkuSlowMoving[];
 }
 
@@ -78,4 +89,71 @@ export function filtrar(skus: readonly SkuSlowMoving[], marcas: readonly string[
     const alvo = semAcento(`${s.sku} ${s.descricao} ${s.categoria ?? ""}`);
     return termos.every((t) => alvo.includes(t));
   });
+}
+
+const canaisDo = (f: FiltroCanal): CanalSlow[] => (f === "todos" ? ["MKT", "TT"] : [f]);
+
+/** Pecas por dia somando os canais do filtro (zeros quando o SKU nao vendeu). */
+export function serieDo(s: SkuSlowMoving, n: number, f: FiltroCanal = "todos"): number[] {
+  const out = new Array<number>(n).fill(0);
+  for (const c of canaisDo(f)) (s.serie[c] ?? []).forEach((v, i) => { if (i < n) out[i] += v; });
+  return out;
+}
+
+const soma = (a: number[]) => a.reduce((t, v) => t + v, 0);
+
+/** Media/dia dos ultimos 15 dias, dos 15 anteriores e a variacao (%). `null` = sem base para comparar. */
+export function ritmo(s: SkuSlowMoving, n: number): { m15: number; m15p: number; tendencia: number | null } {
+  const v = serieDo(s, n);
+  const m15 = soma(v.slice(-15)) / 15, m15p = soma(v.slice(-30, -15)) / 15;
+  return { m15, m15p, tendencia: m15p > 0 ? (m15 / m15p - 1) * 100 : null };
+}
+
+export function passaTendencia(s: SkuSlowMoving, n: number, f: FiltroTendencia): boolean {
+  if (f === "todos") return true;
+  const t = ritmo(s, n).tendencia;
+  return t != null && (f === "melhorando" ? t > 0 : t < 0);
+}
+
+/** Pecas por dia da lista inteira (grafico), no filtro de canal. */
+export function serieDaLista(skus: readonly SkuSlowMoving[], n: number, f: FiltroCanal): number[] {
+  const out = new Array<number>(n).fill(0);
+  for (const s of skus) serieDo(s, n, f).forEach((v, i) => { out[i] += v; });
+  return out;
+}
+
+/** Media movel de 7 dias (menos dias no comeco da serie). */
+export function mediaMovel7(v: number[]): number[] {
+  return v.map((_, i) => soma(v.slice(Math.max(0, i - 6), i + 1)) / Math.min(7, i + 1));
+}
+
+export function faturamento15d(skus: readonly SkuSlowMoving[], f: FiltroCanal): number {
+  return skus.reduce((t, s) => t + canaisDo(f).reduce((u, c) => u + (s.receita_15d[c] ?? 0), 0), 0);
+}
+
+/** Tendencia da lista: Σ media 15d ÷ Σ media 15d anteriores. */
+export function tendenciaDaLista(skus: readonly SkuSlowMoving[], n: number): number | null {
+  let a = 0, b = 0;
+  for (const s of skus) { const r = ritmo(s, n); a += r.m15; b += r.m15p; }
+  return b > 0 ? (a / b - 1) * 100 : null;
+}
+
+export const COLUNAS_EXPORT = [
+  "Marca", "SKU", "Produto", "Categoria", "Curva", "Status", "Estoque Marketplace (pç)", "Custo unit. (R$)",
+  "Capital parado (R$)", "Média/dia 15d (pç)", "Média/dia 15d anteriores (pç)", "Tendência (%)",
+  "Cobertura (dias)", "Precisa vender/dia (pç)", "Faturamento 15d (R$)",
+];
+
+const r1 = (v: number | null) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10);
+
+export function linhaExport(s: SkuSlowMoving, n: number, meta: number, marca: string): Record<string, string | number | null> {
+  const r = ritmo(s, n);
+  return {
+    "Marca": marca, "SKU": s.sku, "Produto": s.descricao, "Categoria": s.categoria, "Curva": s.curva, "Status": s.status,
+    "Estoque Marketplace (pç)": s.estoque, "Custo unit. (R$)": s.custo_unitario, "Capital parado (R$)": Math.round(s.valor_parado * 100) / 100,
+    "Média/dia 15d (pç)": r1(s.venda_dia), "Média/dia 15d anteriores (pç)": r1(r.m15p), "Tendência (%)": r1(r.tendencia),
+    "Cobertura (dias)": s.cobertura_dias == null ? "sem venda" : Math.round(s.cobertura_dias),
+    "Precisa vender/dia (pç)": s.estoque == null ? null : r1(s.estoque / meta),
+    "Faturamento 15d (R$)": Math.round(((s.receita_15d.MKT ?? 0) + (s.receita_15d.TT ?? 0)) * 100) / 100,
+  };
 }

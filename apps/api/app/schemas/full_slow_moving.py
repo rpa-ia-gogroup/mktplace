@@ -23,6 +23,10 @@ class SkuSlowMoving(BaseModel):
     venda_dia: float
     #: Dias de estoque no ritmo atual (None = sem venda).
     cobertura_dias: Optional[float] = None
+    #: Pecas por dia em `dias`, por canal+envio ("ML-F", "SP-N"...), kit aberto em pecas. Vazio = sem venda.
+    serie: dict[str, list[float]] = {}
+    #: R$ vendido nos ultimos 15 dias, por canal+envio.
+    receita_15d: dict[str, float] = {}
 
 
 class SlowMovingResponse(BaseModel):
@@ -31,4 +35,8 @@ class SlowMovingResponse(BaseModel):
     #: Dia da fotografia do Supply Intelligence (None = nao lido).
     atualizado_em: Optional[date] = None
     meta_dias: int
+    #: Dias da `serie` de cada SKU (60, ate' ontem). Vazio = venda diaria indisponivel.
+    dias: list[date] = []
+    #: False = de-para/kits ou vendas nao lidos: a tela mostra so' os numeros do Supply.
+    vendas_disponivel: bool = False
     skus: list[SkuSlowMoving]
