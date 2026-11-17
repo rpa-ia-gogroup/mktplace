@@ -597,6 +597,8 @@ def test_59_portao_le_raw_silver_e_pedidos_pela_mesma_chave_do_pipeline():
     assert "r.ingested_at IS DISTINCT FROM s.ingested_at" in sql
     assert "s.is_fulfillment_by_shopee" in sql
     assert "silver.stg_shopee_orders" in sql
+    # frescor so' por item listado (falso negativo da kokeshi em 16/11)
+    assert "FILTER (WHERE lower(s.item_status) = 'normal')" in sql
 
 
 def test_60_codigos_de_saida_sao_distintos_e_evitam_o_2_do_argparse():

@@ -306,7 +306,9 @@ class Snapshot:
 # velho com data nova, sem nada indicando isso na tela.
 #
 # O corte e' a meia-noite BRT do `ref_date`, e vale para as DUAS fontes:
-#   - catalogo: todo produto FBS de cada conta tem de ter sido capturado hoje;
+#   - catalogo: todo produto FBS LISTADO (`normal`) de cada conta tem de ter sido
+#     capturado hoje. Item `unlist` fica de fora: o upsert com guarda do catalogo nao
+#     avanca `ingested_at` de linha que nao mudou (falso negativo da kokeshi em 16/11);
 #   - pedidos: a demanda usa a janela [ref_date - 28, ref_date), entao o D-1
 #     precisa estar COMPLETO -- a ultima ingestao de pedidos tem de ser depois
 #     da meia-noite. Pedido parado infla a cobertura em silencio.
@@ -326,7 +328,12 @@ SQL_PORTAO_FONTE = text("""
         SELECT r.shop_account,
                COUNT(*)                                        AS produtos_fbs,
                COUNT(*) FILTER (WHERE r.stock_info IS NULL)    AS fbs_sem_stock_info,
-               MIN(r.ingested_at)                              AS fbs_capturado_min
+               -- frescor so' pelos itens LISTADOS: o upsert do catalogo so' avanca
+               -- `ingested_at` quando o dado muda, e item `unlist` parado fica com a
+               -- data antiga mesmo lido hoje (kokeshi 16/11: 2 kits unlist de 15/11
+               -- barraram o dia). Sem item listado, vale o mais recente da conta.
+               COALESCE(MIN(r.ingested_at) FILTER (WHERE lower(s.item_status) = 'normal'),
+                        MAX(r.ingested_at))                    AS fbs_capturado_min
           FROM raw.shopee_products r
           JOIN silver.stg_shopee_products s
             ON s.shop_account = r.shop_account AND s.item_id = r.item_id

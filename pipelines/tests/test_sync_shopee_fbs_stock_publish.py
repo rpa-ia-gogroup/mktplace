@@ -669,6 +669,40 @@ def test_portao_recusa_antes_de_qualquer_escrita(banco, cenario):
     _nada_aconteceu(banco)
 
 
+def test_portao_ignora_fbs_unlist_parado_caso_kokeshi_16_11(banco):
+    """Kokeshi 16/11: kit FBS `unlist` sem mudanca manteve o `ingested_at` de ontem
+    (upsert com guarda) e barrou o dia. Item fora de venda nao prova catalogo velho."""
+    _estragar(banco,
+        "UPDATE silver.stg_shopee_products SET item_status = 'unlist' "
+        "WHERE item_id = (SELECT MIN(item_id) FROM silver.stg_shopee_products "
+        "                 WHERE shop_account = 'barbours' AND is_fulfillment_by_shopee);"
+        "UPDATE raw.shopee_products r SET ingested_at = '" + ONTEM_NOITE + "' "
+        "  FROM silver.stg_shopee_products s "
+        " WHERE s.shop_account = r.shop_account AND s.item_id = r.item_id "
+        "   AND s.item_status = 'unlist';"
+        "UPDATE silver.stg_shopee_products SET ingested_at = '" + ONTEM_NOITE + "' "
+        "WHERE item_status = 'unlist'")
+    res = P.run(apply=True)
+    assert res["portao_fonte"]["contas"]
+    assert _contagens(banco)["prod_linhas"] > 0
+
+
+def test_portao_ainda_recusa_fbs_listado_de_ontem(banco):
+    """O mesmo item, LISTADO, segue barrando: e' catalogo que nao rodou."""
+    _estragar(banco,
+        "UPDATE raw.shopee_products r SET ingested_at = '" + ONTEM_NOITE + "' "
+        "  FROM silver.stg_shopee_products s "
+        " WHERE s.shop_account = r.shop_account AND s.item_id = r.item_id "
+        "   AND s.item_id = (SELECT MIN(item_id) FROM silver.stg_shopee_products "
+        "                    WHERE shop_account = 'barbours' AND is_fulfillment_by_shopee);"
+        "UPDATE silver.stg_shopee_products s SET ingested_at = r.ingested_at "
+        "  FROM raw.shopee_products r "
+        " WHERE s.shop_account = r.shop_account AND s.item_id = r.item_id")
+    with pytest.raises(P.FonteNaoProntaError, match="barbours: catalogo FBS capturado"):
+        P.run(apply=True)
+    _nada_aconteceu(banco)
+
+
 def test_portao_recusa_tambem_no_dry_run(banco):
     """O ensaio diario precisa reprovar pelo MESMO motivo que o apply."""
     _estragar(banco, CENARIOS_FONTE_NAO_PRONTA["pedidos_parados"][0])
