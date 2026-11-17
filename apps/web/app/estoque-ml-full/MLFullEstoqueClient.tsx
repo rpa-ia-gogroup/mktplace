@@ -57,6 +57,7 @@ import { abrirCategoria, CATEGORIAS_ML, categoriaPorChave, contagensNaCurva, CAR
 const CHAVES_CATEGORIA = CATEGORIAS_ML.map((c) => c.chave);
 import {
   AVISO_AUSENCIA_ML,
+  passaBuscaML,
   AVISO_GRAO_ML,
   AVISO_TRANSFER_ML,
   CLASS_LABEL_ML,
@@ -336,6 +337,8 @@ export default function MLFullEstoqueClient() {
   const [erro, setErro] = useState<ErroML | null>(null);
   // CURVA-ABC: filtro so' na tela (a API ja' manda a curva de cada inventario).
   const [curvas, setCurvas] = useState<OpcaoCurva[]>([]);
+  // Busca por SKU/nome so' na tela: a lista ja' vem inteira (ate' 1000 inventarios).
+  const [busca, setBusca] = useState("");
   // Qual busca o payload responde: "Compartilhados"/"Sem leitura" refazem a busca
   // (com os fora do Full) e o foco so' vai ao chip depois dela.
   const [queryCarregada, setQueryCarregada] = useState<string | null>(null);
@@ -408,6 +411,7 @@ export default function MLFullEstoqueClient() {
     setFiltros(FILTROS_ML_VAZIOS);
     setDataDigitada("");
     setCurvas([]);
+    setBusca("");
     if (chaveCategoria) setCategoria(null);
     // O botao "Limpar filtros" some ao limpar: o foco vai para a caixa de
     // marca, que esta sempre na tela, em vez de cair no <body>.
@@ -441,7 +445,7 @@ export default function MLFullEstoqueClient() {
   const comCurva = curvaNaTela(metaCurva);
   const filtroCurva = comCurva ? curvas : [];
   const naCurva = payload && !isIndisponivelML(payload)
-    ? payload.inventarios.filter((i) => passaCurva(i.curva, filtroCurva))
+    ? payload.inventarios.filter((i) => passaCurva(i.curva, filtroCurva) && passaBuscaML(i, busca))
     : [];
   // Sem categoria, os fora do Full so' aparecem se a pessoa pediu (a busca pode te-los trazido).
   const lista = categoria
@@ -452,8 +456,8 @@ export default function MLFullEstoqueClient() {
       })();
   // Com curva filtrada, os 4 cards de contagem seguem o filtro (numero = lista que o card abre).
   // So' com a lista inteira (sem truncar): senao o numero nao seria o da curva e fica o da fotografia.
-  const naCurvaCards = filtroCurva.length > 0 && payload && !isIndisponivelML(payload) && !payload.truncado ? contagensNaCurva(CATEGORIAS_ML, CARDS_NA_CURVA, naCurva) : null;
-  const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria;
+  const naCurvaCards = filtroCurva.length > 0 && !busca.trim() && payload && !isIndisponivelML(payload) && !payload.truncado ? contagensNaCurva(CATEGORIAS_ML, CARDS_NA_CURVA, naCurva) : null;
+  const algumFiltro = temFiltroAtivoML(filtros) || filtroCurva.length > 0 || !!categoria || !!busca.trim();
 
   const fotoEmUso = payload && !isIndisponivelML(payload) ? payload.frescor.ref_date : "";
   const filtrosUI = (
@@ -469,6 +473,16 @@ export default function MLFullEstoqueClient() {
         />
       </span>
       {comCurva && <FiltroCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
+        <label className="flex w-full items-center gap-2 text-sm text-ink-muted sm:w-auto">
+          <span className="sr-only">Buscar por SKU ou produto</span>
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar SKU ou produto"
+            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint min-h-11 px-3 text-sm w-full sm:w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          />
+        </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           Data da fotografia
           <input
@@ -648,12 +662,13 @@ export default function MLFullEstoqueClient() {
                 )}
               </div>
               {/* "N de M inventarios" so' com a lista truncada (senao e' a lista toda); recortes ativos seguem. */}
-              {(categoria || filtroCurva.length > 0 || payload.truncado) && (
+              {(categoria || filtroCurva.length > 0 || busca.trim() || payload.truncado) && (
                 <p className="text-xs text-ink-muted px-1">
                   {categoria
                     ? `${fmtInt(lista.length)} na categoria`
-                    : filtroCurva.length > 0 && `${fmtInt(lista.length)} na curva escolhida`}
-                  {(categoria || filtroCurva.length > 0) && payload.truncado && " · "}
+                    : filtroCurva.length > 0 ? `${fmtInt(lista.length)} na curva escolhida`
+                    : busca.trim() && `${fmtInt(lista.length)} na busca`}
+                  {(categoria || filtroCurva.length > 0 || busca.trim()) && payload.truncado && " · "}
                   {payload.truncado && `${fmtInt(payload.inventarios.length)} de ${fmtInt(payload.total_no_filtro)} inventários · lista truncada; indicadores cobrem tudo`}
                 </p>
               )}

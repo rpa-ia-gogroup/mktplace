@@ -640,6 +640,17 @@ export function temFiltroAtivoML(f: FiltrosML): boolean {
   return f.brands.length > 0 || f.refDate !== "" || f.incluirForaDoFull;
 }
 
+/** Sem acento e sem caixa: "pao" acha "Pão". */
+const semAcento = (t: string) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+/** Busca da tabela (so' na tela): cada palavra precisa estar no SKU ou no titulo. */
+export function passaBuscaML(i: Pick<InventarioML, "sku" | "titulo">, busca: string): boolean {
+  const termos = semAcento(busca).split(/\s+/).filter(Boolean);
+  if (termos.length === 0) return true;
+  const alvo = semAcento(`${i.sku ?? ""} ${i.titulo ?? ""}`);
+  return termos.every((t) => alvo.includes(t));
+}
+
 // ---------------------------------------------------------------------------
 // Avisos fixos
 // ---------------------------------------------------------------------------

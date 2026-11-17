@@ -697,3 +697,13 @@ test("data da foto do ML: dd/mm, sem ano e sem desvio de fuso", () => {
   assert.equal(fmtData(null), SEM_DADO);
   assert.equal(fmtData("lixo"), SEM_DADO);
 });
+
+test("busca da tabela: SKU ou titulo, sem acento/caixa, todas as palavras", async () => {
+  const { passaBuscaML } = await import("../src/lib/ml-full-estoque.ts");
+  const i = { sku: "KK-123", titulo: "Pó Compacto Kokeshi" };
+  assert.equal(passaBuscaML(i, ""), true);
+  assert.equal(passaBuscaML(i, "kk-123"), true);
+  assert.equal(passaBuscaML(i, "po kokeshi"), true);
+  assert.equal(passaBuscaML(i, "po barbours"), false);
+  assert.equal(passaBuscaML({ sku: null, titulo: null }, "x"), false);
+});
