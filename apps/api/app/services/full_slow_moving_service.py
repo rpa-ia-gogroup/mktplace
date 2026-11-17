@@ -7,11 +7,16 @@ cobertura no Marketplace acima de 120 dias) e' do Supply: a Torre so' le' o
 """
 from __future__ import annotations
 
+import logging
 import unicodedata
+from datetime import date, timedelta
 from typing import Callable, Optional
 
 from app.schemas.full_slow_moving import SkuSlowMoving, SlowMovingResponse
+from app.services import slow_moving_vendas as vendas
 from app.services.gold_service import BRANDS_IN_SCOPE
+
+logger = logging.getLogger(__name__)
 
 META_DIAS = 120
 FONTE = "Supply Intelligence (Painel S&OE) · canal Marketplace"
@@ -43,7 +48,26 @@ def _sku(r: dict) -> str:
     return sku or str(r.get("chave") or "").split("-", 1)[-1].strip()
 
 
-def get_slow_moving(consultar: Callable[[str, dict], list[dict]]) -> SlowMovingResponse:
+def _anotar_vendas(skus: list[SkuSlowMoving], consultar, hoje: date) -> list[date]:
+    """Serie diaria (60 dias ate' ontem) e R$ dos ultimos 15 dias em cada SKU. Falha = [] (tela sem a serie)."""
+    if not skus:
+        return []
+    dias = vendas.janela(hoje - timedelta(days=1))
+    try:
+        linhas = consultar(vendas.SQL_VENDAS, {"ini": dias[0], "fim": dias[-1], "skus": sorted({s.sku for s in skus})})
+    except Exception:  # noqa: BLE001 -- vendas sao extra: a lista do Supply segue
+        logger.exception("slow moving: vendas nao lidas")
+        return []
+    series = vendas.series_por_sku(linhas, len(dias), _marca)
+    for s in skus:
+        e = series.get((s.marca, s.sku))
+        if e:
+            s.serie = {ch: [round(v, 2) for v in serie] for ch, serie in e["q"].items()}
+            s.receita_15d = {ch: round(sum(serie[-15:]), 2) for ch, serie in e["r"].items()}
+    return dias
+
+
+def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional[date] = None) -> SlowMovingResponse:
     skus = []
     for r in consultar(SQL_SLOW, {}):
         marca = _marca(r.get("marca"))
@@ -63,5 +87,6 @@ def get_slow_moving(consultar: Callable[[str, dict], list[dict]]) -> SlowMovingR
         ))
     dia = consultar(SQL_DIA, {})
     skus.sort(key=lambda s: s.valor_parado, reverse=True)
+    dias = _anotar_vendas(skus, consultar, hoje or date.today())
     return SlowMovingResponse(fonte=FONTE, atualizado_em=dia[0]["dia"] if dia else None,
-                              meta_dias=META_DIAS, skus=skus)
+                              meta_dias=META_DIAS, dias=dias, vendas_disponivel=bool(dias), skus=skus)
