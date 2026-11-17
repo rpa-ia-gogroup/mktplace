@@ -22,12 +22,8 @@ export const LINHAS_CURVA: { chave: LinhaCurva; rotulo: string }[] = [
   { chave: "sem", rotulo: "Sem curva" },
 ];
 
-/** Filtro da tela: uma curva ou "todas" (a antiga linha "Total marca"). */
+/** Curva da celula clicada: uma linha ou "todas" (a grade da tela junta as curvas escolhidas no filtro do topo). */
 export type FiltroCurvaGrade = LinhaCurva | "todas";
-export const OPCOES_CURVA: { chave: FiltroCurvaGrade; rotulo: string }[] = [
-  ...LINHAS_CURVA,
-  { chave: "todas", rotulo: "Todas" },
-];
 
 export type ClasseGrade = "ruptura" | "baixo" | "excesso" | null;
 
@@ -160,4 +156,4 @@ export function fmtPermanencia(dias: number | null): string {
 }
 
 export const AJUDA_GRADE =
-  "Mesmo recorte dos cartões (brinde e descontinuado fora). A barra mostra os itens da marca: ruptura, estoque baixo, excesso e, em cinza, os demais (suficiente, sem giro). Quem mais precisa de ação vem primeiro; clique em ruptura, baixo ou excesso para ver os itens. Disponível em unidades; ruptura, estoque baixo e excesso em nº de itens. Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";
+  "Mesmo recorte dos cartões (brinde e descontinuado fora). A barra mostra os itens da marca: ruptura, estoque baixo, excesso e, em cinza, os demais (suficiente, sem giro). Quem mais precisa de ação vem primeiro; clique em ruptura, baixo ou excesso para ver os itens. A curva segue o filtro “Curva” do topo da aba (sem filtro, todas). Disponível em unidades; ruptura, estoque baixo e excesso em nº de itens. Permanência = quantos dias o estoque dura no ritmo de venda dos últimos 28 dias: soma do disponível ÷ soma da venda média diária, só dos itens com venda. “—” = sem dado, não zero. “Sem curva” não é C.";

@@ -4,20 +4,20 @@
  * ESTOQUE POR CURVA E MARCA: uma linha por marca, com barra empilhada dos itens
  * (ruptura / baixo / demais / excesso) e os numeros ao lado. Quem mais precisa
  * de acao vem primeiro; ruptura, baixo e excesso abrem a lista (pop-up). A curva
- * e' filtro (botao no topo do painel, pedido da Nathalia em 13/11) e "Todas"
- * ocupa o lugar da antiga linha "Total marca". Regra em `lib/estoque-grade-curva.ts`.
+ * vem do filtro "Curva" do topo da aba (uma fonte so'; vazio = todas as curvas).
+ * Regra em `lib/estoque-grade-curva.ts`.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Grid3x3 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 
 import BarraItens, { LegendaBarra } from "@/components/full/BarraItens";
 import Panel from "@/components/ui/Panel";
-import Segmented from "@/components/ui/Segmented";
+import { passaCurva, OPCOES_CURVA, type OpcaoCurva } from "@/lib/estoque-curva";
 import {
-  AJUDA_GRADE, fmtPermanencia, itensDaCelula, montarGrade, OPCOES_CURVA, ordenarPorAcao, TOTAL,
-  type CelulaGrade, type FiltroCurvaGrade, type ItemGrade,
+  AJUDA_GRADE, fmtPermanencia, itensDaCelula, montarGrade, ordenarPorAcao, TOTAL,
+  type CelulaGrade, type ItemGrade,
 } from "@/lib/estoque-grade-curva";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
@@ -101,7 +101,7 @@ function Linha({ nome, nota, c, aberta, aoAbrir, total = false }: {
 }
 
 export default function GradeCurvaMarca({
-  itens: lista, marcas, rotuloMarca, notaMarca, item = "itens", ressalva, comCurva = true,
+  itens: lista, marcas, rotuloMarca, notaMarca, item = "itens", ressalva, comCurva = true, curvas = [],
 }: {
   /** Itens ja' no recorte dos cartoes; a grade e a lista do clique saem daqui. */
   itens: readonly ItemGrade[];
@@ -115,16 +115,19 @@ export default function GradeCurvaMarca({
   ressalva?: string | null;
   /** Curva nao lida: so' "Todas" (o estado das marcas continua ao lado do nome). */
   comCurva?: boolean;
+  /** Curvas do filtro "Curva" do topo da aba (vazio = todas): a grade nao tem filtro proprio. */
+  curvas?: readonly OpcaoCurva[];
 }) {
-  const [escolhida, setCurvaBruta] = useState<FiltroCurvaGrade>("aa_a");
   const [aberta, setAberta] = useState<{ marca: string; classe: Classe } | null>(null);
-  const curva: FiltroCurvaGrade = comCurva ? escolhida : "todas";
-  const setCurva = (c: FiltroCurvaGrade) => { setCurvaBruta(c); setAberta(null); };
-  const grade = useMemo(() => montarGrade(lista, marcas), [lista, marcas]);
-  const celulas = curva === "todas" ? grade.totalMarca : grade.celulas[curva];
+  // Uma fonte de verdade: o filtro do topo. Sem curva lida, a grade mostra tudo.
+  const escolhidas = comCurva ? curvas : [];
+  const chaveCurvas = escolhidas.join(",");
+  useEffect(() => setAberta(null), [chaveCurvas]);
+  const doFiltro = useMemo(() => lista.filter((i) => passaCurva(i.curva, escolhidas)), [lista, chaveCurvas]); // eslint-disable-line react-hooks/exhaustive-deps
+  const celulas = useMemo(() => montarGrade(doFiltro, marcas).totalMarca, [doFiltro, marcas]);
   const ordem = useMemo(() => ordenarPorAcao(marcas, celulas), [marcas, celulas]);
-  const daLista = aberta ? itensDaCelula(lista, marcas, aberta.marca, curva, aberta.classe) : [];
-  const rotuloCurva = OPCOES_CURVA.find((l) => l.chave === curva)!.rotulo;
+  const daLista = aberta ? itensDaCelula(doFiltro, marcas, aberta.marca, "todas", aberta.classe) : [];
+  const rotuloCurva = escolhidas.length ? `curva ${OPCOES_CURVA.filter((o) => escolhidas.includes(o.valor)).map((o) => o.texto).join(" + ")}` : "todas as curvas";
   const aoAbrir = (marca: string) => (classe: Classe) => setAberta({ marca, classe });
 
   return (
@@ -132,17 +135,7 @@ export default function GradeCurvaMarca({
       titulo={comCurva ? "Estoque por curva e marca" : "Estoque por marca"}
       icone={Grid3x3}
       ajuda={AJUDA_GRADE}
-      acao={
-        <>
-          {ressalva && <span className="rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn-ink">{ressalva}</span>}
-          {comCurva && (
-            // 390: cinco opcoes nao cabem em 358 px; a trilha rola sozinha em vez de quebrar "Sem curva" em duas linhas.
-            <div className="max-w-full overflow-x-auto">
-              <Segmented rotulo="Curva" opcoes={OPCOES_CURVA.map((l) => ({ valor: l.chave, texto: l.rotulo }))} valor={curva} aoEscolher={setCurva} className="whitespace-nowrap" />
-            </div>
-          )}
-        </>
-      }
+      acao={ressalva ? <span className="rounded-full bg-warn-soft px-2.5 py-0.5 text-xs text-warn-ink">{ressalva}</span> : undefined}
       semPadding
     >
       <LegendaBarra className="px-4 pt-3" />
@@ -156,7 +149,7 @@ export default function GradeCurvaMarca({
           <span className="text-right">Disponível</span>
           <span className="text-right">Permanência</span>
         </div>
-        <ul aria-label={`Curva ${rotuloCurva}: ruptura, estoque baixo, excesso, disponível Full e permanência por marca, em ${item}`}>
+        <ul aria-label={`${rotuloCurva[0].toUpperCase()}${rotuloCurva.slice(1)}: ruptura, estoque baixo, excesso, disponível Full e permanência por marca, em ${item}`}>
           {ordem.map((m) => (
             <Linha key={m} nome={rotuloMarca(m)} nota={notaMarca?.(m) ?? null} c={celulas[m]}
               aberta={aberta?.marca === m ? aberta.classe : null} aoAbrir={aoAbrir(m)} />
@@ -167,7 +160,7 @@ export default function GradeCurvaMarca({
       <KpiDrilldownDialog
         open={!!aberta && comCurva}
         onClose={() => setAberta(null)}
-        title={aberta ? `${CLASSES.find((p) => p.chave === aberta.classe)!.rotulo} · ${aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · ${curva === "todas" ? "todas as curvas" : `curva ${rotuloCurva}`}` : ""}
+        title={aberta ? `${CLASSES.find((p) => p.chave === aberta.classe)!.rotulo} · ${aberta.marca === TOTAL ? "todas as marcas" : rotuloMarca(aberta.marca)} · ${rotuloCurva}` : ""}
       >
         {aberta && (
           <>

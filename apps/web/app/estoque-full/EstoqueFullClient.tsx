@@ -594,6 +594,7 @@ export default function EstoqueFullClient() {
                   rotuloMarca={tituloMarca}
                   item="produtos"
                   comCurva={comCurva}
+                  curvas={curvas}
                   ressalva={payload.truncado ? "Lista truncada: grade parcial" : filtros.classificacoes.length > 0 ? "Só as classificações filtradas" : null}
                 />
               )}

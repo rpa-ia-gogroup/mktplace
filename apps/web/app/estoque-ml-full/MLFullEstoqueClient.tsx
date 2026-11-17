@@ -599,6 +599,7 @@ export default function MLFullEstoqueClient() {
               notaMarca={(b) => { const m = payload.marcas.find((x) => x.brand === b); return m ? notaMarcaML(m) : null; }}
               item="inventários"
               comCurva={comCurva}
+              curvas={curvas}
               ressalva={payload.truncado ? "Lista truncada: grade parcial" : null}
             />
           )}

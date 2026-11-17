@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
+import { passaCurva } from "../src/lib/estoque-curva.ts";
 import { descreverPartes, fmtPermanencia, linhaDaCurva, montarGrade, ordenarPorAcao, TOTAL, type ItemGrade } from "../src/lib/estoque-grade-curva.ts";
 
 const it = (o: Partial<ItemGrade>): ItemGrade => ({
@@ -139,4 +140,25 @@ test("barra: excesso em tom fraco (nao o roxo cheio); na visao rapida vira demai
   const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
   assert.match(rapida, /Impacto potencial \{p !== null/); // % primeiro, depois R$/dia, com a palavra "potencial"
   assert.equal(descreverPartes({ itens: 5, ruptura: 0, baixo: 0, excesso: 0, demais: 5 }), "5 itens: 5 demais");
+});
+
+test("curva unica: a grade segue o filtro do topo (varias curvas juntas; vazio = todas)", () => {
+  const xs = [
+    it({ curva: "AA", classe: "ruptura" }), it({ curva: "A", classe: "baixo" }),
+    it({ curva: "B", classe: "ruptura" }), it({ curva: "C" }), it({ curva: null, classe: "excesso" }),
+  ];
+  const total = (f: Parameters<typeof passaCurva>[1]) => montarGrade(xs.filter((i) => passaCurva(i.curva, f)), ["barbours"]).totalMarca.barbours;
+  assert.deepEqual([total([]).itens, total([]).ruptura], [5, 2]); // sem filtro: todas
+  assert.deepEqual([total(["aa_a"]).itens, total(["aa_a"]).ruptura, total(["aa_a"]).baixo], [2, 1, 1]);
+  assert.deepEqual([total(["aa_a", "b"]).itens, total(["aa_a", "b"]).ruptura], [3, 2]); // multi-escolha da caixa
+  assert.equal(total(["sem"]).excesso, 1);
+});
+
+test("curva unica: o painel nao tem filtro proprio e as duas abas passam o filtro do topo", () => {
+  const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
+  const ml = readFileSync(join(import.meta.dirname, "../app/estoque-ml-full/MLFullEstoqueClient.tsx"), "utf8");
+  const sh = readFileSync(join(import.meta.dirname, "../app/estoque-full/EstoqueFullClient.tsx"), "utf8");
+  assert.doesNotMatch(grade, /Segmented|setCurva/);
+  assert.match(ml, /<GradeCurvaMarca[\s\S]*?curvas=\{curvas\}/);
+  assert.match(sh, /<GradeCurvaMarca[\s\S]*?curvas=\{curvas\}/);
 });
