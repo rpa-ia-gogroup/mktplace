@@ -579,6 +579,7 @@ export default function EstoqueFullClient() {
                 ativa={chaveCategoria}
                 aoEscolher={escolherCategoria}
                 parcial={payload.marcas_nao_cobertas.length > 0 || contasSemFotografia.length > 0}
+                chipsDeTodasAsCurvas={filtroCurva.length > 0}
               />
 
               {avisoCurvaIndisponivel(metaCurva) && (

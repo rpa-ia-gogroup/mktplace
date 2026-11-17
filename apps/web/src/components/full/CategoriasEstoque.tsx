@@ -31,7 +31,7 @@ export interface CardCategoria {
 const SR_PARCIAL = "parcial: veja o aviso no topo";
 
 export function FaixaCategorias({
-  cards, faixa, ativa, aoEscolher, parcial = false,
+  cards, faixa, ativa, aoEscolher, parcial = false, chipsDeTodasAsCurvas = false,
 }: {
   cards: CardCategoria[];
   /** ALVO-GRADE: as 4 chaves que viram cartao (as de acao); as demais viram chips do mesmo filtro. */
@@ -39,6 +39,8 @@ export function FaixaCategorias({
   ativa: string | null;
   aoEscolher: (chave: string) => void;
   parcial?: boolean;
+  /** Curva escolhida: os chips (Sem giro, Suficiente, Disponível...) nao seguem a curva, entao dizem "Todas as curvas:". */
+  chipsDeTodasAsCurvas?: boolean;
 }) {
   const grandes = faixa.map((k) => cards.find((c) => c.chave === k)).filter((c): c is CardCategoria => !!c);
   const chips = cards.filter((c) => !faixa.includes(c.chave));
@@ -60,7 +62,8 @@ export function FaixaCategorias({
         ))}
       </div>
       {chips.length > 0 && (
-        <div role="group" aria-label="Outras categorias (filtram a tabela)" className="flex flex-wrap gap-2">
+        <div role="group" aria-label="Outras categorias (filtram a tabela)" className="flex flex-wrap items-center gap-2">
+          {chipsDeTodasAsCurvas && <span className="px-1 text-xs font-medium text-ink-muted">Todas as curvas:</span>}
           {chips.map((c) => {
             const on = ativa === c.chave;
             return (
