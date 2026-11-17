@@ -43,6 +43,7 @@ from app.services import monitoramento_preco_service as mp_svc
 from app.services import performance_service as perf_svc
 from app.services import datamart_leitura
 from app.services import produtos_ml_mes_service as ml_mes_svc
+from app.services import produtos_shopee_periodo_service as sh_periodo_svc
 from app.services import pma_match
 from app.services.affiliate_costs_service import safe_affiliate_costs_block
 from app.services.tiktok_order_discounts_service import (
@@ -440,6 +441,64 @@ def produtos_shopee_summary(
         raise HTTPException(422, f"Brand '{brand}' inválida.")
     year, month = _parse_month(ref_month)
     return perf_svc.get_produtos_shopee_summary(_require_db(db), brand, year, month)
+
+
+_VALID_SHOPEE_PERIODO = set(sh_periodo_svc.MARCAS)
+
+
+def _sh_periodo(ler):
+    try:
+        return ler()
+    except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
+        logger.exception("produtos/shopee por anuncio falhou")
+        raise HTTPException(503, "Base de produtos da Shopee indisponivel.") from exc
+
+
+@router.get("/produtos/shopee/anuncios", response_model=ProdutosMLResponse)
+def produtos_shopee_anuncios(
+    brand: Optional[str] = Query(None),
+    ref_month: Optional[str] = Query(None, description="YYYY-MM; data_inicio/data_fim tem precedencia. Sem nenhum, mes anterior."),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    pareto_bucket: Optional[str] = Query(None),
+    action_signal: Optional[str] = Query(None),
+    limit: int = Query(25, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    sort_by: Optional[str] = Query(None, description="Coluna de ordenacao (allowlist)."),
+    sort_dir: Optional[Literal["asc", "desc"]] = Query(None),
+):
+    """Shopee por anuncio (item_id) no periodo, com Ads por produto (raw.shopee_ads_items) e Sinais do ML."""
+    if brand and brand not in _VALID_SHOPEE_PERIODO:
+        raise HTTPException(422, f"Brand '{brand}' inválida.")
+    if pareto_bucket and pareto_bucket not in VALID_PARETO_BUCKETS:
+        raise HTTPException(422, f"pareto_bucket '{pareto_bucket}' invalido.")
+    if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
+        raise HTTPException(422, "action_signal invalido.")
+    _validate_sort_by(sort_by, perf_svc.PRODUTOS_ML_SORT_COLUMNS)
+    per = _periodo_produtos(ref_month, data_inicio, data_fim)
+    return _sh_periodo(lambda: sh_periodo_svc.get_tabela(
+        datamart_leitura.consultar, per.start, per.end, brand, pareto_bucket, limit, offset, sort_by, sort_dir,
+        action_signal, per.ref_month,
+    ))
+
+
+@router.get("/produtos/shopee/anuncios/summary", response_model=ProdutosMLSummaryResponse)
+def produtos_shopee_anuncios_summary(
+    brand: Optional[str] = Query(None),
+    ref_month: Optional[str] = Query(None),
+    data_inicio: Optional[date] = Query(None),
+    data_fim: Optional[date] = Query(None),
+    action_signal: Optional[str] = Query(None),
+):
+    """Cards A/B/C/D: mesmos filtros da tabela por anuncio, menos o bucket."""
+    if brand and brand not in _VALID_SHOPEE_PERIODO:
+        raise HTTPException(422, f"Brand '{brand}' inválida.")
+    if action_signal and action_signal not in VALID_ML_ACTION_SIGNALS:
+        raise HTTPException(422, "action_signal invalido.")
+    per = _periodo_produtos(ref_month, data_inicio, data_fim)
+    return _sh_periodo(lambda: sh_periodo_svc.get_resumo(
+        datamart_leitura.consultar, per.start, per.end, brand, action_signal, per.ref_month,
+    ))
 
 
 @router.get("/canais", response_model=CanaisResponse)

@@ -20,8 +20,6 @@ export const ATALHOS_PRODUTOS: { valor: AtalhoProdutos; texto: string }[] = [
   { valor: "7d", texto: "Últimos 7 dias" },
   { valor: "30d", texto: "Últimos 30 dias" },
 ];
-/** Shopee so' tem competencia mensal: so' os atalhos de mes. */
-export const ATALHOS_SO_MES = ATALHOS_PRODUTOS.slice(0, 2);
 
 export function periodoDoAtalho(atalho: AtalhoProdutos, hoje: Date = new Date()): PeriodoProdutos {
   const r = presetRange(atalho, hoje);
@@ -46,11 +44,6 @@ export function periodoDoMesProdutos(ym: string, hoje: Date = new Date()): Perio
 export function mesDoPeriodo(p: PeriodoProdutos): string | null {
   if (p.atalho === "mes_atual" || p.atalho === "mes_anterior") return p.inicio.slice(0, 7);
   return p.inicio.endsWith("-01") && p.fim === ultimoDia(p.inicio.slice(0, 7)) ? p.inicio.slice(0, 7) : null;
-}
-
-/** Shopee (mart mensal): o mes do periodo, ou o mes do ultimo dia do intervalo. */
-export function mesShopee(p: PeriodoProdutos): string {
-  return mesDoPeriodo(p) ?? p.fim.slice(0, 7);
 }
 
 export function chavePeriodo(p: PeriodoProdutos): string {

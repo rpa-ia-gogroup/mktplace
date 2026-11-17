@@ -889,6 +889,8 @@ class ProdutoMLRow(BaseModel):
     estimated_margin: Optional[float] = None
     revenue_share_pct: Optional[float] = None
     product_status: Optional[str] = None
+    # Shopee: loja sem coleta de Ads no periodo; Ads nulos = "sem dado", nunca zero.
+    ads_sem_dado: Optional[bool] = None
 
 
 class ProdutosMLResponse(BaseModel):
@@ -903,6 +905,8 @@ class ProdutosMLResponse(BaseModel):
     data_inicio: Optional[str] = None
     data_fim: Optional[str] = None
     ads_ate: Optional[str] = None
+    # Shopee: lojas sem coleta de Ads no periodo.
+    marcas_sem_ads: Optional[list[str]] = None
 
 
 class ParetoBucketSummary(BaseModel):
@@ -935,6 +939,8 @@ class ProdutosMLSummaryResponse(BaseModel):
     data_inicio: Optional[str] = None
     data_fim: Optional[str] = None
     ads_ate: Optional[str] = None
+    # Shopee: lojas sem coleta de Ads no periodo.
+    marcas_sem_ads: Optional[list[str]] = None
 
 
 class ProdutoTikTokRow(BaseModel):

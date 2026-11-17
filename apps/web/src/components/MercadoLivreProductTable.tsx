@@ -49,6 +49,7 @@ interface Props {
   sort: SortState;
   onSort: (column: string) => void;
   pagination: { limit: number; offset: number; onChange: (offset: number) => void };
+  canal?: "Mercado Livre" | "Shopee";
 }
 
 /** Colunas especificas do Mercado Livre, no periodo: preco medio, cancelamento,
@@ -57,11 +58,11 @@ interface Props {
  * Nao inclui margem: `estimated_margin` tem formula desconhecida na fonte
  * (ver docs/sections/produtos_audit.md secao 10.3) e nunca deve ser exibido
  * como margem. */
-export default function MercadoLivreProductTable({ items, loading, sort, onSort, pagination }: Props) {
+export default function MercadoLivreProductTable({ items, loading, sort, onSort, pagination, canal = "Mercado Livre" }: Props) {
   const COL_COUNT = 9;
   return (
     <ProductTableShell<ProdutoMLRow>
-      ariaLabel="Produtos Mercado Livre"
+      ariaLabel={`Produtos ${canal}`}
       colCount={COL_COUNT}
       loading={loading}
       items={items?.items ?? null}
@@ -82,7 +83,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
       renderRow={(p) => (
         <tr key={`${p.brand}-${p.item_id}`} className="hover:bg-raised transition-colors">
           <td className="px-6 py-3 max-w-xs">
-            <p className="text-ink font-medium truncate leading-tight">{p.title}</p>
+            <p className="text-ink font-medium truncate leading-tight">{p.title ?? `Anúncio ${p.item_id}`}</p>
             {p.seller_sku && <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.seller_sku}</p>}
           </td>
           <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
@@ -124,6 +125,8 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
                 {dec(p.ad_roas, 1)}x ROAS
                 {p.ad_roas_direto != null && <span className="sr-only">, ROAS direto {dec(p.ad_roas_direto, 1)}x</span>}
               </span>
+            ) : p.ads_sem_dado ? (
+              <span className="text-ink-faint" title="Loja sem coleta de Ads no período">Sem dado</span>
             ) : p.ad_spend == null && items?.ads_ate ? (
               <span className="text-ink-muted">Sem Ads</span>
             ) : <span className="text-ink-faint">—</span>}

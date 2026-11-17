@@ -655,6 +655,8 @@ export interface ProdutoMLRow {
   estimated_margin: number | null;
   revenue_share_pct: number | null;
   product_status: string | null;
+  /** Shopee: loja sem coleta de Ads no periodo (Ads nulos = "sem dado", nunca zero). */
+  ads_sem_dado?: boolean | null;
 }
 
 export interface ProdutosMLResponse {
@@ -669,6 +671,7 @@ export interface ProdutosMLResponse {
   data_inicio?: string | null;
   data_fim?: string | null;
   ads_ate?: string | null;
+  marcas_sem_ads?: string[] | null;
 }
 
 export interface ProdutoTikTokRow {
@@ -706,7 +709,15 @@ function setPeriodoProdutos(qs: URLSearchParams, period: string): void {
   } else qs.set("ref_month", period);
 }
 
+/** ML ou Shopee por anuncio (mesma linha e mesmos Sinais; a Shopee tem Ads por produto). */
+type CanalAnuncios = "ml" | "shopee";
+const ROTA_ANUNCIOS: Record<CanalAnuncios, string> = {
+  ml: "/api/v1/performance/produtos/ml",
+  shopee: "/api/v1/performance/produtos/shopee/anuncios",
+};
+
 export interface ProdutoMLListParams {
+  canal?: CanalAnuncios;
   brand?: string;
   // YYYY-MM ou inicio..fim: produtos do periodo (Data Mart). Sem ele, ranking acumulado (contrato do Oraculo).
   period?: string;
@@ -732,8 +743,9 @@ export function fetchProdutosML(params: ProdutoMLListParams): Promise<ProdutosML
   qs.set("offset", String(params.offset ?? 0));
   if (params.sort_by) qs.set("sort_by", params.sort_by);
   if (params.sort_dir) qs.set("sort_dir", params.sort_dir);
-  return withCache(`produtos-ml:${qs}`, () =>
-    apiFetch<ProdutosMLResponse>(`/api/v1/performance/produtos/ml?${qs}`)
+  const canal = params.canal ?? "ml";
+  return withCache(`produtos-${canal}-anuncios:${qs}`, () =>
+    apiFetch<ProdutosMLResponse>(`${ROTA_ANUNCIOS[canal]}?${qs}`)
   );
 }
 
@@ -828,9 +840,11 @@ export interface ProdutosMLSummary {
   data_inicio?: string | null;
   data_fim?: string | null;
   ads_ate?: string | null;
+  marcas_sem_ads?: string[] | null;
 }
 
 export function fetchProdutosMLSummary(params: {
+  canal?: CanalAnuncios;
   brand?: string;
   period?: string;
   action_signal?: string;
@@ -843,8 +857,9 @@ export function fetchProdutosMLSummary(params: {
   if (params.action_signal) qs.set("action_signal", params.action_signal);
   if (params.product_status) qs.set("product_status", params.product_status);
   if (params.revenue_velocity) qs.set("revenue_velocity", params.revenue_velocity);
-  return withCache(`produtos-ml-summary:${qs}`, () =>
-    apiFetch<ProdutosMLSummary>(`/api/v1/performance/produtos/ml/summary?${qs}`)
+  const canal = params.canal ?? "ml";
+  return withCache(`produtos-${canal}-anuncios-summary:${qs}`, () =>
+    apiFetch<ProdutosMLSummary>(`${ROTA_ANUNCIOS[canal]}/summary?${qs}`)
   );
 }
 

@@ -7,29 +7,24 @@ import Segmented from "@/components/ui/Segmented";
 import { toISODate } from "@/lib/filters/presets";
 import { validateDateRange } from "@/lib/filters/url-state";
 import {
-  ATALHOS_PRODUTOS, ATALHOS_SO_MES, mesDoPeriodo, mesShopee, periodoDoAtalho, periodoDoMesProdutos, rotuloPeriodo,
+  ATALHOS_PRODUTOS, mesDoPeriodo, periodoDoAtalho, periodoDoMesProdutos, rotuloPeriodo,
   type AtalhoProdutos, type PeriodoProdutos,
 } from "@/lib/produtos-periodo";
 import type { MonthOption } from "@/lib/produtos-tab-transition";
 
 /**
  * Periodo de Produtos (ML, TikTok e Shopee): atalhos a um clique na trilha;
- * mes e intervalo livre (secundarios) no "Outro". `soMes`: a Shopee so' tem
- * competencia mensal, entao ficam os atalhos de mes e a lista de meses.
+ * mes e intervalo livre (secundarios) no "Outro".
  */
-export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }: {
+export default function PeriodoProdutos({ valor, aoMudar, meses }: {
   valor: PeriodoProdutos;
   aoMudar: (p: PeriodoProdutos) => void;
   meses: MonthOption[];
-  soMes?: boolean;
 }) {
   const [erro, setErro] = useState<string | null>(null);
   const hoje = toISODate(new Date());
-  const mes = soMes ? mesShopee(valor) : mesDoPeriodo(valor);
-  // Na Shopee um atalho de semana/dias vale pelo mes do ultimo dia: acende o atalho desse mes.
-  const visto = soMes ? periodoDoMesProdutos(mes!) : valor;
-  const atalhos = soMes ? ATALHOS_SO_MES : ATALHOS_PRODUTOS;
-  const ativo = atalhos.some((a) => a.valor === visto.atalho) ? (visto.atalho as AtalhoProdutos) : null;
+  const mes = mesDoPeriodo(valor);
+  const ativo = ATALHOS_PRODUTOS.some((a) => a.valor === valor.atalho) ? (valor.atalho as AtalhoProdutos) : null;
 
   function livre(inicio: string, fim: string) {
     const v = validateDateRange(inicio, fim);
@@ -44,7 +39,7 @@ export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }
       <div className="max-w-[calc(100vw-2.5rem)] overflow-x-auto">
         <Segmented
           rotulo="Período"
-          opcoes={atalhos}
+          opcoes={ATALHOS_PRODUTOS}
           valor={ativo ?? ("" as AtalhoProdutos)}
           aoEscolher={(a) => aoMudar(periodoDoAtalho(a))}
           className="whitespace-nowrap"
@@ -52,7 +47,7 @@ export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }
       </div>
       <Popover
         rotulo="Outro"
-        valor={ativo ? (soMes ? "mês" : "mês ou datas") : rotuloPeriodo(visto, meses)}
+        valor={ativo ? "mês ou datas" : rotuloPeriodo(valor, meses)}
         ativo={!ativo}
         icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
         largura="w-64"
@@ -80,8 +75,7 @@ export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }
                 );
               })}
             </div>
-            {!soMes && (
-              <div className="flex flex-col gap-1 border-t border-line px-1 pt-2">
+            <div className="flex flex-col gap-1 border-t border-line px-1 pt-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="flex items-center gap-1.5 text-xs text-ink-faint">
                     De
@@ -106,8 +100,7 @@ export default function PeriodoProdutos({ valor, aoMudar, meses, soMes = false }
                   </label>
                 </div>
                 {erro && <p role="alert" className="text-xs font-medium text-crit-ink">{erro}</p>}
-              </div>
-            )}
+            </div>
           </div>
         )}
       </Popover>

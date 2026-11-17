@@ -211,8 +211,8 @@ const FETCHERS_POR_ROTA: Record<string, string[]> = {
   // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).
   canais: ["fetchCanais", "fetchTrend"],
   produtos: [
-    "fetchProdutosML", "fetchProdutosMLSummary", "fetchProdutosShopee",
-    "fetchProdutosShopeeSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
+    // Shopee por anuncio: o mesmo fetch do ML com canal "shopee".
+    "fetchProdutosML", "fetchProdutosMLSummary", "fetchProdutosTikTok", "fetchProdutosTikTokSummary",
   ],
   regioes: ["fetchRegioesSummary", "fetchRegioesByUf", "fetchRegioesByBrand", "fetchRegioesTrend"],
   // ALVO-GRADE: + a serie diaria de GMV da linha do cartao da soma (uma chamada).

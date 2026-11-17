@@ -3,12 +3,11 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  fetchProdutosML, fetchProdutosTikTok, fetchProdutosShopee,
-  fetchProdutosMLSummary, fetchProdutosTikTokSummary, fetchProdutosShopeeSummary,
-  type ProdutosMLResponse, type ProdutosTikTokResponse, type ProdutosShopeeListResponse,
+  fetchProdutosML, fetchProdutosTikTok,
+  fetchProdutosMLSummary, fetchProdutosTikTokSummary,
+  type ProdutosMLResponse, type ProdutosTikTokResponse,
   type ProdutosMLSummary, type ProdutosChannelSummary,
 } from "@/lib/api-client";
-import { scopeUnavailableReason } from "@/lib/scope-quality-display";
 import PageContainer from "@/components/layout/PageContainer";
 import Aba from "@/components/layout/Aba";
 import Panel from "@/components/ui/Panel";
@@ -17,12 +16,10 @@ import { AvisoTopo } from "@/components/full/CategoriasEstoque";
 import PeriodoProdutosFiltro from "@/components/produtos/PeriodoProdutos";
 import { ProductSelect } from "@/components/ProductFilterBar";
 import ProductParetoSummary from "@/components/ProductParetoSummary";
-import ScopeQualityBanner from "@/components/ScopeQualityBanner";
 import InfoDica from "@/components/ui/InfoDica";
 import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { MARCAS_MENORES_KEYS, MARCAS_MENORES_OPTIONS } from "@/lib/filters/brands";
-import { toISODate } from "@/lib/filters/presets";
-import { linhasDoCanal, listaShopee, listaTikTok, periodoDoMes, resumoDoCanal, type CanalProduto } from "@/lib/produtos-marcas-menores";
+import { linhasDoCanal, listaShopee, listaTikTok, resumoDoCanal, type CanalProduto } from "@/lib/produtos-marcas-menores";
 import ProductExportButton from "@/components/ProductExportButton";
 import MercadoLivreProductTable from "@/components/MercadoLivreProductTable";
 import TikTokProductTable from "@/components/TikTokProductTable";
@@ -33,8 +30,9 @@ import {
   lastNMonths, type ProdutosTab,
 } from "@/lib/produtos-tab-transition";
 import { initialChannelState, startFetch, resolveFetch, resolveFetchError, type ChannelState } from "@/lib/async-channel-state";
+import { brandLabel } from "@/lib/filters/brands";
 import { adsAteParcial, formatProdutosScope } from "@/lib/produtos-scope";
-import { chavePeriodo, mesShopee, periodoDoAtalho, periodoDoMesProdutos, rotuloPeriodo, type PeriodoProdutos } from "@/lib/produtos-periodo";
+import { chavePeriodo, periodoDoAtalho, rotuloPeriodo, type PeriodoProdutos } from "@/lib/produtos-periodo";
 import { fmtBrlExato } from "@/lib/formatters";
 import {
   mlRowToExportRecord, tiktokRowToExportRecord, shopeeRowToExportRecord,
@@ -90,6 +88,12 @@ function dicaMlMes(adsAte: string | null | undefined): string {
   const ate = adsAte ? `, até ${adsAte.slice(8, 10)}/${adsAte.slice(5, 7)}` : "";
   return `Período pelo dia do pedido (horário de Brasília), só pedidos pagos. ROAS conforme relatório de Ads do ML, inclui venda indireta; D-1${ate}. Sinais recalculados no período com o ROAS total.`;
 }
+// Shopee por anuncio (Data Mart): mesmas regras da silver.shopee_item_daily; Ads do relatorio por produto (D-1).
+function dicaShopee(r: { ads_ate?: string | null; marcas_sem_ads?: string[] | null } | null | undefined): string {
+  const ate = r?.ads_ate ? `, até ${r.ads_ate.slice(8, 10)}/${r.ads_ate.slice(5, 7)}` : "";
+  const sem = r?.marcas_sem_ads?.length ? ` Sem coleta de Ads: ${r.marcas_sem_ads.map((m) => brandLabel(m)).join(", ")} ("sem dado").` : "";
+  return `Por anúncio, pelo dia do pedido (horário de Brasília), só vendas. ROAS conforme relatório de Ads da Shopee, inclui venda indireta; D-1${ate}.${sem} Sinais recalculados no período com o ROAS total.`;
+}
 const DICA_BLING_TODAS =
   "Dado do Bling (conta da Rituária): Yenzah, Auá e By Samia, pedidos não cancelados do período; quantidade e receita pelos itens do pedido (valor × quantidade − desconto). Ficam fora do ranking e do A/B/C/D do Data Mart acima, que é calculado e paginado no servidor. O A/B/C/D deste bloco é feito só entre as demais marcas, neste canal. O que o Bling não traz (vídeo/live/card, avaliações, cancelamentos) fica vazio.";
 const DICA_BLING =
@@ -115,9 +119,8 @@ function ProdutosPageInner() {
   // produtos_audit.md secao 10.4) — calculado uma vez por montagem da pagina.
   const monthOptions = useMemo(() => lastNMonths(PERIOD_MONTHS_BACK, new Date()), []);
   const [periodo, setPeriodo] = useState<PeriodoProdutos>(() => periodoDoAtalho("mes_atual"));
-  // ML e TikTok: o intervalo (fato diaria). Shopee: o mes (mart mensal).
+  // ML, TikTok e Shopee: o intervalo (Data Mart diario).
   const period = chavePeriodo(periodo);
-  const periodSh = mesShopee(periodo);
 
   // Filtros padronizados (marca + bucket) — marca e compartilhada entre
   // abas (preservada quando existe no canal); bucket e sempre por aba,
@@ -133,8 +136,9 @@ function ProdutosPageInner() {
     fromUrl.tab === "shopee" ? fromUrl.bucket : null,
   );
 
-  // Sinal de acao do ML, recalculado no periodo pela API.
+  // Sinal de acao (ML e Shopee), recalculado no periodo pela API.
   const [mlSignal, setMlSignal] = useState("");
+  const [shSignal, setShSignal] = useState("");
   const [mlOffset, setMlOffset] = useState(0);
   const [tkOffset, setTkOffset] = useState(0);
   const [shOffset, setShOffset] = useState(0);
@@ -144,10 +148,7 @@ function ProdutosPageInner() {
   // (`lib/produtos-marcas-menores.ts`). Os itens do Bling vem por canal e marca, do cache persistente.
   const ehMenor = MARCAS_MENORES_KEYS.includes(brand);
   const canalBling: CanalProduto | null = tab === "ml" ? null : tab;
-  const periodoBling = useMemo(
-    () => (tab === "shopee" ? periodoDoMes(periodSh, toISODate(new Date())) : { inicio: periodo.inicio, fim: periodo.fim }),
-    [tab, periodSh, periodo.inicio, periodo.fim],
-  );
+  const periodoBling = useMemo(() => ({ inicio: periodo.inicio, fim: periodo.fim }), [periodo.inicio, periodo.fim]);
   const blingMarca = useProdutosMarcasMenores(periodoBling.inicio, periodoBling.fim, ehMenor && canalBling != null, {
     canais: canalBling ? [canalBling] : [],
     marcas: [brand],
@@ -165,14 +166,15 @@ function ProdutosPageInner() {
   // atual: volta para data=null (mesmo estado de "API offline").
   const [mlState, setMlState] = useState<ChannelState<ProdutosMLResponse>>(initialChannelState);
   const [tkState, setTkState] = useState<ChannelState<ProdutosTikTokResponse>>(initialChannelState);
-  const [shState, setShState] = useState<ChannelState<ProdutosShopeeListResponse>>(initialChannelState);
+  // Shopee do Data Mart: por anuncio (item_id), mesma linha do ML, com Ads por produto.
+  const [shState, setShState] = useState<ChannelState<ProdutosMLResponse>>(initialChannelState);
   const mlReqId = useRef(0);
   const tkReqId = useRef(0);
   const shReqId = useRef(0);
 
   const [mlSummaryState, setMlSummaryState] = useState<ChannelState<ProdutosMLSummary>>(initialChannelState);
   const [tkSummaryState, setTkSummaryState] = useState<ChannelState<ProdutosChannelSummary>>(initialChannelState);
-  const [shSummaryState, setShSummaryState] = useState<ChannelState<ProdutosChannelSummary>>(initialChannelState);
+  const [shSummaryState, setShSummaryState] = useState<ChannelState<ProdutosMLSummary>>(initialChannelState);
   const mlSummaryReqId = useRef(0);
   const tkSummaryReqId = useRef(0);
   const shSummaryReqId = useRef(0);
@@ -187,8 +189,8 @@ function ProdutosPageInner() {
   const tkGetValue = (row: NonNullable<ProdutosTikTokResponse["items"]>[number], column: string) => (row as unknown as Record<string, string | number | null | undefined>)[column];
   const tkSort = useSortableTable(tkState.data?.items ?? [], tkGetValue, tkColumnTypes);
 
-  const shColumnTypes: Record<string, SortColumnType> = { product_name: "text" };
-  const shGetValue = (row: NonNullable<ProdutosShopeeListResponse["items"]>[number], column: string) => (row as unknown as Record<string, string | number | null | undefined>)[column];
+  const shColumnTypes: Record<string, SortColumnType> = { title: "text", product_name: "text" };
+  const shGetValue = (row: NonNullable<ProdutosMLResponse["items"]>[number], column: string) => (row as unknown as Record<string, string | number | null | undefined>)[column];
   const shSort = useSortableTable(shState.data?.items ?? [], shGetValue, shColumnTypes);
 
   // Identidade de requisicao por tabela/resumo (FINDING 1, rodada de
@@ -214,12 +216,12 @@ function ProdutosPageInner() {
     [brand, period, tkBucket, tkOffset, tkSort.sort.column, tkSort.sort.direction],
   );
   const shTableKey = useMemo(
-    () => buildPeriodTableKey({ brand, period: periodSh, bucket: shBucket, offset: shOffset, sortColumn: shSort.sort.column, sortDirection: shSort.sort.direction }),
-    [brand, periodSh, shBucket, shOffset, shSort.sort.column, shSort.sort.direction],
+    () => buildPeriodTableKey({ brand, period, bucket: shBucket, offset: shOffset, sortColumn: shSort.sort.column, sortDirection: shSort.sort.direction, signal: shSignal }),
+    [brand, period, shBucket, shOffset, shSort.sort.column, shSort.sort.direction, shSignal],
   );
   const mlSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period, signal: mlSignal }), [brand, period, mlSignal]);
   const tkSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period }), [brand, period]);
-  const shSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period: periodSh }), [brand, periodSh]);
+  const shSummaryKey = useMemo(() => buildPeriodSummaryKey({ brand, period, signal: shSignal }), [brand, period, shSignal]);
 
   const mlTableAvail = resolveChannelAvailability({ resolvedKey: mlResolvedKey, requestKey: mlTableKey, loading: mlState.loading, hasData: mlState.data !== null });
   const tkTableAvailDM = resolveChannelAvailability({ resolvedKey: tkResolvedKey, requestKey: tkTableKey, loading: tkState.loading, hasData: tkState.data !== null });
@@ -244,7 +246,7 @@ function ProdutosPageInner() {
   // mostre tabela, resumo, badge, escopo ou linhas de exportacao de uma
   // identidade antiga.
   const mlDisplayData = mlTableAvail === "available" ? mlState.data : null;
-  const refMes = tab === "shopee" ? periodSh : periodo.inicio.slice(0, 7);
+  const refMes = periodo.inicio.slice(0, 7);
   const textoProgresso = (b: typeof blingMarca) =>
     b.produtos?.disponivel && !b.produtos.completo
       ? `${b.desistiu ? "Leitura parcial" : "Lendo os itens"}: ${b.produtos.pedidos_lidos} de ${b.produtos.pedidos_total} pedidos. O A/B/C/D e os totais ainda podem mudar${b.desistiu ? "." : " até terminar."}`
@@ -267,9 +269,9 @@ function ProdutosPageInner() {
   const tkDisplayData = ehMenor
     ? (tkTableAvail === "available" ? listaTikTok(linhasBling, opcoesBling(tkSort, tkBucket, tkOffset)) : null)
     : tkTableAvail === "available" ? tkState.data : null;
-  const shDisplayData = ehMenor
-    ? (shTableAvail === "available" ? listaShopee(linhasBling, opcoesBling(shSort, shBucket, shOffset)) : null)
-    : shTableAvail === "available" ? shState.data : null;
+  // Marca menor (Bling) segue na tabela por SKU; o Data Mart vem por anuncio.
+  const shBlingData = ehMenor && shTableAvail === "available" ? listaShopee(linhasBling, opcoesBling(shSort, shBucket, shOffset)) : null;
+  const shDisplayData = !ehMenor && shTableAvail === "available" ? shState.data : null;
   const mlDisplaySummary = mlSummaryAvail === "available" ? mlSummaryState.data : null;
   const tkDisplaySummary = ehMenor
     ? (tkSummaryAvail === "available" ? resumoDoCanal(linhasBling, refMes, brand) : null)
@@ -277,9 +279,6 @@ function ProdutosPageInner() {
   const shDisplaySummary = ehMenor
     ? (shSummaryAvail === "available" ? resumoDoCanal(linhasBling, refMes, brand) : null)
     : shSummaryAvail === "available" ? shSummaryState.data : null;
-  // Lidos do selo, nunca recalculados aqui: a tela nao decide sozinha o que e
-  // ausencia.
-  const shUnavailable = scopeUnavailableReason(shDisplaySummary?.quality);
 
   // "Ao vivo" reflete exclusivamente o ultimo resultado do PROPRIO canal, e
   // somente quando a tabela da aba ativa esta "available" para a identidade
@@ -348,13 +347,15 @@ function ProdutosPageInner() {
     const id = ++shReqId.current;
     setShState(startFetch);
     (async () => {
-      let result: ProdutosShopeeListResponse | null = null;
+      let result: ProdutosMLResponse | null = null;
       let failed = false;
       try {
-        result = await fetchProdutosShopee({
+        result = await fetchProdutosML({
+          canal: "shopee",
           brand: brandParamForEndpoint(brand),
-          period: periodSh,
+          period,
           pareto_bucket: shBucket || undefined,
+          action_signal: shSignal || undefined,
           limit: PAGE_SIZE,
           offset: shOffset,
           sort_by: shSort.sort.column ?? undefined,
@@ -368,7 +369,7 @@ function ProdutosPageInner() {
         if (isCurrent) setShResolvedKey(shTableKey);
       }
     })();
-  }, [brand, periodSh, shBucket, shOffset, shSort.sort.column, shSort.sort.direction, shTableKey]);
+  }, [brand, period, shBucket, shSignal, shOffset, shSort.sort.column, shSort.sort.direction, shTableKey]);
 
   useEffect(() => { if (tab === "ml") loadML(); }, [tab, loadML]);
   useEffect(() => { if (tab === "tiktok" && !ehMenor) loadTK(); }, [tab, loadTK, ehMenor]);
@@ -418,10 +419,10 @@ function ProdutosPageInner() {
     const id = ++shSummaryReqId.current;
     setShSummaryState(startFetch);
     (async () => {
-      let result: ProdutosChannelSummary | null = null;
+      let result: ProdutosMLSummary | null = null;
       let failed = false;
       try {
-        result = await fetchProdutosShopeeSummary({ brand: brandParamForEndpoint(brand), period: periodSh });
+        result = await fetchProdutosMLSummary({ canal: "shopee", brand: brandParamForEndpoint(brand), period, action_signal: shSignal || undefined });
       } catch {
         failed = true;
       } finally {
@@ -430,12 +431,12 @@ function ProdutosPageInner() {
         if (isCurrent) setShSummaryResolvedKey(shSummaryKey);
       }
     })();
-  }, [tab, brand, periodSh, shSummaryKey, ehMenor]);
+  }, [tab, brand, period, shSignal, shSummaryKey, ehMenor]);
 
   // Reset offset quando filtros mudam (nunca usa a pagina visivel como base)
   useEffect(() => { setMlOffset(0); }, [brand, mlBucket, mlSignal, period]);
   useEffect(() => { setTkOffset(0); }, [brand, tkBucket, period]);
-  useEffect(() => { setShOffset(0); }, [brand, shBucket, periodSh]);
+  useEffect(() => { setShOffset(0); }, [brand, shBucket, shSignal, period]);
 
   // Reset offset quando a ordenacao muda
   useEffect(() => { setMlOffset(0); }, [mlSort.sort.column, mlSort.sort.direction]);
@@ -477,8 +478,7 @@ function ProdutosPageInner() {
     setShBucket(null);
   }
 
-  // Shopee: o mes do periodo, no mesmo formato do atalho aceso ("Este mês · 01–15/11").
-  const periodLabel = rotuloPeriodo(tab === "shopee" ? periodoDoMesProdutos(periodSh) : periodo, monthOptions);
+  const periodLabel = rotuloPeriodo(periodo, monthOptions);
   const activeChannelLabel = TABS.find((t) => t.value === tab)?.label ?? tab;
   const brandOptionsForTab = tab === "ml" ? ML_BRANDS : TK_SH_BRANDS;
   const activeBrandLabel = brand ? (brandOptionsForTab.find((b) => b.value === brand)?.label ?? brand) : "Todas as marcas";
@@ -488,7 +488,7 @@ function ProdutosPageInner() {
 
   // ALVO-GRADE: um esqueleto so' para os tres canais. Filtros, faixa A/B/C/D e
   // tabela mudam com a aba; a regra de cada canal (ML com Ads ate o ultimo dia do relatorio,
-  // Shopee com selo de maturacao ANTES dos cartoes, marcas menores do Bling) fica igual.
+  // e Shopee com Ads ate o ultimo dia do relatorio, marcas menores do Bling) fica igual.
   const marcaSelect = (
     <ProductSelect value={brand} onChange={(e) => setBrand(e.target.value)} aria-label="Marca">
       <option value="">Todas as marcas</option>
@@ -498,8 +498,12 @@ function ProdutosPageInner() {
   const filtros = (
     <div className="flex flex-wrap items-center gap-2">
       {marcaSelect}
-      {tab === "ml" && (
-        <ProductSelect value={mlSignal} onChange={(e) => setMlSignal(e.target.value)} aria-label="Sinal de ação">
+      {(tab === "ml" || (tab === "shopee" && !ehMenor)) && (
+        <ProductSelect
+          value={tab === "ml" ? mlSignal : shSignal}
+          onChange={(e) => (tab === "ml" ? setMlSignal : setShSignal)(e.target.value)}
+          aria-label="Sinal de ação"
+        >
           <option value="">Todos os sinais</option>
           <option value="ACAO: aumentar investimento (ROAS > 15x)">Aumentar investimento</option>
           <option value="ACAO: considerar pausar ads (ROAS < 3x)">Considerar pausar ads</option>
@@ -509,7 +513,7 @@ function ProdutosPageInner() {
           <option value="ATENCAO: grande variacao de preco">Variação de preço</option>
         </ProductSelect>
       )}
-      <PeriodoProdutosFiltro valor={periodo} aoMudar={setPeriodo} meses={monthOptions} soMes={tab === "shopee"} />
+      <PeriodoProdutosFiltro valor={periodo} aoMudar={setPeriodo} meses={monthOptions} />
     </div>
   );
   // Selo: a hora publicada no resumo do canal ativo (nunca a de uma identidade antiga); sem hora, o estado da fonte.
@@ -557,27 +561,17 @@ function ProdutosPageInner() {
       </>
     ) : (
       <>
-        {/* Gate SH-API-2D: o selo vem ANTES dos cards A/B/C/D de proposito.
-            Quem le a tela de cima para baixo tem de saber que a competencia
-            esta em maturacao antes de olhar o Pareto, nao depois de ja ter
-            tirado conclusao dos numeros. */}
-        <ScopeQualityBanner
-          quality={shDisplaySummary?.quality}
-          loading={shSummaryAvail === "loading"}
-          naGrade
-        />
         {progressoBling && <p className="px-1 text-xs font-semibold text-warn-ink" role="status">{progressoBling}</p>}
         <ProductParetoSummary
           buckets={shDisplaySummary?.buckets ?? null}
           loading={shSummaryAvail === "loading"}
           activeBucket={shBucket}
           onSelectBucket={setShBucket}
-          unavailableReason={shUnavailable}
           scopeNote={paretoLinha([
-            shUnavailable ? null : semGmv(shDisplaySummary?.excluded_zero_gmv_count),
+            semGmv(shDisplaySummary?.excluded_zero_gmv_count),
             precoMedio(shDisplaySummary?.avg_price_weighted),
           ])}
-          dica={`${ehMenor ? `${DICA_BLING} ` : ""}${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
+          dica={`${ehMenor ? DICA_BLING : dicaShopee(shSummaryAvail === "available" ? shSummaryState.data : null)} ${DICA_PARETO} ${marginUnavailableNote("shopee")}`}
         />
       </>
     );
@@ -595,8 +589,9 @@ function ProdutosPageInner() {
             total: tkDisplayData?.total ?? null, offset: tkOffset, limit: PAGE_SIZE,
           })
         : formatProdutosScope({
-            channelLabel: activeChannelLabel, brandLabel: activeBrandLabel, periodLabel,
-            total: shUnavailable ? null : shDisplayData?.total ?? null, offset: shOffset, limit: PAGE_SIZE,
+            channelLabel: activeChannelLabel, brandLabel: activeBrandLabel,
+            periodLabel: [periodLabel, ehMenor ? null : adsAteParcial(periodo.fim, shDisplayData?.ads_ate)].filter(Boolean).join(" · "),
+            total: (ehMenor ? shBlingData : shDisplayData)?.total ?? null, offset: shOffset, limit: PAGE_SIZE,
           });
 
   const exportar =
@@ -604,8 +599,10 @@ function ProdutosPageInner() {
       <ProductExportButton rows={mlDisplayData?.items ?? null} loading={mlTableAvail !== "available"} columns={ML_EXPORT_COLUMNS} toRecord={mlRowToExportRecord} scope={{ channel: "ml", brand, period, pageNumber: mlPageNumber }} />
     ) : tab === "tiktok" ? (
       <ProductExportButton rows={tkDisplayData?.items ?? null} loading={tkTableAvail !== "available"} columns={TIKTOK_EXPORT_COLUMNS} toRecord={tiktokRowToExportRecord} scope={{ channel: "tiktok", brand, period, pageNumber: tkPageNumber }} />
+    ) : ehMenor ? (
+      <ProductExportButton rows={shBlingData?.items ?? null} loading={shTableAvail !== "available"} columns={SHOPEE_EXPORT_COLUMNS} toRecord={shopeeRowToExportRecord} scope={{ channel: "shopee", brand, period, pageNumber: shPageNumber }} />
     ) : (
-      <ProductExportButton rows={shDisplayData?.items ?? null} loading={shTableAvail !== "available"} columns={SHOPEE_EXPORT_COLUMNS} toRecord={shopeeRowToExportRecord} scope={{ channel: "shopee", brand, period: periodSh, pageNumber: shPageNumber }} />
+      <ProductExportButton rows={shDisplayData?.items ?? null} loading={shTableAvail !== "available"} columns={ML_EXPORT_COLUMNS} toRecord={mlRowToExportRecord} scope={{ channel: "shopee", brand, period, pageNumber: shPageNumber }} />
     );
 
   return (
@@ -643,9 +640,19 @@ function ProdutosPageInner() {
             pagination={{ limit: PAGE_SIZE, offset: tkOffset, onChange: setTkOffset }}
           />
         )}
-        {tab === "shopee" && (
-          <ShopeeProductTable
+        {tab === "shopee" && !ehMenor && (
+          <MercadoLivreProductTable
+            canal="Shopee"
             items={shDisplayData}
+            loading={shTableAvail === "loading"}
+            sort={shSort.sort}
+            onSort={shSort.toggleSort}
+            pagination={{ limit: PAGE_SIZE, offset: shOffset, onChange: setShOffset }}
+          />
+        )}
+        {tab === "shopee" && ehMenor && (
+          <ShopeeProductTable
+            items={shBlingData}
             loading={shTableAvail === "loading"}
             sort={shSort.sort}
             onSort={shSort.toggleSort}
