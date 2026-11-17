@@ -10,7 +10,7 @@ const SEGMENTOS = [
   { chave: "ruptura", cor: "bg-crit", rotulo: "Ruptura" },
   { chave: "baixo", cor: "bg-warn", rotulo: "Baixo" },
   { chave: "demais", cor: "bg-line-strong", rotulo: "Demais" },
-  { chave: "excesso", cor: "bg-accent/35", rotulo: "Excesso" },
+  { chave: "excesso", cor: "bg-accent-excesso", rotulo: "Excesso" },
 ] as const;
 
 type Partes = Pick<CelulaGrade, "itens" | "ruptura" | "baixo" | "excesso" | "demais">;

@@ -34,7 +34,7 @@ type Classe = "ruptura" | "baixo" | "excesso";
 const CLASSES: { chave: Classe; rotulo: string; curto: string; tom: string }[] = [
   { chave: "ruptura", rotulo: "Ruptura", curto: "Ruptura", tom: "bg-crit-soft text-crit-ink" },
   { chave: "baixo", rotulo: "Estoque baixo", curto: "Baixo", tom: "bg-warn-soft text-warn-ink" },
-  { chave: "excesso", rotulo: "Excesso", curto: "Excesso", tom: "bg-accent-soft text-accent-ink" },
+  { chave: "excesso", rotulo: "Excesso", curto: "Excesso", tom: "bg-accent-excesso/25 text-accent-ink" },
 ];
 
 /** Colunas no desktop: marca | barra | ruptura | baixo | excesso | disponivel | permanencia. */

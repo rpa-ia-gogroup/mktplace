@@ -130,7 +130,13 @@ test("Visao geral: bloco fundido logo abaixo dos indicadores, sem a tabela antig
 
 test("barra: excesso em tom fraco (nao o roxo cheio); na visao rapida vira demais", async () => {
   const barra = readFileSync(join(import.meta.dirname, "../src/components/full/BarraItens.tsx"), "utf8");
-  assert.match(barra, /chave: "excesso", cor: "bg-accent\/\d+"/);
+  assert.match(barra, /chave: "excesso", cor: "bg-accent-excesso"/);
   assert.doesNotMatch(barra, /chave: "excesso", cor: "bg-accent"/);
+  // token proprio por tema (o projeto proibe `dark:` solto): no escuro mais forte, a ponta roxa nao some no cinza do "demais"
+  const css = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
+  const [claro, escuro] = [...css.matchAll(/--tc-accent-excesso:\s*(\d+) (\d+) (\d+)/g)].map((m) => [+m[1], +m[2], +m[3]]);
+  assert.ok(claro && escuro && escuro[0] < claro[0], "token de excesso existe nos dois temas e o escuro e' mais saturado");
+  const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
+  assert.match(rapida, /Impacto potencial \{p !== null/); // % primeiro, depois R$/dia, com a palavra "potencial"
   assert.equal(descreverPartes({ itens: 5, ruptura: 0, baixo: 0, excesso: 0, demais: 5 }), "5 itens: 5 demais");
 });

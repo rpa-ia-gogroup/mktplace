@@ -36,17 +36,17 @@ function Impacto({ canal, l }: { canal: Canal; l: LinhaMarca }) {
   const m = l.impacto[canal];
   if (!m) return null;
   const forte = "block text-xs text-ink-muted";
-  if (marcaSemFoto(m)) return <span className={forte} title="sem fotografia no dia">Impacto —</span>;
+  if (marcaSemFoto(m)) return <span className={forte} title="sem fotografia no dia">Impacto potencial —</span>;
   if (canal === "shopee" && l.vendedorTemEstoque) {
-    return <span className={forte} title={`${fmtReais(m.perda_dia)}/dia potencial no Full, sem contar o estoque do vendedor`}>Impacto: vendedor tem estoque</span>;
+    return <span className={forte} title={`${fmtReais(m.perda_dia)}/dia potencial no Full, sem contar o estoque do vendedor`}>Impacto potencial: sem perda (vendedor tem estoque)</span>;
   }
   const v = perdaDestaque(canal, m);
-  if (v === null) return <span className={forte} title="sem preço">Impacto —</span>;
+  if (v === null) return <span className={forte} title="sem preço">Impacto potencial —</span>;
   const p = pctDestaque(canal, m);
-  const detalhe = `Impacto potencial${p !== null ? `: ${fmtPct(p)} do Full da marca` : ""}`;
+  const detalhe = `Impacto potencial${p !== null ? `: ${fmtPct(p)} do faturamento Full da marca no canal` : ""}`;
   return (
     <span className={`${forte} tabular-nums`} title={detalhe}>
-      Impacto <span className="font-medium text-ink">{fmtReais(v)}/dia</span>{p !== null && <> · {fmtPct(p)}</>}
+      Impacto potencial {p !== null && <><span className="font-medium text-ink">{fmtPct(p)}</span> · </>}<span className={p === null ? "font-medium text-ink" : undefined}>{fmtReais(v)}/dia</span>
       <span className="sr-only"> ({detalhe})</span>
     </span>
   );
@@ -120,7 +120,7 @@ export default function VisaoRapidaEstoque({ canais, impacto }: { canais: readon
   const linhas = rupturaPorMarca([...canais], impacto);
   return (
     <Panel titulo="Estoque por marca" semPadding
-      ajuda="Itens de cada marca no Full: ruptura, estoque baixo e, em cinza, os demais (suficiente, sem giro, excesso). Embaixo, o impacto potencial da marca no canal: R$ por dia e % do Full da marca, medidos em cada canal e nunca somados entre canais. Ordenado do maior impacto para o menor. Curva, excesso e lista de itens: no detalhe do canal.">
+      ajuda="Itens de cada marca no Full: ruptura, estoque baixo e, em cinza, os demais (suficiente, sem giro, excesso). Embaixo, o impacto potencial da marca no canal: o % é do faturamento Full da marca no canal e o R$ é por dia; os dois são medidos em cada canal e nunca somados entre canais. Ordenado do maior impacto para o menor. Curva, excesso e lista de itens: no detalhe do canal.">
       <LegendaBarra excessoComoDemais className="px-4 pt-2" />
       <div className="mt-2 grid divide-y divide-line border-t border-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
         {canais.map((c) => <Canal key={c.canal} c={c} linhas={linhas.filter((l) => l.celulas[c.canal])} />)}

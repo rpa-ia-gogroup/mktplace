@@ -38,6 +38,8 @@
     --tc-accent: 109 40 217; /* violeta — 7,0:1 no branco */
     --tc-accent-soft: 241 236 254;
     --tc-accent-ink: 76 29 149;
+    /* excesso: violeta mais fraco que o destaque (barra e chip do estoque) */
+    --tc-accent-excesso: 197 172 238;
     /* Tinta que assenta SOBRE o violeta cheio. No escuro o destaque e claro,
        entao texto branco em cima dele mediria ~2,4:1 — o token inverte. */
     --tc-accent-on: 255 255 255;
@@ -136,6 +138,7 @@
     --tc-accent: 167 139 250; /* 7,4:1 sobre --tc-surface */
     --tc-accent-soft: 36 29 61;
     --tc-accent-ink: 221 210 254;
+    --tc-accent-excesso: 150 125 240;
     --tc-accent-on: 23 19 39;
 
     --tc-ok: 52 211 153;
