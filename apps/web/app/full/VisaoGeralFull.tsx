@@ -41,9 +41,7 @@ import {
   NOME_CANAL,
   QUERY_ML,
   QUERY_SHOPEE,
-  fmtPct,
   fmtReais,
-  colunasMarca,
   descricaoTop,
   dicaImpacto,
   fracao,
@@ -90,23 +88,20 @@ import {
   type FiltroCurva,
   heroiRuptura,
   kpiImpacto,
-  marcaSemFoto,
   kpiParamVenda,
   pctDestaque,
-  perdaDestaque,
   mediana,
   oks,
   resumoML,
   resumoShopee,
-  rupturaPorMarca,
   total,
   type Canal,
-  type MarcaCanal,
   type ImpactoRuptura,
   type ResumoCanal,
   type ResumoOk,
   type Antes,
 } from "@/lib/full-visao-geral";
+import VisaoRapidaEstoque from "@/components/full/VisaoRapidaEstoque";
 import { tituloMarca, validarPayloadML } from "@/lib/ml-full-estoque";
 
 const DICA_RUPTURA =
@@ -147,21 +142,6 @@ function Fracao({ parte, base, motivo, critico = false }: { parte: number | null
   const f = fracao(parte, base);
   if (!f) return <Ausente motivo={motivo ?? (base === 0 ? "sem itens no Full" : undefined)} />;
   return <Escondido texto={f.texto} detalhe={f.detalhe} className={`font-semibold ${critico ? "text-crit-ink" : "text-ink"}`} />;
-}
-
-/** Segunda linha da celula de marca: so' o R$/dia; % do Full da marca e "sem preço" no title + sr-only. */
-function ImpactoMarca({ canal, m, vendedorTemEstoque }: { canal: Canal; vendedorTemEstoque: boolean; m: { rupturas: number | null; perda_dia: number | null; perda_dia_sem_vendedor: number | null; pct_gmv_full: number | null; pct_gmv_full_sem_vendedor: number | null; sem_preco: number | null } }) {
-  // T-0085: marca sem fotografia no dia nao foi medida: "—", nunca "R$ 0/dia (0,0%)".
-  if (marcaSemFoto(m)) return <span className="block text-xs text-ink-muted"><Ausente motivo="sem fotografia no dia" /></span>;
-  // R$ 0 porque o vendedor cobre as rupturas: diz o porque, nao "R$ 0/dia".
-  if (vendedorTemEstoque) {
-    return <Escondido texto="vendedor tem estoque" detalhe={`${fmtReais(m.perda_dia)}/dia potencial no Full, sem contar o estoque do vendedor`} className="block text-xs text-ink-muted" />;
-  }
-  const v = perdaDestaque(canal, m);
-  if (v === null) return <span className="block text-xs text-ink-muted"><Ausente motivo="sem preço" /></span>;
-  const p = pctDestaque(canal, m);
-  const detalhe = [p !== null ? `${fmtPct(p)} do Full da marca` : null, m.sem_preco != null && m.sem_preco > 0 ? `${fmtInt(m.sem_preco)} sem preço` : null].filter(Boolean).join(" · ");
-  return <Escondido texto={`${fmtReais(v)}/dia`} detalhe={detalhe || null} className="block whitespace-nowrap text-xs text-ink-muted" />;
 }
 
 /**
@@ -407,8 +387,6 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
   const shopee = canais.find((c) => c.canal === "shopee");
   const semVendedor = shopee?.status === "ok" ? shopee.semVendedor : null;
   const tot = total(canais);
-  const marcas = rupturaPorMarca(canais, impacto);
-  const pior = marcas[0]?.maiorPerda || marcas[0]?.taxa ? marcas[0] : null;
   const comCurva = abc?.status === "ok";
   // Com a leitura em falha o filtro some e a lista fica como antes.
   const filtroAtivo: FiltroCurva = comCurva ? url.curva : "todas";
@@ -433,7 +411,6 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
     });
   }, [filtroCanal, filtroAtivo]);
   const comImpacto = impactosOk(impacto).length > 0;
-  const colunas = colunasMarca(canais, marcas);
   const algumaIncompleta = ok.some((c) => !c.rupturasCompletas);
   const falhou = canais.some((c) => c.status === "erro");
 
@@ -571,6 +548,9 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
         </>
       }
     >
+      {/* Visao rapida logo abaixo dos 4 indicadores: marca, barra, ruptura/baixo e impacto do canal (era "Ruptura por marca" + "Estoque por marca") */}
+      <VisaoRapidaEstoque canais={canais} impacto={impacto} />
+
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel
           titulo="Sem estoque por curva"
@@ -760,48 +740,6 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
             </ul>
           </>
         )}
-      </Panel>
-
-      {/* 4. Onde: ruptura por marca, so' os canais medidos (sem coluna Total: vai no title da marca) */}
-      <Panel
-        titulo="Ruptura por marca"
-        acao={marcas.some((l) => l.maiorPerda !== null) ? <InfoDica texto="Ordenado do maior impacto potencial por dia para o menor. R$ não é somado entre canais." /> : undefined}
-        semPadding
-      >
-        <table className="w-full text-sm">
-          <caption className="sr-only">Percentual sem estoque e impacto potencial por marca e canal</caption>
-          <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
-            <tr>
-              <th scope="col" className="px-3 py-2 sm:px-4 text-left">Marca</th>
-              {colunas.map((c) => <th key={c} scope="col" className="px-3 py-2 sm:px-4 text-right">{NOME_CANAL[c]}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {marcas.map((l) => {
-              const ehPior = l === pior;
-              const ft = colunas.length > 1 && colunas.every((c) => l.celulas[c]?.ruptura != null) ? fracao(l.ruptura, l.base) : null;
-              return (
-                <tr key={l.marca} title={ehPior ? (l.maiorPerda !== null ? "Maior impacto" : "Pior taxa") : undefined}>
-                  <th scope="row" className="px-3 py-2 sm:px-4 text-left font-medium text-ink">
-                    <Escondido texto={tituloMarca(l.marca)} detalhe={ft ? `Total: ${ft.texto} (${ft.detalhe})` : null} />
-                    {/* A linha vermelha nao pode ser o unico sinal: leitor de tela ouve "pior". */}
-                    {ehPior && <span className="sr-only"> ({l.maiorPerda !== null ? "maior impacto" : "pior"})</span>}
-                  </th>
-                  {colunas.map((canal) => {
-                    const cel: MarcaCanal | undefined = l.celulas[canal];
-                    return (
-                      <td key={canal} className="px-3 py-2 sm:px-4 text-right tabular-nums">
-                        {cel ? <Fracao parte={cel.ruptura} base={cel.base} motivo={cel.motivo} critico={ehPior} /> : <Ausente motivo="marca fora deste canal" />}
-                        {/* Sem a fracao, o "—" de cima ja' diz a ausencia: nada de segundo "—". */}
-                        {cel && fracao(cel.ruptura, cel.base) && l.impacto[canal] && <ImpactoMarca canal={canal} m={l.impacto[canal]!} vendedorTemEstoque={canal === "shopee" && l.vendedorTemEstoque} />}
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       </Panel>
 
       {/* 4b. Brindes e descontinuados: fora da fila e dos numeros, recolhidos */}

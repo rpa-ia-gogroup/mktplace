@@ -177,7 +177,7 @@ test("Shopee: kits ficam fora da base, e marca sem esteira e' ausencia, nao zero
   const kokeshi = r.marcas.find((m) => m.marca === "kokeshi")!;
   assert.equal(kokeshi.base, null);
   assert.ok(kokeshi.motivo);
-  assert.deepEqual(r.marcas.find((m) => m.marca === "barbours"), { marca: "barbours", base: 2, ruptura: 0 });
+  assert.deepEqual(r.marcas.find((m) => m.marca === "barbours"), { marca: "barbours", base: 2, ruptura: 0, baixo: 1, excesso: 1 });
 });
 
 test("lista truncada: cobertura e marca viram ausencia, os indicadores continuam", () => {
@@ -912,7 +912,7 @@ test("brinde e descontinuado: fora das contagens e da fila; sem situacao (sem li
   assert.deepEqual(r.foraDaFila.map((t) => t.situacao).sort(), ["brinde", "descontinuado"]);
   assert.equal(r.rupturasCompletas, true);
   assert.equal(r.semVendedor, 2);
-  assert.deepEqual(r.marcas.find((m) => m.marca === "apice"), { marca: "apice", base: 3, ruptura: 2 });
+  assert.deepEqual(r.marcas.find((m) => m.marca === "apice"), { marca: "apice", base: 3, ruptura: 2, baixo: 0, excesso: 0 });
 
   const trunc = resumoShopee({ ...sh, truncado: true });
   if (trunc.status !== "ok") return;
@@ -930,7 +930,7 @@ test("brinde e descontinuado no ML: mesma regra; blocos recolhidos so' com item"
   assert.equal(mlr.ruptura, 1);
   assert.equal(mlr.base, 2);
   assert.deepEqual(mlr.rupturas.map((t) => t.codigo), ["N1"]);
-  assert.deepEqual(mlr.marcas.find((m) => m.marca === "kokeshi"), { marca: "kokeshi", base: 2, ruptura: 1 });
+  assert.deepEqual(mlr.marcas.find((m) => m.marca === "kokeshi"), { marca: "kokeshi", base: 2, ruptura: 1, baixo: 0, excesso: 0 });
   const blocos = blocosForaDaFila([mlr]);
   assert.deepEqual(blocos.map((b) => b.titulo), ["Brindes sem estoque no Full (1)", "Descontinuados sem estoque no Full (1)"]);
   assert.deepEqual(blocosForaDaFila([resumoML(ML)]), [], "sem brinde/descontinuado: nenhum bloco");
@@ -1036,8 +1036,8 @@ test("T-0085 marca sem foto e' ausencia: — na celula, nunca R$ 0/dia", () => {
   assert.equal(marcaSemFoto((SEM_FOTO.ml as CanalImpactoOk).marcas[0]), false);
   assert.equal(perdaDestaque("ml", barbours), null);
   assert.equal(fmtReais(perdaDestaque("ml", barbours)), "—");
-  const tela = fonte("app/full/VisaoGeralFull.tsx");
-  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*><Ausente motivo="sem fotografia no dia" \/><\/span>;/);
+  const tela = fonte("src/components/full/VisaoRapidaEstoque.tsx");
+  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*title="sem fotografia no dia">Impacto potencial —<\/span>;/);
 });
 
 test("B2-02: a janela do Envio ML e do Desempenho Shopee vai para a URL e volta no reload", async () => {

@@ -29,6 +29,7 @@ const config: Config = {
           DEFAULT: token("accent"),
           soft: token("accent-soft"),
           ink: token("accent-ink"),
+          excesso: token("accent-excesso"),
           on: token("accent-on"),
         },
         ok: {

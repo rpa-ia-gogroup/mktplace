@@ -45,6 +45,9 @@ export interface MarcaCanal {
   /** `null` = nao medido (motivo diz por que). */
   base: number | null;
   ruptura: number | null;
+  /** Estoque baixo e excesso da marca (barra da visao rapida). `null` = nao medido. */
+  baixo?: number | null;
+  excesso?: number | null;
   motivo?: string;
 }
 
@@ -131,11 +134,13 @@ export function resumoShopee(r: EstoqueFullResponse): ResumoCanal {
   // A API (situacao_aplicada) ja' descontou dos indicadores: o front so' separa a lista, sem descontar de novo.
   const sai = (c: string) => (i.situacao_aplicada ? 0 : fora.filter((p) => p.classificacao_torre === c).length);
 
-  const porMarca = new Map<string, { base: number; ruptura: number }>();
+  const porMarca = new Map<string, { base: number; ruptura: number; baixo: number; excesso: number }>();
   for (const p of itens) {
-    const m = porMarca.get(p.brand) ?? { base: 0, ruptura: 0 };
+    const m = porMarca.get(p.brand) ?? { base: 0, ruptura: 0, baixo: 0, excesso: 0 };
     m.base++;
     if (p.classificacao_torre === "RUPTURA_CANDIDATA") m.ruptura++;
+    else if (p.classificacao_torre === "BAIXO_CANDIDATO") m.baixo++;
+    else if (p.classificacao_torre === "EXCESSO_CANDIDATO") m.excesso++;
     porMarca.set(p.brand, m);
   }
   const marcas: MarcaCanal[] = completa
@@ -200,6 +205,8 @@ export function resumoML(r: MLFullEstoqueResponse): ResumoCanal {
       marca: m.brand,
       base: m.inventarios_full_lidos === null ? null : m.inventarios_full_lidos - foraBase(m.brand),
       ruptura: (m.por_classificacao.RUPTURA_CANDIDATA ?? 0) - sai("RUPTURA_CANDIDATA", m.brand),
+      baixo: (m.por_classificacao.BAIXO_CANDIDATO ?? 0) - sai("BAIXO_CANDIDATO", m.brand),
+      excesso: (m.por_classificacao.EXCESSO_CANDIDATO ?? 0) - sai("EXCESSO_CANDIDATO", m.brand),
     };
   });
 
