@@ -133,6 +133,18 @@ export default function ChavesPage() {
     );
   }
 
+  const botaoRevogar = (c: Chave, rotulo: string) =>
+    rotulo === "Ativa" && (
+      <button
+        type="button"
+        onClick={() => revogar(c)}
+        disabled={revogando === c.id}
+        aria-label={`Revogar a chave ${c.nome}`}
+        className={`${BOTAO} border border-crit/35 text-crit-ink hover:bg-crit-soft`}
+      >
+        {revogando === c.id ? "Revogando…" : "Revogar"}
+      </button>
+    );
   return (
     <Aba titulo="Chaves pessoais">
       <Panel titulo="Nova chave" icone={KeyRound} ajuda="Vale no MCP e na API da Torre (Authorization: Bearer). Vence no prazo escolhido.">
@@ -188,7 +200,29 @@ export default function ChavesPage() {
         ) : carga.chaves.length === 0 ? (
           <StateBlock tipo="vazio" titulo="Nenhuma chave criada" compacto />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* abaixo de sm: um bloco por chave, com Situacao e Revogar sempre a vista (sem rolagem lateral) */}
+          <ul className="divide-y divide-line sm:hidden">
+            {carga.chaves.map((c) => {
+              const s = situacao(c);
+              const ativa = s.rotulo === "Ativa";
+              return (
+                <li key={c.id} className="flex flex-col gap-1 px-4 py-3 text-sm">
+                  <span className="font-medium text-ink">{c.nome}</span>
+                  <span className="text-xs text-ink-muted">criada {data(c.criada_em)} por {c.criada_por}</span>
+                  <span className="break-all text-ink">{c.dono_email}</span>
+                  <span className="text-xs tabular-nums text-ink-muted">
+                    Vence {data(c.expira_em)} · Último uso {c.ultimo_uso_em ? data(c.ultimo_uso_em) : "nunca"}
+                  </span>
+                  <span className="mt-1 flex min-h-11 items-center justify-between gap-3">
+                    <span className={`font-medium ${s.classe}`}>{s.rotulo}</span>
+                    {ativa && botaoRevogar(c, s.rotulo)}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden overflow-x-auto sm:block">
             <table className="w-full min-w-[44rem] text-sm">
               <thead className="text-left text-xs text-ink-muted">
                 <tr className="border-b border-line">
@@ -216,17 +250,7 @@ export default function ChavesPage() {
                       <td className="px-4 py-2 tabular-nums text-ink">{c.ultimo_uso_em ? data(c.ultimo_uso_em) : "Nunca usada"}</td>
                       <td className={`px-4 py-2 font-medium ${s.classe}`}>{s.rotulo}</td>
                       <td className="px-4 py-2 text-right">
-                        {s.rotulo === "Ativa" && (
-                          <button
-                            type="button"
-                            onClick={() => revogar(c)}
-                            disabled={revogando === c.id}
-                            aria-label={`Revogar a chave ${c.nome}`}
-                            className={`${BOTAO} border border-crit/35 text-crit-ink hover:bg-crit-soft`}
-                          >
-                            {revogando === c.id ? "Revogando…" : "Revogar"}
-                          </button>
-                        )}
+                        {botaoRevogar(c, s.rotulo)}
                       </td>
                     </tr>
                   );
@@ -234,6 +258,7 @@ export default function ChavesPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Panel>
     </Aba>
