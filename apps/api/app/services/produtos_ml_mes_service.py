@@ -76,7 +76,8 @@ SINAIS = [
     ("ACAO: aumentar investimento (ROAS > 15x)",
      lambda p: p["ad_roas"] is not None and p["ad_roas"] >= 15 and (p["ad_spend"] or 0) < 50),
     ("OPORTUNIDADE: produto vende organico, considerar ads",
-     lambda p: p["units_sold"] >= 10 and not p["ad_spend"]),
+     # Loja sem coleta de Ads (ads_sem_dado): nao se sabe se anuncia, entao nao e' "organico".
+     lambda p: p["units_sold"] >= 10 and not p["ad_spend"] and not p.get("ads_sem_dado")),
     ("ALERTA: taxa cancelamento alta (> 10%)",
      lambda p: (p["cancel_rate_pct"] or 0) > 10),
     ("ATENCAO: grande variacao de preco",
@@ -106,6 +107,13 @@ def _ler(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
         "marcas": marcas, "ini": ini, "fim": fim,
         "ini_ml": datetime.combine(ini, time()) - um_h, "fim_ml": datetime.combine(prox, time()) - um_h,
     })
+    return montar(linhas, ini, fim, ref_month)
+
+
+def montar(linhas: list[dict], ini: date, fim: date, ref_month: Optional[str],
+           marcas_sem_ads: frozenset = frozenset()) -> tuple[list[dict], dict]:
+    """Linhas da consulta (uma por brand+item_id) -> itens com ROAS, sinal e Pareto.
+    `marcas_sem_ads`: lojas sem coleta de Ads no periodo; os campos de Ads ficam nulos ("sem dado")."""
     meta = {
         "ref_month": ref_month, "data_inicio": ini.isoformat(), "data_fim": fim.isoformat(),
         # Pelo Metabase a data volta com hora e fuso; so' o dia interessa.
@@ -134,6 +142,7 @@ def _ler(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
             "price_spread_pct": round((pmax - pmin) / pmin * 100, 1) if pmin and pmax is not None else None,
             "revenue_velocity": None, "ad_efficiency": None,
             "estimated_margin": None, "product_status": None,
+            "ads_sem_dado": r["brand"] in marcas_sem_ads,
         })
         itens[-1]["action_signal"] = sinal(itens[-1])
     # Pareto e % do total sobre o conjunto filtrado, so' GMV > 0 (mesma regra do SQL das outras abas).
@@ -154,6 +163,11 @@ def get_tabela(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
                sort_by: Optional[str], sort_dir: Optional[str],
                action_signal: Optional[str] = None, ref_month: Optional[str] = None) -> dict:
     itens, meta = _ler(consultar, ini, fim, brand, ref_month)
+    return tabela(itens, meta, pareto_bucket, limit, offset, sort_by, sort_dir, action_signal)
+
+
+def tabela(itens: list[dict], meta: dict, pareto_bucket: Optional[str], limit: int, offset: int,
+           sort_by: Optional[str], sort_dir: Optional[str], action_signal: Optional[str] = None) -> dict:
     if action_signal:
         itens = [p for p in itens if p["action_signal"] == action_signal]
     if pareto_bucket:
@@ -171,6 +185,10 @@ def get_tabela(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
 def get_resumo(consultar: Consultar, ini: date, fim: date, brand: Optional[str],
                action_signal: Optional[str] = None, ref_month: Optional[str] = None) -> dict:
     itens, meta = _ler(consultar, ini, fim, brand, ref_month)
+    return resumo(itens, meta, brand, action_signal)
+
+
+def resumo(itens: list[dict], meta: dict, brand: Optional[str], action_signal: Optional[str] = None) -> dict:
     if action_signal:  # cards seguem os filtros da tabela, menos o bucket
         itens = [p for p in itens if p["action_signal"] == action_signal]
     elegiveis = [p for p in itens if p["gross_revenue"] > 0]

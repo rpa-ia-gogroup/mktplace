@@ -371,14 +371,11 @@ test("faixa: a data de publicacao do mart aparece tambem no caso saudavel", () =
   assert.match(okBlock, /publicacao/, "o caso definitivo tambem precisa datar a publicacao");
 });
 
-test("tela de Produtos: a faixa vem ANTES dos cards de Pareto", () => {
-  // Quem le de cima para baixo tem de saber do regime antes de olhar os
-  // numeros, nao depois de ja ter concluido.
+test("tela de Produtos: a Shopee por anuncio nao reusa o selo do mart mensal", () => {
+  // A aba le a silver por anuncio e periodo; o selo mede a competencia do mart (fact_shopee_product_monthly).
   const src = readSource("app", "produtos", "page.tsx");
-  const faixa = src.indexOf("<ScopeQualityBanner");
-  const pareto = src.indexOf("buckets={shDisplaySummary?.buckets");
-  assert.ok(faixa > 0 && pareto > 0, "ambos os blocos devem existir na aba Shopee");
-  assert.ok(faixa < pareto, "a faixa de qualidade tem de preceder os cards A/B/C/D");
+  assert.ok(src.indexOf("buckets={shDisplaySummary?.buckets") > 0, "cards A/B/C/D da Shopee seguem na aba");
+  assert.equal(src.indexOf("<ScopeQualityBanner"), -1);
 });
 
 test("tela de Qualidade: o selo nao depende de haver metrica operacional Shopee", () => {

@@ -485,8 +485,8 @@ test("PF1 chaves: as 21 chaves reais seguem identicas e nenhuma perdeu filtro/pa
   assert.equal(chaves.length, 21, "o numero de call sites nao mudou");
   assert.deepEqual(chaves, [
     "overview:${qs.toString()}", "brands:${qs.toString()}", "monthly:${marketplace}",
-    "trend:${granularity}:${qs.toString()}", "produtos-ml:${qs}", "produtos-shopee:${qs}",
-    "produtos-tk:${qs}", "produtos-ml-summary:${qs}", "produtos-tk-summary:${qs}",
+    "trend:${granularity}:${qs.toString()}", "produtos-${canal}-anuncios:${qs}", "produtos-shopee:${qs}",
+    "produtos-tk:${qs}", "produtos-${canal}-anuncios-summary:${qs}", "produtos-tk-summary:${qs}",
     "produtos-sh-summary:${qs}", "canais:${qs.toString()}", "financeiro:${qs.toString()}",
     "quality:${qs.toString()}", "brand-detail:${brand}:${month}", "pedidos:${qs.toString()}",
     // Gate V3-1B: a chave ganhou o escopo de marca. Sem isso, `?brands=barbours`
