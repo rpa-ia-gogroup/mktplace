@@ -589,6 +589,7 @@ export default function MLFullEstoqueClient() {
             ativa={chaveCategoria}
             aoEscolher={escolherCategoria}
             parcial={!!parcial}
+            chipsDeTodasAsCurvas={filtroCurva.length > 0}
           />
 
           {(

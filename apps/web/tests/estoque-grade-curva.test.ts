@@ -196,3 +196,12 @@ test("cards seguem a curva: as duas abas usam o recorte e so' sem lista truncada
     assert.match(t, /cards=\{cards\w+\(payload, naCurvaCards\)\}/);
   }
 });
+
+test("com curva escolhida, os chips que nao seguem a curva dizem 'Todas as curvas:'", () => {
+  const faixa = readFileSync(join(import.meta.dirname, "../src/components/full/CategoriasEstoque.tsx"), "utf8");
+  const ml = readFileSync(join(import.meta.dirname, "../app/estoque-ml-full/MLFullEstoqueClient.tsx"), "utf8");
+  const sh = readFileSync(join(import.meta.dirname, "../app/estoque-full/EstoqueFullClient.tsx"), "utf8");
+  assert.match(faixa, /chipsDeTodasAsCurvas && <span[^>]*>Todas as curvas:<\/span>/);
+  assert.match(ml, /chipsDeTodasAsCurvas=\{filtroCurva\.length > 0\}/);
+  assert.match(sh, /chipsDeTodasAsCurvas=\{filtroCurva\.length > 0\}/);
+});
