@@ -366,7 +366,7 @@ export function PopupColetaPerdida({
               }
             >
               <div className="max-h-[50vh] overflow-auto rounded-lg border border-line" aria-busy={carga.tipo === "carregando"}>
-                <table className="w-full text-sm [&_td]:px-2 [&_td]:py-1.5 [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-1.5">
+                <table className="w-full text-sm [&_td]:px-2 [&_td]:py-1.5 [&_th]:whitespace-nowrap [&_th]:px-2 [&_th]:py-1.5 [&_td:last-child]:pr-3 [&_th:last-child]:pr-3">
                   <caption className="sr-only">{titulo}</caption>
                   <thead className="sticky top-0 bg-raised text-left text-xs uppercase tracking-wide text-ink-faint">
                     <tr>
