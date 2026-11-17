@@ -6,8 +6,8 @@
  * Mesma rota da /cx (`/api/v1/cx/shopee`), buscada pelo navegador. Sempre 30
  * dias fechados, escrito no cabecalho, sem casar com o periodo da Gerencial.
  * Marca segue o filtro global; a pagina so' monta isto com a Shopee no filtro.
- * Com TikTok/ML tambem no filtro (o padrao desde o T-0089 sao os tres canais),
- * o painel avisa que eles estao sem dado nesta visao, em vez de cala-los.
+ * O ML tem painel proprio (`CxResumoMl`); o aviso de canal sem dado (TikTok)
+ * fica na pagina, acima dos dois.
  *
  * Card = rotulo, valor e no maximo UMA linha (reservada em todos, para a
  * mesma altura). Clicar abre o dialogo unico da pagina com o valor de cada
@@ -22,7 +22,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Ban, MessageCircle, MessagesSquare, Repeat2, Undo2, type LucideIcon } from "lucide-react";
 
-import AvisoCanaisSemDado from "@/components/ui/AvisoCanaisSemDado";
 import InfoDica from "@/components/ui/InfoDica";
 import DeltaBadge from "@/components/ui/DeltaBadge";
 import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
@@ -46,7 +45,6 @@ import {
   type ResumoCx,
 } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
-import type { Marketplace } from "@/lib/mock-data";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const DIAS: JanelaDias = 30;
@@ -160,19 +158,20 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias: number = DIAS): s
   ];
 }
 
-/** A fonte do CX (`/api/v1/cx/shopee`) so' tem Shopee. */
-const CX_CANAIS_COBERTOS: readonly Marketplace[] = ["shopee"];
+/** Janela do CX na Gerencial: segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa). */
+export function janelaGerencialCx(dateFrom?: string, dateTo?: string): { dias: JanelaDias; subtitulo: string } {
+  const segue = dateFrom && dateTo ? janelaCxDoPeriodo(dateFrom, dateTo) : null;
+  const dias = segue ?? DIAS;
+  return { dias, subtitulo: segue || !dateFrom ? `Últimos ${dias} dias até ontem` : `Últimos ${DIAS} dias até ontem · o CX não segue este período` };
+}
 
 export default function CxResumo({
   brands,
-  canais,
   dateFrom,
   dateTo,
   onOpen,
 }: {
   brands: string[];
-  /** Canais do filtro global: o CX so' tem Shopee; os demais selecionados ganham o aviso de sem dado. */
-  canais: readonly Marketplace[];
   /** Periodo da Gerencial: o CX segue quando for 7, 30 ou 90 dias fechados; senao, 30. */
   dateFrom?: string;
   dateTo?: string;
@@ -180,9 +179,7 @@ export default function CxResumo({
   onOpen: (indicador: IndicadorCx, resumo: ResumoCx, geradoEm: string, dias: JanelaDias) => void;
 }) {
   const marca = brands.length ? brands.join(",") : null;
-  const segue = dateFrom && dateTo ? janelaCxDoPeriodo(dateFrom, dateTo) : null;
-  const dias = segue ?? DIAS;
-  const subtitulo = segue || !dateFrom ? `Últimos ${dias} dias até ontem` : `Últimos ${DIAS} dias até ontem · o CX não segue este período`;
+  const { dias, subtitulo } = janelaGerencialCx(dateFrom, dateTo);
   const [resultado, setResultado] = useState<ResultadoCx | null>(null);
 
   const carregar = useCallback(() => {
@@ -217,7 +214,6 @@ export default function CxResumo({
         </Link>
       }
     >
-      <AvisoCanaisSemDado selecao={canais} cobertos={CX_CANAIS_COBERTOS} className="mb-3" />
       {!resultado ? (
         <StateBlock tipo="carregando" compacto titulo="Carregando CX da Shopee" />
       ) : !resultado.ok || !r ? (
@@ -298,7 +294,7 @@ function Tiles({ r, dias, abrir }: { r: ResumoCx; dias: JanelaDias; abrir: (i: I
       {card("resposta", SPAN_TOPO, r.resposta, null, rodapeComparacao(r, "resposta"))}
       {card("cancelamento", SPAN_TOPO, r.cancelamento, null, rodapeComparacao(r, "cancelamento"))}
       {/* % antes do absoluto, como na /cx: a taxa no numero, o R$ embaixo (texto que quebra: nunca atras do grafico) */}
-      {card("reembolso", SPAN_BASE, r.reembolsoPct ?? "—", r.reembolsado !== "—" ? `${r.reembolsado} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
+      {card("reembolso", SPAN_BASE, r.reembolsoPct ?? "—", r.reembolsadoCurto !== "—" ? `${r.reembolsadoCurto} reembolsado` : null, rodapeComparacao(r, "reembolso"))}
       <div className={`${CARD} ${SPAN_BASE}`}>
         <KpiTile
           variante="gerencial"

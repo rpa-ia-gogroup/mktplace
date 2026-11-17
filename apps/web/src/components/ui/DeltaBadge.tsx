@@ -21,6 +21,14 @@ export default function DeltaBadge({
   tone?: DeltaTone;
   unidade?: "pct" | "pp" | "pts";
 }) {
+  // sem variacao (o que o texto mostra arredondado a 0,0), sem seta e sem cor: "= 0,0 p.p."
+  if (fmtDelta(pct, unidade).replace(/^[+−]/, "") === fmtDelta(0, unidade)) {
+    return (
+      <span className="inline-flex w-fit items-center gap-0.5 rounded-md bg-raised px-1.5 py-0.5 text-xs font-semibold tabular-nums text-ink-muted">
+        = {fmtDelta(0, unidade)}
+      </span>
+    );
+  }
   const up = pct >= 0;
   const Seta = up ? ArrowUpRight : ArrowDownRight;
   const pele =
