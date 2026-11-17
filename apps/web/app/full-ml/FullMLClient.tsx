@@ -244,7 +244,7 @@ function FullMLPageInner() {
         valor={presetAtivo ? presetAtivo.label : `${dm(from)}–${dm(to)}`}
         ativo={presetAtivo?.days !== 30}
         icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
-        largura="w-64"
+        largura="w-60"
       >
         {(fechar) => (
           <div className="flex flex-col gap-1">
@@ -268,12 +268,12 @@ function FullMLPageInner() {
                 );
               })}
             </div>
-            <div className="flex items-center gap-2 border-t border-line px-1 pt-2">
-              <label className="sr-only" htmlFor="full-ml-de">De</label>
-              <input id="full-ml-de" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={`${CONTROLE} min-w-0 flex-1`} />
-              <span aria-hidden="true" className="text-xs text-ink-muted">a</span>
-              <label className="sr-only" htmlFor="full-ml-ate">Até</label>
-              <input id="full-ml-ate" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={`${CONTROLE} min-w-0 flex-1`} />
+            {/* Datas uma embaixo da outra: o painel cabe no celular sem cortar o campo. */}
+            <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1.5 border-t border-line px-1 pt-2">
+              <label className="text-xs text-ink-muted" htmlFor="full-ml-de">De</label>
+              <input id="full-ml-de" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={`${CONTROLE} min-w-0`} />
+              <label className="text-xs text-ink-muted" htmlFor="full-ml-ate">Até</label>
+              <input id="full-ml-ate" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={`${CONTROLE} min-w-0`} />
             </div>
           </div>
         )}
