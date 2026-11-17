@@ -442,13 +442,14 @@ test("todo controle interativo declara alvo minimo de 44px", () => {
   // regex de atributos: arrow functions contem `>`, que truncaria `[^>]*` no
   // meio da tag e daria falso positivo.
   const blocos = PAGE.split("<button").slice(1);
-  // ALVO-GRADE: 1 literal `<button` (Limpar); marca, periodo e metrica sao o
-  // `Segmented` da casa, que ja' fixa o alvo de 44px.
-  assert.equal(blocos.length, 1, "a tela tem 1 literal de botao");
+  // 2 literais `<button`: Limpar (CONTROLE) e as opcoes do Período (OPCAO, as
+  // classes do BrandFilter no menu). Marca e' o BrandFilter da Gerencial.
+  assert.equal(blocos.length, 2, "a tela tem 2 literais de botao");
+  assert.ok(/const OPCAO =\s*"inline-flex[^"]*min-h-11/.test(PAGE), "OPCAO fixa o alvo de 44px");
   for (const b of blocos) {
     const tag = b.split(">")[0] + b.split(">").slice(1).join(">").split("</button>")[0];
     assert.ok(tag.includes("className="), "todo button precisa de className");
-    assert.ok(tag.includes("CONTROLE"), "todo button usa a constante de alvo 44px");
+    assert.ok(tag.includes("CONTROLE") || tag.includes("OPCAO"), "todo button usa uma constante de alvo 44px");
   }
 
   // Inputs e selects tambem.
@@ -528,7 +529,8 @@ test("todo input e select tem label associado por id", () => {
 });
 
 test("grupos de botoes sem label individual tem aria-label", () => {
-  assert.ok(PAGE.includes('rotulo="Período"') && PAGE.includes('rotulo="Marca"'), "Segmented da casa: o rotulo vira o nome do grupo");
+  // Marca: BrandFilter (grupo "Filtro de marcas"); Período: Popover com grupo nomeado.
+  assert.ok(PAGE.includes("<BrandFilter") && PAGE.includes('rotulo="Período"') && PAGE.includes('role="group" aria-label="Período"'));
   assert.ok(PAGE.includes('rotulo="Métrica da série"'));
 });
 

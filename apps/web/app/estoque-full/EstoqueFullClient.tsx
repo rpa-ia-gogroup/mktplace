@@ -44,7 +44,8 @@ import {
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
-import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
+import BrandFilter from "@/components/BrandFilter";
+import { CelulaCurva, FiltroCurva } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
 import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
@@ -356,14 +357,6 @@ export default function EstoqueFullClient() {
     return () => abortRef.current?.abort();
   }, [carregar]);
 
-  const alternarMarca = (m: string) =>
-    setFiltros((f) => ({
-      ...f,
-      brands: f.brands.includes(m)
-        ? f.brands.filter((x) => x !== m)
-        : [...f.brands, m],
-    }));
-
   // CARDS-CLICAVEIS: a categoria do card vive na URL e corta a tabela da aba.
   const [chaveCategoria, setCategoria] = useCategoriaNaUrl(CHAVES_CATEGORIA);
   const categoria = categoriaPorChave(CATEGORIAS_SHOPEE, chaveCategoria);
@@ -373,7 +366,7 @@ export default function EstoqueFullClient() {
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const pedidoRolagem = useRolarAteChip(
     alvoRef, chaveCategoria, !carregando && !!payload && queryCarregada === query,
-    () => (classeDoCard ? document.querySelector<HTMLElement>(`[data-classe="${classeDoCard}"]`) : chipRef.current),
+    () => (classeDoCard ? document.querySelector<HTMLElement>('[data-filtro="classificacao"] button') : chipRef.current),
   );
 
   // URL -> chip de Classificação (abrir o link, voltar do navegador): a categoria
@@ -388,10 +381,7 @@ export default function EstoqueFullClient() {
     else if (antes) setFiltros((f) => (so(f, antes) ? { ...f, classificacoes: [] } : f));
   }, [chaveCategoria]);
 
-  const alternarClasse = (c: Classificacao) => {
-    const proximas = filtros.classificacoes.includes(c)
-      ? filtros.classificacoes.filter((x) => x !== c)
-      : [...filtros.classificacoes, c];
+  const escolherClasses = (proximas: Classificacao[]) => {
     // Desmarcar (ou mudar) a classificação do card desfaz o card.
     if (classeDoCard && !(proximas.length === 1 && proximas[0] === classeDoCard)) setCategoria(null);
     setFiltros((f) => ({ ...f, classificacoes: proximas }));
@@ -450,61 +440,34 @@ export default function EstoqueFullClient() {
   );
 
   const filtrosUI = (
-    <div className="flex flex-col gap-3 w-full">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">
-          Conta
-        </span>
-        {contasFiltraveis.map((m) => (
-          <button
-            key={m}
-            type="button"
-            aria-pressed={filtros.brands.includes(m)}
-            onClick={() => alternarMarca(m)}
-            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-              filtros.brands.includes(m)
-                ? "bg-accent border-accent text-accent-on font-semibold"
-                : "bg-surface border-line text-ink-muted hover:border-accent/40"
-            }`}
-          >
-            {tituloMarca(m)}
-          </button>
-        ))}
-      </div>
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 w-full">
+      <BrandFilter
+        variante="menu"
+        rotulo="Conta"
+        opcoes={contasFiltraveis.map((m) => ({ value: m, label: tituloMarca(m) }))}
+        value={filtros.brands}
+        onChange={(brands) => setFiltros((f) => ({ ...f, brands }))}
+      />
+      {/* O card de Classificação devolve o foco a esta caixa (useRolarAteChip). */}
+      <span data-filtro="classificacao" className="contents">
+        <BrandFilter
+          variante="menu"
+          rotulo="Classificação"
+          opcoes={CLASSIFICACOES.map((c) => ({ value: c, label: CLASS_LABEL[c] }))}
+          value={filtros.classificacoes}
+          onChange={(v) => escolherClasses(v as Classificacao[])}
+        />
+      </span>
+      {comCurva && <FiltroCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">
-          Classificação
-        </span>
-        {CLASSIFICACOES.map((c) => (
-          <button
-            key={c}
-            type="button"
-            data-classe={c}
-            aria-pressed={filtros.classificacoes.includes(c)}
-            onClick={() => alternarClasse(c)}
-            className={`inline-flex items-center min-h-11 sm:min-h-0 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-              filtros.classificacoes.includes(c)
-                ? "bg-accent border-accent text-accent-on font-semibold"
-                : "bg-surface border-line text-ink-muted hover:border-accent/40"
-            }`}
-          >
-            {CLASS_LABEL[c]}
-          </button>
-        ))}
-      </div>
-
-      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-ink-muted">
+      <label className="flex items-center gap-2 text-sm text-ink-muted">
           <span className="sr-only">Buscar por SKU ou produto</span>
           <input
             type="search"
             value={buscaDigitada}
             onChange={(e) => setBuscaDigitada(e.target.value)}
             placeholder="Buscar SKU ou produto"
-            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint px-3 py-1.5 text-sm w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint min-h-11 px-3 text-sm w-64 max-w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -522,12 +485,11 @@ export default function EstoqueFullClient() {
           <button
             type="button"
             onClick={limpar}
-            className="text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+            className="inline-flex min-h-11 items-center px-2 text-sm font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
           >
             Limpar filtros
           </button>
         )}
-      </div>
     </div>
   );
 

@@ -69,7 +69,7 @@ test("as duas abas: coluna, filtro e ordem so' com a curva lida; resumo de açã
     const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     assert.match(src, /const comCurva = curvaNaTela\(metaCurva\)/, f);
     assert.match(src, /\{comCurva && <th scope="col" className="(hidden )?px-4 py-3( sm:table-cell)?">Curva<\/th>\}/, f);
-    assert.match(src, /\{comCurva && <FiltroCurvaChips/, f);
+    assert.match(src, /\{comCurva && <FiltroCurva /, f);
     assert.match(src, /ordenarPorCurva\(/, f);
     // o resumo e' o panorama: sem o filtro de curva
     assert.match(src, /resumoAcao\(payload\.(produtos|inventarios)[,.]/, f);
