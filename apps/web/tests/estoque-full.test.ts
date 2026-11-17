@@ -725,18 +725,11 @@ test("is_saleable null usa VENDA_NAO_INFORMADA, distinto do rotulo do CD", () =>
 // T-0020 — smoke 29/10: pilulas de filtro com alvo de 44px no mobile
 // ---------------------------------------------------------------------------
 
-test("pilulas de conta e classificacao tem min-h-11 so' no mobile", () => {
-  const pilulas = [
-    ...CLIENT_SRC.matchAll(/className=\{`([^`$]*rounded-full border px-3[^`$]*)\$\{/g),
-  ].map((m) => new Set(m[1].trim().split(/\s+/)));
-  assert.equal(pilulas.length, 2, "esperava os dois grupos de pilulas");
-  for (const tokens of pilulas) {
-    assert.ok(tokens.has("min-h-11"), "alvo de toque de 44px no mobile");
-    assert.ok(tokens.has("sm:min-h-0"), "desktop mantem a altura compacta");
-    assert.ok(
-      tokens.has("inline-flex") && tokens.has("items-center"),
-      "min-h-11 so' rende alvo real com o conteudo centrado",
-    );
-    assert.ok(tokens.has("py-1"), "padding do desktop preservado");
-  }
+test("conta e classificacao em caixa (BrandFilter menu da Gerencial), sem pilulas", () => {
+  assert.doesNotMatch(CLIENT_SRC, /rounded-full border px-3/, "as pilulas sairam");
+  assert.match(CLIENT_SRC, /<BrandFilter\s+variante="menu"\s+rotulo="Conta"/);
+  assert.match(CLIENT_SRC, /<BrandFilter\s+variante="menu"\s+rotulo="Classificação"/);
+  // busca e checkbox continuam, com o alvo de 44px da barra
+  assert.match(CLIENT_SRC, /type="search"[\s\S]*?min-h-11/);
+  assert.ok(CLIENT_SRC.includes("Somente itens que exigem ação"));
 });

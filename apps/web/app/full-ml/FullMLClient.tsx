@@ -27,9 +27,12 @@ import { janelaDaUrl, urlComJanela } from "@/lib/full-janela-url";
 import PageContainer from "@/components/layout/PageContainer";
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
-import { Ban, CircleDollarSign, ShoppingBag, Truck } from "lucide-react";
+import { Ban, CalendarDays, Check, CircleDollarSign, ShoppingBag, Truck } from "lucide-react";
 import CartaoIndicador from "@/components/ui/CartaoIndicador";
 import Segmented from "@/components/ui/Segmented";
+import BrandFilter from "@/components/BrandFilter";
+import Popover from "@/components/ui/Popover";
+import { marcaUnica } from "@/lib/cx";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import { rotuloAtualizado } from "@/lib/atualizado";
 import { intervaloCurto } from "@/lib/filters/presets";
@@ -94,6 +97,11 @@ const CONTROLE_BASE =
  *  perder, rendendo branco-sobre-branco no botao selecionado. Para variar a
  *  cor, parta de `CONTROLE_BASE` e declare a paleta inteira em cada ramo. */
 const CONTROLE = `${CONTROLE_BASE} border-line-strong bg-surface text-ink`;
+/** Opcoes do painel de Período: as mesmas classes dos botoes do `BrandFilter` no menu. */
+const OPCAO =
+  "inline-flex w-full shrink-0 items-center justify-between min-h-11 min-w-11 px-3 rounded-md text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent";
+const OPCAO_ATIVA = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
+const OPCAO_INATIVA = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
 function hojeIsoBrt(): string {
   // `sv-SE` devolve YYYY-MM-DD; o fuso e' explicito porque o dia operacional da
@@ -223,25 +231,54 @@ function FullMLPageInner() {
 
   const filtros = (
     <div className="flex min-w-0 flex-wrap items-center gap-2">
-      <Segmented
+      <BrandFilter
+        variante="menu"
         rotulo="Marca"
-        opcoes={MARCAS.map((m) => ({ valor: m.key || "todas", texto: m.key ? m.label : "Todas" }))}
-        valor={marca || "todas"}
-        aoEscolher={(v) => setMarca(v === "todas" ? "" : v)}
-        className="max-w-full overflow-x-auto overflow-y-hidden whitespace-nowrap"
+        opcoes={MARCAS.filter((m) => m.key).map((m) => ({ value: m.key, label: m.label }))}
+        value={marca ? [marca] : []}
+        // A API le' UMA marca: vale a ultima escolhida (como na CX e na Expedicao).
+        onChange={(escolha) => setMarca(marcaUnica(escolha, marca || null) ?? "")}
       />
-      <Segmented
+      <Popover
         rotulo="Período"
-        opcoes={PERIOD_PRESETS.map((p) => ({ valor: String(p.days), texto: p.label }))}
-        valor={presetAtivo ? String(presetAtivo.days) : ""}
-        aoEscolher={(v) => aplicarPreset(Number(v))}
-        className="whitespace-nowrap"
-      />
-      <label className="sr-only" htmlFor="full-ml-de">De</label>
-      <input id="full-ml-de" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={CONTROLE} />
-      <span aria-hidden="true" className="text-xs text-ink-muted">a</span>
-      <label className="sr-only" htmlFor="full-ml-ate">Até</label>
-      <input id="full-ml-ate" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={CONTROLE} />
+        rotuloSoNoLargo
+        valor={presetAtivo ? presetAtivo.label : `${dm(from)}–${dm(to)}`}
+        ativo={presetAtivo?.days !== 30}
+        icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
+        largura="w-60"
+      >
+        {(fechar) => (
+          <div className="flex flex-col gap-1">
+            <div role="group" aria-label="Período" className="flex flex-col gap-0.5">
+              {PERIOD_PRESETS.map((p) => {
+                const ativo = presetAtivo?.days === p.days;
+                return (
+                  <button
+                    key={p.days}
+                    type="button"
+                    aria-pressed={ativo}
+                    onClick={() => {
+                      fechar();
+                      if (!ativo) aplicarPreset(p.days);
+                    }}
+                    className={`${OPCAO} ${ativo ? OPCAO_ATIVA : OPCAO_INATIVA}`}
+                  >
+                    {p.label}
+                    {ativo && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
+                  </button>
+                );
+              })}
+            </div>
+            {/* Datas uma embaixo da outra: o painel cabe no celular sem cortar o campo. */}
+            <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1.5 border-t border-line px-1 pt-2">
+              <label className="text-xs text-ink-muted" htmlFor="full-ml-de">De</label>
+              <input id="full-ml-de" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={`${CONTROLE} min-w-0`} />
+              <label className="text-xs text-ink-muted" htmlFor="full-ml-ate">Até</label>
+              <input id="full-ml-ate" type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={`${CONTROLE} min-w-0`} />
+            </div>
+          </div>
+        )}
+      </Popover>
       <button type="button" onClick={limpar} className={`${CONTROLE_BASE} inline-flex items-center border-transparent font-semibold text-accent-ink hover:underline`}>
         Limpar
       </button>

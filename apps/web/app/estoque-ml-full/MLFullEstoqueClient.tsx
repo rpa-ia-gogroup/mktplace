@@ -40,7 +40,8 @@ import TableScrollHint from "@/components/TableScrollHint";
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
-import { CelulaCurva, FiltroCurvaChips } from "@/components/full/CurvaEstoque";
+import BrandFilter from "@/components/BrandFilter";
+import { CelulaCurva, FiltroCurva } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
 import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
@@ -336,7 +337,7 @@ export default function MLFullEstoqueClient() {
   // Qual busca o payload responde: "Compartilhados"/"Sem leitura" refazem a busca
   // (com os fora do Full) e o foco so' vai ao chip depois dela.
   const [queryCarregada, setQueryCarregada] = useState<string | null>(null);
-  const primeiroChipRef = useRef<HTMLButtonElement | null>(null);
+  const marcaRef = useRef<HTMLSpanElement | null>(null);
   const dataRef = useRef<HTMLInputElement | null>(null);
   // O que esta no campo de data. So' vira filtro quando completo (ver
   // `dataParaFiltroML`): digitar o ano nao dispara busca com "0002-12-01".
@@ -389,14 +390,6 @@ export default function MLFullEstoqueClient() {
     return () => abortRef.current?.abort();
   }, [carregar]);
 
-  const alternarMarca = (m: string) =>
-    setFiltros((f) => ({
-      ...f,
-      brands: f.brands.includes(m)
-        ? f.brands.filter((x) => x !== m)
-        : [...f.brands, m],
-    }));
-
   const chipRef = useRef<HTMLButtonElement | null>(null);
   const pedidoRolagem = useRolarAteChip(chipRef, chaveCategoria, !carregando && !!payload && queryCarregada === query);
 
@@ -413,9 +406,9 @@ export default function MLFullEstoqueClient() {
     setDataDigitada("");
     setCurvas([]);
     if (chaveCategoria) setCategoria(null);
-    // O botao "Limpar filtros" some ao limpar: o foco vai para o primeiro
-    // chip de marca, que esta sempre na tela, em vez de cair no <body>.
-    primeiroChipRef.current?.focus();
+    // O botao "Limpar filtros" some ao limpar: o foco vai para a caixa de
+    // marca, que esta sempre na tela, em vez de cair no <body>.
+    marcaRef.current?.querySelector("button")?.focus();
   };
 
   const voltarParaUltima = () => {
@@ -458,30 +451,18 @@ export default function MLFullEstoqueClient() {
 
   const fotoEmUso = payload && !isIndisponivelML(payload) ? payload.frescor.ref_date : "";
   const filtrosUI = (
-    <div className="flex flex-col gap-3 w-full">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold text-ink-faint uppercase tracking-wide">
-          Marca
-        </span>
-        {MARCAS_ML.map((m, idx) => (
-          <button
-            key={m}
-            ref={idx === 0 ? primeiroChipRef : undefined}
-            type="button"
-            aria-pressed={filtros.brands.includes(m)}
-            onClick={() => alternarMarca(m)}
-            className={`inline-flex items-center justify-center min-h-11 min-w-11 text-sm rounded-full border px-3 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-              filtros.brands.includes(m)
-                ? "bg-accent border-accent text-accent-on font-semibold"
-                : "bg-surface border-line text-ink-muted hover:border-accent/40"
-            }`}
-          >
-            {tituloMarca(m)}
-          </button>
-        ))}
-      </div>
-      {comCurva && <FiltroCurvaChips valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 w-full">
+      {/* "Limpar filtros" devolve o foco a esta caixa, que esta' sempre na tela. */}
+      <span ref={marcaRef} className="contents">
+        <BrandFilter
+          variante="menu"
+          rotulo="Marca"
+          opcoes={MARCAS_ML.map((m) => ({ value: m, label: tituloMarca(m) }))}
+          value={filtros.brands}
+          onChange={(brands) => setFiltros((f) => ({ ...f, brands }))}
+        />
+      </span>
+      {comCurva && <FiltroCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
         <label className="flex items-center gap-2 text-sm text-ink-muted">
           Data da fotografia
           <input
@@ -495,7 +476,7 @@ export default function MLFullEstoqueClient() {
             onKeyDown={(e) => {
               if (e.key === "Enter" && (dataDigitada || e.currentTarget.value !== fotoEmUso)) confirmarData(e.currentTarget.value);
             }}
-            className="rounded-lg border border-line bg-surface text-ink px-3 py-1.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            className="rounded-lg border border-line bg-surface text-ink min-h-11 px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           />
         </label>
         <label className="flex items-center gap-2 text-sm text-ink-muted">
@@ -518,7 +499,6 @@ export default function MLFullEstoqueClient() {
             Limpar filtros
           </button>
         )}
-      </div>
     </div>
   );
 

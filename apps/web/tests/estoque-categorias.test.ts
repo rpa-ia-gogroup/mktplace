@@ -156,5 +156,7 @@ test("Shopee: card com chip de Classificação equivalente marca o chip e não m
   // desmarcar a classificação do card desfaz o card; URL -> chip ao abrir/voltar
   assert.match(sh, /if \(classeDoCard && !\(proximas\.length === 1 && proximas\[0\] === classeDoCard\)\) setCategoria\(null\)/);
   assert.match(sh, /if \(agora\) setFiltros/);
-  assert.match(sh, /data-classe=\{c\}/);
+  // o foco volta a' caixa de Classificação (filtro em caixa, como a Gerencial)
+  assert.match(sh, /<span data-filtro="classificacao" className="contents">\s*<BrandFilter[\s\S]*?rotulo="Classificação"/);
+  assert.match(sh, /querySelector<HTMLElement>\('\[data-filtro="classificacao"\] button'\)/);
 });

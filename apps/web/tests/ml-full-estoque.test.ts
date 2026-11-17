@@ -308,16 +308,16 @@ test("QA4: estado vazio sem filtro nao fala em filtros; transfer ausente diz 'se
   assert.ok(!CLIENT_SRC.includes("transfer_full)} em transferência"));
 });
 
-test("QA5: limpar filtros move o foco para o primeiro chip de marca", () => {
+test("QA5: limpar filtros move o foco para a caixa de marca", () => {
   const limpar = CLIENT_SRC.split("const limpar = () => {")[1]?.split("\n  };")[0] ?? "";
   assert.ok(limpar.includes("setFiltros(FILTROS_ML_VAZIOS)"));
-  assert.ok(limpar.includes("primeiroChipRef.current?.focus()"));
-  assert.match(CLIENT_SRC, /ref=\{idx === 0 \? primeiroChipRef : undefined\}/);
+  assert.ok(limpar.includes('marcaRef.current?.querySelector("button")?.focus()'));
+  assert.match(CLIENT_SRC, /<span ref=\{marcaRef\} className="contents">\s*<BrandFilter/);
 });
 
 test("QA6: chips com 44px, marca formatada no PARCIAL, sem aviso duplicado", () => {
-  const chip = CLIENT_SRC.split("aria-pressed={filtros.brands.includes(m)}")[1] ?? "";
-  assert.match(chip.split("{tituloMarca(m)}")[0], /inline-flex items-center justify-center min-h-11 min-w-11/);
+  // Marca em caixa (BrandFilter da Gerencial: alvo de 44px la'), com o rotulo formatado.
+  assert.match(CLIENT_SRC, /opcoes=\{MARCAS_ML\.map\(\(m\) => \(\{ value: m, label: tituloMarca\(m\) \}\)\)\}/);
 
   assert.equal(
     motivoParcialLegivel("Sem fotografia no dia: kokeshi, lescent."),

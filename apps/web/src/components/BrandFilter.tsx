@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Check, Tag } from "lucide-react";
 import Popover from "@/components/ui/Popover";
 import { FILTER_BRAND_OPTIONS, brandLabel } from "@/lib/filters/brands";
@@ -21,6 +22,12 @@ interface Props {
   variante?: "faixa" | "menu";
   /** Lista propria (Expedicao: as marcas do payload tambem). Padrao: o filtro global. */
   opcoes?: readonly { value: string; label: string }[];
+  /**
+   * Mesmo gatilho para outro filtro multi da tela (Full: Classificação, Curva).
+   * Com rotulo proprio ele fica visivel em toda largura: o icone de marca nao diz o que e'.
+   */
+  rotulo?: string;
+  icone?: ReactNode;
 }
 
 /**
@@ -34,13 +41,17 @@ const ACTIVE_BTN = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inse
 const INACTIVE_BTN = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
 /** Valor curto para o gatilho do menu: o escopo legivel sem abrir nada ("Ápice +1"). */
-export function resumoMarcaMenu(value: readonly string[]): string {
-  if (value.length === 0 || value.length === FILTER_BRAND_OPTIONS.length) return "Todas";
-  if (value.length === 1) return brandLabel(value[0]);
-  return `${brandLabel(value[0])} +${value.length - 1}`;
+export function resumoMarcaMenu(
+  value: readonly string[],
+  opcoes: readonly { value: string; label: string }[] = FILTER_BRAND_OPTIONS,
+): string {
+  if (value.length === 0 || value.length === opcoes.length) return "Todas";
+  const nome = (v: string) => opcoes.find((o) => o.value === v)?.label ?? brandLabel(v);
+  if (value.length === 1) return nome(value[0]);
+  return `${nome(value[0])} +${value.length - 1}`;
 }
 
-export default function BrandFilter({ value, onChange, variante = "faixa", opcoes = FILTER_BRAND_OPTIONS }: Props) {
+export default function BrandFilter({ value, onChange, variante = "faixa", opcoes = FILTER_BRAND_OPTIONS, rotulo, icone }: Props) {
   const allActive = value.length === 0;
   const menu = variante === "menu";
   // Na lista do menu o rotulo encosta a esquerda e o check marca a selecao;
@@ -99,15 +110,15 @@ export default function BrandFilter({ value, onChange, variante = "faixa", opcoe
   if (menu) {
     return (
       <Popover
-        rotulo="Marca"
-        rotuloSoNoLargo
-        valor={resumoMarcaMenu(value)}
+        rotulo={rotulo ?? "Marca"}
+        rotuloSoNoLargo={!rotulo}
+        valor={resumoMarcaMenu(value, opcoes)}
         ativo={!allActive}
-        icone={<Tag aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
+        icone={icone ?? (rotulo ? undefined : <Tag aria-hidden="true" className="h-4 w-4 text-ink-faint" />)}
         largura="w-60"
       >
         {(fechar) => (
-          <div role="group" aria-label="Filtro de marcas" className="flex flex-col gap-0.5">
+          <div role="group" aria-label={rotulo ? `Filtro de ${rotulo.toLowerCase()}` : "Filtro de marcas"} className="flex flex-col gap-0.5">
             {botoes(fechar)}
           </div>
         )}
