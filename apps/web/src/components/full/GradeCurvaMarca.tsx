@@ -12,7 +12,7 @@ import { Grid3x3 } from "lucide-react";
 
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 
-import BarraItens from "@/components/full/BarraItens";
+import BarraItens, { LegendaBarra } from "@/components/full/BarraItens";
 import Panel from "@/components/ui/Panel";
 import Segmented from "@/components/ui/Segmented";
 import {
@@ -145,7 +145,8 @@ export default function GradeCurvaMarca({
       }
       semPadding
     >
-      <div className="mt-3 border-t border-line">
+      <LegendaBarra className="px-4 pt-3" />
+      <div className="mt-2 border-t border-line">
         <div aria-hidden="true" className={`hidden gap-x-3 bg-raised px-4 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted lg:grid ${COLUNAS}`}>
           <span>Marca</span>
           <span>Itens</span>

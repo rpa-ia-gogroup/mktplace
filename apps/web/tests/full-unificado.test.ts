@@ -1036,8 +1036,8 @@ test("T-0085 marca sem foto e' ausencia: — na celula, nunca R$ 0/dia", () => {
   assert.equal(marcaSemFoto((SEM_FOTO.ml as CanalImpactoOk).marcas[0]), false);
   assert.equal(perdaDestaque("ml", barbours), null);
   assert.equal(fmtReais(perdaDestaque("ml", barbours)), "—");
-  const tela = fonte("app/full/VisaoGeralFull.tsx");
-  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*><Ausente motivo="sem fotografia no dia" \/><\/span>;/);
+  const tela = fonte("src/components/full/VisaoRapidaEstoque.tsx");
+  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*title="sem fotografia no dia">Impacto —<\/span>;/);
 });
 
 test("B2-02: a janela do Envio ML e do Desempenho Shopee vai para a URL e volta no reload", async () => {

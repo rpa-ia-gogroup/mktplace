@@ -113,12 +113,24 @@ test("texto da barra: so' o que existe, singular e plural", () => {
   assert.equal(descreverPartes({ itens: 12, ruptura: 3, baixo: 2, excesso: 0, demais: 7 }), "12 itens: 3 em ruptura, 2 com estoque baixo, 7 demais");
 });
 
-test("Visao geral usa a visao rapida; a grade nao rola na horizontal", () => {
+test("Visao geral: bloco fundido logo abaixo dos indicadores, sem a tabela antiga; grade nao rola na horizontal", () => {
   const vg = readFileSync(join(import.meta.dirname, "../app/full/VisaoGeralFull.tsx"), "utf8");
   const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
   const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
-  assert.match(vg, /<VisaoRapidaEstoque canais=\{canais\}/);
+  assert.match(vg, /<VisaoRapidaEstoque canais=\{canais\} impacto=\{impacto\}/);
+  assert.doesNotMatch(vg, /titulo="Ruptura por marca"/); // a tabela antiga saiu: um bloco so'
+  assert.ok(vg.indexOf("<VisaoRapidaEstoque") < vg.indexOf('titulo="Sem estoque por curva"')); // logo abaixo dos 4 indicadores
   assert.doesNotMatch(grade, /TableScrollHint|min-w-max/); // so o seletor de curva rola, a lista de marcas nao
   assert.match(rapida, /hrefAba\(ABA\[c\.canal\]\)/); // link para o detalhe do canal
-  assert.doesNotMatch(rapida, /fmtReais|perda/); // R$ nunca soma entre canais: aqui nem aparece
+  assert.match(rapida, /perdaDestaque\(canal/); // R$ e % sao do proprio canal...
+  assert.doesNotMatch(rapida, /reduce\(/); // ...e nunca somados entre canais
+  assert.match(rapida, /<LegendaBarra excessoComoDemais/); // legenda de uma linha; excesso cinza junto com demais
+  assert.match(grade, /<LegendaBarra/);
+});
+
+test("barra: excesso em tom fraco (nao o roxo cheio); na visao rapida vira demais", async () => {
+  const barra = readFileSync(join(import.meta.dirname, "../src/components/full/BarraItens.tsx"), "utf8");
+  assert.match(barra, /chave: "excesso", cor: "bg-accent\/\d+"/);
+  assert.doesNotMatch(barra, /chave: "excesso", cor: "bg-accent"/);
+  assert.equal(descreverPartes({ itens: 5, ruptura: 0, baixo: 0, excesso: 0, demais: 5 }), "5 itens: 5 demais");
 });

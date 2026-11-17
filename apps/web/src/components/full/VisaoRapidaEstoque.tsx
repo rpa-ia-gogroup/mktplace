@@ -1,15 +1,19 @@
 import Link from "next/link";
 
-import BarraItens from "@/components/full/BarraItens";
+import BarraItens, { LegendaBarra } from "@/components/full/BarraItens";
 import Panel from "@/components/ui/Panel";
 import { hrefAba } from "@/lib/full-abas";
-import { NOME_CANAL_LONGO, SELO_CANAL, type ResumoCanal, type ResumoOk } from "@/lib/full-visao-geral";
+import {
+  fmtPct, fmtReais, marcaSemFoto, NOME_CANAL_LONGO, pctDestaque, perdaDestaque, rupturaPorMarca, SELO_CANAL,
+  type Canal, type ImpactoRuptura, type LinhaMarca, type ResumoCanal, type ResumoOk,
+} from "@/lib/full-visao-geral";
 import { tituloMarca } from "@/lib/ml-full-estoque";
 
 /**
- * VISAO RAPIDA do estoque Full por canal: por marca, a barra dos itens e as
- * contagens de ruptura e estoque baixo; o detalhe (curva, lista, excesso) fica
- * na aba do canal. So' contagens de itens: R$ nunca soma entre canais.
+ * VISAO RAPIDA do estoque Full por canal (primeiro bloco depois dos indicadores):
+ * por marca, a barra dos itens, as contagens de ruptura e estoque baixo e, embaixo,
+ * o impacto potencial DO CANAL (R$/dia e %). R$ nunca soma entre canais: cada canal
+ * tem o seu quadro. O detalhe (curva, lista, excesso) fica na aba do canal.
  */
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 /** No celular a barra precisa de espaco: nome e contagens mais justos. */
@@ -24,7 +28,40 @@ function Contagem({ n, tom }: { n: number | null | undefined; tom: string }) {
   );
 }
 
-function Canal({ c }: { c: ResumoCanal }) {
+/**
+ * Segunda linha da marca: "Impacto R$ 13,3 mil/dia · 4,2%". Marca sem fotografia ou sem preco: "—"
+ * (nunca R$ 0 por ausencia); Shopee com estoque do vendedor: diz o porque, nao "R$ 0".
+ */
+function Impacto({ canal, l }: { canal: Canal; l: LinhaMarca }) {
+  const m = l.impacto[canal];
+  if (!m) return null;
+  const forte = "block text-xs text-ink-muted";
+  if (marcaSemFoto(m)) return <span className={forte} title="sem fotografia no dia">Impacto —</span>;
+  if (canal === "shopee" && l.vendedorTemEstoque) {
+    return <span className={forte} title={`${fmtReais(m.perda_dia)}/dia potencial no Full, sem contar o estoque do vendedor`}>Impacto: vendedor tem estoque</span>;
+  }
+  const v = perdaDestaque(canal, m);
+  if (v === null) return <span className={forte} title="sem preço">Impacto —</span>;
+  const p = pctDestaque(canal, m);
+  const detalhe = `Impacto potencial${p !== null ? `: ${fmtPct(p)} do Full da marca` : ""}`;
+  return (
+    <span className={`${forte} tabular-nums`} title={detalhe}>
+      Impacto <span className="font-medium text-ink">{fmtReais(v)}/dia</span>{p !== null && <> · {fmtPct(p)}</>}
+      <span className="sr-only"> ({detalhe})</span>
+    </span>
+  );
+}
+
+/** Quem mais pesa primeiro: maior impacto do canal, depois mais ruptura, depois mais baixo; sem leitura por ultimo. */
+function ordenar(canal: Canal, linhas: LinhaMarca[]): LinhaMarca[] {
+  const medida = (l: LinhaMarca) => l.celulas[canal]?.ruptura != null;
+  const perda = (l: LinhaMarca) => (l.impacto[canal] ? perdaDestaque(canal, l.impacto[canal]!) ?? -1 : -1);
+  return [...linhas].sort((a, b) =>
+    Number(medida(b)) - Number(medida(a)) || perda(b) - perda(a)
+    || (b.celulas[canal]?.ruptura ?? 0) - (a.celulas[canal]?.ruptura ?? 0) || (b.celulas[canal]?.baixo ?? 0) - (a.celulas[canal]?.baixo ?? 0));
+}
+
+function Canal({ c, linhas }: { c: ResumoCanal; linhas: LinhaMarca[] }) {
   const nome = NOME_CANAL_LONGO[c.canal];
   const cab = (
     <div className="flex items-center justify-between gap-3">
@@ -42,9 +79,6 @@ function Canal({ c }: { c: ResumoCanal }) {
   if (c.status !== "ok") {
     return <div className="px-4 py-3">{cab}<p className="mt-1 text-sm text-ink-faint" title={c.motivo}>Sem dado agora</p></div>;
   }
-  // Quem mais precisa de acao primeiro; marca sem leitura por ultimo.
-  const marcas = [...c.marcas].sort((a, b) =>
-    (b.ruptura === null ? 0 : 1) - (a.ruptura === null ? 0 : 1) || (b.ruptura ?? 0) - (a.ruptura ?? 0) || (b.baixo ?? 0) - (a.baixo ?? 0));
   return (
     <div className="px-4 py-3">
       {cab}
@@ -55,21 +89,25 @@ function Canal({ c }: { c: ResumoCanal }) {
         <li aria-hidden="true" className={`grid ${COLUNAS} items-center pb-1 text-[11px] font-semibold uppercase tracking-wide text-ink-faint`}>
           <span>Marca</span><span>Itens</span><span className="text-center">Ruptura</span><span className="text-center">Baixo</span>
         </li>
-        {marcas.map((m) => {
+        {ordenar(c.canal, linhas).map((l) => {
+          const m = l.celulas[c.canal]!;
           const medida = m.base !== null && m.ruptura !== null && m.baixo != null && m.excesso != null;
           const base = m.base ?? 0, ruptura = m.ruptura ?? 0, baixo = m.baixo ?? 0, excesso = m.excesso ?? 0;
           return (
-            <li key={m.marca} className={`grid ${COLUNAS} items-center border-t border-line py-2`} title={medida ? undefined : m.motivo}>
-              <span className="truncate text-sm font-medium text-ink">{tituloMarca(m.marca)}</span>
-              {medida ? (
-                <>
-                  <BarraItens c={{ itens: base, ruptura, baixo, excesso, demais: Math.max(0, base - ruptura - baixo - excesso) }} />
-                  <Contagem n={m.ruptura} tom="bg-crit-soft text-crit-ink" />
-                  <Contagem n={m.baixo} tom="bg-warn-soft text-warn-ink" />
-                </>
-              ) : (
-                <span className="col-span-3 text-sm text-ink-faint">sem dado{m.motivo ? <span className="sr-only">: {m.motivo}</span> : null}</span>
-              )}
+            <li key={l.marca} className="border-t border-line py-2" title={medida ? undefined : m.motivo}>
+              <div className={`grid ${COLUNAS} items-center`}>
+                <span className="truncate text-sm font-medium text-ink">{tituloMarca(l.marca)}</span>
+                {medida ? (
+                  <>
+                    <BarraItens excessoComoDemais c={{ itens: base, ruptura, baixo, excesso, demais: Math.max(0, base - ruptura - baixo - excesso) }} />
+                    <Contagem n={m.ruptura} tom="bg-crit-soft text-crit-ink" />
+                    <Contagem n={m.baixo} tom="bg-warn-soft text-warn-ink" />
+                  </>
+                ) : (
+                  <span className="col-span-3 text-sm text-ink-faint">sem dado{m.motivo ? <span className="sr-only">: {m.motivo}</span> : null}</span>
+                )}
+              </div>
+              {medida && <div className="mt-0.5"><Impacto canal={c.canal} l={l} /></div>}
             </li>
           );
         })}
@@ -78,12 +116,14 @@ function Canal({ c }: { c: ResumoCanal }) {
   );
 }
 
-export default function VisaoRapidaEstoque({ canais }: { canais: readonly ResumoCanal[] }) {
+export default function VisaoRapidaEstoque({ canais, impacto }: { canais: readonly ResumoCanal[]; impacto: ImpactoRuptura | null }) {
+  const linhas = rupturaPorMarca([...canais], impacto);
   return (
     <Panel titulo="Estoque por marca" semPadding
-      ajuda="Itens de cada marca no Full: ruptura, estoque baixo, excesso e, em cinza, os demais. Quem mais precisa de ação vem primeiro. Contagem de itens, sem R$. Curva e lista de itens: no detalhe do canal.">
+      ajuda="Itens de cada marca no Full: ruptura, estoque baixo e, em cinza, os demais (suficiente, sem giro, excesso). Embaixo, o impacto potencial da marca no canal: R$ por dia e % do Full da marca, medidos em cada canal e nunca somados entre canais. Ordenado do maior impacto para o menor. Curva, excesso e lista de itens: no detalhe do canal.">
+      <LegendaBarra excessoComoDemais className="px-4 pt-2" />
       <div className="mt-2 grid divide-y divide-line border-t border-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
-        {canais.map((c) => <Canal key={c.canal} c={c} />)}
+        {canais.map((c) => <Canal key={c.canal} c={c} linhas={linhas.filter((l) => l.celulas[c.canal])} />)}
       </div>
     </Panel>
   );
