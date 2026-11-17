@@ -20,6 +20,7 @@ from app.routers import (
     regioes,
     tiktok_abertos,
     top_produtos,
+    chaves_pessoais,
     marcas_menores,
 )
 
@@ -65,6 +66,7 @@ app.include_router(auth_permitido.router)
 # Top 5 produtos por marca na Gerencial (base consolidada por NF).
 app.include_router(top_produtos.router)
 app.include_router(marcas_menores.router)
+app.include_router(chaves_pessoais.router)
 
 
 @app.on_event("startup")

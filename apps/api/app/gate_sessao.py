@@ -6,6 +6,9 @@ fronteira real de seguranca: sem cookie `torre_session` valido, a API nega.
 Modos (`TORRE_AUTH_MODE`): `off` (nao faz nada), `report` (decide como o
 enforce, mas so' loga e deixa passar) e `enforce` (nega). Modo desconhecido
 conta como `enforce` (fail-closed). Nenhum token/cookie/chave vai a log ou resposta.
+
+Alem do cookie e da chave de servico, aceita `Authorization: Bearer torre_pat_...`
+(chave pessoal, `app/services/chaves_pessoais.py`): o ator vira o dono da chave.
 """
 from __future__ import annotations
 
@@ -13,10 +16,15 @@ import hmac
 import json
 import logging
 from dataclasses import dataclass
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Callable, Optional
+
+import anyio
 
 from app.config import settings
-from app.sessao import SEGREDO_MINIMO, SESSION_COOKIE, dominios_permitidos, validar_sessao
+from app.services import chaves_pessoais
+from app.services.chaves_pessoais import PREFIXO as PREFIXO_CHAVE
+from app.sessao import SEGREDO_MINIMO, SESSION_COOKIE, dominios_permitidos, email_permitido, validar_sessao
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +64,7 @@ def decidir(
     segredo: str,
     dominios: tuple[str, ...],
     chave_servico_esperada: str,
+    dono_chave_pessoal: Optional[str] = None,
 ) -> Decisao:
     """Funcao pura: decide liberar ou negar."""
     if modo == "off":
@@ -71,6 +80,8 @@ def decidir(
         and hmac.compare_digest(chave_servico.encode("utf-8"), chave_servico_esperada.encode("utf-8"))
     ):
         return Decisao(True, ator=ATOR_SERVICO)
+    if dono_chave_pessoal:
+        return Decisao(True, ator=dono_chave_pessoal)
     sessao = validar_sessao(cookie_sessao, segredo, dominios)
     if sessao is not None:
         return Decisao(True, ator=sessao.email)
@@ -112,9 +123,30 @@ async def _negar(send, status: int) -> None:
     await send({"type": "http.response.body", "body": dados})
 
 
+def _bearer_pessoal(headers: list[tuple[bytes, bytes]]) -> Optional[str]:
+    tipo, _, valor = (_header(headers, "authorization") or "").strip().partition(" ")
+    valor = valor.strip()
+    return valor if tipo.lower() == "bearer" and valor.startswith(PREFIXO_CHAVE) else None
+
+
+def _validar_no_banco(chave: str):
+    """Dono da chave pessoal ou `None`. Falha de banco = `None` (fail-closed)."""
+    from app.database import engine
+
+    if engine is None:
+        return None
+    try:
+        with engine.connect() as conn:
+            return chaves_pessoais.validar(conn, chave, datetime.now(timezone.utc))
+    except Exception as exc:  # noqa: BLE001 — fail-closed, sem vazar a mensagem (pode ter o DSN)
+        logger.error("chave_pessoal validacao falhou (%s)", type(exc).__name__)
+        return None
+
+
 class GateDeSessao:
-    def __init__(self, app) -> None:
+    def __init__(self, app, validar_chave: Callable[[str], object] = _validar_no_banco) -> None:
         self.app = app
+        self.validar_chave = validar_chave
 
     async def __call__(self, scope, receive, send) -> None:
         if scope.get("type") != "http":
@@ -129,6 +161,20 @@ class GateDeSessao:
             return
 
         headers = scope.get("headers") or []
+        dono = None
+        chave = _bearer_pessoal(headers)
+        if chave and not _publico(scope.get("path", "")):
+            achada = await anyio.to_thread.run_sync(self.validar_chave, chave)
+            # dono que saiu da lista de acesso perde a chave na hora (fail-closed)
+            if achada is not None and not email_permitido(achada.dono_email, dominios_permitidos(settings.allowed_email_domains)):
+                logger.warning("chave_pessoal recusada via=api id=%s dono=%s motivo=dono_fora_da_lista", achada.id, achada.dono_email)
+                achada = None
+            if achada is not None:
+                dono = achada.dono_email
+                logger.info(
+                    "chave_pessoal uso via=api id=%s nome=%s dono=%s metodo=%s caminho=%s",
+                    achada.id, achada.nome, achada.dono_email, scope.get("method", ""), scope.get("path", ""),
+                )
         decisao = decidir(
             metodo=scope.get("method", ""),
             caminho=scope.get("path", ""),
@@ -138,6 +184,7 @@ class GateDeSessao:
             segredo=settings.auth_secret.get_secret_value().strip(),
             dominios=dominios_permitidos(settings.allowed_email_domains),
             chave_servico_esperada=settings.torre_service_key.get_secret_value().strip(),
+            dono_chave_pessoal=dono,
         )
 
         if decisao.liberar:

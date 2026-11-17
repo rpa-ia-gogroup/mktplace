@@ -293,6 +293,9 @@ class Settings(BaseSettings):
     allowed_email_domains: str = "gocase.com,gobeaute.com.br"
     # Chave do Oraculo MCP (header x-torre-service-key); >= 32 caracteres, vazia = desligada.
     torre_service_key: SecretStr = SecretStr("")
+    # CHAVES-PESSOAIS: e-mails (CSV) que criam, listam e revogam chaves em /api/v1/chaves.
+    # Vazio = ninguem administra (fail-closed); o valor vem de TORRE_ADMIN_EMAILS no Render.
+    torre_admin_emails: str = ""
 
     @property
     def expedicao_alerta_destinatarios_list(self) -> list[str]:
