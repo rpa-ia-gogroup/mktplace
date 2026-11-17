@@ -212,7 +212,7 @@ export default function ChavesPage() {
                   <span className="text-xs text-ink-muted">criada {data(c.criada_em)} por {c.criada_por}</span>
                   <span className="break-all text-ink">{c.dono_email}</span>
                   <span className="text-xs tabular-nums text-ink-muted">
-                    Vence {data(c.expira_em)} · Último uso {c.ultimo_uso_em ? data(c.ultimo_uso_em) : "nunca"}
+                    Vence {data(c.expira_em)} · {c.ultimo_uso_em ? `Último uso ${data(c.ultimo_uso_em)}` : "Nunca usada"}
                   </span>
                   <span className="mt-1 flex min-h-11 items-center justify-between gap-3">
                     <span className={`font-medium ${s.classe}`}>{s.rotulo}</span>

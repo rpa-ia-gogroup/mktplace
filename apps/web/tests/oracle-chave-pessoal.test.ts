@@ -161,3 +161,8 @@ test("MCP ponta a ponta: chave recusada pela API = 401, sem nome/dono no log", a
   assert.ok(!(await res.text()).includes(CHAVE));
   assert.ok(!JSON.stringify(eventos).includes(CHAVE));
 });
+
+test("/admin/chaves: a topbar mostra 'Chaves', nao repete a marca", async () => {
+  const { getRouteTitle } = await import("../src/components/shell/nav-config.ts");
+  assert.equal(getRouteTitle("/admin/chaves"), "Chaves");
+});

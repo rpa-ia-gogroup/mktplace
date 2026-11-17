@@ -153,6 +153,8 @@ export function isNavItemActive(pageHref: string, pathname: string): boolean {
  */
 export function getRouteTitle(pathname: string): string {
   if (pathname.startsWith("/brand/")) return "Gerencial";
+  // tela de admin fora do menu: nome proprio em vez de repetir a marca
+  if (pathname.startsWith("/admin/chaves")) return "Chaves";
   // Com AS DUAS flags ligadas, e nao `NAV_SECTIONS`: quem esta NA rota ja
   // passou pelo guard dela, entao a flag correspondente e necessariamente
   // `true`. Resolver o titulo por uma lista sem o item deixaria a topbar
