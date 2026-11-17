@@ -306,9 +306,9 @@ class Snapshot:
 # velho com data nova, sem nada indicando isso na tela.
 #
 # O corte e' a meia-noite BRT do `ref_date`, e vale para as DUAS fontes:
-#   - catalogo: todo produto FBS LISTADO (`normal`) de cada conta tem de ter sido
-#     capturado hoje. Item `unlist` fica de fora: o upsert com guarda do catalogo nao
-#     avanca `ingested_at` de linha que nao mudou (falso negativo da kokeshi em 16/11);
+#   - catalogo: a conta tem de ter gravado o catalogo hoje (ultima gravacao da conta
+#     depois do corte). Nao por item: o upsert com guarda nao avanca `ingested_at` de
+#     linha que nao mudou (falso negativo da kokeshi em 16/11, ver CTE `catalogo`);
 #   - pedidos: a demanda usa a janela [ref_date - 28, ref_date), entao o D-1
 #     precisa estar COMPLETO -- a ultima ingestao de pedidos tem de ser depois
 #     da meia-noite. Pedido parado infla a cobertura em silencio.
@@ -327,18 +327,26 @@ SQL_PORTAO_FONTE = text("""
     fbs AS (
         SELECT r.shop_account,
                COUNT(*)                                        AS produtos_fbs,
-               COUNT(*) FILTER (WHERE r.stock_info IS NULL)    AS fbs_sem_stock_info,
-               -- frescor so' pelos itens LISTADOS: o upsert do catalogo so' avanca
-               -- `ingested_at` quando o dado muda, e item `unlist` parado fica com a
-               -- data antiga mesmo lido hoje (kokeshi 16/11: 2 kits unlist de 15/11
-               -- barraram o dia). Sem item listado, vale o mais recente da conta.
-               COALESCE(MIN(r.ingested_at) FILTER (WHERE lower(s.item_status) = 'normal'),
-                        MAX(r.ingested_at))                    AS fbs_capturado_min
+               COUNT(*) FILTER (WHERE r.stock_info IS NULL)    AS fbs_sem_stock_info
           FROM raw.shopee_products r
           JOIN silver.stg_shopee_products s
             ON s.shop_account = r.shop_account AND s.item_id = r.item_id
          WHERE s.is_fulfillment_by_shopee
            AND r.shop_account = ANY(:contas)
+         GROUP BY 1
+    ),
+    -- Marca de execucao do catalogo POR CONTA = a ultima gravacao da conta em
+    -- raw.shopee_products. NAO o MIN por item: o upsert do catalogo so' avanca
+    -- `ingested_at` quando o dado muda, e item parado (unlist ou listado) fica com a
+    -- data antiga mesmo lido hoje -- medido 16/11: kokeshi 4 itens (2 FBS unlist,
+    -- 2 normal) e lescent 1 normal com 15/11, todo o resto da conta com 16/11.
+    -- shortcut: e' a ultima linha GRAVADA, nao um registro do run; um catalogo que
+    -- leu tudo sem mudar nada barraria. Trocar por marca de run gravada pelo
+    -- shopee_catalog_etl se isso acontecer.
+    catalogo AS (
+        SELECT shop_account, MAX(ingested_at) AS catalogo_gravado_max
+          FROM raw.shopee_products
+         WHERE shop_account = ANY(:contas)
          GROUP BY 1
     ),
     versao AS (
@@ -361,11 +369,12 @@ SQL_PORTAO_FONTE = text("""
     SELECT c.shop_account,
            COALESCE(f.produtos_fbs, 0)       AS produtos_fbs,
            COALESCE(f.fbs_sem_stock_info, 0) AS fbs_sem_stock_info,
-           f.fbs_capturado_min,
+           k.catalogo_gravado_max,
            COALESCE(v.silver_divergente, 0)  AS silver_divergente,
            p.pedidos_ingeridos_max
       FROM contas c
       LEFT JOIN fbs f     ON f.shop_account = c.shop_account
+      LEFT JOIN catalogo k ON k.shop_account = c.shop_account
       LEFT JOIN versao v  ON v.shop_account = c.shop_account
       LEFT JOIN pedidos p ON p.shop_account = c.shop_account
      ORDER BY c.shop_account
@@ -399,9 +408,9 @@ def avaliar_portao(linhas, ref_date: date) -> list[str]:
             problemas.append(
                 f"{conta}: {r['fbs_sem_stock_info']} produto(s) FBS sem stock_info "
                 "(sairiam da fotografia em silencio)")
-        if r["fbs_capturado_min"] is None or r["fbs_capturado_min"] < corte:
+        if r["catalogo_gravado_max"] is None or r["catalogo_gravado_max"] < corte:
             problemas.append(
-                f"{conta}: catalogo FBS capturado em {r['fbs_capturado_min']}, "
+                f"{conta}: catalogo gravado pela ultima vez em {r['catalogo_gravado_max']}, "
                 f"antes do corte {corte.isoformat()}")
         if int(r["silver_divergente"]) > 0:
             problemas.append(
