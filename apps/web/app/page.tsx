@@ -31,6 +31,7 @@ import { useGlobalFilters } from "@/hooks/useGlobalFilters";
 import { useBaseVendas } from "@/hooks/useBaseVendas";
 import { notaBase } from "@/lib/base-vendas";
 import SeletorBase from "@/components/SeletorBase";
+import OportunidadesTop3 from "@/components/gerencial/OportunidadesTop3";
 import { useGerencialSources } from "@/hooks/useGerencialSources";
 import { HOME_FILTER_DEFAULTS } from "@/lib/filters/home-defaults";
 import { mergeFilteredHref } from "@/lib/filters/nav-links";
@@ -850,6 +851,9 @@ function GerencialComGrandes() {
 
       {visaoAtiva === "geral" && (
         <>
+      {/* OPORTUNIDADES-1: as 3 de maior ganho real com a acao (segue o filtro de marca). */}
+      <OportunidadesTop3 brands={filters.brands} />
+
       {/* ---- Dobra 2: como evoluiu / onde ----
           12 colunas: 7/5 a partir de `lg`. SEM `items-start` e SEM `row-span`:
           os dois itens esticam juntos. */}

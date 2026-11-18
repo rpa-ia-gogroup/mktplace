@@ -58,6 +58,8 @@ from app.schemas.full_impacto import ImpactoRupturaResponse
 from app.services import full_curva_abc_service as curva_abc_svc
 from app.schemas.full_curva_abc import CurvaAbcResponse, CurvaMeta
 from app.services import full_slow_moving_service as slow_svc
+from app.services import oportunidades_service as oport_svc
+from app.schemas.oportunidades import OportunidadesResponse
 from app.schemas.full_slow_moving import SlowMovingResponse
 from app.services.ml_fulfillment_service import (
     MLFulfillmentUnavailable,
@@ -1342,6 +1344,23 @@ def full_slow_moving():
     except Exception as exc:  # noqa: BLE001 -- texto do banco nunca sai
         logger.exception("full-slow-moving falhou")
         raise HTTPException(503, "Base do Supply indisponivel.") from exc
+
+
+@router.get("/oportunidades", response_model=OportunidadesResponse)
+def oportunidades(
+    brands: Optional[list[str]] = Query(None, description="Marcas; vazio = todas."),
+    db: Session = Depends(get_db),
+):
+    """Top 3 oportunidades de ganho real (R$ em 30 dias) com a acao: ruptura no
+    Full (venda perdida) e capital parado (slow moving). No geral e por marca."""
+    ml, shopee = settings.ml_full_stock_api_enabled, settings.shopee_fbs_stock_enabled
+    return oport_svc.get_oportunidades(
+        lambda: impacto_svc.get_impacto_ruptura(
+            _require_db(db) if (ml or shopee) else db, ml_ligado=ml, shopee_ligado=shopee),
+        # Sem a venda diaria por canal: aqui so' importam estoque, custo e venda/dia do Supply.
+        lambda: slow_svc.get_slow_moving(datamart_leitura.consultar, hoje=today_brt(), lookups=lambda: None).model_dump(),
+        brands=brands,
+    )
 
 
 @router.get("/full-impacto-ruptura", response_model=ImpactoRupturaResponse)

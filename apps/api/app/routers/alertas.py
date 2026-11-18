@@ -33,6 +33,11 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
+from app.deps.period import today_brt
+from app.services import datamart_leitura
+from app.services import full_impacto_service as impacto_svc
+from app.services import full_slow_moving_service as slow_svc
+from app.services import oportunidades_service as oport_svc
 from app.services import torre_alertas, torre_expedicao_dia, torre_report
 from app.services.alerta_vencidos import EVENTO, avaliar
 from app.services.slack_dm import (
@@ -138,6 +143,19 @@ def disparar_alertas_criticos(
     return corpo
 
 
+def _oportunidades_do_report(db: Session) -> list[str]:
+    """OPORTUNIDADES-1: top 3 do grupo para o report. Falha = secao vazia; o report sai igual."""
+    try:
+        ml, shopee = settings.ml_full_stock_api_enabled, settings.shopee_fbs_stock_enabled
+        r = oport_svc.get_oportunidades(
+            lambda: impacto_svc.get_impacto_ruptura(db, ml_ligado=ml, shopee_ligado=shopee),
+            lambda: slow_svc.get_slow_moving(datamart_leitura.consultar, hoje=today_brt(), lookups=lambda: None).model_dump())
+        return torre_report.linhas_oportunidades(r["geral"])
+    except Exception as exc:  # noqa: BLE001 -- oportunidade e' extra no report
+        logger.warning("report diario: oportunidades fora (%s)", type(exc).__name__)
+        return []
+
+
 @router.post("/report-diario")
 def disparar_report_diario(
     simular: bool = Query(False, description="Monta e devolve o report sem enviar."),
@@ -152,6 +170,7 @@ def disparar_report_diario(
         logger.warning("report diario: leitura falhou (%s)", type(exc).__name__)
         raise HTTPException(503, "Dados indisponiveis.") from None
     rep = torre_report.compor_report(dados)
+    rep.oportunidades = _oportunidades_do_report(db)
     texto = torre_report.montar_mensagem(rep)
     msg = torre_report.montar_blocos(rep)
     corpo = {"dia": rep.ontem.isoformat(), "avancos": len(rep.avancos),
