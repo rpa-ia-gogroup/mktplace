@@ -26,7 +26,49 @@ _cache: dict[int, tuple[float, dict]] = {}
 _trava = threading.Lock()
 _cipher: dict[str, str] = {}
 
-AUTOR = {"BUYER": "Comprador", "SELLER": "Loja", "SYSTEM": "Plataforma", "OPERATOR": "Plataforma"}
+AUTOR = {"BUYER": "Comprador", "SELLER": "Loja", "SYSTEM": "Plataforma", "OPERATOR": "Plataforma",
+         "BUYER_CANCEL": "Comprador", "SELLER_CANCEL": "Loja", "SYSTEM_CANCEL": "Plataforma"}
+#: Nao pago: o TikTok cancela sozinho; fica fora do Pareto (mesma regra da Shopee), contado a' parte.
+NAO_PAGO = {"customer overdue to pay"}
+#: Motivos mais comuns em portugues; fora do mapa, sai o texto do TikTok.
+MOTIVOS_PT = {
+    "no longer needed": "Não quer mais",
+    "bought by mistake": "Comprou por engano",
+    "need to change payment method": "Quer mudar a forma de pagamento",
+    "need to change delivery address": "Quer mudar o endereço",
+    "need to change the delivery address": "Quer mudar o endereço",
+    "package received but missing item": "Pacote chegou faltando item",
+    "package arrived damaged. example: spilled liquid, damaged box.": "Pacote chegou danificado",
+    "package wasn't received": "Pacote não recebido",
+    "package was not received": "Pacote não recebido",
+    "item doesn't match description": "Produto diferente do anúncio",
+    "item does not match description": "Produto diferente do anúncio",
+    "wrong item was sent": "Produto errado enviado",
+    "received wrong item": "Produto errado enviado",
+    "product is defective or doesn't work": "Produto com defeito",
+    "found a better price": "Achou preço melhor",
+    "delivery takes too long": "Entrega demorando",
+    "seller is out of stock": "Sem estoque",
+    "out of stock": "Sem estoque",
+    "item is counterfeit": "Suspeita de falsificação",
+    "expired product": "Produto vencido",
+}
+
+
+def _pt(motivo: str) -> str:
+    return MOTIVOS_PT.get(motivo.strip().lower(), motivo)
+
+
+def _autor(c: dict) -> str:
+    for k in ("cancel_initiator", "cancel_user", "initiator", "cancel_role", "role", "cancel_type"):
+        v = str(c.get(k) or "").upper()
+        if v in AUTOR:
+            return AUTOR[v]
+        if v.startswith("BUYER"):
+            return "Comprador"
+        if v.startswith("SELLER"):
+            return "Loja"
+    return "Plataforma"
 
 
 def janela(dias: int, hoje: date) -> tuple[date, date]:
@@ -56,18 +98,26 @@ def _itens(linhas) -> list[dict]:
 
 def coletar_marca(cli: Cliente, ini: int, fim: int) -> dict:
     corpo = {"create_time_ge": ini, "create_time_lt": fim}
-    devs, t1 = cli.paginar("/return_refund/202309/returns/search", corpo, "return_orders")
-    cans, t2 = cli.paginar("/return_refund/202309/cancellations/search", corpo, "cancellations")
+    devs, t1 = cli.paginar("/return_refund/202309/returns/search", corpo, "return_orders", page_size=100, max_paginas=100)
+    cans, t2 = cli.paginar("/return_refund/202309/cancellations/search", corpo, "cancellations", page_size=100, max_paginas=100)
+    # pedido de devolucao que o proprio comprador desistiu nao e' problema (mesma regra da Shopee)
+    devs = [d for d in devs if "CANCEL" not in str(d.get("return_status") or "").upper()]
+    texto = lambda x, *ks: next((x.get(k) for k in ks if x.get(k)), None) or "Sem motivo informado"  # noqa: E731
+    nao_pagos = [c for c in cans if texto(c, "cancel_reason_text", "cancel_reason").strip().lower() in NAO_PAGO]
+    cans = [c for c in cans if c not in nao_pagos]
     return {
+        "nao_pagos": len(nao_pagos),
+        # nomes dos campos (sem valores) para conferir o contrato da API
+        "campos": {"devolucao": sorted(devs[0])[:40] if devs else [], "cancelamento": sorted(cans[0])[:40] if cans else []},
         "devolucoes": [{
-            "motivo": d.get("return_reason_text") or d.get("return_reason") or "Sem motivo informado",
+            "motivo": _pt(texto(d, "return_reason_text", "return_reason")),
             "tipo": d.get("return_type"), "status": d.get("return_status"),
             "valor": _valor((d.get("refund_amount") or {}).get("refund_total")),
             "itens": _itens(d.get("return_line_items")),
         } for d in devs],
         "cancelamentos": [{
-            "motivo": c.get("cancel_reason_text") or c.get("cancel_reason") or "Sem motivo informado",
-            "autor": AUTOR.get(str(c.get("cancel_initiator") or "").upper(), "Plataforma"),
+            "motivo": _pt(texto(c, "cancel_reason_text", "cancel_reason")),
+            "autor": _autor(c),
             "status": c.get("cancel_status"),
             "itens": _itens(c.get("cancel_line_items")),
         } for c in cans],
@@ -126,7 +176,7 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
         devs, cans = d["devolucoes"], d["cancelamentos"]
         marcas.append({"marca": conta, "estado": "dado", "motivo": None, "truncado": d["truncado"],
                        "devolucoes": len(devs), "reembolsado": round(sum(x["valor"] for x in devs), 2),
-                       "cancelamentos": len(cans),
+                       "cancelamentos": len(cans), "nao_pagos": d["nao_pagos"], "campos": d["campos"],
                        "cancelamentos_comprador": sum(1 for c in cans if c["autor"] == "Comprador")})
         for tipo, lista in (("Devolução", devs), ("Cancelamento", cans)):
             for x in lista:
