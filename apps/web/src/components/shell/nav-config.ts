@@ -52,6 +52,8 @@ export const NAV_SECTIONS: NavSection[] = [
       // FULL-UNIFICADO-1: `/full`, rota unica com sub-abas. Rota PROPRIA, e nao
       // filha de /operacoes, porque `isNavItemActive` casa por prefixo.
       { href: "/full", label: "Full" },
+      // Slow moving: aba propria (pedido da Nath, 18/11); o estoque parado e' do Marketplace, nao so' do Full.
+      { href: "/slow-moving", label: "Slow Moving" },
     ],
   },
   // METAS-1 — Metas e' a unica tela da Torre que RECEBE dado digitado pelo time.

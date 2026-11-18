@@ -16,7 +16,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { CircleDollarSign, Snowflake, Timer, TrendingUp, type LucideIcon } from "lucide-react";
 
 import Aba from "@/components/layout/Aba";
-import { useVisoesFull } from "@/components/full/useVisoesFull";
 import BrandFilter from "@/components/BrandFilter";
 import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
@@ -97,7 +96,6 @@ const FAIXAS: { rotulo: string; passa: (s: SkuSlowMoving) => boolean }[] = [
 ];
 
 export default function SlowMovingClient() {
-  const abas = useVisoesFull();
   const [dados, setDados] = useState<SlowMovingResponse | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -206,7 +204,7 @@ export default function SlowMovingClient() {
 
   return (
     <Aba
-      {...abas}
+      titulo="Slow Moving"
       // O Supply publica so' o dia da fotografia (sem hora): o selo de horario mentiria.
       selo={dados?.atualizado_em ? <span className="text-xs text-ink-muted" title={dados.fonte}>Fotografia do Supply · {dataBr(dados.atualizado_em)}</span> : undefined}
       filtros={filtrosUI}

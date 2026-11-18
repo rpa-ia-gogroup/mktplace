@@ -1,10 +1,11 @@
+import { redirect } from "next/navigation";
+
 import { abasVisiveis, resolverAba, type AbaFull } from "@/lib/full-abas";
 import { shopeeFbsEnabled } from "@/lib/shopee-fbs-flag";
 import MLFullEstoqueClient from "../estoque-ml-full/MLFullEstoqueClient";
 import EstoqueFullClient from "../estoque-full/EstoqueFullClient";
 import FullMLClient from "../full-ml/FullMLClient";
 import FullShopeeClient from "../full-shopee/FullShopeeClient";
-import SlowMovingClient from "../full-slow-moving/SlowMovingClient";
 import VisaoGeralFull from "./VisaoGeralFull";
 
 /**
@@ -24,13 +25,15 @@ const CONTEUDO: Record<AbaFull, () => React.ReactNode> = {
   "estoque-ml": () => <MLFullEstoqueClient />,
   "estoque-shopee": () => <EstoqueFullClient />,
   "envio-ml": () => <FullMLClient />,
-  "slow-moving": () => <SlowMovingClient />,
   "desempenho-shopee": () => <FullShopeeClient />,
 };
 
 export default async function FullPage({ searchParams }: { searchParams: SearchParams }) {
   const abas = abasVisiveis({ desempenhoShopee: shopeeFbsEnabled() });
-  const ativa = resolverAba((await searchParams).aba, abas);
+  const pedida = (await searchParams).aba;
+  // Slow moving virou aba propria (18/11): link antigo vai para la'.
+  if (pedida === "slow-moving") redirect("/slow-moving");
+  const ativa = resolverAba(pedida, abas);
   // ALVO-GRADE: o titulo "Full" e as sub-abas sao do `<Aba>` de cada client (useVisoesFull).
   return CONTEUDO[ativa]();
 }

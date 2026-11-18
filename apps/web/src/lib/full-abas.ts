@@ -12,7 +12,6 @@ export const ABAS_FULL = [
   { chave: "estoque-ml", rotulo: "Estoque ML" },
   { chave: "estoque-shopee", rotulo: "Estoque Shopee" },
   { chave: "envio-ml", rotulo: "Envio ML" },
-  { chave: "slow-moving", rotulo: "Slow Moving" },
   { chave: "desempenho-shopee", rotulo: "Desempenho Shopee" },
 ] as const;
 
