@@ -1,7 +1,7 @@
 // Para onde o gatilho repassa e como o status da API vira status do cron.
 // A regra do alerta NAO mora aqui: ver apps/api/app/services/alerta_vencidos.py.
 
-const API = "https://mktplace-api.onrender.com/api/v1/alertas";
+const API = "https://mktplace-api-6wif.onrender.com/api/v1/alertas";
 
 /** Mantido por compatibilidade: a rota do alerta de vencidos (A1). */
 export const URL_DA_API = `${API}/expedicao-vencidos`;
