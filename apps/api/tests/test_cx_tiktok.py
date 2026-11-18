@@ -82,3 +82,14 @@ def test_cache_por_dia_so_busca_o_que_falta(monkeypatch):
     assert chamadas == [] and d7b["marcas"][0]["cancelamentos"] == 14  # tudo do cache
     svc.montar(10, ["kokeshi"], lambda c: "ok", criar=Conta, hoje=hoje)
     assert len(chamadas) == 6  # so' os 3 dias novos x 2 rotas
+
+
+def test_pedidos_do_data_mart_entram_so_nas_marcas_com_dado():
+    d = {"inicio": "2026-11-11", "fim": "2026-11-17",
+         "marcas": [{"marca": "kokeshi", "estado": "dado"}, {"marca": "apice", "estado": "erro"}]}
+    pedidos = []
+    svc._anotar_pedidos(d, lambda sql, p: pedidos.append(p) or [{"marca": "kokeshi", "pedidos": 1000, "faturamento": 50000.5}])
+    assert pedidos[0]["marcas"] == ["kokeshi"]
+    assert d["marcas"][0]["pedidos"] == 1000 and d["marcas"][0]["faturamento"] == 50000.5
+    assert "pedidos" not in d["marcas"][1]
+    svc._anotar_pedidos(d, lambda sql, p: (_ for _ in ()).throw(RuntimeError("x")))  # falha nao derruba
