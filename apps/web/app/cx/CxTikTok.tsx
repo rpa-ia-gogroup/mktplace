@@ -21,7 +21,7 @@ import { torreFetch } from "@/lib/torre-fetch";
 
 import { AbaCx, COR_CX, FaixaCarregando, GRADE_FAIXA, PainelPareto, TD, TentarNovamente, TH, TH_MARCA, THEAD, TR, TR_TOTAL } from "./CxConteudo";
 
-const COR_TIPO: Record<string, string> = { Devolução: COR_CX.devolucao, Cancelamento: COR_CX.cancelamento };
+const COR_TIPO: Record<string, string> = { Devolução: "bg-canal-tiktok", Cancelamento: "bg-accent" };
 const ESTADO: Record<string, string> = {
   sem_permissao: "Sem permissão do app nesta loja",
   nao_autorizada: "Loja não autorizou o app",
