@@ -67,7 +67,7 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
   const intervalo = `${dataBr(d.inicio)}–${dataBr(d.fim)}`;
   const selo = (
     <span className="flex flex-wrap items-center gap-1.5">
-      {s.parcial && <Chip tom="atencao" title="Alguma marca passou de 10 mil registros na janela: a leitura foi cortada.">Parcial</Chip>}
+      {s.parcial && <Chip tom="atencao" title="Alguma marca ainda tem dias por ler (limite do TikTok) ou passou de 10 mil registros num dia: o número real é maior.">Parcial</Chip>}
       <SeloAtualizado em={d.gerado_em} detalhe={`Direto da API do TikTok Shop · por data de abertura · ${intervalo}`} />
     </span>
   );
@@ -165,7 +165,7 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
             </tr>
           </tbody>
         </table>
-        {s.parcial && <p className="px-3 pb-3 text-xs text-ink-muted">* Leitura cortada em 10 mil registros nesta janela: o número real é maior.</p>}
+        {s.parcial && <p className="px-3 pb-3 text-xs text-ink-muted">* Leitura incompleta nesta marca (dias ainda por ler ou mais de 10 mil registros num dia): o número real é maior. Os dias que faltam entram na próxima atualização.</p>}
       </Panel>
     </AbaCx>
   );

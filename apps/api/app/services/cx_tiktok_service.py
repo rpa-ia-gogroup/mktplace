@@ -237,12 +237,14 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
     nome_sku: dict[str, str] = {}
     for conta in contas:
         dias_ag = [_dias.get((conta, d)) for d in datas]
-        if conta in falha and any(x is None for x in dias_ag):  # falhou e nao ha' dia guardado para cobrir
+        faltam = sum(1 for x in dias_ag if x is None)
+        if faltam == len(datas) and conta in falha:  # nenhum dia lido: a marca vem com o motivo
             marcas.append({"marca": conta, **falha[conta]})
             continue
         ags = [x[1] for x in dias_ag if x]
-        marcas.append({"marca": conta, "estado": "dado", "motivo": None,
-                       "truncado": any(a["truncado"] for a in ags),
+        # dia que falhou (limite do TikTok) entra na proxima rodada; ate' la' a marca e' parcial
+        marcas.append({"marca": conta, "estado": "dado", "motivo": None, "dias_faltando": faltam,
+                       "truncado": faltam > 0 or any(a["truncado"] for a in ags),
                        "devolucoes": sum(a["devolucoes"] for a in ags),
                        "reembolsado": round(sum(a["reembolsado"] for a in ags), 2),
                        "cancelamentos": sum(a["cancelamentos"] for a in ags),
