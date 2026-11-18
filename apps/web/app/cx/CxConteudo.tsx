@@ -53,6 +53,7 @@ import {
   avisoColetaChat,
   carregarCxShopee,
   carregarPedidosMotivo,
+  type CanalPedidos,
   chipsCx,
   csvPedidosMotivo,
   heroiCx,
@@ -963,7 +964,7 @@ function baixarCsv(conteudo: string, nome: string): void {
   }
 }
 
-function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros: FiltrosCx; fechar: () => void }) {
+export function PedidosDoMotivo({ item, filtros, fechar, canal = "shopee" }: { item: Pick<ItemPareto, "chave" | "codigo" | "rotulo"> & { tipo: string }; filtros: FiltrosCx; fechar: () => void; canal?: CanalPedidos }) {
   const tipo = tipoDoItem(item);
   const [r, setR] = useState<ResultadoPedidos | null>(null);
   // Pareto -> marca -> SKU: a marca aberta mostra os produtos; a lista de pedidos fica a um clique.
@@ -982,13 +983,13 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
     setR(null);
     setMarcaAberta(null);
     setVerPedidos(false);
-    carregarPedidosMotivo(filtros, tipo, item.codigo, torreFetch as typeof fetch).then((x) => {
+    carregarPedidosMotivo(filtros, tipo, item.codigo, torreFetch as typeof fetch, undefined, undefined, canal).then((x) => {
       if (vivo) setR(x);
     });
     return () => {
       vivo = false;
     };
-  }, [filtros, tipo, item.codigo]);
+  }, [filtros, tipo, item.codigo, canal]);
 
   const v = r?.ok && r.dados.estado !== "erro" ? montarPedidosMotivo(r.dados, brandLabel) : null;
   const marcas = r?.ok && r.dados.estado !== "erro" ? marcasDoMotivo(r.dados, brandLabel) : [];

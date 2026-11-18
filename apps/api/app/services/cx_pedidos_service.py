@@ -244,3 +244,96 @@ def montar_pedidos_motivo(*, tipo: Tipo, codigo: str, brands: Optional[list[str]
         total=total, truncado=truncado, parcial=falhou,
         pedidos=[PedidoMotivo(**x) for x in pedidos],
     )
+
+
+# ---------------------------------------------------------------------------
+# Mercado Livre: pedidos de um motivo do Pareto (reclamacao ou cancelamento)
+# ---------------------------------------------------------------------------
+#: Mesmas reclamacoes do Pareto (`cx_ml_service.SQL_RECLAMACOES`, bloco motivo). O codigo
+#: do motivo E' o texto cru (`rotular_ml_cx`), entao o filtro vai direto no SQL. Recurso
+#: `shipment` vira os pedidos daquele envio (`stg_ml_orders.shipping_id`).
+SQL_ML_PEDIDOS = """
+WITH r AS (
+    SELECT c.brand, c.claim_id, c.recurso, c.recurso_id, c.status,
+           (c.criada_em AT TIME ZONE 'America/Sao_Paulo')::date AS dia
+      FROM raw.ml_cx_reclamacoes c
+      LEFT JOIN raw.ml_cx_motivos m ON m.reason_id = c.reason_id
+     WHERE c.brand = ANY(:marcas)
+       AND COALESCE(c.tipo IN ('cancel_purchase', 'cancel_sale'), false) = :cancelamento
+       AND COALESCE(m.nome, c.reason_id, '') = :texto
+       AND (c.criada_em AT TIME ZONE 'America/Sao_Paulo')::date BETWEEN :inicio AND :fim
+), lim AS (
+    SELECT *, COUNT(*) OVER () AS total FROM r ORDER BY dia DESC, claim_id DESC LIMIT :teto
+)
+SELECT lim.brand AS marca, lim.claim_id, lim.dia, lim.status, lim.total,
+       string_agg(DISTINCT o.order_id::text, ',') AS pedidos
+  FROM lim
+  LEFT JOIN silver.stg_ml_orders o
+    ON (lim.recurso = 'order' AND o.order_id::text = lim.recurso_id::text)
+    OR (lim.recurso = 'shipment' AND o.shipping_id::text = lim.recurso_id::text)
+ GROUP BY 1, 2, 3, 4, 5
+"""
+
+SQL_ML_ITENS = """
+SELECT order_id::text AS order_sn, COALESCE(NULLIF(seller_sku, ''), item_id::text) AS sku,
+       MAX(title) AS produto, SUM(quantity) AS quantidade
+  FROM silver.stg_ml_order_items
+ WHERE order_id::text = ANY(:pedidos)
+ GROUP BY 1, 2
+"""
+
+SITUACAO_ML = {"opened": "Aberta", "closed": "Encerrada"}
+
+
+def montar_pedidos_motivo_ml(*, tipo: Literal["cancelamento", "reclamacao"], codigo: str,
+                             brands: Optional[list[str]] = None, dias: int = cx.JANELA_PADRAO_DIAS,
+                             consultar: Optional[Consultar] = None,
+                             agora: Optional[datetime] = None) -> PedidosMotivoResponse:
+    from app.services.gold_service import ML_BRANDS
+
+    agora = agora or datetime.now(timezone.utc)
+    consultar = consultar or cx.consultar_datamart
+    janela = cx.calcular_janela(dias, agora)
+    marcas = [m for m in cx.MARCAS_PERMITIDAS if (brands is None or m in brands) and m in ML_BRANDS]
+    base = dict(gerado_em=agora, janela=janela, tipo=tipo, codigo=codigo, numero_publico=_numero_publico())
+    if not marcas:
+        return PedidosMotivoResponse(**base, estado="vazio_legitimo", total=0, pedidos=[],
+                                     motivo_indisponivel="Nenhum pedido com este motivo no período.")
+    params = {"marcas": marcas, "cancelamento": tipo == "cancelamento",
+              "texto": "" if codigo == "sem_motivo" else codigo,
+              "inicio": janela.inicio, "fim": janela.fim, "teto": TETO}
+    linhas = cx._rodar(consultar, "ml_pedidos_motivo", SQL_ML_PEDIDOS, params)
+    if linhas is None:
+        return PedidosMotivoResponse(**base, estado="erro", motivo_indisponivel=cx.MOTIVO_ERRO,
+                                     total=None, parcial=True, pedidos=[])
+    from app.services.cx_ml_service import rotular_ml_cx
+
+    total = cx._int(linhas[0].get("total")) if linhas else 0
+    pedidos, nums = [], set()
+    for r in linhas:
+        ids = [x for x in str(r.get("pedidos") or "").split(",") if x]
+        nums.update(ids)
+        pedidos.append({"marca": str(r.get("marca")), "pedido": ids[0] if ids else None, "_ids": ids,
+                        "devolucao": _texto(r.get("claim_id")), "dia": _dia(r.get("dia")),
+                        "situacao": SITUACAO_ML.get(str(r.get("status") or ""), _texto(r.get("status"))),
+                        "valor": None})
+    # itens: um envio pode ter varios pedidos (pack); junta os produtos de todos
+    itens = cx._rodar(consultar, "ml_pedidos_itens", SQL_ML_ITENS, {"pedidos": sorted(nums)}) if nums else []
+    por_pedido: dict[str, list[dict]] = {}
+    for r in itens or []:
+        por_pedido.setdefault(str(r.get("order_sn")), []).append(
+            {"sku": _texto(r.get("sku")), "produto": _texto(r.get("produto")), "quantidade": cx._int(r.get("quantidade")) or 0})
+    for x in pedidos:
+        x["itens"] = [i for p in x.pop("_ids") for i in por_pedido.get(p, [])]
+    pedidos.sort(key=lambda x: (x["dia"] or date.min, x["devolucao"] or ""), reverse=True)
+    if not base["numero_publico"]:
+        for x in pedidos:
+            x["pedido"] = None
+            x["devolucao"] = None
+    return PedidosMotivoResponse(
+        **base, rotulo=rotular_ml_cx(codigo)[1],
+        estado="dado" if pedidos else "vazio_legitimo",
+        motivo_indisponivel=None if pedidos else "Nenhum pedido com este motivo no período.",
+        total=total, truncado=(total or 0) > TETO, parcial=itens is None,
+        pedidos=[PedidoMotivo(**x) for x in pedidos],
+    )

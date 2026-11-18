@@ -66,6 +66,7 @@ import {
   Notas,
   PainelAtencao,
   PainelPareto,
+  PedidosDoMotivo,
   SaudePorMarca,
   TD,
   TentarNovamente,
@@ -143,6 +144,8 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
   const prob = montarProblemasMl(dados, brandLabel);
   const atend = montarAtendimentoMl(dados, brandLabel, agora);
   const pareto = montarParetoMl(dados);
+  // Pareto -> marca -> SKU, como na Shopee (pedido da Nath, 18/11)
+  const [aberto, setAberto] = useState<(typeof pareto.itens)[number] | null>(null);
   const atencao = itensAtencaoMl(dados, brandLabel, agora);
   const status = montarStatusMarcasMl(dados, brandLabel);
   const heroi = heroiMl(dados, r);
@@ -183,7 +186,9 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
     >
       {/* Dois paineis lado a lado: por que (Pareto) | o que exige atencao */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <PainelPareto v={pareto} cores={COR_TIPO} semNome="motivo sem nome" />
+        <PainelPareto v={pareto} cores={COR_TIPO} semNome="motivo sem nome" aberta={aberto?.chave} aoAbrir={(i) => setAberto(aberto?.chave === i.chave ? null : i)}>
+          {aberto && <PedidosDoMotivo item={aberto} filtros={filtros} canal="ml" fechar={() => setAberto(null)} />}
+        </PainelPareto>
         <PainelAtencao
           ajuda={`${AJUDA_ML.aguardando} ${AJUDA_ML.perguntas}`}
           saude={status.length ? <SaudePorMarca itens={status} abrir={setMarcaAberta} ajuda={AJUDA_ML.status} /> : null}

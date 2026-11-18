@@ -1470,7 +1470,8 @@ export function linhasDrilldownCx(r: ResumoCx, i: IndicadorCx): LinhaDrilldownCx
 // Pedidos de um motivo do Pareto (CX-PEDIDOS-MOTIVO, 05/11/2026)
 // `GET /api/v1/cx/shopee/pedidos?tipo=&motivo=&brands=&dias=` (ate' 500).
 // ---------------------------------------------------------------------------
-export type TipoPedidos = "cancelamento" | "devolucao";
+export type TipoPedidos = "cancelamento" | "devolucao" | "reclamacao";
+export type CanalPedidos = "shopee" | "ml";
 
 export interface PedidoMotivo {
   marca: string;
@@ -1499,14 +1500,15 @@ export interface PedidosMotivoResponse {
 
 export const ROTA_API_CX_PEDIDOS = "/api/v1/cx/shopee/pedidos";
 
-export function tipoDoItem(i: Pick<ItemPareto, "tipo">): TipoPedidos {
-  return i.tipo === "Devolução" ? "devolucao" : "cancelamento";
+export function tipoDoItem(i: { tipo: string }): TipoPedidos {
+  return i.tipo === "Devolução" ? "devolucao" : i.tipo === "Reclamação" ? "reclamacao" : "cancelamento";
 }
 
-export function urlPedidosMotivo(base: string, f: FiltrosCx, tipo: TipoPedidos, codigo: string): string {
+export function urlPedidosMotivo(base: string, f: FiltrosCx, tipo: TipoPedidos, codigo: string, canal: CanalPedidos = "shopee"): string {
   const qs = new URLSearchParams({ tipo, motivo: codigo, dias: String(f.dias) });
   if (f.marca) qs.set("brands", f.marca);
-  return `${base}${ROTA_API_CX_PEDIDOS}?${qs.toString()}`;
+  const rota = canal === "ml" ? ROTA_API_CX_PEDIDOS.replace("/shopee/", "/ml/") : ROTA_API_CX_PEDIDOS;
+  return `${base}${rota}?${qs.toString()}`;
 }
 
 export type ResultadoPedidos = { ok: true; dados: PedidosMotivoResponse } | { ok: false; motivo: string };
@@ -1526,11 +1528,12 @@ async function carregarPedidosMotivoUmaVez(
   fetchImpl: typeof fetch = fetch,
   base: string = API_URL,
   timeoutMs: number = TIMEOUT_API_MS,
+  canal: CanalPedidos = "shopee",
 ): Promise<ResultadoPedidos> {
   const controle = new AbortController();
   const timer = setTimeout(() => controle.abort(), timeoutMs);
   try {
-    const res = await fetchImpl(urlPedidosMotivo(base, f, tipo, codigo), { cache: "no-store", signal: controle.signal });
+    const res = await fetchImpl(urlPedidosMotivo(base, f, tipo, codigo, canal), { cache: "no-store", signal: controle.signal });
     if (!res.ok) return { ok: false, motivo: `A API respondeu ${res.status}.` };
     const json = (await res.json()) as PedidosMotivoResponse;
     if (!json || !Array.isArray(json.pedidos)) return { ok: false, motivo: "Resposta inválida da API." };

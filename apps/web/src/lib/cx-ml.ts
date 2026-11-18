@@ -427,6 +427,8 @@ export interface ItemParetoMl {
   chave: string;
   rotulo: string;
   tipo: "Reclamação" | "Cancelamento";
+  /** Codigo do motivo na API (abre as reclamacoes dele, por marca e SKU). */
+  codigo: string;
   natureza: string;
   quantidade: string;
   pct: string;
@@ -467,6 +469,7 @@ export function montarParetoMl(d: CxMlResponse): VisaoParetoMl {
           : "Nenhuma reclamação nem cancelamento no período.",
     itens: brutos.slice(0, MAX_ITENS_PARETO_ML).map((m) => ({
       chave: `${m.tipo}:${m.codigo}`,
+      codigo: m.codigo,
       rotulo: m.rotulo,
       tipo: m.tipo,
       natureza: ROTULO_NATUREZA[m.natureza] ?? m.natureza,

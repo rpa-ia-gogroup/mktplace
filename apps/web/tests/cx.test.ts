@@ -374,6 +374,9 @@ test("pedidos do motivo: url com tipo, motivo, periodo e marca", () => {
     "/torre-api/api/v1/cx/shopee/pedidos?tipo=cancelamento&motivo=out_of_stock&dias=7&brands=apice");
   assert.equal(tipoDoItem({ tipo: "Devolução" }), "devolucao");
   assert.equal(tipoDoItem({ tipo: "Cancelamento" }), "cancelamento");
+  assert.equal(tipoDoItem({ tipo: "Reclamação" }), "reclamacao");
+  assert.equal(urlPedidosMotivo("/torre-api", f, "reclamacao", "broken_item", "ml"),
+    "/torre-api/api/v1/cx/ml/pedidos?tipo=reclamacao&motivo=broken_item&dias=7&brands=apice");
 });
 
 test("pedidos do motivo: linhas, resumo com teto e avisos", () => {
@@ -408,7 +411,7 @@ test("pareto: cada motivo abre a lista de pedidos (botao com aria-expanded)", ()
   const tela = readFileSync(new URL("../app/cx/CxConteudo.tsx", import.meta.url), "utf8");
   assert.match(tela, /aria-expanded=\{aberta === i\.chave\}/);
   assert.match(tela, /aoAbrir=\{\(i\) => setAberto\(aberto\?\.chave === i\.chave \? null : i\)\}/);
-  assert.match(tela, /carregarPedidosMotivo\(filtros, tipo, item\.codigo, torreFetch as typeof fetch\)/);
+  assert.match(tela, /carregarPedidosMotivo\(filtros, tipo, item\.codigo, torreFetch as typeof fetch, undefined, undefined, canal\)/);
   const v = montarPareto(comConversas(30), rotulo);
   assert.ok(v.itens.every((i) => i.codigo && i.chave.endsWith(i.codigo)));
 });
