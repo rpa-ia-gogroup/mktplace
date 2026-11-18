@@ -29,6 +29,16 @@ SELECT marca, chave, sku_unico, descricao, categoria, curva, status, custo_und,
  WHERE slowmoving_marketplace_sn = 'S'
 """
 SQL_DIA = "SELECT MAX(date_created)::date AS dia FROM staging.si_historical_stock"
+#: Capital de TODO o estoque do Marketplace por marca (base da % do capital parado): no slow moving,
+#: o R$ que o Supply guarda; nos demais, custo x venda/dia x cobertura (= pecas x custo).
+SQL_CAPITAL_TOTAL = """
+SELECT marca,
+       SUM(CASE WHEN slowmoving_marketplace_sn = 'S' THEN COALESCE(slow_moving_marketplace_rs, 0)
+                ELSE COALESCE(custo_und, 0) * COALESCE(consumo_marketplace, 0) * COALESCE(cobertura_marketplace, 0)
+           END) AS capital
+  FROM staging.si_disponibilidade
+ GROUP BY marca
+"""
 
 
 def _marca(nome: Optional[str]) -> str:
@@ -92,7 +102,16 @@ def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional
             valor_parado=valor, venda_dia=venda, cobertura_dias=cob if venda > 0 else None,
         ))
     dia = consultar(SQL_DIA, {})
+    capital: dict[str, float] = {}
+    try:
+        for r in consultar(SQL_CAPITAL_TOTAL, {}):
+            m = _marca(r.get("marca"))
+            if m in BRANDS_IN_SCOPE:
+                capital[m] = round(capital.get(m, 0.0) + (_num(r.get("capital")) or 0.0), 2)
+    except Exception:  # noqa: BLE001 -- sem a base, a tela so' nao mostra a %
+        capital = {}
     skus.sort(key=lambda s: s.valor_parado, reverse=True)
     dias = _anotar_vendas(skus, consultar, hoje or date.today(), lookups)
     return SlowMovingResponse(fonte=FONTE, atualizado_em=dia[0]["dia"] if dia else None,
-                              meta_dias=META_DIAS, dias=dias, vendas_disponivel=bool(dias), skus=skus)
+                              meta_dias=META_DIAS, dias=dias, vendas_disponivel=bool(dias), skus=skus,
+                              capital_marketplace=capital)

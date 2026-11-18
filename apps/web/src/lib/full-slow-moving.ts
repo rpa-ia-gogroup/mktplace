@@ -49,6 +49,8 @@ export interface SlowMovingResponse {
   dias: string[];
   vendas_disponivel: boolean;
   skus: SkuSlowMoving[];
+  /** Capital de todo o estoque do Marketplace por marca (R$ a custo); base da % do capital parado. */
+  capital_marketplace?: Record<string, number>;
 }
 
 export interface TotaisSlow {
