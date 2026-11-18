@@ -807,7 +807,9 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
                     {l.cancelamentoDelta && <span className={`ml-1 text-xs ${COR_DELTA[l.cancelamentoDelta.sentido]}`}>{l.cancelamentoDelta.texto}</span>}
                   </Celula>
                   <Celula valor={l.devolucoesPct} barra={barra(pesoDevol[k], COR_CX.devolucao)} dica={dica(l.devolucoes !== "—" && `${l.devolucoes} devoluções`)} />
-                  <Celula valor={l.reembolsado} dica={dica(l.reembolsoPct && `${l.reembolsoPct} aceitas/pedidos`)} />
+                  <Celula valor={l.reembolsado} dica={dica(l.reembolsoPct && `${l.reembolsoPct} aceitas/pedidos`)}>
+                    {l.reembolsadoPctFat && <span className="ml-1 text-xs text-ink-muted">{l.reembolsadoPctFat}</span>}
+                  </Celula>
                 </tr>
               ))}
               <tr className={TR_TOTAL}>
@@ -820,7 +822,9 @@ function ProblemasPorMarca({ v }: { v: VisaoPareto }) {
                   {t.cancelamentoDelta && <span className={`ml-1 text-xs ${COR_DELTA[t.cancelamentoDelta.sentido]}`}>{t.cancelamentoDelta.texto}</span>}
                 </Celula>
                 <Celula valor={t.devolucoesPct} dica={dica(t.devolucoes !== "—" && `${t.devolucoes} devoluções`)} />
-                <Celula valor={t.reembolsado} dica={dica(t.reembolsoPct && `${t.reembolsoPct} aceitas/pedidos`)} />
+                <Celula valor={t.reembolsado} dica={dica(t.reembolsoPct && `${t.reembolsoPct} aceitas/pedidos`)}>
+                  {t.reembolsadoPctFat && <span className="ml-1 text-xs text-ink-muted">{t.reembolsadoPctFat}</span>}
+                </Celula>
               </tr>
             </tbody>
           </table>

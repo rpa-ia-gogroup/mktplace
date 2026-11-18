@@ -104,6 +104,8 @@ export interface LinhaMarca {
   /** So' na aba CX: a mesma conta na janela anterior. Ausente/null = sem historico (nunca zero). */
   pedidos_anterior?: number | null;
   cancelamentos_anterior?: number | null;
+  /** Shopee: R$ dos pedidos pagos e nao cancelados (base da % reembolsada). */
+  faturamento?: number | null;
 }
 
 export interface Pendencia {

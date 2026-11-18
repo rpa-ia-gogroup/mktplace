@@ -602,7 +602,7 @@ export const AJUDA_CX = {
     "Cancelados ÷ pedidos do período (embaixo, a contagem); os não pagos, que a Shopee cancela sozinha, ficam de fora. A seta compara com o período anterior de mesmo tamanho, em pontos percentuais; subir é pior.",
   devolucoesMarca:
     "Pedidos de devolução ou reembolso abertos pelo comprador ÷ pedidos do período (embaixo, a contagem). Os que o próprio comprador cancelou ficam de fora.",
-  reembolsadoMarca: "Valor reembolsado nas devoluções aceitas; ao lado, devoluções aceitas ÷ pedidos.",
+  reembolsadoMarca: "Valor reembolsado nas devoluções aceitas; ao lado, quanto ele é do faturamento da marca no período (pedidos pagos e não cancelados).",
   avaliacao:
     "Nota da loja na Saúde da Conta da Shopee: a média das avaliações que os compradores deram à loja, de 0 a 5. A meta é a da própria Shopee. Em destaque, a pior.",
   naoLidas: "Conversas com mensagem ainda não aberta pela loja, na última leitura do chat (a cada 2 h).",
@@ -724,6 +724,8 @@ export interface VisaoPareto {
     reembolsado: string;
     /** Devolucoes aceitas ÷ pedidos (a mesma taxa do card da Gerencial). */
     reembolsoPct: string | null;
+    /** Reembolsado ÷ faturamento (pedidos pagos e nao cancelados); null sem uma das pontas. */
+    reembolsadoPctFat: string | null;
   }[];
   /** Linha de total da tabela por marca (as mesmas contas, somando as lojas). */
   total: {
@@ -738,6 +740,7 @@ export interface VisaoPareto {
     marcasDevolucao: { lidas: number; total: number };
     reembolsado: string;
     reembolsoPct: string | null;
+    reembolsadoPctFat: string | null;
   };
   notas: string[];
 }
@@ -819,6 +822,10 @@ export function montarPareto(
       const v = razaoPct(marcas.map((m) => [devMarca.get(m)?.aceitas, canMarca.get(m)?.pedidos]));
       return v == null ? null : pct(v);
     })(),
+    reembolsadoPctFat: (() => {
+      const v = razaoPct(marcas.map((m) => [devMarca.get(m)?.reembolsado, canMarca.get(m)?.faturamento]));
+      return v == null ? null : pct(v);
+    })(),
   };
   return {
     total: linhaTotal,
@@ -852,6 +859,10 @@ export function montarPareto(
         devolucoes: inteiro(liquidas(d)),
         reembolsado: d ? reais(d.reembolsado) : "—",
         reembolsoPct: reemb == null ? null : pct(reemb),
+        reembolsadoPctFat: (() => {
+          const v = razaoPct([[d?.reembolsado, c?.faturamento]]);
+          return v == null ? null : pct(v);
+        })(),
       };
     }),
     notas,

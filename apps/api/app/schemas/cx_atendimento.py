@@ -84,6 +84,8 @@ class LinhaMarca(BaseModel):
     #: historico comparavel (Kokeshi: export so' desde 04/10/2026), nunca 0.
     pedidos_anterior: Optional[int] = None
     cancelamentos_anterior: Optional[int] = None
+    #: Shopee: soma do `total_amount` dos pedidos pagos e nao cancelados (base da % reembolsada).
+    faturamento: Optional[float] = None
 
 
 class Pendencia(BaseModel):

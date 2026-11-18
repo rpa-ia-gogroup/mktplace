@@ -789,7 +789,7 @@ test("pareto: linha de total da tabela por marca", () => {
     {
       pedidos: "1.300", cancelamentosPct: "1,8%", cancelamentoDelta: { texto: "▲ 1,0 p.p.", sentido: "piorou" },
       cancelamentoAntes: "1,0%", devolucoesPct: "1,0%", devolucoes: "10", pedidosDevolucao: "1.000", marcasDevolucao: { lidas: 1, total: 2 },
-      reembolsado: "R$ 450,50", reembolsoPct: "0,8%",
+      reembolsado: "R$ 450,50", reembolsoPct: "0,8%", reembolsadoPctFat: null,
     },
   );
 });
@@ -993,4 +993,16 @@ test("Shopee: card Devolução na faixa (entre Cancelamento e Reembolso), com de
   assert.ok(ordem.every((i, k) => i > 0 && (k === 0 || i > ordem[k - 1])), "Cancelamento, Devolução, Reembolso");
   assert.match(tela, /pareto\.total\.devolucoesPct/);
   assert.match(tela, /<DetalheDevolucao/);
+});
+
+test("pareto: % reembolsada = reembolsado ÷ faturamento, so' com as duas pontas", () => {
+  const p = comConversas(30);
+  const [apice, rit] = p.atendimento.marcas;
+  const v = montarPareto(
+    { ...p, atendimento: { ...p.atendimento, marcas: [{ ...apice, faturamento: 45050 }, rit] } },
+    rotulo,
+  );
+  assert.equal(v.total.reembolsadoPctFat, "1,0%");
+  assert.equal(v.linhas.find((l) => l.chave === apice.marca)?.reembolsadoPctFat, "1,0%");
+  assert.equal(v.linhas.find((l) => l.chave === rit.marca)?.reembolsadoPctFat ?? null, null);
 });
