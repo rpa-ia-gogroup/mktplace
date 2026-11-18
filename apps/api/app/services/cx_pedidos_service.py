@@ -69,6 +69,15 @@ SELECT brand AS marca, order_sn, return_sn,
 """
 
 #: Situacao da devolucao em portugues (status da Shopee).
+#: Produtos dos pedidos da lista, para abrir o motivo por marca e por SKU.
+SQL_ITENS_PEDIDOS = """
+SELECT order_sn, COALESCE(NULLIF(model_sku, ''), NULLIF(item_sku, ''), item_id::text) AS sku,
+       MAX(item_name) AS produto, SUM(quantity) AS quantidade
+  FROM silver.stg_shopee_order_items
+ WHERE order_sn = ANY(:pedidos)
+ GROUP BY 1, 2
+"""
+
 SITUACAO_DEVOLUCAO = {
     "ACCEPTED": "Reembolsada",
     "REQUESTED": "Solicitada",
@@ -118,6 +127,22 @@ def _textos_do_codigo(linhas: list[dict], rotular, codigo: str, *, com_autor: bo
         total += cx._int(r.get("quantidade")) or 0
         rotulo = rotulo or rot
     return sorted(textos), total, rotulo
+
+
+def _anotar_itens(consultar: Consultar, pedidos: list[dict]) -> None:
+    """Poe os produtos em cada pedido (antes de esconder o numero). Falha = lista sem itens."""
+    nums = sorted({x["pedido"] for x in pedidos if x.get("pedido")})
+    if not nums:
+        return
+    linhas = cx._rodar(consultar, "pedidos_itens", SQL_ITENS_PEDIDOS, {"pedidos": nums})
+    if not linhas:
+        return
+    por_pedido: dict[str, list[dict]] = {}
+    for r in linhas:
+        por_pedido.setdefault(str(r.get("order_sn")), []).append(
+            {"sku": _texto(r.get("sku")), "produto": _texto(r.get("produto")), "quantidade": cx._int(r.get("quantidade")) or 0})
+    for x in pedidos:
+        x["itens"] = por_pedido.get(x.get("pedido") or "", [])
 
 
 def _cancelamentos(consultar: Consultar, marcas: list[str], params: dict, codigo: str):
@@ -206,6 +231,7 @@ def montar_pedidos_motivo(*, tipo: Tipo, codigo: str, brands: Optional[list[str]
     pedidos.sort(key=lambda x: (x["dia"] or date.min, x["pedido"] or ""), reverse=True)
     truncado = len(pedidos) > TETO or total > TETO
     pedidos = pedidos[:TETO]
+    _anotar_itens(consultar, pedidos)
     if not base["numero_publico"]:
         for x in pedidos:
             x["pedido"] = None

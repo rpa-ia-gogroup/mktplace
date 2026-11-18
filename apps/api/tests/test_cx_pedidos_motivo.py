@@ -125,3 +125,19 @@ def test_rota_recusa_motivo_fora_do_formato_sem_ecoar(motivo):
 def test_rota_recusa_tipo_desconhecido():
     res = TestClient(app).get("/api/v1/cx/shopee/pedidos", params={"tipo": "chat", "motivo": "x"})
     assert res.status_code == 422
+
+
+def test_itens_dos_pedidos_para_abrir_por_marca_e_sku_e_falha_nao_derruba():
+    itens = [{"order_sn": "A1", "sku": "20910", "produto": "Shampoo", "quantidade": 2},
+             {"order_sn": "B1", "sku": "10041", "produto": "Delight", "quantidade": 1}]
+    fonte = _dm(**{svc.SQL_ITENS_PEDIDOS: itens})
+    r = svc.montar_pedidos_motivo(tipo="cancelamento", codigo=_codigo("Out of Stock"), consultar=fonte, agora=AGORA)
+    por_marca = {p.marca: [(i.sku, i.quantidade) for i in p.itens] for p in r.pedidos}
+    assert por_marca == {"apice": [("20910", 2)], "barbours": [("10041", 1)]}
+    pedidos_buscados = next(p for s, p in fonte.chamadas if s == svc.SQL_ITENS_PEDIDOS)["pedidos"]
+    assert pedidos_buscados == ["A1", "B1"]  # numero real, mesmo se a tela nao mostra o numero
+
+    quebrada = _dm()
+    quebrada.falhas.add(svc.SQL_ITENS_PEDIDOS)
+    r2 = svc.montar_pedidos_motivo(tipo="cancelamento", codigo=_codigo("Out of Stock"), consultar=quebrada, agora=AGORA)
+    assert len(r2.pedidos) == 2 and all(p.itens == [] for p in r2.pedidos)
