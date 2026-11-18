@@ -23,12 +23,12 @@ for (const [upstream, esperado] of casos) {
 test("aponta para a rota do alerta na API do Render", () => {
   assert.equal(
     URL_DA_API,
-    "https://mktplace-api.onrender.com/api/v1/alertas/expedicao-vencidos",
+    "https://mktplace-api-6wif.onrender.com/api/v1/alertas/expedicao-vencidos",
   );
 });
 
 test("cada cron do gatilho aponta para a sua rota na API", () => {
-  const base = "https://mktplace-api.onrender.com/api/v1/alertas";
+  const base = "https://mktplace-api-6wif.onrender.com/api/v1/alertas";
   assert.deepEqual(ROTAS, {
     "/cron/alerta-vencidos": `${base}/expedicao-vencidos`,
     "/cron/alertas-criticos": `${base}/criticos`,
