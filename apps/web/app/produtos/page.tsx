@@ -513,6 +513,7 @@ function ProdutosPageInner() {
           <option value="ATENCAO: grande variacao de preco">Variação de preço</option>
         </ProductSelect>
       )}
+      {(tab === "ml" || (tab === "shopee" && !ehMenor)) && <InfoDica titulo="Sinal de ação" texto={AJUDA_SINAL} />}
       <PeriodoProdutosFiltro valor={periodo} aoMudar={setPeriodo} meses={monthOptions} />
     </div>
   );
@@ -692,6 +693,18 @@ function ProdutosPageInner() {
     </Aba>
   );
 }
+
+// Pedido da Nath (18/11): a regra de cada sinal no ⓘ do filtro. Mesma ordem da API (`produtos_ml_mes_service.SINAIS`).
+const AJUDA_SINAL = [
+  "Cada produto recebe um sinal só; vale a primeira regra que bater, nesta ordem:",
+  "1. Investe sem vender: gastou mais de R$ 50 em Ads e não vendeu nada no período. Vale revisar o anúncio ou a campanha.",
+  "2. Considerar pausar ads: ROAS abaixo de 3x com mais de R$ 100 investidos. Provavelmente não paga a margem.",
+  "3. Aumentar investimento: ROAS de 15x ou mais, investindo menos de R$ 50. Rende muito e dá para escalar.",
+  "4. Oportunidade orgânica: vendeu 10 unidades ou mais sem nenhum Ads. Ads tende a acelerar.",
+  "5. Cancelamento alto: mais de 10% dos pedidos cancelados. Pode ser estoque, prazo ou anúncio errado.",
+  "6. Variação de preço: o maior preço ficou mais de 50% acima do menor. Promoção forte ou preço inconsistente.",
+  "ROAS = receita atribuída aos Ads ÷ gasto em Ads, do relatório de Ads do canal.",
+].join("\n");
 
 export default function ProdutosPage() {
   // `useSearchParams` exige limite de Suspense no App Router.
