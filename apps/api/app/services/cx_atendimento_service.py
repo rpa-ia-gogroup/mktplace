@@ -233,6 +233,7 @@ SELECT shop_account AS marca,
        COUNT(*) FILTER (WHERE order_status = 'cancelled' AND cancel_by = 'buyer') AS cancelados_comprador,
        COUNT(*) FILTER (WHERE order_status = 'cancelled'
                           AND lower(trim(cancel_reason)) = :nao_pago) AS nao_pagos,
+       SUM(total_amount) FILTER (WHERE order_status NOT IN ('unpaid', 'cancelled')) AS faturamento,
        MAX(ingested_at) AS atualizado_em
   FROM silver.stg_shopee_orders
  WHERE shop_account = ANY(:marcas)
@@ -295,6 +296,15 @@ def _int(v: Any) -> Optional[int]:
         return None
     try:
         return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def _num(v: Any) -> Optional[float]:
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        return round(float(v), 2)
     except (TypeError, ValueError):
         return None
 
@@ -539,6 +549,7 @@ def _canal_shopee(consultar: Consultar, marcas: list[str], janela: Janela, agora
             cancelamentos_comprador=_int(r.get("cancelados_comprador")) if r else None,
             # fotografia: sem linha para a marca = nenhum pedido em devolucao (zero medido)
             em_devolucao=dev_marca.get(m, 0) if ok_dev else None,
+            faturamento=_num(r.get("faturamento")) if r else None,
         ))
     if cortes is not None:
         cortes.update(parada)
