@@ -77,6 +77,14 @@ def _aquecer_bling() -> None:
     bling_warm.iniciar_rotina()
 
 
+@app.on_event("startup")
+def _aquecer_cx_tiktok() -> None:
+    """Mantem a CX do TikTok (Open API) quente por dia; sem app configurado, nao faz nada."""
+    from app.services import cx_tiktok_service
+
+    cx_tiktok_service.iniciar_rotina()
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     """LIVENESS: o processo esta de pe. NAO diz nada sobre o banco.
