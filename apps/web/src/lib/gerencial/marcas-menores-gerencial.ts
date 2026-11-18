@@ -289,10 +289,16 @@ const filtrarDict = <T,>(d: Record<string, T> | undefined, canais: readonly Mark
  * serie, pedidos e consolidado refeitos. Sem dado no recorte = null, nunca 0; o anterior so' vale com base
  * em todas as marcas somadas (o mesmo conjunto nos dois lados).
  */
-export function filtrarMarcasMenores(d: MarcasMenores, ids: readonly string[], canais: readonly Marketplace[]): MarcasMenores {
+export function filtrarMarcasMenores(
+  d: MarcasMenores,
+  ids: readonly string[],
+  canais: readonly Marketplace[],
+  /** Aba Demais marcas: mantem a fonte provisoria (Denavita pelo TikTok); a Gerencial nao. */
+  opcoes: { comProvisoria?: boolean } = {},
+): MarcasMenores {
   const marcas: MarcaMenor[] = [];
   for (const m of d.marcas) {
-    if (!ids.includes(m.id) || m.status === "aguardando_autorizacao" || ehFonteProvisoria(m)) continue;
+    if (!ids.includes(m.id) || m.status === "aguardando_autorizacao" || (ehFonteProvisoria(m) && !opcoes.comProvisoria)) continue;
     const por = m.por_plataforma.filter((p) => canais.includes(CANAL_DA_PLATAFORMA[p.plataforma]));
     const ant = filtrarDict(m.por_plataforma_anterior, canais);
     const ped = filtrarDict(m.pedidos_por_plataforma, canais);
