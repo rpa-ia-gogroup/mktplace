@@ -16,6 +16,9 @@ export interface MarcaTikTok {
   cancelamentos?: number;
   nao_pagos?: number;
   cancelamentos_comprador?: number;
+  /** Data Mart (gold.tiktok_brand_daily): base das taxas. Ausente = sem taxa, nunca 0. */
+  pedidos?: number | null;
+  faturamento?: number | null;
 }
 
 export interface MotivoTikTok {
@@ -129,4 +132,74 @@ export function itensParetoTikTok(d: CxTikTokResponse, max = 12) {
       bruto: m,
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// Taxas no mesmo padrao da Shopee/ML: % dos pedidos do periodo (Data Mart), por marca e no total
+// ---------------------------------------------------------------------------
+export type IndicadorTikTok = "cancelamento" | "devolucao" | "reembolso" | "naoPago";
+
+const taxa = (n: number | undefined, base: number | null | undefined) => (n == null || !base ? null : (n / base) * 100);
+
+export interface LinhaTikTok {
+  chave: string;
+  pedidos: number | null;
+  faturamento: number | null;
+  n: Record<IndicadorTikTok, number>;
+  taxa: Record<IndicadorTikTok, number | null>;
+  parcial: boolean;
+}
+
+/** Uma linha por marca com dado. Reembolso = R$ reembolsado ÷ faturamento; os demais = contagem ÷ pedidos. */
+export function linhasTikTok(d: CxTikTokResponse): LinhaTikTok[] {
+  return d.marcas
+    .filter((m) => m.estado === "dado")
+    .map((m) => {
+      const pedidos = m.pedidos ?? null;
+      const n = { cancelamento: m.cancelamentos ?? 0, devolucao: m.devolucoes ?? 0, reembolso: m.reembolsado ?? 0, naoPago: m.nao_pagos ?? 0 };
+      return {
+        chave: m.marca, pedidos, faturamento: m.faturamento ?? null, n, parcial: !!m.truncado,
+        taxa: { cancelamento: taxa(n.cancelamento, pedidos), devolucao: taxa(n.devolucao, pedidos), reembolso: taxa(n.reembolso, m.faturamento), naoPago: taxa(n.naoPago, pedidos) },
+      };
+    });
+}
+
+/** Total so' com as marcas que tem a base (pedidos/faturamento): taxa nunca mistura marca sem base. */
+export function totalTikTok(ls: LinhaTikTok[]): LinhaTikTok {
+  const com = ls.filter((l) => l.pedidos);
+  const soma = (f: (l: LinhaTikTok) => number) => com.reduce((a, l) => a + f(l), 0);
+  const pedidos = com.length ? soma((l) => l.pedidos ?? 0) : null;
+  const comFat = ls.filter((l) => l.faturamento);
+  const faturamento = comFat.length ? comFat.reduce((a, l) => a + (l.faturamento ?? 0), 0) : null;
+  const n = { cancelamento: soma((l) => l.n.cancelamento), devolucao: soma((l) => l.n.devolucao), reembolso: comFat.reduce((a, l) => a + l.n.reembolso, 0), naoPago: soma((l) => l.n.naoPago) };
+  return {
+    chave: "total", pedidos, faturamento, n, parcial: ls.some((l) => l.parcial),
+    taxa: { cancelamento: taxa(n.cancelamento, pedidos), devolucao: taxa(n.devolucao, pedidos), reembolso: taxa(n.reembolso, faturamento), naoPago: taxa(n.naoPago, pedidos) },
+  };
+}
+
+/** "O que exige atenção": marca acima de 1,5x a taxa do grupo, marca sem dado e leitura parcial. */
+export function atencaoTikTok(d: CxTikTokResponse, rotulo: (m: string) => string) {
+  const ls = linhasTikTok(d);
+  const t = totalTikTok(ls);
+  const itens: { chave: string; severidade: "critico" | "atencao" | "info"; titulo: string; detalhe?: string }[] = [];
+  const nome: Record<IndicadorTikTok, string> = { cancelamento: "Cancelamento", devolucao: "Devolução", reembolso: "Reembolso", naoPago: "Não pago" };
+  for (const l of ls) {
+    for (const i of ["cancelamento", "devolucao", "reembolso"] as const) {
+      const v = l.taxa[i], g = t.taxa[i];
+      if (v != null && g != null && g > 0 && v >= g * 1.5) {
+        itens.push({ chave: `${l.chave}:${i}`, severidade: v >= g * 2 ? "critico" : "atencao",
+          titulo: `${rotulo(l.chave)}: ${nome[i].toLowerCase()} em ${v.toFixed(1).replace(".", ",")}%`,
+          detalhe: `${(v / g).toFixed(1).replace(".", ",")}x a média do grupo (${g.toFixed(1).replace(".", ",")}%)` });
+      }
+    }
+  }
+  for (const m of d.marcas.filter((x) => x.estado !== "dado")) {
+    itens.push({ chave: `${m.marca}:sem`, severidade: "info", titulo: `${rotulo(m.marca)}: sem dado do TikTok agora`, detalhe: m.motivo ?? undefined });
+  }
+  for (const l of ls.filter((x) => x.parcial)) {
+    itens.push({ chave: `${l.chave}:parcial`, severidade: "info", titulo: `${rotulo(l.chave)}: leitura parcial`, detalhe: "Dias ainda por ler; completa na próxima atualização." });
+  }
+  const ordem = { critico: 0, atencao: 1, info: 2 };
+  return itens.sort((a, b) => ordem[a.severidade] - ordem[b.severidade]);
 }

@@ -312,6 +312,7 @@ def _atualizar(dias: int) -> None:
             db.rollback()
             armazem = tiktok_token.ArmazemPg(db)
             dados = montar(dias, todas, lambda c: tiktok_token.obter_access_token(armazem, c))
+        _anotar_pedidos(dados)
         with _trava:
             _cache[dias] = (time.time(), dados)
     except Exception:  # noqa: BLE001 -- falha fica no log; a tela segue com o cache anterior
@@ -319,6 +320,35 @@ def _atualizar(dias: int) -> None:
     finally:
         with _trava:
             _rodando.discard(dias)
+
+
+#: Pedidos e faturamento do TikTok por marca na janela (base das taxas, igual Shopee/ML).
+SQL_PEDIDOS = """
+SELECT brand AS marca, SUM(orders) AS pedidos, SUM(gmv) AS faturamento
+  FROM gold.tiktok_brand_daily
+ WHERE brand = ANY(:marcas) AND date BETWEEN :inicio AND :fim
+ GROUP BY brand
+"""
+
+
+def _anotar_pedidos(dados: dict, consultar: Optional[Callable[[str, dict], list[dict]]] = None) -> None:
+    """Poe `pedidos` e `faturamento` em cada marca com dado (Data Mart). Falha = sem taxa, nunca 0."""
+    from app.services import cx_atendimento_service as cx
+
+    marcas = [m["marca"] for m in dados.get("marcas", []) if m.get("estado") == "dado"]
+    if not marcas:
+        return
+    try:
+        linhas = (consultar or cx.consultar_datamart)(SQL_PEDIDOS, {"marcas": marcas, "inicio": dados["inicio"], "fim": dados["fim"]})
+    except Exception:  # noqa: BLE001
+        logger.warning("cx tiktok: pedidos do Data Mart indisponiveis")
+        return
+    por = {str(r.get("marca")): r for r in linhas or []}
+    for m in dados["marcas"]:
+        r = por.get(m["marca"])
+        if m.get("estado") == "dado" and r:
+            m["pedidos"] = int(r.get("pedidos") or 0) or None
+            m["faturamento"] = round(float(r.get("faturamento") or 0), 2) or None
 
 
 def obter(dias: int, contas: Optional[list[str]] = None, iniciar: Callable[[int], None] | None = None) -> dict:

@@ -452,3 +452,24 @@ test("cx tiktok: repete enquanto a API diz carregando e para no dado", async () 
   assert.equal(n, 3);
   assert.ok(r.ok && !r.dados.carregando);
 });
+
+test("cx tiktok: taxas por marca sobre os pedidos do Data Mart e atencao acima de 1,5x o grupo", async () => {
+  const { linhasTikTok, totalTikTok, atencaoTikTok } = await import("../src/lib/cx-tiktok.ts");
+  const d = {
+    gerado_em: "", dias: 7, inicio: "2026-11-11", fim: "2026-11-17", motivos: [],
+    marcas: [
+      { marca: "kokeshi", estado: "dado" as const, motivo: null, devolucoes: 10, reembolsado: 100, cancelamentos: 300, nao_pagos: 50, pedidos: 1000, faturamento: 10000 },
+      { marca: "apice", estado: "dado" as const, motivo: null, devolucoes: 10, reembolsado: 50, cancelamentos: 20, nao_pagos: 5, pedidos: 1000, faturamento: 10000 },
+      { marca: "lescent", estado: "dado" as const, motivo: null, devolucoes: 1, reembolsado: 1, cancelamentos: 1, nao_pagos: 1 },
+      { marca: "rituaria", estado: "erro" as const, motivo: "x" },
+    ],
+  };
+  const ls = linhasTikTok(d);
+  assert.equal(ls[0].taxa.cancelamento, 30);
+  assert.equal(ls[2].taxa.cancelamento, null); // sem pedidos: sem taxa, nunca 0
+  const t = totalTikTok(ls);
+  assert.deepEqual([t.pedidos, t.taxa.cancelamento, t.taxa.reembolso], [2000, 16, 0.75]);
+  const a = atencaoTikTok(d, (m) => m.toUpperCase());
+  assert.equal(a[0].titulo, "KOKESHI: cancelamento em 30,0%");
+  assert.ok(a.some((x) => x.titulo === "RITUARIA: sem dado do TikTok agora"));
+});
