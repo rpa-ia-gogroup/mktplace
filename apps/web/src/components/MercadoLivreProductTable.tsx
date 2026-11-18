@@ -1,3 +1,4 @@
+import NomeProduto from "@/components/NomeProduto";
 import type { ProdutoMLRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -93,7 +94,7 @@ export default function MercadoLivreProductTable({ items, loading, sort, onSort,
       renderRow={(p) => (
         <tr key={`${p.brand}-${p.item_id}`} className="hover:bg-raised transition-colors">
           <td className="px-6 py-3 max-w-xs">
-            <p className="text-ink font-medium truncate leading-tight">{p.title ?? `Anúncio ${p.item_id}`}</p>
+            <NomeProduto nome={p.title ?? `Anúncio ${p.item_id}`} />
             {p.seller_sku && <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.seller_sku}</p>}
           </td>
           <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>
