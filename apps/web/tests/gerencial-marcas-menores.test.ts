@@ -276,3 +276,17 @@ test("carregamento: esqueleto na hora (nada de tela bloqueada) e produtos pedido
   const pagina = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(pagina, /useProdutosMarcasMenores\(filters\.dateFrom, filters\.dateTo/);
 });
+
+test("filtrarMarcasMenores: a aba Demais marcas mantem a Denavita (fonte provisoria); a Gerencial nao", () => {
+  const d = {
+    disponivel: true,
+    marcas: [
+      { id: "denavita", label: "Denavita", status: "parcial_fonte_provisoria", total: 100, por_plataforma: [{ plataforma: "TIKTOK", faturamento: 100 }], serie: [] },
+      { id: "yenzah", label: "Yenzah", status: "ok", total: 50, por_plataforma: [{ plataforma: "SHOPEE", faturamento: 40 }, { plataforma: "TIKTOK", faturamento: 10 }], serie: [] },
+    ],
+  } as never;
+  assert.deepEqual(filtrarMarcasMenores(d, ["denavita", "yenzah"], ["shopee", "tiktok"]).marcas.map((m) => m.id), ["yenzah"]);
+  const aba = filtrarMarcasMenores(d, ["denavita", "yenzah"], ["tiktok"], { comProvisoria: true });
+  assert.deepEqual(aba.marcas.map((m) => [m.id, m.total]), [["denavita", 100], ["yenzah", 10]]);
+  assert.equal(aba.consolidado?.total, 110);
+});
