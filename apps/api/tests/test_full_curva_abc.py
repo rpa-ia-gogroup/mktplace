@@ -89,6 +89,23 @@ def test_leitura_falhando_mantem_a_planilha_anterior_e_sem_nada_e_indisponivel()
     assert p is not None, "a planilha anterior segue valendo"
 
 
+def test_primeira_leitura_falhando_tenta_de_novo_em_1_minuto_e_nao_em_1_hora():
+    t = [5000.0]
+    cache = svc._Cache()
+
+    def quebra():
+        raise RuntimeError("timeout")
+
+    p, m = svc.obter_planilha(cache=cache, ler=quebra, relogio=lambda: t[0], em_segundo_plano=False)
+    assert p is None and m == svc.MOTIVO_LEITURA
+    t[0] += svc.RETENTAR_SEGUNDOS - 1  # ainda dentro do intervalo: nao rele
+    p, _ = svc.obter_planilha(cache=cache, ler=lambda: LINHAS, relogio=lambda: t[0], em_segundo_plano=False)
+    assert p is None
+    t[0] += 1  # passou 1 min: le de novo e a curva volta
+    p, m = svc.obter_planilha(cache=cache, ler=lambda: LINHAS, relogio=lambda: t[0], em_segundo_plano=False)
+    assert p is not None and m is None
+
+
 class _R:
     def __init__(self, linhas):
         self._l = linhas
