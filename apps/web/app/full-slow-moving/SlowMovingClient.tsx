@@ -3,21 +3,26 @@
 /**
  * SLOW-MOVING — sub-aba "Slow Moving" do /full (paridade com o dash Mix Marketplace da Nath).
  *
- * Lista do Supply (Painel S&OE, canal Marketplace): curva B/C, descontinuado
- * ou brinde com mais de 120 dias de cobertura. A Torre nao recalcula a regra:
- * le' o Supply Intelligence (lista, estoque, custo e a venda diaria com kit ja'
- * aberto), entao o numero bate com o painel deles.
+ * Lista, estoque, custo e cobertura: Supply Intelligence (regra do Painel S&OE:
+ * curva B/C, descontinuado ou brinde com mais de 120 dias no Marketplace).
+ * Venda diaria por canal (ML, Shopee, TikTok; Full ou normal): pedidos dos
+ * marketplaces com kit aberto em pecas, a mesma conta do dash da Nath.
+ *
+ * Tela enxuta: 4 cartoes que abrem o detalhe (dialogo padrao), uma tabela, e o
+ * clique no produto abre a ficha dele. Grafico e quebras ficam nos dialogos.
  */
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CircleDollarSign, Package, ShoppingBag, Snowflake, Timer, TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CircleDollarSign, Snowflake, Timer, TrendingUp, type LucideIcon } from "lucide-react";
 
 import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import BrandFilter from "@/components/BrandFilter";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import InfoDica from "@/components/ui/InfoDica";
 import KpiCardSkeleton from "@/components/ui/KpiCardSkeleton";
-import KpiTile from "@/components/ui/KpiTile";
+import KpiTile, { type IdentidadeKpi } from "@/components/ui/KpiTile";
 import Segmented from "@/components/ui/Segmented";
 import SortHeader from "@/components/ui/SortHeader";
 import Sparkline from "@/components/ui/Sparkline";
@@ -26,9 +31,10 @@ import TableScrollHint from "@/components/TableScrollHint";
 import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto, fmtPctBr } from "@/lib/formatters";
 import {
-  COLUNAS_EXPORT, ROTULO_CANAL, faturamento15d, fetchSlowMoving, filtrar, linhaExport, mediaMovel7, passaTendencia,
-  porMarca, ritmo, serieDaLista, serieDo, tendenciaDaLista, totais,
-  type FiltroCanal, type FiltroTendencia, type SkuSlowMoving, type SlowMovingResponse,
+  COLUNAS_EXPORT, MARKETPLACES, ROTULO_CANAL, ROTULO_ENVIO, faturamento15d, fetchSlowMoving, filtrar, linhaExport,
+  mediaMovel7, passaTendencia, pecas15dPorMarketplace, porMarca, ritmo, seriesPorMarketplace, serieDo,
+  tendenciaDaLista, totais,
+  type FiltroCanal, type FiltroEnvio, type FiltroTendencia, type Marketplace, type SkuSlowMoving, type SlowMovingResponse,
 } from "@/lib/full-slow-moving";
 import { buildProdutosCsvFile } from "@/lib/produtos-export";
 import { useSortableTable, type SortColumnType } from "@/lib/use-sortable-table";
@@ -43,6 +49,7 @@ const int = (n: number) => Math.round(n).toLocaleString("pt-BR");
 const dec = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
 const dataBr = (iso: string) => iso.slice(0, 10).split("-").reverse().join("/");
 const dias = (n: number | null) => (n == null ? "sem venda" : `${int(n)} d`);
+const ROTULO_MKT: Record<Marketplace, string> = { ML: "Mercado Livre", SP: "Shopee", TT: "TikTok Shop" };
 
 function Tendencia({ v }: { v: number | null }) {
   if (v == null) return <span className="text-ink-faint">—</span>;
@@ -50,14 +57,44 @@ function Tendencia({ v }: { v: number | null }) {
   return <span className={tom}>{v > 0.5 ? "▲ " : v < -0.5 ? "▼ " : ""}{fmtPctBr(v)}</span>;
 }
 
-const CANAIS: { valor: FiltroCanal; texto: string }[] = (["todos", "MKT", "TT"] as const).map((v) => ({ valor: v, texto: ROTULO_CANAL[v] }));
+/** Numero com rotulo, para a grade dos dialogos. */
+function Metrica({ rotulo, valor, sub }: { rotulo: string; valor: ReactNode; sub?: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-line bg-raised/40 p-3">
+      <div className="text-xs text-ink-muted">{rotulo}</div>
+      <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{valor}</div>
+      {sub && <div className="text-xs text-ink-muted">{sub}</div>}
+    </div>
+  );
+}
+
+const CANAIS: { valor: FiltroCanal; texto: string }[] = (["todos", "ML", "SP", "TT"] as const).map((v) => ({ valor: v, texto: ROTULO_CANAL[v] }));
+const ENVIOS: { valor: FiltroEnvio; texto: string }[] = (["todos", "F", "N"] as const).map((v) => ({ valor: v, texto: ROTULO_ENVIO[v] }));
 const TENDENCIAS: { valor: FiltroTendencia; texto: string }[] = [
   { valor: "todos", texto: "Todos" }, { valor: "melhorando", texto: "▲ Melhorando" }, { valor: "piorando", texto: "▼ Piorando" },
 ];
 const COLUNAS: Record<string, SortColumnType> = {
-  produto: "text", estoque: "numeric", valor: "numeric", venda: "numeric", anterior: "numeric",
-  tendencia: "numeric", cobertura: "numeric", precisa: "numeric",
+  produto: "text", estoque: "numeric", valor: "numeric", venda: "numeric", tendencia: "numeric", cobertura: "numeric",
 };
+
+type Dialogo =
+  | { tipo: "skus" | "capital" | "cobertura" | "venda" }
+  | { tipo: "produto"; sku: SkuSlowMoving };
+
+const CARTOES: Record<"skus" | "capital" | "cobertura" | "venda", { titulo: string; icone: LucideIcon; identidade: IdentidadeKpi }> = {
+  skus: { titulo: "SKUs parados por marca", icone: Snowflake, identidade: "ads" },
+  capital: { titulo: "Onde está o capital parado", icone: CircleDollarSign, identidade: "gmv" },
+  cobertura: { titulo: "Cobertura dos SKUs parados", icone: Timer, identidade: "prazo" },
+  venda: { titulo: "Venda diária dos SKUs parados", icone: TrendingUp, identidade: "pedidos" },
+};
+
+/** Faixas de cobertura do dialogo de cobertura. */
+const FAIXAS: { rotulo: string; passa: (s: SkuSlowMoving) => boolean }[] = [
+  { rotulo: "120 a 180 dias", passa: (s) => s.cobertura_dias != null && s.cobertura_dias < 180 },
+  { rotulo: "180 a 365 dias", passa: (s) => s.cobertura_dias != null && s.cobertura_dias >= 180 && s.cobertura_dias < 365 },
+  { rotulo: "Mais de 1 ano", passa: (s) => s.cobertura_dias != null && s.cobertura_dias >= 365 },
+  { rotulo: "Sem venda", passa: (s) => s.cobertura_dias == null },
+];
 
 export default function SlowMovingClient() {
   const abas = useVisoesFull();
@@ -67,7 +104,9 @@ export default function SlowMovingClient() {
   const [marcas, setMarcas] = useState<string[]>([]);
   const [busca, setBusca] = useState("");
   const [canal, setCanal] = useState<FiltroCanal>("todos");
+  const [envio, setEnvio] = useState<FiltroEnvio>("todos");
   const [tendencia, setTendencia] = useState<FiltroTendencia>("todos");
+  const [dialogo, setDialogo] = useState<Dialogo | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const carregar = useCallback(async () => {
@@ -105,19 +144,21 @@ export default function SlowMovingClient() {
     if (c === "produto") return s.descricao;
     if (c === "valor") return s.valor_parado;
     if (c === "venda") return s.venda_dia;
-    if (c === "anterior") return ritmo(s, n).m15p;
     if (c === "tendencia") return ritmo(s, n).tendencia;
     if (c === "cobertura") return s.cobertura_dias ?? Number.POSITIVE_INFINITY;
     return s.estoque;
   }, [n]);
   const { sort, toggleSort, sortedRows } = useSortableTable(lista, valorDe, COLUNAS);
 
-  const pontos = useMemo(() => {
-    if (!comVendas || !dados) return [];
-    const v = serieDaLista(daMarca, n, canal);
-    const m7 = mediaMovel7(v);
-    return dados.dias.map((dia, i) => ({ dia, pecas: v[i], media7: m7[i] }));
-  }, [comVendas, dados, daMarca, n, canal]);
+  /** Pontos do grafico: uma barra por marketplace dentro do filtro + media de 7 dias. */
+  const pontosDe = useCallback((skus: readonly SkuSlowMoving[]) => {
+    if (!dados || !comVendas) return [];
+    const s = seriesPorMarketplace(skus, n, canal, envio);
+    const m7 = mediaMovel7(s.ML.map((v, i) => v + s.SP[i] + s.TT[i]));
+    return dados.dias.map((dia, i) => ({ dia, ML: s.ML[i], SP: s.SP[i], TT: s.TT[i], media7: m7[i] }));
+  }, [dados, comVendas, n, canal, envio]);
+  const canaisGrafico: Marketplace[] = canal === "todos" ? MARKETPLACES : [canal];
+  const recorte = `${ROTULO_CANAL[canal]}${envio === "todos" ? "" : ` · ${ROTULO_ENVIO[envio]}`}`;
 
   const exportar = () => {
     const linhas = sortedRows.map((s) => linhaExport(s, n, meta, brandLabel(s.marca)));
@@ -142,16 +183,24 @@ export default function SlowMovingClient() {
         onChange={setMarcas}
       />
       {comVendas && <Segmented rotulo="Canal das vendas" opcoes={CANAIS} valor={canal} aoEscolher={setCanal} />}
+      {comVendas && <Segmented rotulo="Envio" opcoes={ENVIOS} valor={envio} aoEscolher={setEnvio} />}
       <label className="flex w-full items-center gap-2 text-sm text-ink-muted sm:w-auto">
-        <span className="sr-only">Buscar por SKU, produto ou categoria</span>
+        <span className="sr-only">Buscar por nome do produto ou SKU</span>
         <input
           type="search"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          placeholder="Buscar SKU ou produto"
+          placeholder="Buscar por nome ou SKU"
           className="rounded-lg border border-line bg-surface text-ink placeholder:text-ink-faint min-h-11 px-3 text-sm w-full sm:w-64 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         />
       </label>
+    </div>
+  );
+
+  const abrirProduto = (s: SkuSlowMoving) => setDialogo({ tipo: "produto", sku: s });
+  const grafico = (skus: readonly SkuSlowMoving[]) => (
+    <div className="h-56 w-full">
+      <Grafico pontos={pontosDe(skus)} canais={canaisGrafico} />
     </div>
   );
 
@@ -163,9 +212,9 @@ export default function SlowMovingClient() {
       filtros={filtrosUI}
     >
       {carregando && (
-        <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+        <div role="status" aria-busy="true" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <span className="sr-only">Carregando slow moving…</span>
-          {Array.from({ length: 6 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
+          {Array.from({ length: 4 }).map((_, i) => <KpiCardSkeleton key={i} anunciar={false} />)}
         </div>
       )}
 
@@ -175,158 +224,225 @@ export default function SlowMovingClient() {
 
       {!carregando && !erro && dados && (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             <KpiTile variante="gerencial" identidade="ads" icone={Snowflake} rotulo="SKUs parados"
-              ajuda={<InfoDica texto={`Regra do Supply (Painel S&OE): curva B/C, descontinuado ou brinde com mais de ${meta} dias de estoque no Marketplace.`} />}
-              valor={int(t.skus)} comparacao={`${int(t.estoque)} peças no Marketplace`} />
+              ajuda={<InfoDica emControle texto={`Regra do Supply (Painel S&OE): curva B/C, descontinuado ou brinde com mais de ${meta} dias de estoque no Marketplace.`} />}
+              valor={int(t.skus)} comparacao={`${int(t.estoque)} peças no Marketplace`}
+              onAbrir={() => setDialogo({ tipo: "skus" })} />
             <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Capital parado"
-              ajuda={<InfoDica texto="Estoque do Marketplace a preço de custo." />}
-              valor={fmtBrlCurto(t.valor)} />
+              ajuda={<InfoDica emControle texto="Estoque do Marketplace a preço de custo." />}
+              valor={fmtBrlCurto(t.valor)} comparacao="a preço de custo"
+              onAbrir={() => setDialogo({ tipo: "capital" })} />
             <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Cobertura"
-              ajuda={<InfoDica texto="Σ estoque ÷ Σ venda média por dia dos últimos 15 dias, no Marketplace (com TikTok)." />}
-              valor={dias(t.cobertura)} comparacao={`Meta: abaixo de ${meta} d`} />
+              ajuda={<InfoDica emControle texto="Σ estoque ÷ Σ venda média por dia dos últimos 15 dias, no Marketplace." />}
+              valor={dias(t.cobertura)} comparacao={`Meta: abaixo de ${meta} d`}
+              onAbrir={() => setDialogo({ tipo: "cobertura" })} />
             <KpiTile variante="gerencial" identidade="pedidos" icone={TrendingUp} rotulo="Venda média/dia (15d)"
-              ajuda={<InfoDica texto="Peças por dia nos últimos 15 dias, avulso + dentro de kits, todos os canais do Marketplace." />}
+              ajuda={<InfoDica emControle texto="Peças por dia nos últimos 15 dias, avulso + dentro de kits, todos os canais do Marketplace." />}
               valor={`${int(t.vendaDia)} pç`}
-              comparacao={comVendas ? <span><Tendencia v={tendenciaDaLista(daMarca, n)} /> vs 15 dias anteriores</span> : undefined} />
-            {comVendas && (
-              <KpiTile variante="gerencial" identidade="gmv" icone={ShoppingBag} rotulo="Faturamento 15d"
-                ajuda={<InfoDica texto="Faturamento dos SKUs da lista nos últimos 15 dias, no canal escolhido." />}
-                valor={fmtBrlCurto(faturamento15d(daMarca, canal))} comparacao={`Canal: ${ROTULO_CANAL[canal]}`} />
-            )}
-            <KpiTile variante="gerencial" identidade="pedidos" icone={Package} rotulo="Precisa vender por dia"
-              ajuda={<InfoDica texto={`Peças por dia para o estoque cair para ${meta} dias.`} />}
-              valor={`${int(t.precisaDia)} pç`} comparacao={`Hoje vende ${int(t.vendaDia)} pç/dia`} />
+              comparacao={comVendas ? <span><Tendencia v={tendenciaDaLista(daMarca, n)} /> vs 15 dias antes</span> : undefined}
+              onAbrir={() => setDialogo({ tipo: "venda" })} />
           </div>
 
           {daMarca.length === 0 ? (
             <StateBlock tipo="vazio" titulo="Nenhum SKU parado" descricao="Nenhum SKU desta seleção passa da meta no Marketplace." />
           ) : (
-            <>
-              {comVendas && (
-                <section aria-labelledby="sm-grafico" className="flex flex-col gap-2">
-                  <h2 id="sm-grafico" className="text-sm font-semibold text-ink">
-                    Venda diária dos SKUs parados — peças ({ROTULO_CANAL[canal]})
-                  </h2>
-                  <div className="h-64 rounded-xl border border-line bg-surface p-3">
-                    <Grafico pontos={pontos} />
-                  </div>
-                </section>
-              )}
-
-              {marcas.length !== 1 && (
-                <section aria-labelledby="sm-marcas" className="flex flex-col gap-2">
-                  <h2 id="sm-marcas" className="text-sm font-semibold text-ink">Por marca</h2>
-                  <TableScrollHint>
-                    <table className="min-w-full text-sm">
-                      <thead className="text-xs uppercase tracking-wide text-ink-muted">
-                        <tr className="border-b border-line">
-                          <th scope="col" className="px-3 py-2 text-left">Marca</th>
-                          <th scope="col" className="px-3 py-2 text-right">SKUs</th>
-                          <th scope="col" className="px-3 py-2 text-right">Capital parado</th>
-                          <th scope="col" className="px-3 py-2 text-right">Estoque</th>
-                          <th scope="col" className="px-3 py-2 text-right">Venda/dia (15d)</th>
-                          {comVendas && <th scope="col" className="px-3 py-2 text-right">Tendência</th>}
-                          <th scope="col" className="px-3 py-2 text-right">Cobertura</th>
-                          <th scope="col" className="px-3 py-2 text-right">Precisa vender/dia</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {porMarca(daMarca, meta).map(({ marca, t: m }) => (
-                          <tr key={marca} className="border-b border-line last:border-0">
-                            <td className="px-3 py-2 font-medium text-ink">
-                              <button type="button" onClick={() => setMarcas([marca])} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-                                {brandLabel(marca)}
-                              </button>
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">{int(m.skus)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(m.valor)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{int(m.estoque)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{dec(m.vendaDia)}</td>
-                            {comVendas && (
-                              <td className="px-3 py-2 text-right tabular-nums">
-                                <Tendencia v={tendenciaDaLista(daMarca.filter((s) => s.marca === marca), n)} />
-                              </td>
-                            )}
-                            <td className="px-3 py-2 text-right tabular-nums">{dias(m.cobertura)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{int(m.precisaDia)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </TableScrollHint>
-                </section>
-              )}
-
-              <section aria-labelledby="sm-skus" className="flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h2 id="sm-skus" className="text-sm font-semibold text-ink">SKUs parados</h2>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {comVendas && <Segmented rotulo="Tendência" opcoes={TENDENCIAS} valor={tendencia} aoEscolher={setTendencia} />}
-                    <button
-                      type="button"
-                      onClick={exportar}
-                      disabled={sortedRows.length === 0}
-                      className="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink hover:bg-raised disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                    >
-                      Exportar tabela (.csv)
-                    </button>
-                  </div>
+            <section aria-labelledby="sm-skus" className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 id="sm-skus" className="text-sm font-semibold text-ink">
+                  SKUs parados <span className="font-normal text-ink-muted">· {int(lista.length)}{lista.length !== daMarca.length ? ` de ${int(daMarca.length)}` : ""}</span>
+                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {comVendas && <Segmented rotulo="Tendência" opcoes={TENDENCIAS} valor={tendencia} aoEscolher={setTendencia} />}
+                  <button
+                    type="button"
+                    onClick={exportar}
+                    disabled={sortedRows.length === 0}
+                    className="inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink hover:bg-raised disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                  >
+                    Exportar (.csv)
+                  </button>
                 </div>
-                {(busca.trim() || tendencia !== "todos") && <p className="text-xs text-ink-muted px-1">{int(lista.length)} no filtro</p>}
-                <TableScrollHint>
-                  <table className="min-w-full text-sm">
-                    <thead className="text-xs text-ink-muted">
-                      <tr className="border-b border-line">
-                        <SortHeader rotulo="Produto" coluna="produto" sort={sort} aoOrdenar={toggleSort} alinhamento="left" />
-                        <SortHeader rotulo="Estoque" coluna="estoque" sort={sort} aoOrdenar={toggleSort} />
-                        <SortHeader rotulo="Venda/dia (15d)" coluna="venda" sort={sort} aoOrdenar={toggleSort} />
-                        {comVendas && <SortHeader rotulo="15d anteriores" coluna="anterior" sort={sort} aoOrdenar={toggleSort} />}
-                        {comVendas && <SortHeader rotulo="Tendência" coluna="tendencia" sort={sort} aoOrdenar={toggleSort} />}
-                        <SortHeader rotulo="Cobertura" coluna="cobertura" sort={sort} aoOrdenar={toggleSort} />
-                        <SortHeader rotulo="Precisa vender/dia" coluna="precisa" sort={sort} aoOrdenar={toggleSort} />
-                        <SortHeader rotulo="Capital parado" coluna="valor" sort={sort} aoOrdenar={toggleSort} />
-                        {comVendas && <th scope="col" className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide">Últimos 30 dias</th>}
+              </div>
+              <TableScrollHint>
+                <table className="min-w-full text-sm">
+                  <thead className="text-xs text-ink-muted">
+                    <tr className="border-b border-line">
+                      <SortHeader rotulo="Produto" coluna="produto" sort={sort} aoOrdenar={toggleSort} alinhamento="left" />
+                      <SortHeader rotulo="Estoque" coluna="estoque" sort={sort} aoOrdenar={toggleSort} />
+                      <SortHeader rotulo="Venda/dia" coluna="venda" sort={sort} aoOrdenar={toggleSort} />
+                      {comVendas && <SortHeader rotulo="Tendência" coluna="tendencia" sort={sort} aoOrdenar={toggleSort} />}
+                      <SortHeader rotulo="Cobertura" coluna="cobertura" sort={sort} aoOrdenar={toggleSort} />
+                      <SortHeader rotulo="Capital parado" coluna="valor" sort={sort} aoOrdenar={toggleSort} />
+                      {comVendas && <th scope="col" className="hidden px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide md:table-cell">30 dias</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedRows.map((s) => (
+                      <tr key={`${s.marca}|${s.sku}`} className="border-b border-line last:border-0 hover:bg-raised/60">
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            onClick={() => abrirProduto(s)}
+                            aria-haspopup="dialog"
+                            className="text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                          >
+                            <span className="block text-ink hover:underline">{s.descricao}</span>
+                            <span className="block text-xs text-ink-muted">{brandLabel(s.marca)} · {s.sku}</span>
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{s.estoque == null ? "—" : int(s.estoque)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{dec(s.venda_dia)}</td>
+                        {comVendas && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={ritmo(s, n).tendencia} /></td>}
+                        <td className="px-3 py-2 text-right tabular-nums">{dias(s.cobertura_dias)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(s.valor_parado)}</td>
+                        {comVendas && (
+                          <td className="hidden px-3 py-2 md:table-cell">
+                            <div className="ml-auto h-8 w-24 text-kpi-pedidos" aria-hidden="true">
+                              <Sparkline pontos={serieDo(s, n).slice(-30)} tinta="text-kpi-pedidos" />
+                            </div>
+                          </td>
+                        )}
                       </tr>
-                    </thead>
-                    <tbody>
-                      {sortedRows.map((s) => {
-                        const r = comVendas ? ritmo(s, n) : null;
-                        return (
-                          <tr key={`${s.marca}|${s.sku}`} className="border-b border-line last:border-0 align-top">
-                            <td className="px-3 py-2">
-                              <div className="text-ink">{s.descricao}</div>
-                              <div className="text-xs text-ink-muted">
-                                {brandLabel(s.marca)} · {s.sku}{s.categoria ? ` · ${s.categoria}` : ""}
-                                {s.curva ? ` · curva ${s.curva}` : ""}{s.status && s.status !== "Ativo" ? ` · ${s.status}` : ""}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">{s.estoque == null ? "—" : int(s.estoque)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums font-medium">{dec(s.venda_dia)}</td>
-                            {r && <td className="px-3 py-2 text-right tabular-nums">{dec(r.m15p)}</td>}
-                            {r && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={r.tendencia} /></td>}
-                            <td className="px-3 py-2 text-right tabular-nums">{dias(s.cobertura_dias)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{s.estoque == null ? "—" : dec(s.estoque / meta)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(s.valor_parado)}</td>
-                            {comVendas && (
-                              <td className="px-3 py-2">
-                                <div className="ml-auto h-8 w-24 text-kpi-pedidos" aria-hidden="true">
-                                  <Sparkline pontos={serieDo(s, n).slice(-30)} tinta="text-kpi-pedidos" />
-                                </div>
-                              </td>
-                            )}
-                          </tr>
-                        );
-                      })}
-                      {sortedRows.length === 0 && (
-                        <tr><td colSpan={9} className="px-3 py-6 text-center text-ink-muted">Nenhum SKU neste filtro.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </TableScrollHint>
-              </section>
-            </>
+                    ))}
+                    {sortedRows.length === 0 && (
+                      <tr><td colSpan={7} className="px-3 py-6 text-center text-ink-muted">Nenhum SKU nesta busca.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </TableScrollHint>
+            </section>
           )}
+
+          <KpiDrilldownDialog
+            open={dialogo != null}
+            onClose={() => setDialogo(null)}
+            title={dialogo == null ? "" : dialogo.tipo === "produto" ? dialogo.sku.descricao : CARTOES[dialogo.tipo].titulo}
+            focusResetKey={dialogo?.tipo === "produto" ? dialogo.sku.sku : dialogo?.tipo}
+            largura="larga"
+            icone={dialogo && dialogo.tipo !== "produto" ? CARTOES[dialogo.tipo].icone : undefined}
+            identidade={dialogo && dialogo.tipo !== "produto" ? CARTOES[dialogo.tipo].identidade : undefined}
+          >
+            {dialogo?.tipo === "produto" && (() => {
+              const s = dialogo.sku;
+              const r = ritmo(s, n);
+              const p15 = pecas15dPorMarketplace(s, n);
+              const total15 = p15.ML + p15.SP + p15.TT;
+              return (
+                <div className="flex flex-col gap-3">
+                  <p className="text-sm text-ink-muted">
+                    {[brandLabel(s.marca), `SKU ${s.sku}`, s.categoria, s.curva && `curva ${s.curva}`, s.status].filter(Boolean).join(" · ")}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <Metrica rotulo="Estoque no Marketplace" valor={s.estoque == null ? "—" : `${int(s.estoque)} pç`} sub={s.custo_unitario ? `custo ${fmtBrlCurto(s.custo_unitario)}/pç` : undefined} />
+                    <Metrica rotulo="Capital parado" valor={fmtBrlCurto(s.valor_parado)} />
+                    <Metrica rotulo="Cobertura" valor={dias(s.cobertura_dias)} sub={`meta: abaixo de ${meta} d`} />
+                    <Metrica rotulo="Venda/dia (15d)" valor={`${dec(s.venda_dia)} pç`} sub={comVendas ? <>15d antes: {dec(r.m15p)} · <Tendencia v={r.tendencia} /></> : undefined} />
+                    <Metrica rotulo="Precisa vender/dia" valor={s.estoque == null ? "—" : `${dec(s.estoque / meta)} pç`} sub={`para ficar em ${meta} d`} />
+                    {comVendas && <Metrica rotulo="Faturamento 15d" valor={fmtBrlCurto(faturamento15d([s]))} />}
+                  </div>
+                  {comVendas && (
+                    <>
+                      <DrilldownSecao titulo="Peças nos últimos 15 dias, por canal">
+                        <div className="grid grid-cols-3 gap-2">
+                          {MARKETPLACES.map((m) => (
+                            <Metrica key={m} rotulo={ROTULO_MKT[m]} valor={int(p15[m])} sub={total15 ? `${Math.round((p15[m] / total15) * 100)}%` : undefined} />
+                          ))}
+                        </div>
+                      </DrilldownSecao>
+                      <DrilldownSecao titulo={`Venda diária, 60 dias (${recorte})`}>{grafico([s])}</DrilldownSecao>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+
+            {dialogo?.tipo === "skus" && (
+              <TableScrollHint>
+                <table className="min-w-full text-sm">
+                  <thead className="text-xs uppercase tracking-wide text-ink-muted">
+                    <tr className="border-b border-line">
+                      <th scope="col" className="px-3 py-2 text-left">Marca</th>
+                      <th scope="col" className="px-3 py-2 text-right">SKUs</th>
+                      <th scope="col" className="px-3 py-2 text-right">Capital parado</th>
+                      <th scope="col" className="px-3 py-2 text-right">Venda/dia</th>
+                      {comVendas && <th scope="col" className="px-3 py-2 text-right">Tendência</th>}
+                      <th scope="col" className="px-3 py-2 text-right">Cobertura</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {porMarca(daMarca, meta).map(({ marca, t: m }) => (
+                      <tr key={marca} className="border-b border-line last:border-0">
+                        <td className="px-3 py-2 font-medium text-ink">
+                          <button type="button" onClick={() => { setMarcas([marca]); setDialogo(null); }} className="rounded hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                            {brandLabel(marca)}
+                          </button>
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums">{int(m.skus)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(m.valor)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{dec(m.vendaDia)}</td>
+                        {comVendas && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={tendenciaDaLista(daMarca.filter((s) => s.marca === marca), n)} /></td>}
+                        <td className="px-3 py-2 text-right tabular-nums">{dias(m.cobertura)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 text-xs text-ink-muted">Clique na marca para ver só ela.</p>
+              </TableScrollHint>
+            )}
+
+            {dialogo?.tipo === "capital" && (
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-ink-muted">{fmtBrlCurto(t.valor)} a preço de custo · os 10 SKUs com mais capital parado:</p>
+                <ol className="flex flex-col divide-y divide-line">
+                  {[...daMarca].sort((a, b) => b.valor_parado - a.valor_parado).slice(0, 10).map((s) => (
+                    <li key={`${s.marca}|${s.sku}`}>
+                      <button type="button" onClick={() => abrirProduto(s)} className="flex w-full items-center justify-between gap-3 py-2 text-left hover:bg-raised/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded">
+                        <span className="min-w-0">
+                          <span className="block truncate text-ink">{s.descricao}</span>
+                          <span className="block text-xs text-ink-muted">{brandLabel(s.marca)} · {s.sku} · {dias(s.cobertura_dias)}</span>
+                        </span>
+                        <span className="shrink-0 tabular-nums font-semibold">{fmtBrlCurto(s.valor_parado)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+
+            {dialogo?.tipo === "cobertura" && (
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {FAIXAS.map((f) => {
+                    const l = daMarca.filter(f.passa);
+                    return <Metrica key={f.rotulo} rotulo={f.rotulo} valor={`${int(l.length)} SKUs`} sub={fmtBrlCurto(l.reduce((a, s) => a + s.valor_parado, 0))} />;
+                  })}
+                </div>
+                <DrilldownSecao titulo="Para chegar na meta">
+                  <p className="text-sm text-ink">
+                    Precisa vender <b>{int(t.precisaDia)} pç/dia</b> para o estoque cair para {meta} dias. Hoje vende {int(t.vendaDia)} pç/dia.
+                  </p>
+                </DrilldownSecao>
+              </div>
+            )}
+
+            {dialogo?.tipo === "venda" && (
+              <div className="flex flex-col gap-3">
+                {comVendas ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      <Metrica rotulo="Venda/dia (15d)" valor={`${int(t.vendaDia)} pç`} sub={<><Tendencia v={tendenciaDaLista(daMarca, n)} /> vs 15 dias antes</>} />
+                      <Metrica rotulo={`Faturamento 15d · ${recorte}`} valor={fmtBrlCurto(faturamento15d(daMarca, canal, envio))} />
+                    </div>
+                    <DrilldownSecao titulo={`Peças por dia, 60 dias (${recorte})`}>{grafico(daMarca)}</DrilldownSecao>
+                    <p className="text-xs text-ink-muted">Pedidos de Mercado Livre, Shopee e TikTok com os kits abertos em peças. Canal e envio seguem os filtros do topo.</p>
+                  </>
+                ) : (
+                  <p className="text-sm text-ink-muted">A venda diária por canal está indisponível agora; a média de 15 dias vem do Supply.</p>
+                )}
+              </div>
+            )}
+          </KpiDrilldownDialog>
         </>
       )}
     </Aba>

@@ -30,15 +30,22 @@ test("por marca: maior R$ primeiro; filtro de marca e busca sem acento", () => {
   assert.deepEqual(filtrar(L, [], "fragrances kiss").map((s) => s.sku), ["BB02084"]);
 });
 
-test("ritmo, tendencia e canal: TikTok separado; media movel de 7", async () => {
-  const { ritmo, serieDo, passaTendencia, serieDaLista, faturamento15d, mediaMovel7 } = await import("../src/lib/full-slow-moving.ts");
+test("ritmo, tendencia e canal: ML/Shopee/TikTok e Full/normal; media movel de 7", async () => {
+  const { ritmo, serieDo, passaTendencia, seriesPorMarketplace, faturamento15d, mediaMovel7, pecas15dPorMarketplace } = await import("../src/lib/full-slow-moving.ts");
   const base = sku("barbours", "BB02084", "Kiss", 100, 10, 2);
-  const s = { ...base, serie: { MKT: [...Array(15).fill(1), ...Array(15).fill(2)], TT: [...Array(15).fill(0), ...Array(15).fill(1)] }, receita_15d: { MKT: 30, TT: 10 } };
+  const s = { ...base,
+    serie: { "ML-F": [...Array(15).fill(1), ...Array(15).fill(2)], "SP-N": [...Array(15).fill(0), ...Array(15).fill(1)] },
+    receita_15d: { "ML-F": 30, "SP-N": 10 } };
   assert.deepEqual(ritmo(s, 30), { m15: 3, m15p: 1, tendencia: 200 });
-  assert.equal(serieDo(s, 30, "TT")[29], 1);
+  assert.equal(serieDo(s, 30, "SP")[29], 1);
+  assert.equal(serieDo(s, 30, "todos", "F")[29], 2);
   assert.ok(passaTendencia(s, 30, "melhorando") && !passaTendencia(s, 30, "piorando"));
   assert.equal(passaTendencia({ ...base, serie: {}, receita_15d: {} }, 30, "melhorando"), false); // sem base nao entra
-  assert.equal(serieDaLista([s, s], 30, "MKT")[0], 2);
-  assert.equal(faturamento15d([s], "todos"), 40);
+  const ser = seriesPorMarketplace([s, s], 30, "todos", "todos");
+  assert.deepEqual([ser.ML[29], ser.SP[29], ser.TT[29]], [4, 2, 0]);
+  assert.equal(seriesPorMarketplace([s], 30, "SP", "todos").ML[29], 0); // filtro de canal zera os outros
+  assert.equal(faturamento15d([s]), 40);
+  assert.equal(faturamento15d([s], "ML", "N"), 0);
+  assert.deepEqual(pecas15dPorMarketplace(s, 30), { ML: 30, SP: 15, TT: 0 });
   assert.deepEqual(mediaMovel7([7, 0, 0, 0, 0, 0, 0, 7]), [7, 3.5, 7 / 3, 1.75, 1.4, 7 / 6, 1, 1]);
 });

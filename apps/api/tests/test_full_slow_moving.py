@@ -23,7 +23,7 @@ def test_marcas_da_torre_pecas_e_ordem():
             return []
         return [{"dia": date(2026, 11, 17)}] if "si_historical_stock" in sql else linhas
 
-    r = get_slow_moving(consultar, hoje=date(2026, 11, 17))
+    r = get_slow_moving(consultar, hoje=date(2026, 11, 17), lookups=lambda: None)
     assert [s.sku for s in r.skus] == ["KS03042", "RT01030"]  # bysamia fora; maior R$ primeiro
     assert r.skus[0].marca == "kokeshi" and r.skus[0].estoque == 98332
     rt = r.skus[1]
@@ -32,18 +32,19 @@ def test_marcas_da_torre_pecas_e_ordem():
 
 
 
-def test_serie_do_supply_por_marca_e_canal():
-    from app.services.full_slow_moving_service import _marca
-    from app.services.slow_moving_vendas import series_por_sku
+def test_kit_vira_pecas_e_canal_separa_ml_shopee_tiktok():
+    from app.services.slow_moving_vendas import montar_lookups, series_por_sku
 
-    linhas = [
-        {"empresa": "Barbours", "sku_unico": "BB02084", "canal": "MKT", "q": "0,0,3", "r": "0,0,90.5"},
-        {"empresa": "Barbours", "sku_unico": "BB02084", "canal": "TT", "q": "0,2,0", "r": "0,50,0"},
-        {"empresa": "Rituária", "sku_unico": "BB02084", "canal": "MKT", "q": "0,0,7", "r": "0,0,1"},
-        {"empresa": "Barbours", "sku_unico": "BB02008", "canal": "MKT", "q": "1,2", "r": "1,2"},  # tamanho errado
-    ]
-    s = series_por_sku(linhas, 3, _marca)
-    assert s[("barbours", "BB02084")]["q"] == {"MKT": [0, 0, 3], "TT": [0, 2, 0]}
-    assert s[("barbours", "BB02084")]["r"]["MKT"] == [0, 0, 90.5]
-    assert s[("rituaria", "BB02084")]["q"]["MKT"] == [0, 0, 7]  # mesmo codigo em outra marca fica separado
-    assert ("barbours", "BB02008") not in s
+    depara_csv = "Empresa,SKU unico,Status,Descricao,SKU VENDAS,SKU VENDAS 2\nBarbours,BB02084,Ativo,Kiss,10056,7901128400075\n"
+    kits_csv = "Empresa,SKU KIT,Descricao,SKU UNICO 1,SKU UNICO 2\nBarbours,KIT009,Kit 2 Kiss,BB02084,BB02084\n"
+    depara, kits = montar_lookups(depara_csv, kits_csv, {"kitRows": [], "inferidos": {}})
+    assert depara["barbours"]["10056"] == "BB02084" and kits["barbours"]["KIT009"] == {"BB02084": 2}
+    linhas = {
+        "SP": [{"marca": "barbours", "sku": "10056", "envio": "F", "q": "0,0,3", "r": "0,0,90"}],
+        "ML": [{"marca": "barbours", "sku": "kit-009", "envio": "N", "q": "0,1,0", "r": "0,50,0"},
+               {"marca": "barbours", "sku": "SEM-DEPARA", "envio": "N", "q": "9,9,9", "r": "1,1,1"}],
+        "TT": [{"marca": "barbours", "sku": "10056", "envio": "N", "q": "1,2", "r": "1,2"}],  # tamanho errado
+    }
+    e = series_por_sku(linhas, 3, depara, kits)[("barbours", "BB02084")]
+    assert e["q"] == {"SP-F": [0, 0, 3], "ML-N": [0, 2, 0]}  # kit = 2 pecas; sem de-para e lista quebrada nao entram
+    assert e["r"]["ML-N"] == [0, 50, 0]
