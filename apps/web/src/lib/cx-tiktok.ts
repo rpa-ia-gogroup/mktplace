@@ -28,6 +28,8 @@ export interface MotivoTikTok {
 }
 
 export interface CxTikTokResponse {
+  /** A API ainda esta' lendo o TikTok em 2o plano: perguntar de novo em alguns segundos. */
+  carregando?: boolean;
   gerado_em: string;
   dias: number;
   inicio: string;
@@ -36,8 +38,10 @@ export interface CxTikTokResponse {
   motivos: MotivoTikTok[];
 }
 
-/** A 1a leitura da janela pagina a API do TikTok por marca: pode passar de 1 min (depois, cache de 10 min). */
-export const TIMEOUT_TIKTOK_MS = 240_000;
+/** Cada pergunta e' rapida (a API nunca espera o TikTok); a 1a leitura da janela vem por repeticao. */
+export const TIMEOUT_TIKTOK_MS = 30_000;
+export const INTERVALO_TIKTOK_MS = 5_000;
+export const MAX_TENTATIVAS_TIKTOK = 60; // ~5 min
 
 export function urlCxTikTok(base: string, f: FiltrosCx): string {
   const qs = new URLSearchParams({ dias: String(f.dias) });
@@ -47,7 +51,23 @@ export function urlCxTikTok(base: string, f: FiltrosCx): string {
 
 export type ResultadoTikTok = { ok: true; dados: CxTikTokResponse } | { ok: false; motivo: string };
 
-export async function carregarCxTikTok(f: FiltrosCx, fetchImpl: typeof fetch = fetch, base: string = API_URL): Promise<ResultadoTikTok> {
+/** Pergunta ate' a API terminar de ler o TikTok (`carregando`), esperando `esperar` entre as tentativas. */
+export async function carregarCxTikTok(
+  f: FiltrosCx,
+  fetchImpl: typeof fetch = fetch,
+  base: string = API_URL,
+  esperar: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  vivo: () => boolean = () => true,
+): Promise<ResultadoTikTok> {
+  for (let n = 0; n < MAX_TENTATIVAS_TIKTOK && vivo(); n++) {
+    const r = await umaVezTikTok(f, fetchImpl, base);
+    if (!r.ok || !r.dados.carregando) return r;
+    await esperar(INTERVALO_TIKTOK_MS);
+  }
+  return { ok: false, motivo: "O TikTok está demorando para responder. Tente de novo em alguns minutos." };
+}
+
+async function umaVezTikTok(f: FiltrosCx, fetchImpl: typeof fetch, base: string): Promise<ResultadoTikTok> {
   const controle = new AbortController();
   const timer = setTimeout(() => controle.abort(), TIMEOUT_TIKTOK_MS);
   try {
@@ -57,7 +77,7 @@ export async function carregarCxTikTok(f: FiltrosCx, fetchImpl: typeof fetch = f
     if (!j || !Array.isArray(j.marcas) || !Array.isArray(j.motivos)) return { ok: false, motivo: "Resposta inválida da API." };
     return { ok: true, dados: j };
   } catch {
-    return { ok: false, motivo: controle.signal.aborted ? "O TikTok demorou demais para responder. Tente de novo." : "Não foi possível contatar a API." };
+    return { ok: false, motivo: controle.signal.aborted ? "A API demorou demais para responder. Tente de novo." : "Não foi possível contatar a API." };
   } finally {
     clearTimeout(timer);
   }

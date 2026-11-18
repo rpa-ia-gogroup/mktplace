@@ -442,3 +442,13 @@ test("cx tiktok: resumo soma so' marcas com dado e Pareto acumula", async () => 
   const it = itensParetoTikTok(d);
   assert.deepEqual(it.map((i) => [i.pct, i.acumulado, i.natureza]), [["75,0%", "75%", "Comprador"], ["25,0%", "100%", "Comprador"]]);
 });
+
+test("cx tiktok: repete enquanto a API diz carregando e para no dado", async () => {
+  const { carregarCxTikTok } = await import("../src/lib/cx-tiktok.ts");
+  const respostas = [{ carregando: true, marcas: [], motivos: [] }, { carregando: true, marcas: [], motivos: [] },
+    { gerado_em: "x", dias: 7, inicio: "a", fim: "b", marcas: [], motivos: [] }];
+  let n = 0;
+  const r = await carregarCxTikTok({ marca: null, dias: 7 }, (async () => Response.json(respostas[n++])) as typeof fetch, "", async () => {});
+  assert.equal(n, 3);
+  assert.ok(r.ok && !r.dados.carregando);
+});

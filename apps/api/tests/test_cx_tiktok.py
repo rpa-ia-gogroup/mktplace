@@ -48,3 +48,16 @@ def test_monta_por_motivo_e_marca_e_isola_marca_sem_permissao(monkeypatch):
     assert dev["skus"] == [{"marca": "kokeshi", "sku": "S1", "produto": "Creme", "quantidade": 1}]
     f = svc._filtrar(d, ["apice"])
     assert f["motivos"] == [] and [m["marca"] for m in f["marcas"]] == ["apice"]
+
+
+def test_obter_nunca_espera_o_tiktok():
+    svc._cache.clear(); svc._rodando.clear()
+    disparos = []
+    r = svc.obter(7, iniciar=disparos.append)
+    assert r["carregando"] is True and disparos == [7]
+    assert svc.obter(7, iniciar=disparos.append)["carregando"] is True and disparos == [7]  # ja' rodando: nao dispara de novo
+    svc._rodando.clear()
+    svc._cache[7] = (svc.time.time(), {"marcas": [{"marca": "kokeshi"}], "motivos": [], "dias": 7})
+    assert svc.obter(7, iniciar=disparos.append)["marcas"] == [{"marca": "kokeshi"}] and disparos == [7]
+    svc._cache[7] = (0, svc._cache[7][1])  # vencido: devolve o antigo e atualiza por tras
+    assert svc.obter(7, iniciar=disparos.append)["marcas"] and disparos == [7, 7]

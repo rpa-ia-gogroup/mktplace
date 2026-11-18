@@ -31,7 +31,6 @@ from app.services import cx_avaliacoes_service
 from app.services import cx_ml_service
 from app.services import cx_pedidos_service
 from app.services import cx_tiktok_service
-from app.database import get_db
 
 
 def exigir_flag() -> None:
@@ -124,11 +123,9 @@ def cx_ml_pedidos(
 
 
 @router.get("/tiktok")
-def cx_tiktok(brands: Optional[list[str]] = Depends(brands_query), dias: int = Depends(dias_query), db=Depends(get_db)):
-    """CX do TikTok Shop direto da Open API (app da Torre): devolucoes e cancelamentos por motivo e marca."""
-    if db is None:
-        raise HTTPException(503, "Banco indisponivel.")
-    return cx_tiktok_service.obter(dias, db, brands)
+def cx_tiktok(brands: Optional[list[str]] = Depends(brands_query), dias: int = Depends(dias_query)):
+    """CX do TikTok Shop direto da Open API (app da Torre). Sem cache: `carregando=true` e le em 2o plano."""
+    return cx_tiktok_service.obter(dias, brands)
 
 
 @router.get("/shopee/avaliacoes", response_model=CxAvaliacoesResponse)
