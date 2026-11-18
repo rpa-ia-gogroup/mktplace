@@ -108,7 +108,7 @@ function routes(over: Record<string, unknown> = {}) {
 
 async function connect(rs: Record<string, unknown> = routes()) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch(rs),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),

@@ -36,7 +36,7 @@ const ROUTES: Record<string, unknown> = {
 
 async function connect(routes: Record<string, unknown> = ROUTES, log?: CallLog) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch(routes, log),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
@@ -73,7 +73,7 @@ function withBroken(path: string, payload: unknown): Record<string, unknown> {
 const LOCAL_OK: AccessEnv = {
   NODE_ENV: "development",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
 };
 
 test("F1: Preview da Vercel e' NEGADO mesmo com NODE_ENV=development", () => {
@@ -404,7 +404,7 @@ test("F3: monthBoundsOf resolve fevereiro comum e bissexto", () => {
 
 test("F4: corpo pendurado APOS os headers termina como SOURCE_TIMEOUT", async () => {
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: headersThenHangFetch(),
     timeoutMs: 60,
   });
@@ -423,7 +423,7 @@ test("F4: corpo pendurado APOS os headers termina como SOURCE_TIMEOUT", async ()
 test("F4: teto de bytes vale para conteudo multibyte (streaming)", async () => {
   // 200 caracteres "€" = 600 bytes UTF-8, acima do teto de 300.
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: multibyteStreamFetch(200),
     maxBytes: 300,
     timeoutMs: 1000,
@@ -437,7 +437,7 @@ test("F4: teto de bytes vale para conteudo multibyte (streaming)", async () => {
 
 test("F4: conteudo multibyte DENTRO do teto passa", async () => {
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: multibyteStreamFetch(10), // 30 bytes + aspas
     maxBytes: 300,
     timeoutMs: 1000,
@@ -450,7 +450,7 @@ test("F4: fallback sem stream tambem mede BYTES, nao caracteres", async () => {
   // 150 caracteres = 150 chars, mas 450 bytes em UTF-8.
   const payload = '"' + "€".repeat(150) + '"';
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: noStreamFetch(payload),
     maxBytes: 300,
     timeoutMs: 1000,
@@ -476,7 +476,7 @@ test("F4: timeout na fase de headers continua SOURCE_TIMEOUT", async () => {
     })) as unknown as typeof fetch;
 
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: hangBeforeHeaders,
     timeoutMs: 40,
   });
@@ -546,7 +546,7 @@ test("F6: refreshed_at nao e' confundido com a competencia dos indicadores", asy
 
 test("F6: virada de ano — janeiro produz frescor de jan e indicadores de dez/ano-1", async () => {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch(ROUTES),
     now: () => new Date("2026-01-15T12:00:00.000Z"),
     rateLimiter: new SlidingWindowRateLimiter({ limit: 100, windowMs: 60_000 }),
@@ -646,7 +646,7 @@ test("valores distintos continuam aceitos e nao duplicam linhas", async () => {
 test("revisao: typo com valor `undefined` tambem falha (erro nao fica latente)", async () => {
   const log: CallLog = [];
   const c = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({ "/api/v1/performance/overview": OVERVIEW }, log),
   });
 
@@ -689,7 +689,7 @@ test("F4: nenhum timer/recurso fica pendurado depois do timeout", async () => {
   const before = process.getActiveResourcesInfo().filter((r) => r === "Timeout").length;
 
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: headersThenHangFetch(),
     timeoutMs: 40,
   });
@@ -709,7 +709,7 @@ test("F4: nenhum timer/recurso fica pendurado depois do timeout", async () => {
 test("terminal-F2: `cancel()` que NUNCA resolve nao segura a tool", async () => {
   const { impl, cancelCalls } = hangingCancelFetch();
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: impl,
     timeoutMs: 50,
   });
@@ -729,7 +729,7 @@ test("terminal-F2: `cancel()` que NUNCA resolve nao segura a tool", async () => 
 test("terminal-F2: caso normal continua liberando o reader sem erro solto", async () => {
   const { impl, cancelCalls } = countingCancelFetch({ current: { gmv: 1, orders: 1 } });
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: impl,
     timeoutMs: 1000,
   });
@@ -756,7 +756,7 @@ test("terminal-F2: nenhum timer fica pendurado apos o cancel hostil", async () =
 
   const { impl } = hangingCancelFetch();
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: impl,
     timeoutMs: 40,
   });

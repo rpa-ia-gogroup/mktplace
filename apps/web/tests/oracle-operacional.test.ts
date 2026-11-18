@@ -56,7 +56,7 @@ const STOCK_ROUTES: Record<string, Route> = {
 
 async function connect(routes: Record<string, Route>, calls: Calls = []) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: routedFetch(routes, calls),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
@@ -125,7 +125,7 @@ test("expedicao: include_queue=false sempre, nenhuma linha/identificador de pedi
 
 test("expedicao: o adapter recusa /expedicao sem include_queue=false ANTES do fetch", async () => {
   const calls: Calls = [];
-  const c = new TorreClient({ baseUrl: "https://mktplace-api.onrender.com", fetchImpl: routedFetch(EXP_ROUTES, calls) });
+  const c = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch(EXP_ROUTES, calls) });
   for (const params of [{ channel: "shopee" }, { channel: "shopee", include_queue: "true" }]) {
     await assert.rejects(
       () => c.get("expedicao", params),
@@ -373,7 +373,7 @@ test("estoque: limites e texto livre falham antes do GET; periodo so' com dias f
   }
   assert.equal(calls.length, 0);
 
-  const c = new TorreClient({ baseUrl: "https://mktplace-api.onrender.com", fetchImpl: routedFetch(STOCK_ROUTES, calls) });
+  const c = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch(STOCK_ROUTES, calls) });
   for (const p of [{ busca: "x" }, { accounts: ["apice"] }, { limit: 10 }]) {
     await assert.rejects(() => c.get("shopeeFbsEstoque", p as never), (e: unknown) => e instanceof OracleToolError);
   }
@@ -486,7 +486,7 @@ test("precos: product_query, canal fora do enum e limite > 50 falham antes do GE
     await callError(client, "torre_monitoramento_precos", args);
   }
   assert.equal(calls.length, 0);
-  const c = new TorreClient({ baseUrl: "https://mktplace-api.onrender.com", fetchImpl: routedFetch(PMA_ROUTES, calls) });
+  const c = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch(PMA_ROUTES, calls) });
   for (const p of [{ product_query: "x" }, { shop_account: "a" }, { offset: 1 }, { order_by: "x" }]) {
     await assert.rejects(() => c.get("monitoramentoPreco", p as never), (e: unknown) => e instanceof OracleToolError);
   }
@@ -664,7 +664,7 @@ const NOW_REAL = new Date("2026-11-11T12:00:00Z"); // 47 h apos a publicacao do 
 
 async function connectDre(payload: Route, calls: Calls = [], now = NOW_REAL) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: routedFetch({ "/api/v1/dre": payload }, calls),
     now: () => now,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
@@ -810,7 +810,7 @@ test("torre_dre: filtros vao como CSV na ordem canonica; lista repetida e' recus
   assert.equal(calls[0].searchParams.get("channels"), "tiktok,ml");
   assert.deepEqual(calls[0].searchParams.getAll("brands"), ["apice,barbours"]);
 
-  const client = new TorreClient({ baseUrl: "https://mktplace-api.onrender.com", fetchImpl: routedFetch({}, []) });
+  const client = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch({}, []) });
   await assert.rejects(
     () => client.get("dre", { ref_month: "2026-10", brands: ["apice", "barbours"] }),
     (e: unknown) => e instanceof OracleToolError && e.category === "MISSING_CONFIGURATION",
@@ -892,7 +892,7 @@ test("erro upstream nas tools novas e' sanitizado (sem URL, sem status)", async 
 test("rate limit tambem cobre as tools novas", async () => {
   const calls: Calls = [];
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: routedFetch(PMA_ROUTES, calls),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1, windowMs: 60_000 }),
@@ -934,7 +934,7 @@ test("M1: nenhuma conta no escopo -> totais NULOS, nunca 'backlog 0'", async () 
 
 test("m1: guarda de include_queue usa todos os valores; lista em parametro escalar e' recusada", async () => {
   const calls: Calls = [];
-  const c = new TorreClient({ baseUrl: "https://mktplace-api.onrender.com", fetchImpl: routedFetch({ ...EXP_ROUTES, ...STOCK_ROUTES }, calls) });
+  const c = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch({ ...EXP_ROUTES, ...STOCK_ROUTES }, calls) });
   for (const p of [
     { channel: "shopee", include_queue: ["false", "true"] },
     { channel: ["shopee", "mercadolivre"], include_queue: "false" },

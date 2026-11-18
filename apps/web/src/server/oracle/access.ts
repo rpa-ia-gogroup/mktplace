@@ -181,13 +181,13 @@ export function isProductionEnv(env: AccessEnv): boolean {
  * (uma configuracao errada continuaria destravando qualquer origem). Com a
  * constante, uma configuracao divergente falha FECHADA.
  */
-export const ALLOWED_BACKEND_HOSTNAME = "mktplace-api.onrender.com";
+export const ALLOWED_BACKEND_HOSTNAME = "mktplace-api-6wif.onrender.com";
 
 /**
  * Valida a base do backend. Estrita de proposito:
  * - `https:` obrigatorio;
  * - hostname EXATAMENTE igual ao canonico (nunca `endsWith`, que aceitaria
- *   `mktplace-api.onrender.com.evil.invalid`);
+ *   `mktplace-api-6wif.onrender.com.evil.invalid`);
  * - porta explicita ausente (somente a porta padrao de HTTPS);
  * - sem credencial embutida;
  * - sem query, sem fragment;

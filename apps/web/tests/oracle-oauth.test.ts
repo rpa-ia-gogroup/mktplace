@@ -36,7 +36,7 @@ const PROD_ENV: AccessEnv = {
   VERCEL: "1",
   VERCEL_ENV: "production",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   ORACLE_AUTH_ISSUER: ISSUER,
   ORACLE_AUTH_AUDIENCE: AUDIENCE,
   ORACLE_AUTH_REQUIRED_SCOPE: SCOPE,
@@ -204,7 +204,7 @@ test("metadata: 200 em local completo (OAuth + flag + backend)", async () => {
   const res = protectedResourceMetadataResponse({
     NODE_ENV: "development",
     ORACLE_MCP_ENABLED: "1",
-    MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+    MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     ...OAUTH_ENV,
   });
   assert.equal(res.status, 200);
@@ -230,7 +230,7 @@ test("metadata: disponibilidade segue a MESMA decisao da rota MCP", async () => 
     ["local sem OAuth (modo OM1)", {
       NODE_ENV: "development",
       ORACLE_MCP_ENABLED: "1",
-      MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+      MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     }],
   ];
 
@@ -252,7 +252,7 @@ test("metadata: as duas rotas devolvem corpo IDENTICO", async () => {
   Object.assign(process.env, {
     NODE_ENV: "development",
     ORACLE_MCP_ENABLED: "1",
-    MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+    MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     ORACLE_AUTH_ISSUER: ISSUER,
     ORACLE_AUTH_AUDIENCE: AUDIENCE,
     ORACLE_AUTH_REQUIRED_SCOPE: SCOPE,
@@ -831,7 +831,7 @@ test("local sem OAuth mantem o comportamento do OM1 (sem auth)", () => {
   const d = evaluateAccess({
     NODE_ENV: "development",
     ORACLE_MCP_ENABLED: "1",
-    MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+    MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   });
   assert.equal(d.allowed, true);
   assert.equal(d.allowed === true && d.mode, "development");
@@ -842,7 +842,7 @@ test("local COM OAuth configurado passa a exigir bearer", async () => {
   const env: AccessEnv = {
     NODE_ENV: "development",
     ORACLE_MCP_ENABLED: "1",
-    MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+    MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     ...OAUTH_ENV,
   };
   const d = evaluateAccess(env);
@@ -926,7 +926,7 @@ test("as nove tools continuam read-only e sem escrita", async () => {
 const DEPLOY_BASE: AccessEnv = {
   NODE_ENV: "production",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   ORACLE_AUTH_ISSUER: ISSUER,
   ORACLE_AUTH_AUDIENCE: AUDIENCE,
   ORACLE_AUTH_REQUIRED_SCOPE: SCOPE,
@@ -1011,7 +1011,7 @@ test("ambiente: nenhuma flag, backend ou OAuth destrava Preview", async () => {
       ...DEPLOY_BASE,
       VERCEL: "1",
       VERCEL_ENV: "preview",
-      MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+      MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     },
     { ...DEPLOY_BASE, VERCEL: "1", VERCEL_ENV: "preview", ORACLE_AUTH_REQUIRED_SCOPE: SCOPE },
   ];
@@ -1028,7 +1028,7 @@ test("ambiente: local dev/test seguem permitidos com habilitacao explicita", () 
     const d = evaluateAccess({
       NODE_ENV: nodeEnv,
       ORACLE_MCP_ENABLED: "1",
-      MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+      MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
     });
     assert.equal(d.allowed, true, nodeEnv);
     assert.equal(d.allowed === true && d.auth, null, "sem OAuth local, sem bearer exigido");

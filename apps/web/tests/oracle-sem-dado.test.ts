@@ -41,7 +41,7 @@ type Env = { meta: Record<string, any>; data: any };
 
 async function chamar(overview: unknown, brands: unknown, args: Record<string, unknown>): Promise<Env> {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({
       "/api/v1/performance/overview": overview,
       "/api/v1/performance/brands": brands,
@@ -120,7 +120,7 @@ import { ML_FULL, ML_FULL_ESTOQUE, ML_FULL_SEM_PEDIDO, SHOPEE_ESTOQUE, SHOPEE_FB
 
 async function chamarTool(routes: Record<string, unknown>, nome: string, args: Record<string, unknown>, now = FIXED_NOW): Promise<Env> {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch(routes),
     now: () => now,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),

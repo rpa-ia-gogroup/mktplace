@@ -33,7 +33,7 @@ const ROUTES = {
 
 async function connect(routes: Record<string, unknown> = ROUTES, log?: CallLog) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch(routes, log),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
@@ -471,7 +471,7 @@ function capturingFetch(status = 200) {
 test("TorreClient envia x-torre-service-key quando serviceKey esta definida", async () => {
   const { seen, fetchImpl } = capturingFetch();
   const client = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     serviceKey: SERVICE_KEY,
     fetchImpl,
   });
@@ -485,7 +485,7 @@ test("TorreClient sem serviceKey (ou so com espacos) nao envia header extra", as
   for (const serviceKey of [undefined, "", "   "]) {
     const { seen, fetchImpl } = capturingFetch();
     const client = new TorreClient({
-      baseUrl: "https://mktplace-api.onrender.com",
+      baseUrl: "https://mktplace-api-6wif.onrender.com",
       serviceKey,
       fetchImpl,
     });
@@ -500,7 +500,7 @@ test("a chave de servico nunca aparece nos erros do TorreClient", async () => {
   }) as typeof fetch;
   for (const fetchImpl of [leaky, capturingFetch(401).fetchImpl, capturingFetch(500).fetchImpl]) {
     const client = new TorreClient({
-      baseUrl: "https://mktplace-api.onrender.com",
+      baseUrl: "https://mktplace-api-6wif.onrender.com",
       serviceKey: SERVICE_KEY,
       fetchImpl,
     });
@@ -712,7 +712,7 @@ function mlFalhaFetch(modo: "timeout" | "5xx", log: string[] = []): typeof fetch
 
 async function connectMlFalha(modo: "timeout" | "5xx", log?: string[]) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: mlFalhaFetch(modo, log),
     now: () => FIXED_NOW,
     timeoutMs: 50,

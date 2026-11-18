@@ -17,7 +17,7 @@ import {
 
 async function connect(fetchImpl: typeof fetch, limiter?: SlidingWindowRateLimiter) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl,
     now: () => FIXED_NOW,
     rateLimiter: limiter ?? new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),
@@ -73,7 +73,7 @@ test("JSON malformado vira categoria sanitizada", async () => {
 
 test("timeout do upstream e' sanitizado", async () => {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: timeoutFetch(),
     now: () => FIXED_NOW,
     timeoutMs: 20,
@@ -110,7 +110,7 @@ test("404/500 do upstream nao expoem status nem URL", async () => {
 
   assert.equal(res.isError, true);
   const text = textOf(res);
-  assert.ok(!text.includes("mktplace-api.onrender.com"), "host upstream nao pode vazar");
+  assert.ok(!text.includes("mktplace-api-6wif.onrender.com"), "host upstream nao pode vazar");
   assert.ok(!text.includes("404"));
   assert.ok(!text.includes("/api/v1/"), "path interno nao pode vazar");
 });
@@ -161,7 +161,7 @@ test("parametro desconhecido e' rejeitado (objeto estrito)", async () => {
 test("F5: parametro interno desconhecido FALHA antes do fetch (nao e' descartado)", async () => {
   const log: CallLog = [];
   const c = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({ "/api/v1/performance/overview": OVERVIEW }, log),
   });
 
@@ -175,7 +175,7 @@ test("F5: parametro interno desconhecido FALHA antes do fetch (nao e' descartado
 test("F5: typo em nome de filtro FALHA em vez de ampliar a consulta", async () => {
   const log: CallLog = [];
   const c = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({ "/api/v1/performance/overview": OVERVIEW }, log),
   });
 
@@ -194,7 +194,7 @@ test("F5: typo em nome de filtro FALHA em vez de ampliar a consulta", async () =
 test("parametro allowlisted continua chegando na querystring", async () => {
   const log: CallLog = [];
   const c = new TorreClient({
-    baseUrl: "https://mktplace-api.onrender.com",
+    baseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({ "/api/v1/performance/overview": OVERVIEW }, log),
   });
   await c.get("overview", { channels: "all", brands: "barbours" });
@@ -206,11 +206,11 @@ test("parametro allowlisted continua chegando na querystring", async () => {
 
 test("F5: base URL e' validada estritamente", () => {
   const bad: Array<[string, string]> = [
-    ["http://mktplace-api.onrender.com", "http nao e' aceito"],
-    ["https://user:pass@mktplace-api.onrender.com", "credencial embutida"],
-    ["https://mktplace-api.onrender.com/api/v1", "path significativo"],
-    ["https://mktplace-api.onrender.com/?x=1", "querystring"],
-    ["https://mktplace-api.onrender.com/#frag", "fragment"],
+    ["http://mktplace-api-6wif.onrender.com", "http nao e' aceito"],
+    ["https://user:pass@mktplace-api-6wif.onrender.com", "credencial embutida"],
+    ["https://mktplace-api-6wif.onrender.com/api/v1", "path significativo"],
+    ["https://mktplace-api-6wif.onrender.com/?x=1", "querystring"],
+    ["https://mktplace-api-6wif.onrender.com/#frag", "fragment"],
     ["not-a-url", "url invalida"],
   ];
   for (const [url, why] of bad) {
@@ -221,8 +221,8 @@ test("F5: base URL e' validada estritamente", () => {
     );
   }
   // Raiz explicita e origem pura sao aceitas.
-  assert.ok(new TorreClient({ baseUrl: "https://mktplace-api.onrender.com" }));
-  assert.ok(new TorreClient({ baseUrl: "https://mktplace-api.onrender.com/" }));
+  assert.ok(new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com" }));
+  assert.ok(new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com/" }));
 });
 
 // ---------------------------------------------------------------------------
@@ -333,7 +333,7 @@ test("S12: varredura em massa e' barrada antes de sobrecarregar o upstream", asy
 
 test("base http (nao https) e' recusada na construcao do adapter", () => {
   assert.throws(
-    () => new TorreClient({ baseUrl: "http://mktplace-api.onrender.com" }),
+    () => new TorreClient({ baseUrl: "http://mktplace-api-6wif.onrender.com" }),
     (e: unknown) => e instanceof OracleToolError && e.category === "MISSING_CONFIGURATION",
   );
 });

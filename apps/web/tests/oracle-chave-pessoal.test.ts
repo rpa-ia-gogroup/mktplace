@@ -29,7 +29,7 @@ const PROD_ENV: AccessEnv = {
   VERCEL: "1",
   VERCEL_ENV: "production",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   MCP_BACKEND_SERVICE_KEY: SERVICO,
   ...OAUTH_ENV,
 };
@@ -89,9 +89,9 @@ test("validador da API: POST com chave de servico; 401 = null; sem chave de serv
     return new Response(JSON.stringify({ nome: "Sim", dono_email: "n@gocase.com", expira_em: 99 }), { status });
   }) as unknown as typeof fetch;
 
-  const validar = apiPersonalKeyValidator("https://mktplace-api.onrender.com", SERVICO, fetchFalso);
+  const validar = apiPersonalKeyValidator("https://mktplace-api-6wif.onrender.com", SERVICO, fetchFalso);
   assert.deepEqual(await validar(CHAVE), { nome: "Sim", dono: "n@gocase.com", expiraEm: 99 });
-  assert.equal(pedidos[0].url, "https://mktplace-api.onrender.com/api/v1/chaves/validar");
+  assert.equal(pedidos[0].url, "https://mktplace-api-6wif.onrender.com/api/v1/chaves/validar");
   assert.equal(pedidos[0].init.method, "POST");
   assert.equal((pedidos[0].init.headers as Record<string, string>)["x-torre-service-key"], SERVICO);
   assert.deepEqual(JSON.parse(String(pedidos[0].init.body)), { chave: CHAVE });
@@ -100,7 +100,7 @@ test("validador da API: POST com chave de servico; 401 = null; sem chave de serv
   assert.equal(await validar(CHAVE), null);
 
   const n = pedidos.length;
-  assert.equal(await apiPersonalKeyValidator("https://mktplace-api.onrender.com", undefined, fetchFalso)(CHAVE), null);
+  assert.equal(await apiPersonalKeyValidator("https://mktplace-api-6wif.onrender.com", undefined, fetchFalso)(CHAVE), null);
   assert.equal(pedidos.length, n);
 });
 
@@ -148,7 +148,7 @@ async function chamar(valida: boolean) {
 test("MCP ponta a ponta: chave valida lista as tools e o log tem nome/dono, nunca a chave", async () => {
   const { res, eventos, urls } = await chamar(true);
   assert.equal(res.status, 200);
-  assert.deepEqual(urls, ["https://mktplace-api.onrender.com/api/v1/chaves/validar"]);
+  assert.deepEqual(urls, ["https://mktplace-api-6wif.onrender.com/api/v1/chaves/validar"]);
   assert.equal(eventos.length, 1);
   assert.deepEqual(eventos[0].chave_pessoal, { nome: DONO.nome, dono: DONO.dono });
   assert.ok(!JSON.stringify(eventos).includes(CHAVE));
