@@ -266,6 +266,10 @@ class Settings(BaseSettings):
     # `expedicao_alerta_destinatarios`: e-mails do Slack, separados por virgula.
     alerta_webhook_secret: SecretStr = SecretStr("")
     slack_bot_token: SecretStr = SecretStr("")
+    #: App da Torre no TikTok Shop (Partner Center). Os tokens por marca ficam em
+    #: audit.tiktok_oauth_token (migration 050); aqui so' a chave e o segredo do app.
+    tiktok_app_key: str = ""
+    tiktok_app_secret: SecretStr = SecretStr("")
     # Marcas menores (Yenzah, Aua, By Samia): API do Bling v3, conta da Rituaria.
     # O refresh_token ROTACIONA a cada uso: o vivo fica na tabela
     # audit.bling_oauth_token; o inicial so' semeia a tabela vazia.
