@@ -217,7 +217,8 @@ def test_m02_head_unico_em_todas_as_revisoes():
     # T-0118: head avancado de 046 para 047 (`total_shipments` anulavel na fato diaria).
     # T-0120b: head avancado de 047 para 048 (CHECK dos insumos aceita `shopee_repasse_escrow`).
     # CHAVES-PESSOAIS: head avancado de 048 para 049 (tabela nova audit.torre_chave_pessoal).
-    assert heads == ["049"], f"head deveria ser unico e igual a 049, veio {heads}"
+    # TIKTOK-OAUTH: head avancado de 049 para 050 (tabela nova audit.tiktok_oauth_token).
+    assert heads == ["050"], f"head deveria ser unico e igual a 050, veio {heads}"
 
 
 def test_m03_as_tres_revisoes_novas_existem_uma_vez_cada():
