@@ -60,6 +60,7 @@ import {
   itensAtencaoCx,
   montarAtendimentoCx,
   montarAvaliacaoLoja,
+  marcasDoMotivo,
   montarPareto,
   montarPedidosMotivo,
   montarStatusMarcas,
@@ -961,6 +962,10 @@ function baixarCsv(conteudo: string, nome: string): void {
 function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros: FiltrosCx; fechar: () => void }) {
   const tipo = tipoDoItem(item);
   const [r, setR] = useState<ResultadoPedidos | null>(null);
+  // Pareto -> marca -> SKU: a marca aberta mostra os produtos; a lista de pedidos fica a um clique.
+  const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
+  const [verPedidos, setVerPedidos] = useState(false);
+  const [todosSkus, setTodosSkus] = useState(false);
   const caixa = useRef<HTMLElement>(null);
   // a lista abre abaixo dos motivos: leva o olho ate' ela
   useEffect(() => {
@@ -971,6 +976,8 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
   useEffect(() => {
     let vivo = true;
     setR(null);
+    setMarcaAberta(null);
+    setVerPedidos(false);
     carregarPedidosMotivo(filtros, tipo, item.codigo, torreFetch as typeof fetch).then((x) => {
       if (vivo) setR(x);
     });
@@ -980,6 +987,8 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
   }, [filtros, tipo, item.codigo]);
 
   const v = r?.ok && r.dados.estado !== "erro" ? montarPedidosMotivo(r.dados, brandLabel) : null;
+  const marcas = r?.ok && r.dados.estado !== "erro" ? marcasDoMotivo(r.dados, brandLabel) : [];
+  const aberta = marcas.find((m) => m.marca === marcaAberta) ?? null;
   return (
     <section ref={caixa} id="cx-pedidos-motivo" aria-label={`Pedidos: ${item.rotulo}`} className="rounded-lg border border-line bg-surface p-3" data-testid="cx-pedidos-motivo">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1013,6 +1022,75 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
       ) : !v.linhas.length ? (
         <StateBlock tipo="vazio" compacto titulo={r.dados.motivo_indisponivel ?? "Nenhum pedido com este motivo no período."} />
       ) : (
+        <>
+        <div className="mt-2 flex flex-col gap-1" data-testid="cx-motivo-marcas">
+          <p className="text-xs text-ink-muted">Por marca{r.ok && r.dados.truncado ? " (pedidos mais recentes)" : ""} · clique na marca para ver os produtos</p>
+          <ul className="flex flex-col gap-1">
+            {marcas.map((m) => (
+              <li key={m.marca}>
+                <button
+                  type="button"
+                  aria-expanded={marcaAberta === m.marca}
+                  onClick={() => { setMarcaAberta(marcaAberta === m.marca ? null : m.marca); setTodosSkus(false); }}
+                  className={`flex w-full items-center gap-3 rounded-md px-2 py-1.5 text-left text-sm hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${marcaAberta === m.marca ? "bg-raised" : ""}`}
+                >
+                  <span className="w-28 shrink-0 font-medium text-ink">{m.rotulo}</span>
+                  <span className="relative h-2 flex-1 rounded-full bg-line/60" aria-hidden="true">
+                    <span className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${Math.max(2, m.pct)}%` }} />
+                  </span>
+                  <span className="w-28 shrink-0 text-right tabular-nums text-ink-muted">{m.pedidos} · {Math.round(m.pct)}%</span>
+                </button>
+                {marcaAberta === m.marca && aberta && (
+                  <div className="ml-2 mt-1 border-l border-line pl-3">
+                    {aberta.skus.length === 0 ? (
+                      <p className="py-1 text-xs text-ink-muted">Sem os produtos destes pedidos na base.</p>
+                    ) : (
+                      <table className="w-full border-collapse text-sm">
+                        <caption className="sr-only">Produtos de {m.rotulo} com o motivo {item.rotulo}</caption>
+                        <thead>
+                          <tr className="border-b border-line text-left text-xs font-semibold text-ink-faint">
+                            <th scope="col" className="py-1.5 pr-3">Produto</th>
+                            <th scope="col" className={TH}>Pedidos</th>
+                            <th scope="col" className={TH}>Unidades</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(todosSkus ? aberta.skus : aberta.skus.slice(0, 10)).map((k) => (
+                            <tr key={k.sku + k.produto} className="border-b border-line last:border-b-0">
+                              <td className="py-1.5 pr-3">
+                                <span className="block text-ink">{k.produto}</span>
+                                <span className="block text-xs text-ink-faint">SKU {k.sku}</span>
+                              </td>
+                              <td className={TD}>{k.pedidos}</td>
+                              <td className={TD}>{k.unidades}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                    {aberta.skus.length > 10 && (
+                      <button type="button" onClick={() => setTodosSkus((x) => !x)}
+                        className="min-h-11 rounded-md px-2 text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                        {todosSkus ? "Ver menos" : `Ver todos (${aberta.skus.length})`}
+                      </button>
+                    )}
+                    {aberta.semItens > 0 && aberta.skus.length > 0 && (
+                      <p className="py-1 text-xs text-ink-muted">{aberta.semItens} pedido(s) sem os produtos na base.</p>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => setVerPedidos((x) => !x)}
+            className="mt-1 self-start min-h-11 rounded-md px-2 text-xs font-semibold text-accent-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {verPedidos ? "Esconder os pedidos" : `Ver os ${v.linhas.length} pedidos`}
+          </button>
+        </div>
+        {verPedidos && (
         <div className="mt-2 max-h-96 overflow-auto">
           <table className="w-full border-collapse text-sm">
             <caption className="sr-only">Pedidos com o motivo {item.rotulo}</caption>
@@ -1038,6 +1116,8 @@ function PedidosDoMotivo({ item, filtros, fechar }: { item: ItemPareto; filtros:
             </tbody>
           </table>
         </div>
+        )}
+        </>
       )}
       {v && <Notas notas={v.avisos} />}
     </section>

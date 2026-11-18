@@ -1468,6 +1468,8 @@ export interface PedidoMotivo {
   dia: string | null;
   situacao: string | null;
   valor: number | null;
+  /** Produtos do pedido (Pareto -> marca -> SKU). Vazio = itens nao lidos. API antiga nao manda. */
+  itens?: { sku: string | null; produto: string | null; quantidade: number }[];
 }
 
 export interface PedidosMotivoResponse {
@@ -1589,4 +1591,30 @@ export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string): 
 
 export function nomeDoCsvPedidos(tipo: TipoPedidos, codigo: string, f: FiltrosCx, agora: Date): string {
   return `cx-${tipo}-${codigo}${f.marca ? `-${f.marca}` : ""}-${f.dias}d-${agora.toISOString().slice(0, 10)}.csv`;
+}
+
+/** Pareto -> marca -> SKU: o motivo aberto por marca e, dentro dela, por produto. */
+export interface SkuDoMotivo { sku: string; produto: string; pedidos: number; unidades: number }
+export interface MarcaDoMotivo { marca: string; rotulo: string; pedidos: number; pct: number; skus: SkuDoMotivo[]; semItens: number }
+
+export function marcasDoMotivo(dados: PedidosMotivoResponse, rotuloMarca: (m: string) => string): MarcaDoMotivo[] {
+  const g = new Map<string, { pedidos: number; semItens: number; skus: Map<string, SkuDoMotivo> }>();
+  for (const p of dados.pedidos) {
+    const e = g.get(p.marca) ?? { pedidos: 0, semItens: 0, skus: new Map() };
+    e.pedidos += 1;
+    if (!p.itens?.length) e.semItens += 1;
+    for (const it of p.itens ?? []) {
+      const chave = it.sku ?? it.produto ?? "?";
+      const s = e.skus.get(chave) ?? { sku: it.sku ?? "—", produto: it.produto ?? "—", pedidos: 0, unidades: 0 };
+      s.pedidos += 1;
+      s.unidades += it.quantidade;
+      e.skus.set(chave, s);
+    }
+    g.set(p.marca, e);
+  }
+  const total = dados.pedidos.length || 1;
+  return [...g].map(([marca, e]) => ({
+    marca, rotulo: rotuloMarca(marca), pedidos: e.pedidos, pct: (e.pedidos / total) * 100, semItens: e.semItens,
+    skus: [...e.skus.values()].sort((a, b) => b.pedidos - a.pedidos || b.unidades - a.unidades),
+  })).sort((a, b) => b.pedidos - a.pedidos);
 }

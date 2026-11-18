@@ -253,6 +253,13 @@ class CxShopeeResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # CX-PEDIDOS-MOTIVO (05/11/2026): os pedidos de um motivo do Pareto
 # ---------------------------------------------------------------------------
+class ItemPedido(BaseModel):
+    """Produto do pedido (Shopee): o SKU do anuncio/variacao, o nome e as unidades."""
+    sku: Optional[str] = None
+    produto: Optional[str] = None
+    quantidade: int = 0
+
+
 class PedidoMotivo(BaseModel):
     marca: str
     #: Numero do pedido na Shopee. None quando a Torre retem o numero
@@ -264,6 +271,8 @@ class PedidoMotivo(BaseModel):
     situacao: Optional[str] = None
     #: Valor reembolsado (so' devolucao reembolsada).
     valor: Optional[float] = None
+    #: Produtos do pedido (Pareto -> marca -> SKU). Vazio = itens nao lidos.
+    itens: list[ItemPedido] = []
 
 
 class PedidosMotivoResponse(BaseModel):
