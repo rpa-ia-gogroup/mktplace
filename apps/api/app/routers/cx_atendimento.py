@@ -108,6 +108,19 @@ def cx_shopee_pedidos(
     return cx_pedidos_service.montar_pedidos_motivo(tipo=tipo, codigo=motivo, brands=brands, dias=dias)
 
 
+@router.get("/ml/pedidos", response_model=PedidosMotivoResponse)
+def cx_ml_pedidos(
+    tipo: Literal["cancelamento", "reclamacao"] = Query(..., description="cancelamento ou reclamacao"),
+    motivo: str = Query(..., description="Codigo do motivo, como vem no Pareto do ML (`codigo`)."),
+    brands: Optional[list[str]] = Depends(brands_query),
+    dias: int = Depends(dias_query),
+):
+    """Reclamacoes/cancelamentos do ML de um motivo do Pareto, com marca e produtos (ate' 500)."""
+    if not re.match(r"^[A-Za-z0-9_]{1,80}$", motivo):  # motivo sem mapa sai com o reason_id do ML (maiusculo)
+        raise HTTPException(422, _MSG_MOTIVO)
+    return cx_pedidos_service.montar_pedidos_motivo_ml(tipo=tipo, codigo=motivo, brands=brands, dias=dias)
+
+
 @router.get("/shopee/avaliacoes", response_model=CxAvaliacoesResponse)
 def cx_shopee_avaliacoes(brands: Optional[list[str]] = Depends(brands_query)):
     """Nota acumulada das avaliacoes de produto da Shopee, por marca e por produto (sem texto)."""

@@ -280,7 +280,7 @@ class PedidoMotivo(BaseModel):
 class PedidosMotivoResponse(BaseModel):
     gerado_em: datetime
     janela: Janela
-    tipo: Literal["cancelamento", "devolucao"]
+    tipo: Literal["cancelamento", "devolucao", "reclamacao"]
     codigo: str
     rotulo: Optional[str] = None
     estado: Literal["dado", "vazio_legitimo", "erro"]
