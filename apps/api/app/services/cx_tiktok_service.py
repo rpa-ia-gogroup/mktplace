@@ -52,6 +52,23 @@ MOTIVOS_PT = {
     "out of stock": "Sem estoque",
     "item is counterfeit": "Suspeita de falsificação",
     "expired product": "Produto vencido",
+    "better price available": "Achou preço melhor",
+    "forgot to apply coupons": "Esqueceu de usar cupom",
+    "package lost": "Pacote extraviado",
+    "discount not as expected": "Desconto diferente do esperado",
+    "incorrect shipping address": "Endereço de entrega errado",
+    "wrong shipping address": "Endereço de entrega errado",
+    "change of mind": "Mudou de ideia",
+    "item is damaged": "Produto danificado",
+    "damaged item": "Produto danificado",
+    "product doesn't work": "Produto não funciona",
+    "missing parts or accessories": "Faltam peças ou acessórios",
+    "seller did not ship": "Loja não enviou",
+    "seller didn't ship": "Loja não enviou",
+    "delivery failed": "Entrega falhou",
+    "logistics issue": "Problema na entrega",
+    "pricing error": "Erro de preço",
+    "unable to deliver": "Não foi possível entregar",
 }
 
 
