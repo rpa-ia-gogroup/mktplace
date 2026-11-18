@@ -31,7 +31,7 @@ import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto, fmtPctBr } from "@/lib/formatters";
 import {
   COLUNAS_EXPORT, MARKETPLACES, ROTULO_CANAL, ROTULO_ENVIO, faturamento15d, fetchSlowMoving, filtrar, linhaExport,
-  mediaMovel7, passaTendencia, pecas15dPorMarketplace, porMarca, ritmo, seriesPorMarketplace, serieDo,
+  mediaMovel7, passaTendencia, vendeNoCanal, pecas15dPorMarketplace, porMarca, ritmo, seriesPorMarketplace, serieDo,
   tendenciaDaLista, totais,
   type FiltroCanal, type FiltroEnvio, type FiltroTendencia, type Marketplace, type SkuSlowMoving, type SlowMovingResponse,
 } from "@/lib/full-slow-moving";
@@ -133,19 +133,24 @@ export default function SlowMovingClient() {
   const n = dados?.dias.length ?? 0;
   const comVendas = !!dados?.vendas_disponivel && n >= 30;
   const daMarca = useMemo(() => filtrar(dados?.skus ?? [], marcas, ""), [dados, marcas]);
+  // Canal e envio recortam a lista (so' quem vendeu ali em 60 dias) e a venda/tendencia/serie de cada SKU.
+  const recortado = comVendas && (canal !== "todos" || envio !== "todos");
   const lista = useMemo(
-    () => filtrar(daMarca, [], busca).filter((s) => !comVendas || passaTendencia(s, n, tendencia)),
-    [daMarca, busca, tendencia, comVendas, n],
+    () => filtrar(daMarca, [], busca).filter((s) => !comVendas || (vendeNoCanal(s, n, canal, envio) && passaTendencia(s, n, tendencia, canal, envio))),
+    [daMarca, busca, tendencia, comVendas, n, canal, envio],
   );
+  const vendaDia = useCallback((s: SkuSlowMoving) => (recortado ? ritmo(s, n, canal, envio).m15 : s.venda_dia), [recortado, n, canal, envio]);
   const t = totais(daMarca, meta);
+  // Com canal/envio escolhido, a venda/dia do topo e' a daquele recorte (pedidos dos canais), nao a do Supply.
+  const vendaDiaTopo = recortado ? daMarca.reduce((a, s) => a + ritmo(s, n, canal, envio).m15, 0) : t.vendaDia;
   const valorDe = useCallback((s: SkuSlowMoving, c: string) => {
     if (c === "produto") return s.descricao;
     if (c === "valor") return s.valor_parado;
-    if (c === "venda") return s.venda_dia;
-    if (c === "tendencia") return ritmo(s, n).tendencia;
+    if (c === "venda") return vendaDia(s);
+    if (c === "tendencia") return ritmo(s, n, canal, envio).tendencia;
     if (c === "cobertura") return s.cobertura_dias ?? Number.POSITIVE_INFINITY;
     return s.estoque;
-  }, [n]);
+  }, [n, canal, envio, vendaDia]);
   const { sort, toggleSort, sortedRows } = useSortableTable(lista, valorDe, COLUNAS);
 
   /** Pontos do grafico: uma barra por marketplace dentro do filtro + media de 7 dias. */
@@ -237,8 +242,8 @@ export default function SlowMovingClient() {
               onAbrir={() => setDialogo({ tipo: "cobertura" })} />
             <KpiTile variante="gerencial" identidade="pedidos" icone={TrendingUp} rotulo="Venda média/dia (15d)"
               ajuda={<InfoDica emControle texto="Peças por dia nos últimos 15 dias, avulso + dentro de kits, todos os canais do Marketplace." />}
-              valor={`${int(t.vendaDia)} pç`}
-              comparacao={comVendas ? <span><Tendencia v={tendenciaDaLista(daMarca, n)} /> vs 15 dias antes</span> : undefined}
+              valor={`${int(vendaDiaTopo)} pç`}
+              comparacao={comVendas ? <span><Tendencia v={tendenciaDaLista(daMarca, n, canal, envio)} /> vs 15 dias antes</span> : undefined}
               onAbrir={() => setDialogo({ tipo: "venda" })} />
           </div>
 
@@ -290,14 +295,14 @@ export default function SlowMovingClient() {
                           </button>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">{s.estoque == null ? "—" : int(s.estoque)}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">{dec(s.venda_dia)}</td>
-                        {comVendas && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={ritmo(s, n).tendencia} /></td>}
+                        <td className="px-3 py-2 text-right tabular-nums">{dec(vendaDia(s))}</td>
+                        {comVendas && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={ritmo(s, n, canal, envio).tendencia} /></td>}
                         <td className="px-3 py-2 text-right tabular-nums">{dias(s.cobertura_dias)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(s.valor_parado)}</td>
                         {comVendas && (
                           <td className="hidden px-3 py-2 md:table-cell">
                             <div className="ml-auto h-8 w-24 text-kpi-pedidos" aria-hidden="true">
-                              <Sparkline pontos={serieDo(s, n).slice(-30)} tinta="text-kpi-pedidos" />
+                              <Sparkline pontos={serieDo(s, n, canal, envio).slice(-30)} tinta="text-kpi-pedidos" />
                             </div>
                           </td>
                         )}
@@ -429,7 +434,7 @@ export default function SlowMovingClient() {
                 {comVendas ? (
                   <>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      <Metrica rotulo="Venda/dia (15d)" valor={`${int(t.vendaDia)} pç`} sub={<><Tendencia v={tendenciaDaLista(daMarca, n)} /> vs 15 dias antes</>} />
+                      <Metrica rotulo="Venda/dia (15d)" valor={`${int(vendaDiaTopo)} pç`} sub={<><Tendencia v={tendenciaDaLista(daMarca, n, canal, envio)} /> vs 15 dias antes</>} />
                       <Metrica rotulo={`Faturamento 15d · ${recorte}`} valor={fmtBrlCurto(faturamento15d(daMarca, canal, envio))} />
                     </div>
                     <DrilldownSecao titulo={`Peças por dia, 60 dias (${recorte})`}>{grafico(daMarca)}</DrilldownSecao>

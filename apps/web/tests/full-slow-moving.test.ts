@@ -49,3 +49,23 @@ test("ritmo, tendencia e canal: ML/Shopee/TikTok e Full/normal; media movel de 7
   assert.deepEqual(pecas15dPorMarketplace(s, 30), { ML: 30, SP: 15, TT: 0 });
   assert.deepEqual(mediaMovel7([7, 0, 0, 0, 0, 0, 0, 7]), [7, 3.5, 7 / 3, 1.75, 1.4, 7 / 6, 1, 1]);
 });
+
+test("slow moving: canal e envio recortam venda, tendencia e quem aparece na lista", async () => {
+  const { ritmo, vendeNoCanal, tendenciaDaLista } = await import("../src/lib/full-slow-moving.ts");
+  const n = 30;
+  const zeros = new Array(n).fill(0);
+  const s = {
+    marca: "kokeshi", sku: "X", descricao: "x", categoria: null, curva: "C", status: null, estoque: 100,
+    custo_unitario: 1, valor_parado: 100, venda_dia: 9, cobertura_dias: 200,
+    serie: { "ML-F": new Array(n).fill(2), "TT-N": [...new Array(15).fill(0), ...new Array(15).fill(4)] },
+    receita_15d: {},
+  } as never;
+  assert.equal(ritmo(s, n, "ML").m15, 2);
+  assert.equal(ritmo(s, n, "TT").m15, 4);
+  assert.equal(ritmo(s, n, "TT").tendencia, null); // sem base nos 15 dias anteriores
+  assert.equal(vendeNoCanal(s, n, "SP", "todos"), false);
+  assert.equal(vendeNoCanal(s, n, "ML", "F"), true);
+  assert.equal(vendeNoCanal(s, n, "ML", "N"), false);
+  assert.equal(vendeNoCanal({ ...(s as object), serie: { "ML-F": zeros } } as never, n, "todos", "todos"), true);
+  assert.equal(tendenciaDaLista([s], n, "ML"), 0);
+});

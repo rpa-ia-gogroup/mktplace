@@ -112,15 +112,20 @@ export function serieDo(s: SkuSlowMoving, n: number, f: FiltroCanal = "todos", e
 const soma = (a: number[]) => a.reduce((t, v) => t + v, 0);
 
 /** Media/dia dos ultimos 15 dias, dos 15 anteriores e a variacao (%). `null` = sem base para comparar. */
-export function ritmo(s: SkuSlowMoving, n: number): { m15: number; m15p: number; tendencia: number | null } {
-  const v = serieDo(s, n);
+export function ritmo(s: SkuSlowMoving, n: number, f: FiltroCanal = "todos", e: FiltroEnvio = "todos"): { m15: number; m15p: number; tendencia: number | null } {
+  const v = serieDo(s, n, f, e);
   const m15 = soma(v.slice(-15)) / 15, m15p = soma(v.slice(-30, -15)) / 15;
   return { m15, m15p, tendencia: m15p > 0 ? (m15 / m15p - 1) * 100 : null };
 }
 
-export function passaTendencia(s: SkuSlowMoving, n: number, f: FiltroTendencia): boolean {
+/** O SKU vendeu algo no canal/envio escolhido na janela (60 dias)? Sem recorte, todos passam. */
+export function vendeNoCanal(s: SkuSlowMoving, n: number, f: FiltroCanal, e: FiltroEnvio): boolean {
+  return (f === "todos" && e === "todos") || soma(serieDo(s, n, f, e)) > 0;
+}
+
+export function passaTendencia(s: SkuSlowMoving, n: number, f: FiltroTendencia, c: FiltroCanal = "todos", e: FiltroEnvio = "todos"): boolean {
   if (f === "todos") return true;
-  const t = ritmo(s, n).tendencia;
+  const t = ritmo(s, n, c, e).tendencia;
   return t != null && (f === "melhorando" ? t > 0 : t < 0);
 }
 
@@ -150,9 +155,9 @@ export function pecas15dPorMarketplace(s: SkuSlowMoving, n: number): Record<Mark
 }
 
 /** Tendencia da lista: Σ media 15d ÷ Σ media 15d anteriores. */
-export function tendenciaDaLista(skus: readonly SkuSlowMoving[], n: number): number | null {
+export function tendenciaDaLista(skus: readonly SkuSlowMoving[], n: number, f: FiltroCanal = "todos", e: FiltroEnvio = "todos"): number | null {
   let a = 0, b = 0;
-  for (const s of skus) { const r = ritmo(s, n); a += r.m15; b += r.m15p; }
+  for (const s of skus) { const r = ritmo(s, n, f, e); a += r.m15; b += r.m15p; }
   return b > 0 ? (a / b - 1) * 100 : null;
 }
 
