@@ -61,10 +61,12 @@ function resp(extra: Partial<CxMlResponse> = {}): CxMlResponse {
   };
 }
 
-test("canal na URL: so' ml vale; o resto e' Shopee; Shopee nao escreve canal", () => {
+test("canal na URL: ml e tiktok valem; o resto e' Shopee; Shopee nao escreve canal", () => {
   assert.equal(lerCanalCx({ canal: "ml" }), "ml");
   assert.equal(lerCanalCx({ canal: "ML " }), "ml");
-  assert.equal(lerCanalCx({ canal: "tiktok" }), "shopee");
+  assert.equal(lerCanalCx({ canal: "tiktok" }), "tiktok");
+  assert.equal(lerCanalCx({ canal: "amazon" }), "shopee");
+  assert.equal(hrefCx({ marca: null, dias: 30 }, "tiktok"), "/cx?canal=tiktok");
   assert.equal(lerCanalCx({}), "shopee");
   assert.equal(hrefCx({ marca: null, dias: 30 }), "/cx");
   assert.equal(hrefCx({ marca: null, dias: 30 }, "ml"), "/cx?canal=ml");
@@ -420,4 +422,23 @@ test("fila de atenção: métrica oficial fora do limite e' crítica, na frente 
     ["critico", "KOKESHI: Reclamações 2,0%"], ["atencao", "KOKESHI: 1 reclamação vence em 24 h"],
   ]);
   assert.equal(itens[0].detalhe, "meta ≤ 1%");
+});
+
+test("cx tiktok: resumo soma so' marcas com dado e Pareto acumula", async () => {
+  const { resumoTikTok, itensParetoTikTok } = await import("../src/lib/cx-tiktok.ts");
+  const d = {
+    gerado_em: "", dias: 7, inicio: "2026-11-11", fim: "2026-11-17",
+    marcas: [
+      { marca: "kokeshi", estado: "dado" as const, motivo: null, devolucoes: 3, reembolsado: 10.5, cancelamentos: 4, nao_pagos: 9, cancelamentos_comprador: 2, truncado: true },
+      { marca: "apice", estado: "sem_permissao" as const, motivo: "x" },
+    ],
+    motivos: [
+      { tipo: "Cancelamento" as const, motivo: "Não quer mais", quantidade: 3, autor: "Comprador", marcas: [], skus: [] },
+      { tipo: "Devolução" as const, motivo: "Danificado", quantidade: 1, autor: null, marcas: [], skus: [] },
+    ],
+  };
+  const s = resumoTikTok(d);
+  assert.deepEqual([s.devolucoes, s.reembolsado, s.cancelamentos, s.naoPagos, s.parcial, s.semDado.length], [3, 10.5, 4, 9, true, 1]);
+  const it = itensParetoTikTok(d);
+  assert.deepEqual(it.map((i) => [i.pct, i.acumulado, i.natureza]), [["75,0%", "75%", "Comprador"], ["25,0%", "100%", "Comprador"]]);
 });
