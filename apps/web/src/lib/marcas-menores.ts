@@ -203,3 +203,29 @@ export interface ProdutosMarcas {
   pedidos_lidos: number;
   marcas: ProdutosDaMarca[];
 }
+
+/** Colunas do CSV de vendas por SKU das demais marcas (para o dash de vendas e o Supply). */
+export const COLUNAS_CSV_PRODUTOS = ["Marca", "SKU", "Produto", "Canal", "Quantidade", "Pedidos", "Receita (R$)"];
+
+const ROTULO_PLATAFORMA: Record<string, string> = { SHOPEE: "Shopee", TIKTOK: "TikTok Shop", MELI: "Mercado Livre" };
+
+/**
+ * Uma linha por marca x SKU x canal (os itens por canal); marca sem a quebra por canal
+ * sai com os totais do produto e canal vazio. Marca sem itens (aguardando autorizacao) nao entra.
+ */
+export function linhasCsvProdutos(r: ProdutosMarcas, ids?: readonly string[]): Record<string, string | number | null>[] {
+  const out: Record<string, string | number | null>[] = [];
+  for (const m of r.marcas) {
+    if (ids && !ids.includes(m.id)) continue;
+    const fonte = m.itens_por_canal && m.itens_por_canal.length > 0 ? m.itens_por_canal : m.produtos;
+    for (const p of fonte) {
+      out.push({
+        "Marca": m.label, "SKU": p.sku, "Produto": p.produto,
+        "Canal": p.plataforma ? (ROTULO_PLATAFORMA[p.plataforma] ?? p.plataforma) : "",
+        "Quantidade": p.quantidade, "Pedidos": p.pedidos ?? null,
+        "Receita (R$)": p.receita == null ? null : Math.round(p.receita * 100) / 100,
+      });
+    }
+  }
+  return out;
+}

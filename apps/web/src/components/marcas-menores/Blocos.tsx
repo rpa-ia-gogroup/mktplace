@@ -14,7 +14,9 @@ import InfoDica from "@/components/ui/InfoDica";
 import StateBlock from "@/components/ui/StateBlock";
 import { fmtNumber, fmtPctBr } from "@/lib/formatters";
 import {
+  COLUNAS_CSV_PRODUTOS,
   corDaPlataforma,
+  linhasCsvProdutos,
   fatias,
   nomeDaPlataforma,
   pendenciasDoTotal,
@@ -27,6 +29,7 @@ import {
   type ProdutosMarcas,
 } from "@/lib/marcas-menores";
 import { fmtCompacto } from "@/lib/metas";
+import { buildProdutosCsvFile } from "@/lib/produtos-export";
 
 const SerieDiaria = dynamic(() => import("./SerieDiaria"), { ssr: false, loading: () => <div className="h-36" aria-hidden="true" /> });
 
@@ -187,6 +190,19 @@ export function Marcas({ marcas, emAndamento, semMeta = false }: { marcas: Marca
 const LINHAS_VISIVEIS = 10;
 
 /** Produto, quantidade e receita por marca (itens dos pedidos). Sem item = "sem dado", nunca 0. */
+/** Baixa o CSV de vendas por SKU x canal (separador ";" e BOM, como os outros exports da Torre). */
+function exportarCsv(r: ProdutosMarcas, ids?: readonly string[]) {
+  const blob = new Blob([buildProdutosCsvFile(COLUNAS_CSV_PRODUTOS, linhasCsvProdutos(r, ids))], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `vendas_sku_demais_marcas_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function Produtos({
   r,
   desistiu,
@@ -208,6 +224,16 @@ export function Produtos({
           {titulo}
         </h2>
         <InfoDica texto={FONTE_PRODUTOS} />
+        {r?.disponivel && r.marcas.some((m) => m.produtos.length > 0) && (
+          <button
+            type="button"
+            onClick={() => exportarCsv(r, ids)}
+            title={r.completo ? "Vendas por SKU e canal no período, para o dash de vendas" : "Ainda lendo os itens: o arquivo sai parcial"}
+            className="ml-auto inline-flex min-h-11 items-center rounded-lg border border-line bg-surface px-3 text-sm font-semibold text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Exportar vendas por SKU (.csv)
+          </button>
+        )}
         {r?.disponivel && !r.completo && (
           <span className="flex items-center gap-2 text-xs font-semibold text-warn-ink">
             {desistiu ? "leitura parcial" : "lendo os itens"}: {r.pedidos_lidos} de {r.pedidos_total} pedidos
@@ -266,7 +292,10 @@ function TabelaProdutos({ m, lendo }: { m: ProdutosMarcas["marcas"][number]; len
           <tbody className="tabular-nums">
             {visiveis.map((p) => (
               <tr key={p.sku} className="border-t border-line">
-                <td className="max-w-[9rem] py-2 pr-3 text-ink sm:max-w-md" title={p.produto}><span className="line-clamp-2">{p.produto}</span></td>
+                <td className="max-w-[9rem] py-2 pr-3 text-ink sm:max-w-md" title={p.produto}>
+                  <span className="line-clamp-2">{p.produto}</span>
+                  <span className="block text-xs text-ink-faint">SKU {p.sku}</span>
+                </td>
                 <td className="px-3 py-2 text-right text-ink-muted">{p.quantidade == null ? "—" : fmtNumber(p.quantidade)}</td>
                 <td className="py-2 pl-3 text-right font-semibold text-ink">{p.receita == null ? "—" : fmtCompacto(p.receita)}</td>
               </tr>
