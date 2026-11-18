@@ -18,7 +18,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ENABLED: AccessEnv = {
   NODE_ENV: "development",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
 };
 
 /** `fetch` espiao: qualquer chamada upstream numa negacao seria falha grave. */
@@ -139,7 +139,7 @@ test("a negacao nao vaza nome de variavel de ambiente nem host", async () => {
     NODE_ENV: "production",
   });
   const text = await res.text();
-  for (const leak of ["ORACLE_MCP_ENABLED", "MCP_BACKEND_API_URL", "VERCEL_ENV", "mktplace-api.onrender.com"]) {
+  for (const leak of ["ORACLE_MCP_ENABLED", "MCP_BACKEND_API_URL", "VERCEL_ENV", "mktplace-api-6wif.onrender.com"]) {
     assert.ok(!text.includes(leak), `${leak} nao pode aparecer`);
   }
 });
@@ -203,7 +203,7 @@ test("leg moderno: envelope 2026 SEM header Mcp-Method e' rejeitado sem vazar de
   const res = await handleMcpRequest(mcpRequest(DISCOVER, { omitMcpMethod: true }), ENABLED);
   assert.equal(res.status, 400, "transporte moderno exige concordancia header/corpo");
   const text = await res.text();
-  assert.ok(!text.includes("mktplace-api.onrender.com"));
+  assert.ok(!text.includes("mktplace-api-6wif.onrender.com"));
   assert.ok(!/\bat\s+\w+\s+\(/.test(text), "sem stack trace");
 });
 
@@ -223,7 +223,7 @@ test("corpo JSON invalido nao derruba o handler nem vaza stack", async () => {
   assert.ok(res.status >= 400 && res.status < 500, `status inesperado: ${res.status}`);
   const text = await res.text();
   assert.ok(!/\bat\s+\w+\s+\(/.test(text), "sem stack trace");
-  assert.ok(!text.includes("mktplace-api.onrender.com"), "sem host interno");
+  assert.ok(!text.includes("mktplace-api-6wif.onrender.com"), "sem host interno");
 });
 
 test("tools/list via HTTP nao dispara nenhuma chamada upstream", async () => {
@@ -435,7 +435,7 @@ test("2025: tool desconhecida e' erro JSON-RPC sanitizado", async () => {
   assert.ok(msg.error, "tool fora da allowlist precisa falhar");
   assert.equal(msg.error.code, -32602);
   assert.ok(!/\bat\s+\w+\s+\(/.test(msg.error.message), "sem stack trace");
-  assert.ok(!msg.error.message.includes("mktplace-api.onrender.com"), "sem host interno");
+  assert.ok(!msg.error.message.includes("mktplace-api-6wif.onrender.com"), "sem host interno");
   assert.equal(spy.calls.length, 0, "tool inexistente nunca alcanca o backend");
 });
 
@@ -504,7 +504,7 @@ const OBS_PROD: AccessEnv = {
   VERCEL: "1",
   VERCEL_ENV: "production",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   ORACLE_AUTH_ISSUER: OBS_ISSUER,
   ORACLE_AUTH_AUDIENCE: OBS_AUDIENCE,
   ORACLE_AUTH_REQUIRED_SCOPE: "oracle:read",
@@ -871,7 +871,7 @@ test("obs 15: falha interna vira internal_error, sem mensagem bruta", async () =
 
   const serialized = JSON.stringify(events[0]);
   assert.ok(!/\bat\s+\w+\s+\(/.test(serialized), "sem stack trace");
-  assert.ok(!serialized.includes("mktplace-api.onrender.com"), "sem host interno");
+  assert.ok(!serialized.includes("mktplace-api-6wif.onrender.com"), "sem host interno");
   assert.ok(!/TypeError|disturbed|unusable/i.test(serialized), "sem mensagem bruta da runtime");
 });
 
@@ -981,7 +981,7 @@ test("obs 18: o evento serializado nao carrega chave nem valor sensivel", async 
       "oracle:read",
       "obs-key",
       "mes_anterior",
-      "mktplace-api.onrender.com",
+      "mktplace-api-6wif.onrender.com",
     ];
     for (const forbidden of proibidos) {
       assert.ok(!serialized.includes(forbidden), "evento nao pode conter: " + forbidden.slice(0, 24));

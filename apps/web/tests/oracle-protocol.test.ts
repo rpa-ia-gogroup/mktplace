@@ -25,7 +25,7 @@ const EXPECTED_TOOLS = [
 
 async function connect(fetchImpl: typeof fetch) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl,
     now: () => FIXED_NOW,
     // Limitador dedicado por teste: sem vazamento de contagem entre casos.
@@ -160,7 +160,7 @@ const PROD_ENV: AccessEnv = {
   VERCEL: "1",
   VERCEL_ENV: "production",
   ORACLE_MCP_ENABLED: "1",
-  MCP_BACKEND_API_URL: "https://mktplace-api.onrender.com",
+  MCP_BACKEND_API_URL: "https://mktplace-api-6wif.onrender.com",
   ORACLE_AUTH_ISSUER: OAUTH_ISSUER,
   ORACLE_AUTH_AUDIENCE: OAUTH_AUDIENCE,
   ORACLE_AUTH_REQUIRED_SCOPE: "oracle:read",

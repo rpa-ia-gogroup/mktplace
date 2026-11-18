@@ -28,7 +28,7 @@ const ROUTES = {
 
 async function connect(overrides: Record<string, unknown> = {}) {
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: jsonFetch({ ...ROUTES, ...overrides }),
     now: () => FIXED_NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),

@@ -405,7 +405,7 @@ test("teto de 240 KB preservado com linhas do cenario e textos longos; corte dec
 
   // Pela tool (JSON-RPC em memoria): mesma garantia, abaixo de 256 KB.
   const server = buildOracleServer({
-    backendBaseUrl: "https://mktplace-api.onrender.com",
+    backendBaseUrl: "https://mktplace-api-6wif.onrender.com",
     fetchImpl: (async () => new Response(JSON.stringify(grande), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch,
     now: () => NOW,
     rateLimiter: new SlidingWindowRateLimiter({ limit: 1000, windowMs: 60_000 }),

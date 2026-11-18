@@ -7,7 +7,7 @@ import {
   ALLOWED_BACKEND_HOSTNAME, evaluateAccess, isUsableBackendUrl,
 } from "../src/server/oracle/access.ts";
 
-const OK_URL = "https://mktplace-api.onrender.com";
+const OK_URL = "https://mktplace-api-6wif.onrender.com";
 
 // ---------------------------------------------------------------------------
 // Producao: negacao incondicional
@@ -142,7 +142,7 @@ test("stub em desenvolvimento -> NEGADO (impossivel fora de teste)", () => {
 
 test("F1: o hostname do backend precisa ser EXATAMENTE o canonico", () => {
   const H = ALLOWED_BACKEND_HOSTNAME;
-  assert.equal(H, "mktplace-api.onrender.com");
+  assert.equal(H, "mktplace-api-6wif.onrender.com");
 
   // Aceitos: origem https limpa, com ou sem barra final.
   assert.equal(isUsableBackendUrl(`https://${H}`), true);
@@ -150,7 +150,7 @@ test("F1: o hostname do backend precisa ser EXATAMENTE o canonico", () => {
   // Porta padrao explicita e' normalizada pela `URL` para vazio.
   assert.equal(isUsableBackendUrl(`https://${H}:443/`), true);
   // Hostname e' case-insensitive no DNS e a `URL` normaliza para minusculas.
-  assert.equal(isUsableBackendUrl(`https://MKTPLACE-API.ONRENDER.COM/`), true);
+  assert.equal(isUsableBackendUrl(`https://MKTPLACE-API-6WIF.ONRENDER.COM/`), true);
 
   const rejected: Array<[string | undefined, string]> = [
     // --- host ---
