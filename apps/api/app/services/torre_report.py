@@ -143,6 +143,14 @@ class Report:
     avancos: list[str] = field(default_factory=list)
     problemas: list[str] = field(default_factory=list)
     notas: list[str] = field(default_factory=list)
+    #: OPORTUNIDADES-1: as 3 de maior ganho (R$ em 30 dias) com a acao; vazio = secao some.
+    oportunidades: list[str] = field(default_factory=list)
+
+
+def linhas_oportunidades(itens: list[dict]) -> list[str]:
+    """'1. *Acao* · Produto (Marca) · R$ 99,1 mil em 30 dias' para o report."""
+    return [f"{n}. *{o['acao']}* · {o['titulo']} ({ta.rotulo_marca(o['marca'])}) · {brl(o['valor_30d'])} em 30 dias"
+            for n, o in enumerate(itens, 1)]
 
 
 CRIT = ":red_circle:"
@@ -293,6 +301,10 @@ def montar_mensagem(rep: Report) -> str:
         linhas.append(f"*{MESES[o.month - 1].capitalize()} até ontem:* " + " · ".join(partes))
     linhas.append("_GMV e meta contam Shopee e Mercado Livre._")
 
+    if rep.oportunidades:
+        linhas.append("")
+        linhas.append("*:bulb: Maiores oportunidades (R$ em 30 dias)*")
+        linhas += rep.oportunidades
     linhas.append("")
     linhas.append(f"*:white_check_mark: Avanços ({len(rep.avancos)})*")
     linhas += [f"• {a}" for a in rep.avancos] or ["• Nenhum destaque ontem."]
@@ -361,6 +373,10 @@ def montar_blocos(rep: Report) -> sb.Mensagem:
         linhas.append(f"{_bola_meta(x.pct_meta_dia)} " + "  ·  ".join(partes))
     blocos.append(sb.secao("\n".join(linhas), sb.botao("Ver metas", sb.url_metas())))
 
+    if rep.oportunidades:
+        blocos.append(sb.divisor())
+        blocos.append(sb.secao(":bulb: *Maiores oportunidades (R$ em 30 dias)*\n" + "\n".join(rep.oportunidades),
+                               sb.botao("Ver na Torre", URL_DA_TORRE)))
     blocos.append(sb.divisor())
     blocos.append(sb.secao(f":white_check_mark: *Avanços ({len(rep.avancos)})*\n"
                            + ("\n".join(f"• {a}" for a in rep.avancos) or "• Nenhum destaque ontem.")))
