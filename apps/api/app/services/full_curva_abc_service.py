@@ -198,6 +198,10 @@ def ler_aba(sa: dict, cliente: Optional[httpx.Client] = None, aba: str = ABA) ->
 # Cache: 1 h; vencido, serve o que tem e atualiza em segundo plano
 # ---------------------------------------------------------------------------
 
+#: Falha sem nenhuma planilha em cache: nova tentativa depois deste tempo (nao 1 h).
+RETENTAR_SEGUNDOS = 60
+
+
 @dataclass
 class _Cache:
     planilha: Optional[Planilha] = None
@@ -230,7 +234,9 @@ def _atualizar(cache: _Cache, ler: Callable[[], list[list[str]]], relogio: Calla
     except Exception:  # rede, token, cota: a mensagem do erro nao sai daqui
         cache.motivo = MOTIVO_LEITURA
     finally:
-        cache.lido_em_s = relogio()
+        # Sem planilha nenhuma (1a leitura falhou, ex.: API acordando no Render Free), tenta de novo
+        # em RETENTAR_SEGUNDOS: antes a falha valia 1 h e o filtro de curva sumia da tela.
+        cache.lido_em_s = relogio() - (CACHE_SEGUNDOS - RETENTAR_SEGUNDOS if cache.planilha is None else 0)
         cache.atualizando = False
 
 
