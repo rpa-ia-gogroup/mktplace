@@ -25,15 +25,20 @@ export interface SkuSlowMoving {
   valor_parado: number;
   venda_dia: number;
   cobertura_dias: number | null;
-  /** Pecas por dia em `dias` (60, ate' ontem), por canal: "MKT" (ML, Shopee e outras) e "TT" (TikTok). */
+  /** Pecas por dia em `dias` (60, ate' ontem), por canal+envio ("ML-F", "SP-N"...), kit aberto em pecas. */
   serie: Partial<Record<CanalSlow, number[]>>;
   receita_15d: Partial<Record<CanalSlow, number>>;
 }
 
-export type CanalSlow = "MKT" | "TT";
-/** Filtro de canal: o grafico e o faturamento seguem; media, tendencia e cobertura usam todos (igual ao Supply). */
-export type FiltroCanal = "todos" | "MKT" | "TT";
-export const ROTULO_CANAL: Record<FiltroCanal, string> = { todos: "Todos", MKT: "Sem TikTok", TT: "TikTok" };
+/** Canal + envio, igual ao dash da Nath: ML/SP/TT e F (Full) ou N (normal). */
+export type CanalSlow = "ML-F" | "ML-N" | "SP-F" | "SP-N" | "TT-F" | "TT-N";
+export type Marketplace = "ML" | "SP" | "TT";
+export const MARKETPLACES: Marketplace[] = ["ML", "SP", "TT"];
+/** Filtro de canal e de envio: grafico, faturamento e a venda por canal seguem. Cobertura e a lista sao do Supply. */
+export type FiltroCanal = "todos" | Marketplace;
+export type FiltroEnvio = "todos" | "F" | "N";
+export const ROTULO_CANAL: Record<FiltroCanal, string> = { todos: "Todos", ML: "Mercado Livre", SP: "Shopee", TT: "TikTok Shop" };
+export const ROTULO_ENVIO: Record<FiltroEnvio, string> = { todos: "Todos", F: "Full", N: "Normal" };
 export type FiltroTendencia = "todos" | "melhorando" | "piorando";
 
 export interface SlowMovingResponse {
@@ -91,12 +96,16 @@ export function filtrar(skus: readonly SkuSlowMoving[], marcas: readonly string[
   });
 }
 
-const canaisDo = (f: FiltroCanal): CanalSlow[] => (f === "todos" ? ["MKT", "TT"] : [f]);
+export function canaisDo(f: FiltroCanal, e: FiltroEnvio = "todos"): CanalSlow[] {
+  const mk = f === "todos" ? MARKETPLACES : [f];
+  const en = e === "todos" ? ["F", "N"] : [e];
+  return mk.flatMap((m) => en.map((x) => `${m}-${x}` as CanalSlow));
+}
 
 /** Pecas por dia somando os canais do filtro (zeros quando o SKU nao vendeu). */
-export function serieDo(s: SkuSlowMoving, n: number, f: FiltroCanal = "todos"): number[] {
+export function serieDo(s: SkuSlowMoving, n: number, f: FiltroCanal = "todos", e: FiltroEnvio = "todos"): number[] {
   const out = new Array<number>(n).fill(0);
-  for (const c of canaisDo(f)) (s.serie[c] ?? []).forEach((v, i) => { if (i < n) out[i] += v; });
+  for (const c of canaisDo(f, e)) (s.serie[c] ?? []).forEach((v, i) => { if (i < n) out[i] += v; });
   return out;
 }
 
@@ -115,10 +124,13 @@ export function passaTendencia(s: SkuSlowMoving, n: number, f: FiltroTendencia):
   return t != null && (f === "melhorando" ? t > 0 : t < 0);
 }
 
-/** Pecas por dia da lista inteira (grafico), no filtro de canal. */
-export function serieDaLista(skus: readonly SkuSlowMoving[], n: number, f: FiltroCanal): number[] {
-  const out = new Array<number>(n).fill(0);
-  for (const s of skus) serieDo(s, n, f).forEach((v, i) => { out[i] += v; });
+/** Pecas por dia da lista (grafico), uma serie por marketplace dentro do filtro de canal e envio. */
+export function seriesPorMarketplace(skus: readonly SkuSlowMoving[], n: number, f: FiltroCanal, e: FiltroEnvio): Record<Marketplace, number[]> {
+  const out = { ML: new Array<number>(n).fill(0), SP: new Array<number>(n).fill(0), TT: new Array<number>(n).fill(0) };
+  for (const m of MARKETPLACES) {
+    if (f !== "todos" && f !== m) continue;
+    for (const s of skus) serieDo(s, n, m, e).forEach((v, i) => { out[m][i] += v; });
+  }
   return out;
 }
 
@@ -127,8 +139,14 @@ export function mediaMovel7(v: number[]): number[] {
   return v.map((_, i) => soma(v.slice(Math.max(0, i - 6), i + 1)) / Math.min(7, i + 1));
 }
 
-export function faturamento15d(skus: readonly SkuSlowMoving[], f: FiltroCanal): number {
-  return skus.reduce((t, s) => t + canaisDo(f).reduce((u, c) => u + (s.receita_15d[c] ?? 0), 0), 0);
+export function faturamento15d(skus: readonly SkuSlowMoving[], f: FiltroCanal = "todos", e: FiltroEnvio = "todos"): number {
+  return skus.reduce((t, s) => t + canaisDo(f, e).reduce((u, c) => u + (s.receita_15d[c] ?? 0), 0), 0);
+}
+
+/** Pecas dos ultimos 15 dias por marketplace (ficha do produto). */
+export function pecas15dPorMarketplace(s: SkuSlowMoving, n: number): Record<Marketplace, number> {
+  const t = (m: Marketplace) => soma(serieDo(s, n, m).slice(-15));
+  return { ML: t("ML"), SP: t("SP"), TT: t("TT") };
 }
 
 /** Tendencia da lista: Σ media 15d ÷ Σ media 15d anteriores. */
@@ -154,6 +172,6 @@ export function linhaExport(s: SkuSlowMoving, n: number, meta: number, marca: st
     "Média/dia 15d (pç)": r1(s.venda_dia), "Média/dia 15d anteriores (pç)": r1(r.m15p), "Tendência (%)": r1(r.tendencia),
     "Cobertura (dias)": s.cobertura_dias == null ? "sem venda" : Math.round(s.cobertura_dias),
     "Precisa vender/dia (pç)": s.estoque == null ? null : r1(s.estoque / meta),
-    "Faturamento 15d (R$)": Math.round(((s.receita_15d.MKT ?? 0) + (s.receita_15d.TT ?? 0)) * 100) / 100,
+    "Faturamento 15d (R$)": Math.round(faturamento15d([s]) * 100) / 100,
   };
 }

@@ -8,6 +8,7 @@ cobertura no Marketplace acima de 120 dias) e' do Supply: a Torre so' le' o
 from __future__ import annotations
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 import unicodedata
 from datetime import date, timedelta
 from typing import Callable, Optional
@@ -48,26 +49,31 @@ def _sku(r: dict) -> str:
     return sku or str(r.get("chave") or "").split("-", 1)[-1].strip()
 
 
-def _anotar_vendas(skus: list[SkuSlowMoving], consultar, hoje: date) -> list[date]:
-    """Serie diaria (60 dias ate' ontem) e R$ dos ultimos 15 dias em cada SKU. Falha = [] (tela sem a serie)."""
-    if not skus:
+def _anotar_vendas(skus: list[SkuSlowMoving], consultar, hoje: date, lookups) -> list[date]:
+    """Serie diaria por canal (60 dias ate' ontem) e R$ dos ultimos 15 dias em cada SKU. Falha = [] (tela sem a serie)."""
+    lk = lookups() if skus else None
+    if not lk:
         return []
     dias = vendas.janela(hoje - timedelta(days=1))
     try:
-        linhas = consultar(vendas.SQL_VENDAS, {"ini": dias[0], "fim": dias[-1], "skus": sorted({s.sku for s in skus})})
+        # As 3 em paralelo: cada uma pode ir ao Metabase, e em serie a 1a carga passava de 25 s.
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            futuros = {c: ex.submit(consultar, vendas.sql_canal(c), {"ini": dias[0], "fim": dias[-1]}) for c in ("ML", "SP", "TT")}
+            linhas = {c: f.result() for c, f in futuros.items()}
     except Exception:  # noqa: BLE001 -- vendas sao extra: a lista do Supply segue
         logger.exception("slow moving: vendas nao lidas")
         return []
-    series = vendas.series_por_sku(linhas, len(dias), _marca)
+    series = vendas.series_por_sku(linhas, len(dias), lk[0], lk[1])
     for s in skus:
-        e = series.get((s.marca, s.sku))
+        e = series.get((s.marca, vendas.ncode(s.sku)))
         if e:
             s.serie = {ch: [round(v, 2) for v in serie] for ch, serie in e["q"].items()}
             s.receita_15d = {ch: round(sum(serie[-15:]), 2) for ch, serie in e["r"].items()}
     return dias
 
 
-def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional[date] = None) -> SlowMovingResponse:
+def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional[date] = None,
+                    lookups: Callable = vendas.obter_lookups) -> SlowMovingResponse:
     skus = []
     for r in consultar(SQL_SLOW, {}):
         marca = _marca(r.get("marca"))
@@ -87,6 +93,6 @@ def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional
         ))
     dia = consultar(SQL_DIA, {})
     skus.sort(key=lambda s: s.valor_parado, reverse=True)
-    dias = _anotar_vendas(skus, consultar, hoje or date.today())
+    dias = _anotar_vendas(skus, consultar, hoje or date.today(), lookups)
     return SlowMovingResponse(fonte=FONTE, atualizado_em=dia[0]["dia"] if dia else None,
                               meta_dias=META_DIAS, dias=dias, vendas_disponivel=bool(dias), skus=skus)
