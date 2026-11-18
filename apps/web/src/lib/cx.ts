@@ -206,14 +206,16 @@ export function janelaCxDoPeriodo(dateFrom: string, dateTo: string, hoje: Date =
 }
 
 /** Canal da aba CX na URL (`canal=ml`); qualquer outra coisa = Shopee. */
-export type CanalCx = "shopee" | "ml";
+export type CanalCx = "shopee" | "ml" | "tiktok";
 export const CANAIS_CX: readonly { valor: CanalCx; rotulo: string; ponto: string }[] = [
   { valor: "shopee", rotulo: "Shopee", ponto: "bg-canal-shopee" },
   { valor: "ml", rotulo: "Mercado Livre", ponto: "bg-canal-ml" },
+  { valor: "tiktok", rotulo: "TikTok Shop", ponto: "bg-canal-tiktok" },
 ];
 
 export function lerCanalCx(params: Readonly<Record<string, ParamBruto>>): CanalCx {
-  return primeiro(params.canal)?.trim().toLowerCase() === "ml" ? "ml" : "shopee";
+  const c = primeiro(params.canal)?.trim().toLowerCase();
+  return c === "ml" || c === "tiktok" ? c : "shopee";
 }
 
 export function hrefCx(f: FiltrosCx, canal: CanalCx = "shopee"): string {

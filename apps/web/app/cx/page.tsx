@@ -15,6 +15,7 @@ import { ALL_BRAND_KEYS } from "@/lib/filters/brands";
 
 import CxConteudo from "./CxConteudo";
 import CxMercadoLivre from "./CxMercadoLivre";
+import CxTikTok from "./CxTikTok";
 
 export const dynamic = "force-dynamic";
 
@@ -25,5 +26,6 @@ export default async function CxPage({ searchParams }: { searchParams: SearchPar
   const filtros = lerFiltrosCx(params, ALL_BRAND_KEYS);
   const canal = lerCanalCx(params);
   // o respiro e a ordem dos blocos sao da `Aba` (ALVO-GRADE), montada por cada canal
+  if (canal === "tiktok") return <CxTikTok filtros={filtros} />;
   return canal === "ml" ? <CxMercadoLivre filtros={filtros} /> : <CxConteudo filtros={filtros} />;
 }
