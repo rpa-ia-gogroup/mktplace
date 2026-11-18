@@ -2,8 +2,9 @@
 
 Para cada marca com token em `audit.tiktok_oauth_token`: devolucoes/reembolsos
 (`/return_refund/202309/returns/search`) e cancelamentos (`/cancellations/search`) criados
-na janela. Junta por motivo (Pareto) e por marca. Marca sem permissao/erro nao derruba as
-outras: vem com `estado` e `motivo`. Cache de 10 min por janela (a API e' lenta e paginada).
+na janela. Leitura POR DIA, em paralelo, com cache por (marca, dia): dia fechado vale 6 h, os 3
+ultimos 10 min; uma rotina mantem 30/7/90 dias quentes. Junta por motivo (Pareto) e por marca.
+Marca sem permissao/erro nao derruba as outras: vem com `estado` e `motivo`.
 """
 from __future__ import annotations
 
@@ -124,8 +125,6 @@ def coletar_marca(cli: Cliente, ini: int, fim: int) -> dict:
     cans = [c for c in cans if c not in nao_pagos]
     return {
         "nao_pagos": len(nao_pagos),
-        # nomes dos campos (sem valores) para conferir o contrato da API
-        "campos": {"devolucao": sorted(devs[0])[:40] if devs else [], "cancelamento": sorted(cans[0])[:40] if cans else []},
         "devolucoes": [{
             "motivo": _pt(texto(d, "return_reason_text", "return_reason")),
             "tipo": d.get("return_type"), "status": d.get("return_status"),
@@ -151,61 +150,112 @@ def _cliente_da_marca(conta: str, tok: str, criar: Callable[..., Cliente]) -> Cl
     return criar(tok, _cipher[conta])
 
 
+# --- Cache POR DIA e por marca (agregado compacto, nao os registros) ---------------------------
+#: Dia fechado quase nao muda: 6 h. Os ultimos `RECENTES` dias ainda recebem devolucao: 10 min.
+TTL_RECENTE, TTL_FECHADO, RECENTES = 600, 6 * 3600, 3
+#: Chamadas simultaneas ao TikTok (dias x marcas em paralelo).
+PARALELO = 12
+_dias: dict[tuple[str, date], tuple[float, dict]] = {}
+
+
+def resumir(c: dict) -> dict:
+    """Saida de `coletar_marca` (um dia) -> agregado: contagens, motivos, autores, SKUs."""
+    motivos, skus = Counter(), Counter()
+    autores: dict[tuple, Counter] = defaultdict(Counter)
+    nomes: dict[str, str] = {}
+    for tipo, lista in (("Devolução", c["devolucoes"]), ("Cancelamento", c["cancelamentos"])):
+        for x in lista:
+            k = (tipo, x["motivo"])
+            motivos[k] += 1
+            if tipo == "Cancelamento":
+                autores[k][x["autor"]] += 1
+            for it in x["itens"]:
+                if it["sku"]:
+                    skus[(tipo, x["motivo"], it["sku"])] += 1
+                    nomes[it["sku"]] = it["produto"] or nomes.get(it["sku"]) or it["sku"]
+    return {"devolucoes": len(c["devolucoes"]), "reembolsado": sum(x["valor"] for x in c["devolucoes"]),
+            "cancelamentos": len(c["cancelamentos"]), "nao_pagos": c["nao_pagos"],
+            "comprador": sum(1 for x in c["cancelamentos"] if x["autor"] == "Comprador"),
+            "motivos": motivos, "autores": autores, "skus": skus, "nomes": nomes, "truncado": c["truncado"]}
+
+
+def _fresco(chave: tuple[str, date], hoje: date, agora: float) -> bool:
+    hit = _dias.get(chave)
+    if not hit:
+        return False
+    ttl = TTL_RECENTE if (hoje - chave[1]).days <= RECENTES else TTL_FECHADO
+    return agora - hit[0] < ttl
+
+
+def _estado_erro(e: Exception) -> dict:
+    if isinstance(e, tiktok_token.TikTokIndisponivel):
+        return {"estado": "nao_autorizada", "motivo": str(e)}
+    sem = getattr(e, "codigo", None) in (105005, 105002, 106011)  # escopo/permissao do app
+    return {"estado": "sem_permissao" if sem else "erro",
+            "motivo": "O app da Torre não tem permissão de devoluções/cancelamentos nesta loja." if sem else str(e)}
+
+
 def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
            criar: Callable[..., Cliente] = Cliente, hoje: Optional[date] = None) -> dict:
     hoje = hoje or datetime.now(TZ).date()
     ini, fim = janela(dias, hoje)
+    datas = [ini + timedelta(days=i) for i in range(dias)]
 
-    # tokens em sequencia (a sessao do banco nao e' thread-safe); so' as chamadas ao TikTok vao em paralelo
-    tokens: dict[str, object] = {}
+    # tokens e lojas em sequencia (a sessao do banco nao e' thread-safe)
+    clientes: dict[str, Cliente] = {}
+    falha: dict[str, dict] = {}
     for c in contas:
         try:
-            tokens[c] = obter_token(c)
-        except tiktok_token.TikTokIndisponivel as e:
-            tokens[c] = e
+            clientes[c] = _cliente_da_marca(c, obter_token(c), criar)
+        except (tiktok_token.TikTokIndisponivel, TikTokErro) as e:
+            falha[c] = _estado_erro(e)
 
-    def uma(conta: str) -> tuple[str, dict]:
+    # so' os dias que faltam (ou venceram) vao ao TikTok, em paralelo
+    agora = time.time()
+    tarefas = [(c, d) for c in clientes for d in datas if not _fresco((c, d), hoje, agora)]
+
+    def uma(t: tuple[str, date]):
+        c, d = t
         try:
-            if isinstance(tokens[conta], Exception):
-                raise tokens[conta]
-            cli = _cliente_da_marca(conta, tokens[conta], criar)
-            return conta, {"estado": "dado", **coletar_marca(cli, _ts(ini), _ts(fim, fim=True))}
-        except tiktok_token.TikTokIndisponivel as e:
-            return conta, {"estado": "nao_autorizada", "motivo": str(e)}
+            ag = resumir(coletar_marca(clientes[c], _ts(d), _ts(d, fim=True)))
+            with _trava:
+                _dias[t] = (time.time(), ag)
+            return t, None
         except TikTokErro as e:
-            sem = e.codigo in (105005, 105002, 106011)  # escopo/permissao do app
-            return conta, {"estado": "sem_permissao" if sem else "erro",
-                           "motivo": "O app da Torre não tem permissão de devoluções/cancelamentos nesta loja." if sem else str(e)}
+            return t, e
 
-    with ThreadPoolExecutor(max_workers=6) as ex:
-        por_conta = dict(ex.map(uma, contas))
+    with ThreadPoolExecutor(max_workers=PARALELO) as ex:
+        for (c, _), e in ex.map(uma, tarefas):
+            if e is not None and c not in falha:
+                falha[c] = _estado_erro(e)
 
     marcas, motivos = [], Counter()
-    autores: dict[str, Counter] = defaultdict(Counter)
+    autores: dict[tuple, Counter] = defaultdict(Counter)
     por_motivo_marca: dict[tuple, Counter] = defaultdict(Counter)
     por_motivo_sku: dict[tuple, Counter] = defaultdict(Counter)
     nome_sku: dict[str, str] = {}
     for conta in contas:
-        d = por_conta[conta]
-        if d["estado"] != "dado":
-            marcas.append({"marca": conta, "estado": d["estado"], "motivo": d.get("motivo")})
+        dias_ag = [_dias.get((conta, d)) for d in datas]
+        if conta in falha and any(x is None for x in dias_ag):  # falhou e nao ha' dia guardado para cobrir
+            marcas.append({"marca": conta, **falha[conta]})
             continue
-        devs, cans = d["devolucoes"], d["cancelamentos"]
-        marcas.append({"marca": conta, "estado": "dado", "motivo": None, "truncado": d["truncado"],
-                       "devolucoes": len(devs), "reembolsado": round(sum(x["valor"] for x in devs), 2),
-                       "cancelamentos": len(cans), "nao_pagos": d["nao_pagos"], "campos": d["campos"],
-                       "cancelamentos_comprador": sum(1 for c in cans if c["autor"] == "Comprador")})
-        for tipo, lista in (("Devolução", devs), ("Cancelamento", cans)):
-            for x in lista:
-                k = (tipo, x["motivo"])
-                motivos[k] += 1
-                if tipo == "Cancelamento":
-                    autores[k][x["autor"]] += 1
-                por_motivo_marca[k][conta] += 1
-                for it in x["itens"]:
-                    if it["sku"]:
-                        por_motivo_sku[k][(conta, it["sku"])] += 1
-                        nome_sku[it["sku"]] = it["produto"] or nome_sku.get(it["sku"]) or it["sku"]
+        ags = [x[1] for x in dias_ag if x]
+        marcas.append({"marca": conta, "estado": "dado", "motivo": None,
+                       "truncado": any(a["truncado"] for a in ags),
+                       "devolucoes": sum(a["devolucoes"] for a in ags),
+                       "reembolsado": round(sum(a["reembolsado"] for a in ags), 2),
+                       "cancelamentos": sum(a["cancelamentos"] for a in ags),
+                       "nao_pagos": sum(a["nao_pagos"] for a in ags),
+                       "cancelamentos_comprador": sum(a["comprador"] for a in ags)})
+        for a in ags:
+            for k, n in a["motivos"].items():
+                motivos[k] += n
+                por_motivo_marca[k][conta] += n
+            for k, cnt in a["autores"].items():
+                autores[k].update(cnt)
+            for (tipo, motivo, sku), n in a["skus"].items():
+                por_motivo_sku[(tipo, motivo)][(conta, sku)] += n
+            nome_sku.update(a["nomes"])
 
     itens = []
     for (tipo, motivo), n in motivos.most_common():
@@ -219,6 +269,29 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
         })
     return {"gerado_em": datetime.now(timezone.utc).isoformat(), "dias": dias,
             "inicio": ini.isoformat(), "fim": fim.isoformat(), "marcas": marcas, "motivos": itens}
+
+
+def iniciar_rotina(intervalo_s: int = 540) -> None:
+    """Startup da API: le os ultimos 30 dias logo ao subir e a cada ~9 min, antes de alguem abrir a tela.
+    Como o cache e' por dia, 7 dias sai do mesmo cache; 90 dias so' busca os dias que faltam."""
+    from app.config import settings
+
+    if not settings.tiktok_app_key:
+        return
+
+    def laco() -> None:
+        time.sleep(30)
+        while True:
+            for d in (30, 7, 90):
+                with _trava:
+                    livre = d not in _rodando
+                    if livre:
+                        _rodando.add(d)
+                if livre:
+                    _atualizar(d)
+            time.sleep(intervalo_s)
+
+    threading.Thread(target=laco, name="tiktok-cx-rotina", daemon=True).start()
 
 
 _rodando: set[int] = set()

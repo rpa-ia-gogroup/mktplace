@@ -34,10 +34,10 @@ class Fake(Cliente):
 def test_monta_por_motivo_e_marca_e_isola_marca_sem_permissao(monkeypatch):
     monkeypatch.setattr(settings, "tiktok_app_key", "k")
     monkeypatch.setattr(settings, "tiktok_app_secret", SecretStr("s"))
-    svc._cipher.clear()
+    svc._cipher.clear(); svc._dias.clear()
     toks = {"kokeshi": "ok", "apice": "sem"}
-    d = svc.montar(7, ["apice", "kokeshi"], lambda c: toks[c], criar=Fake, hoje=date(2026, 11, 18))
-    assert (d["inicio"], d["fim"]) == ("2026-11-11", "2026-11-17")
+    d = svc.montar(1, ["apice", "kokeshi"], lambda c: toks[c], criar=Fake, hoje=date(2026, 11, 18))
+    assert (d["inicio"], d["fim"]) == ("2026-11-17", "2026-11-17")
     ap = next(m for m in d["marcas"] if m["marca"] == "apice")
     ko = next(m for m in d["marcas"] if m["marca"] == "kokeshi")
     assert ap["estado"] == "sem_permissao"
@@ -61,3 +61,24 @@ def test_obter_nunca_espera_o_tiktok():
     assert svc.obter(7, iniciar=disparos.append)["marcas"] == [{"marca": "kokeshi"}] and disparos == [7]
     svc._cache[7] = (0, svc._cache[7][1])  # vencido: devolve o antigo e atualiza por tras
     assert svc.obter(7, iniciar=disparos.append)["marcas"] and disparos == [7, 7]
+
+
+def test_cache_por_dia_so_busca_o_que_falta(monkeypatch):
+    monkeypatch.setattr(settings, "tiktok_app_key", "k")
+    monkeypatch.setattr(settings, "tiktok_app_secret", SecretStr("s"))
+    svc._cipher.clear(); svc._dias.clear()
+    chamadas = []
+
+    class Conta(Fake):
+        def paginar(self, path, corpo, chave, **k):
+            chamadas.append(corpo["create_time_ge"])
+            return super().paginar(path, corpo, chave, **k)
+
+    hoje = date(2026, 11, 18)
+    d7 = svc.montar(7, ["kokeshi"], lambda c: "ok", criar=Conta, hoje=hoje)
+    assert len(chamadas) == 14 and d7["marcas"][0]["devolucoes"] == 7  # 7 dias x 2 rotas
+    chamadas.clear()
+    d7b = svc.montar(7, ["kokeshi"], lambda c: "ok", criar=Conta, hoje=hoje)
+    assert chamadas == [] and d7b["marcas"][0]["cancelamentos"] == 14  # tudo do cache
+    svc.montar(10, ["kokeshi"], lambda c: "ok", criar=Conta, hoje=hoje)
+    assert len(chamadas) == 6  # so' os 3 dias novos x 2 rotas
