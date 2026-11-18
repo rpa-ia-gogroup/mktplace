@@ -38,7 +38,7 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
     let vivo = true;
     setR(null);
     setAberto(null);
-    carregarCxTikTok({ marca, dias }, torreFetch as typeof fetch).then((x) => vivo && setR(x));
+    carregarCxTikTok({ marca, dias }, torreFetch as typeof fetch, undefined, undefined, () => vivo).then((x) => vivo && setR(x));
     return () => {
       vivo = false;
     };

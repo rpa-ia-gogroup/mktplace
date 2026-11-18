@@ -221,25 +221,45 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
             "inicio": ini.isoformat(), "fim": fim.isoformat(), "marcas": marcas, "motivos": itens}
 
 
-def obter(dias: int, db, contas: Optional[list[str]] = None) -> dict:
-    """Com cache de 10 min por janela (todas as contas); `contas` filtra no fim."""
+_rodando: set[int] = set()
+
+
+def _atualizar(dias: int) -> None:
+    """Le o TikTok inteiro da janela em segundo plano (sessao propria) e guarda no cache."""
+    from sqlalchemy import text
+
+    from app.database import SessionLocal
+
+    try:
+        with SessionLocal() as db:
+            todas = [r[0] for r in db.execute(text("SELECT conta FROM audit.tiktok_oauth_token ORDER BY conta")).all()]
+            db.rollback()
+            armazem = tiktok_token.ArmazemPg(db)
+            dados = montar(dias, todas, lambda c: tiktok_token.obter_access_token(armazem, c))
+        with _trava:
+            _cache[dias] = (time.time(), dados)
+    except Exception:  # noqa: BLE001 -- falha fica no log; a tela segue com o cache anterior
+        logger.exception("cx tiktok: leitura da janela %s falhou", dias)
+    finally:
+        with _trava:
+            _rodando.discard(dias)
+
+
+def obter(dias: int, contas: Optional[list[str]] = None, iniciar: Callable[[int], None] | None = None) -> dict:
+    """Nunca espera o TikTok: cache fresco volta direto; vencido volta e atualiza por tras;
+    sem cache, dispara a leitura e devolve `carregando=True` (a tela pergunta de novo)."""
     agora = time.time()
     with _trava:
         hit = _cache.get(dias)
-    if not hit or agora - hit[0] > CACHE_S:
-        from sqlalchemy import text
-
-        todas = [r[0] for r in db.execute(text("SELECT conta FROM audit.tiktok_oauth_token ORDER BY conta")).all()]
-        db.rollback()
-        armazem = tiktok_token.ArmazemPg(db)
-        dados = montar(dias, todas, lambda c: tiktok_token.obter_access_token(armazem, c))
-        with _trava:
-            _cache[dias] = (agora, dados)
-        hit = (agora, dados)
+        precisa = (not hit or agora - hit[0] > CACHE_S) and dias not in _rodando
+        if precisa:
+            _rodando.add(dias)
+    if precisa:
+        (iniciar or (lambda d: threading.Thread(target=_atualizar, args=(d,), daemon=True).start()))(dias)
+    if not hit:
+        return {"carregando": True, "dias": dias, "marcas": [], "motivos": []}
     dados = hit[1]
-    if not contas:
-        return dados
-    return _filtrar(dados, contas)
+    return _filtrar(dados, contas) if contas else dados
 
 
 def _filtrar(d: dict, contas: list[str]) -> dict:
