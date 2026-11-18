@@ -30,6 +30,8 @@ from app.services import cx_atendimento_service as svc
 from app.services import cx_avaliacoes_service
 from app.services import cx_ml_service
 from app.services import cx_pedidos_service
+from app.services import cx_tiktok_service
+from app.database import get_db
 
 
 def exigir_flag() -> None:
@@ -119,6 +121,14 @@ def cx_ml_pedidos(
     if not re.match(r"^[A-Za-z0-9_]{1,80}$", motivo):  # motivo sem mapa sai com o reason_id do ML (maiusculo)
         raise HTTPException(422, _MSG_MOTIVO)
     return cx_pedidos_service.montar_pedidos_motivo_ml(tipo=tipo, codigo=motivo, brands=brands, dias=dias)
+
+
+@router.get("/tiktok")
+def cx_tiktok(brands: Optional[list[str]] = Depends(brands_query), dias: int = Depends(dias_query), db=Depends(get_db)):
+    """CX do TikTok Shop direto da Open API (app da Torre): devolucoes e cancelamentos por motivo e marca."""
+    if db is None:
+        raise HTTPException(503, "Banco indisponivel.")
+    return cx_tiktok_service.obter(dias, db, brands)
 
 
 @router.get("/shopee/avaliacoes", response_model=CxAvaliacoesResponse)
