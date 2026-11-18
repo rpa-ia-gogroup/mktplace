@@ -21,6 +21,8 @@ def test_marcas_da_torre_pecas_e_ordem():
     def consultar(sql, params):
         if "si_rawsales" in sql:
             return []
+        if "AS capital" in sql:
+            return [{"marca": "Kokeshi", "capital": 500000.0}, {"marca": "Rituária", "capital": 20000}, {"marca": "BySamia", "capital": 1}]
         return [{"dia": date(2026, 11, 17)}] if "si_historical_stock" in sql else linhas
 
     r = get_slow_moving(consultar, hoje=date(2026, 11, 17), lookups=lambda: None)
@@ -29,6 +31,7 @@ def test_marcas_da_torre_pecas_e_ordem():
     rt = r.skus[1]
     assert rt.marca == "rituaria" and rt.estoque is None and rt.cobertura_dias is None  # sem custo e sem venda
     assert r.atualizado_em == date(2026, 11, 17) and r.meta_dias == 120
+    assert r.capital_marketplace == {"kokeshi": 500000.0, "rituaria": 20000.0}  # base da % do capital parado
 
 
 

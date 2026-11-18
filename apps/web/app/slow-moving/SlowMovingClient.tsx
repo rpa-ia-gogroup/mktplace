@@ -73,7 +73,7 @@ const TENDENCIAS: { valor: FiltroTendencia; texto: string }[] = [
   { valor: "todos", texto: "Todos" }, { valor: "melhorando", texto: "▲ Melhorando" }, { valor: "piorando", texto: "▼ Piorando" },
 ];
 const COLUNAS: Record<string, SortColumnType> = {
-  produto: "text", estoque: "numeric", valor: "numeric", venda: "numeric", tendencia: "numeric", cobertura: "numeric",
+  produto: "text", estoque: "numeric", valor: "numeric", venda: "numeric", tendencia: "numeric", cobertura: "numeric", precisa: "numeric",
 };
 
 type Dialogo =
@@ -149,8 +149,12 @@ export default function SlowMovingClient() {
     if (c === "venda") return vendaDia(s);
     if (c === "tendencia") return ritmo(s, n, canal, envio).tendencia;
     if (c === "cobertura") return s.cobertura_dias ?? Number.POSITIVE_INFINITY;
+    if (c === "precisa") return s.estoque == null ? null : s.estoque / meta;
     return s.estoque;
-  }, [n, canal, envio, vendaDia]);
+  }, [n, canal, envio, vendaDia, meta]);
+  // % do capital parado sobre TODO o estoque do Marketplace das marcas na tela (base do Supply)
+  const baseCapital = dados ? (marcas.length ? marcas : Object.keys(dados.capital_marketplace ?? {})).reduce((a, m) => a + (dados.capital_marketplace?.[m] ?? 0), 0) : 0;
+  const pctCapital = baseCapital > 0 ? (t.valor / baseCapital) * 100 : null;
   const { sort, toggleSort, sortedRows } = useSortableTable(lista, valorDe, COLUNAS);
 
   /** Pontos do grafico: uma barra por marketplace dentro do filtro + media de 7 dias. */
@@ -233,8 +237,8 @@ export default function SlowMovingClient() {
               valor={int(t.skus)} comparacao={`${int(t.estoque)} peças no Marketplace`}
               onAbrir={() => setDialogo({ tipo: "skus" })} />
             <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Capital parado"
-              ajuda={<InfoDica emControle texto="Estoque do Marketplace a preço de custo." />}
-              valor={fmtBrlCurto(t.valor)} comparacao="a preço de custo"
+              ajuda={<InfoDica emControle texto={`Estoque parado do Marketplace a preço de custo. A % compara com o capital de todo o estoque do Marketplace das marcas na tela. Fonte: Supply Intelligence (Data Mart, staging.si_disponibilidade), fotografia de ${dados?.atualizado_em ? dataBr(dados.atualizado_em) : "hoje"}.`} />}
+              valor={fmtBrlCurto(t.valor)} comparacao={pctCapital == null ? "a preço de custo" : `${pctCapital.toFixed(1).replace(".", ",")}% do estoque do Marketplace (${fmtBrlCurto(baseCapital)})`}
               onAbrir={() => setDialogo({ tipo: "capital" })} />
             <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Cobertura"
               ajuda={<InfoDica emControle texto="Σ estoque ÷ Σ venda média por dia dos últimos 15 dias, no Marketplace." />}
@@ -276,6 +280,7 @@ export default function SlowMovingClient() {
                       <SortHeader rotulo="Venda/dia" coluna="venda" sort={sort} aoOrdenar={toggleSort} />
                       {comVendas && <SortHeader rotulo="Tendência" coluna="tendencia" sort={sort} aoOrdenar={toggleSort} />}
                       <SortHeader rotulo="Cobertura" coluna="cobertura" sort={sort} aoOrdenar={toggleSort} />
+                      <SortHeader rotulo="Precisa vender/dia" coluna="precisa" sort={sort} aoOrdenar={toggleSort} />
                       <SortHeader rotulo="Capital parado" coluna="valor" sort={sort} aoOrdenar={toggleSort} />
                       {comVendas && <th scope="col" className="hidden px-3 py-2 text-right text-xs font-semibold uppercase tracking-wide md:table-cell">30 dias</th>}
                     </tr>
@@ -298,6 +303,7 @@ export default function SlowMovingClient() {
                         <td className="px-3 py-2 text-right tabular-nums">{dec(vendaDia(s))}</td>
                         {comVendas && <td className="px-3 py-2 text-right tabular-nums"><Tendencia v={ritmo(s, n, canal, envio).tendencia} /></td>}
                         <td className="px-3 py-2 text-right tabular-nums">{dias(s.cobertura_dias)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums" title={`Para a cobertura ficar abaixo de ${meta} dias: estoque ÷ ${meta}`}>{s.estoque == null ? "—" : `${dec(s.estoque / meta)} pç`}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtBrlCurto(s.valor_parado)}</td>
                         {comVendas && (
                           <td className="hidden px-3 py-2 md:table-cell">
@@ -309,7 +315,7 @@ export default function SlowMovingClient() {
                       </tr>
                     ))}
                     {sortedRows.length === 0 && (
-                      <tr><td colSpan={7} className="px-3 py-6 text-center text-ink-muted">Nenhum SKU nesta busca.</td></tr>
+                      <tr><td colSpan={8} className="px-3 py-6 text-center text-ink-muted">Nenhum SKU nesta busca.</td></tr>
                     )}
                   </tbody>
                 </table>

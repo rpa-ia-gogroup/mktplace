@@ -40,3 +40,5 @@ class SlowMovingResponse(BaseModel):
     #: False = de-para/kits ou vendas nao lidos: a tela mostra so' os numeros do Supply.
     vendas_disponivel: bool = False
     skus: list[SkuSlowMoving]
+    #: Capital de todo o estoque do Marketplace por marca (R$, a custo); vazio = nao lido.
+    capital_marketplace: dict[str, float] = {}
