@@ -273,8 +273,8 @@ test("top rupturas: ordena por venda media diaria entre os dois canais", () => {
 
 test("abas: a flag do desempenho Shopee esconde so' a propria aba", () => {
   const sem = abasVisiveis({ desempenhoShopee: false }).map((a) => a.chave);
-  assert.deepEqual(sem, ["visao-geral", "estoque-ml", "estoque-shopee", "envio-ml", "slow-moving"]);
-  assert.equal(abasVisiveis({ desempenhoShopee: true }).length, 6);
+  assert.deepEqual(sem, ["visao-geral", "estoque-ml", "estoque-shopee", "envio-ml"]);
+  assert.equal(abasVisiveis({ desempenhoShopee: true }).length, 5);
   assert.equal(resolverAba("desempenho-shopee", abasVisiveis({ desempenhoShopee: false })), "visao-geral");
   assert.equal(resolverAba(["estoque-ml"], abasVisiveis({ desempenhoShopee: false })), "estoque-ml");
   assert.equal(resolverAba("qualquer", abasVisiveis({ desempenhoShopee: true })), "visao-geral");

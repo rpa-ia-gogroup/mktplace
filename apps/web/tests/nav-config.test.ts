@@ -56,6 +56,7 @@ test("NAV_SECTIONS mantem exatamente as rotas atuais (nenhuma nova, nenhuma remo
     // prefixo, e um filho deixaria os dois itens ativos ao mesmo tempo.
     // FULL-UNIFICADO-1: as quatro telas do Full viraram uma rota so', /full.
     "/full",
+    "/slow-moving",
     // METAS-1 — metas mensais de GMV por marca x canal (grupo Planejamento).
     "/metas",
     // Gate AVH-4B-S Task 2/2 — referencias externas da Avoe.
