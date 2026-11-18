@@ -43,6 +43,17 @@ class Cliente:
         self.token, self.cipher, self.http, self.agora = access_token, shop_cipher, http, agora
 
     def chamar(self, metodo: str, path: str, params: Optional[dict] = None, corpo: Optional[dict] = None) -> dict:
+        """Com ate' 3 novas tentativas quando o TikTok limita a frequencia (36009002)."""
+        for tentativa in range(4):
+            try:
+                return self._chamar(metodo, path, params, corpo)
+            except TikTokErro as e:
+                if e.codigo != 36009002 or tentativa == 3:
+                    raise
+                time.sleep(1.5 * (tentativa + 1))
+        raise TikTokErro("TikTok Shop indisponível agora.")
+
+    def _chamar(self, metodo: str, path: str, params: Optional[dict] = None, corpo: Optional[dict] = None) -> dict:
         p = {"app_key": settings.tiktok_app_key, "timestamp": str(int(self.agora())), **(params or {})}
         if self.cipher:
             p["shop_cipher"] = self.cipher

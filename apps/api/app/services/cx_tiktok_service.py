@@ -154,7 +154,8 @@ def _cliente_da_marca(conta: str, tok: str, criar: Callable[..., Cliente]) -> Cl
 #: Dia fechado quase nao muda: 6 h. Os ultimos `RECENTES` dias ainda recebem devolucao: 10 min.
 TTL_RECENTE, TTL_FECHADO, RECENTES = 600, 6 * 3600, 3
 #: Chamadas simultaneas ao TikTok (dias x marcas em paralelo).
-PARALELO = 12
+PARALELO = 4  # Render Free tem 0,1 CPU: mais que isso trava o /health
+_uma_leitura = threading.Lock()  # um periodo por vez (rotina e tela nao leem o mesmo dia juntas)
 _dias: dict[tuple[str, date], tuple[float, dict]] = {}
 
 
@@ -282,7 +283,7 @@ def iniciar_rotina(intervalo_s: int = 540) -> None:
     def laco() -> None:
         time.sleep(30)
         while True:
-            for d in (30, 7, 90):
+            for d in (30,):  # 7 dias sai do mesmo cache; 90 so' quando alguem pede
                 with _trava:
                     livre = d not in _rodando
                     if livre:
@@ -304,7 +305,7 @@ def _atualizar(dias: int) -> None:
     from app.database import SessionLocal
 
     try:
-        with SessionLocal() as db:
+        with _uma_leitura, SessionLocal() as db:
             todas = [r[0] for r in db.execute(text("SELECT conta FROM audit.tiktok_oauth_token ORDER BY conta")).all()]
             db.rollback()
             armazem = tiktok_token.ArmazemPg(db)
