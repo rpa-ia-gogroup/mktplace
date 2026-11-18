@@ -98,8 +98,8 @@ def _itens(linhas) -> list[dict]:
 
 def coletar_marca(cli: Cliente, ini: int, fim: int) -> dict:
     corpo = {"create_time_ge": ini, "create_time_lt": fim}
-    devs, t1 = cli.paginar("/return_refund/202309/returns/search", corpo, "return_orders", page_size=100, max_paginas=100)
-    cans, t2 = cli.paginar("/return_refund/202309/cancellations/search", corpo, "cancellations", page_size=100, max_paginas=100)
+    devs, t1 = cli.paginar("/return_refund/202309/returns/search", corpo, "return_orders", page_size=50, max_paginas=200)
+    cans, t2 = cli.paginar("/return_refund/202309/cancellations/search", corpo, "cancellations", page_size=50, max_paginas=200)
     # pedido de devolucao que o proprio comprador desistiu nao e' problema (mesma regra da Shopee)
     devs = [d for d in devs if "CANCEL" not in str(d.get("return_status") or "").upper()]
     texto = lambda x, *ks: next((x.get(k) for k in ks if x.get(k)), None) or "Sem motivo informado"  # noqa: E731
