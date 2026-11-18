@@ -32,7 +32,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal, get_db
 from app.deps.period import today_brt
 from app.services import datamart_leitura
 from app.services import full_impacto_service as impacto_svc
@@ -147,8 +147,16 @@ def _oportunidades_do_report(db: Session) -> list[str]:
     """OPORTUNIDADES-1: top 3 do grupo para o report. Falha = secao vazia; o report sai igual."""
     try:
         ml, shopee = settings.ml_full_stock_api_enabled, settings.shopee_fbs_stock_enabled
+
+        def impacto() -> dict:
+            # Sessao propria: o impacto abre transacao so' leitura, e a do report ja' fez consultas.
+            if SessionLocal is None:
+                raise RuntimeError("sem banco")
+            with SessionLocal() as s:
+                return impacto_svc.get_impacto_ruptura(s, ml_ligado=ml, shopee_ligado=shopee)
+
         r = oport_svc.get_oportunidades(
-            lambda: impacto_svc.get_impacto_ruptura(db, ml_ligado=ml, shopee_ligado=shopee),
+            impacto,
             lambda: slow_svc.get_slow_moving(datamart_leitura.consultar, hoje=today_brt(), lookups=lambda: None).model_dump())
         return torre_report.linhas_oportunidades(r["geral"])
     except Exception as exc:  # noqa: BLE001 -- oportunidade e' extra no report
