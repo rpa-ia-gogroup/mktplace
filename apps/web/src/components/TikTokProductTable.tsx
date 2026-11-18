@@ -1,3 +1,4 @@
+import NomeProduto from "@/components/NomeProduto";
 import type { ProdutoTikTokRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -66,7 +67,7 @@ export default function TikTokProductTable({ items, loading, sort, onSort, pagin
       renderRow={(p) => (
         <tr key={`${p.brand}-${p.product_id}`} className="hover:bg-raised transition-colors">
           <td className="px-6 py-3 max-w-xs">
-            <p className="text-ink font-medium truncate leading-tight">{p.product_name}</p>
+            <NomeProduto nome={p.product_name} />
             <p className="text-[11px] text-ink-muted tabular-nums mt-0.5">{p.product_id}</p>
           </td>
           <td className="px-4 py-3 text-xs font-semibold text-ink-muted uppercase whitespace-nowrap">{p.brand ? brandLabel(p.brand.toLowerCase()) : "—"}</td>

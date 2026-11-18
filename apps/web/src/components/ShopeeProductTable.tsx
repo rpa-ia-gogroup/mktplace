@@ -1,3 +1,4 @@
+import NomeProduto from "@/components/NomeProduto";
 import type { ProdutoShopeeRow } from "@/lib/api-client";
 import type { SortState } from "@/lib/use-sortable-table";
 import SortableHeader from "@/components/SortableHeader";
@@ -54,7 +55,7 @@ export default function ShopeeProductTable({ items, loading, sort, onSort, pagin
       renderRow={(p, i) => (
         <tr key={`${p.brand}-${p.sku_ref ?? "sem-sku"}-${p.variation_name ?? ""}-${i}`} className="hover:bg-raised transition-colors">
           <td className="px-6 py-3 max-w-xs">
-            <p className="text-ink font-medium truncate leading-tight">{p.product_name}</p>
+            <NomeProduto nome={p.product_name} />
           </td>
           <td className="px-4 py-3 text-xs text-ink-muted max-w-[120px] truncate">
             {p.variation_name ?? <span className="text-ink-faint">—</span>}
