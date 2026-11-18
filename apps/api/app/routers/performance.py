@@ -1193,6 +1193,11 @@ def shopee_fbs_estoque(
         # PR3: curva ABC por produto (mesma leitura e cache do /full-curva-abc)
         resp.curva_meta = CurvaMeta(**curva_abc_svc.anotar_curva(
             resp.produtos, db, sku_de=lambda p: p.item_sku, kit_de=lambda p: p.is_kit))
+        if somente_acao:
+            # "So' acao": brinde e descontinuado nao se repoe, entao nao entram na fila.
+            antes = len(resp.produtos)
+            resp.produtos = [p for p in resp.produtos if not p.situacao]
+            resp.total_no_filtro = max(0, resp.total_no_filtro - (antes - len(resp.produtos)))
         # Indicadores sem brinde/descontinuado (batem com a Visao geral). Precisa da lista COMPLETA do
         # escopo: a filtrada e' refeita sem filtro; truncada = nada e' descontado (`situacao_aplicada` False).
         if resp.curva_meta.bd_lida:

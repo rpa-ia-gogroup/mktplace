@@ -125,3 +125,24 @@ def test_rotas_anotam_e_mandam_o_curva_meta(monkeypatch):
     r2 = rota.ml_full_estoque(brands=None, ref_date=None, incluir_fora_do_full=False, limite=10, db=object())
     assert r1.produtos[0].curva == "AA" and r1.curva_meta.itens_com_curva == 1
     assert r2.inventarios[0].curva == "B" and r2.curva_meta.disponivel is True
+
+
+def test_so_acao_tira_brinde_e_descontinuado_da_lista(monkeypatch):
+    from app.config import settings
+    from app.routers import performance as rota
+
+    monkeypatch.setattr(settings, "shopee_fbs_stock_enabled", True)
+    monkeypatch.setattr(rota, "_require_db", lambda db: db)
+    ativo, desc = _shopee("apice", "20690"), _shopee("apice", "20582")
+    shopee = SimpleNamespace(produtos=[ativo, desc], curva_meta=None, total_no_filtro=2)
+
+    def anotar(itens, db, **kw):
+        for i in itens:
+            i.situacao = "descontinuado" if i is desc else None
+        return {"disponivel": True, "bd_lida": False}
+
+    monkeypatch.setattr(rota.fbs_stock_svc, "get_estoque_full_block", lambda *a, **k: shopee)
+    monkeypatch.setattr(svc, "anotar_curva", anotar)
+    r = rota.shopee_fbs_estoque(brands=None, accounts=None, classificacoes=None, busca=None,
+                                somente_acao=True, limite=10, ref_date=None, db=object())
+    assert r.produtos == [ativo] and r.total_no_filtro == 1
