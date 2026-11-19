@@ -93,3 +93,20 @@ def test_pedidos_do_data_mart_entram_so_nas_marcas_com_dado():
     assert d["marcas"][0]["pedidos"] == 1000 and d["marcas"][0]["faturamento"] == 50000.5
     assert "pedidos" not in d["marcas"][1]
     svc._anotar_pedidos(d, lambda sql, p: (_ for _ in ()).throw(RuntimeError("x")))  # falha nao derruba
+
+
+def test_agregado_vai_e_volta_do_json_e_parcial_aparece_enquanto_le():
+    from collections import Counter
+    from datetime import date as d_
+
+    a = {"devolucoes": 2, "reembolsado": 9.5, "cancelamentos": 3, "nao_pagos": 1, "comprador": 3, "truncado": False,
+         "nomes": {"S1": "Creme"}, "motivos": Counter({("Cancelamento", "Não quer mais"): 3}),
+         "autores": {("Cancelamento", "Não quer mais"): Counter({"Comprador": 3})},
+         "skus": Counter({("Cancelamento", "Não quer mais", "S1"): 2})}
+    b = svc.de_json(__import__("json").loads(__import__("json").dumps(svc.para_json(a))))
+    assert b["motivos"] == a["motivos"] and b["skus"] == a["skus"] and b["autores"][("Cancelamento", "Não quer mais")]["Comprador"] == 3
+    svc._dias.clear(); svc._cache.clear(); svc._rodando.clear()
+    svc._dias[("kokeshi", d_.today() - svc.timedelta(days=1))] = (svc.time.time(), b)
+    r = svc.obter(7, iniciar=lambda d: None)
+    assert r["carregando"] is True and r["marcas"][0]["marca"] == "kokeshi" and r["marcas"][0]["cancelamentos"] == 3
+    svc._dias.clear()

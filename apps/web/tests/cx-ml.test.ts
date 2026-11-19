@@ -473,3 +473,14 @@ test("cx tiktok: taxas por marca sobre os pedidos do Data Mart e atencao acima d
   assert.equal(a[0].titulo, "KOKESHI: cancelamento em 30,0%");
   assert.ok(a.some((x) => x.titulo === "RITUARIA: sem dado do TikTok agora"));
 });
+
+test("cx tiktok: enquanto carrega, entrega o parcial para a tela", async () => {
+  const { carregarCxTikTok } = await import("../src/lib/cx-tiktok.ts");
+  const parcial = { carregando: true, gerado_em: "", dias: 7, inicio: "a", fim: "b", marcas: [{ marca: "kokeshi", estado: "dado" as const, motivo: null }], motivos: [] };
+  const respostas = [parcial, { ...parcial, carregando: false }];
+  let n = 0;
+  const vistos: unknown[] = [];
+  const r = await carregarCxTikTok({ marca: null, dias: 7 }, (async () => Response.json(respostas[n++])) as typeof fetch, "", async () => {}, () => true, (p) => vistos.push(p));
+  assert.equal(vistos.length, 1);
+  assert.ok(r.ok && !r.dados.carregando);
+});

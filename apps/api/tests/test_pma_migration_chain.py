@@ -80,7 +80,7 @@ DDL_PATH = REPO / "db" / "sql" / "marts" / "pma_listing_price_serving_ddl.sql"
 #: SOBRE a 046.
 #: Avancado para 049 pelas CHAVES-PESSOAIS (tabela nova audit.torre_chave_pessoal), SOBRE a 048.
 #: Avancado para 050 pelo TIKTOK-OAUTH (tabela nova audit.tiktok_oauth_token), SOBRE a 049.
-HEAD_ESPERADO = "050"
+HEAD_ESPERADO = "051"
 
 #: Mapa OFICIAL de propriedade das revisoes. Existe para que uma frente nao
 #: ocupe o numero de outra: 016 e' do Full, 017 e' do PMA e a 018 esta

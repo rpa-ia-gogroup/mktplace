@@ -151,8 +151,9 @@ def _cliente_da_marca(conta: str, tok: str, criar: Callable[..., Cliente]) -> Cl
 
 
 # --- Cache POR DIA e por marca (agregado compacto, nao os registros) ---------------------------
-#: Dia fechado quase nao muda: 6 h. Os ultimos `RECENTES` dias ainda recebem devolucao: 10 min.
-TTL_RECENTE, TTL_FECHADO, RECENTES = 600, 6 * 3600, 3
+#: Dia fechado quase nao muda: 7 dias (e fica no banco, sobrevive ao reinicio). Os ultimos
+#: `RECENTES` dias ainda recebem devolucao: 10 min.
+TTL_RECENTE, TTL_FECHADO, RECENTES = 600, 7 * 24 * 3600, 3
 #: Chamadas simultaneas ao TikTok (dias x marcas em paralelo).
 PARALELO = 4  # Render Free tem 0,1 CPU: mais que isso trava o /health
 _uma_leitura = threading.Lock()  # um periodo por vez (rotina e tela nao leem o mesmo dia juntas)
@@ -199,7 +200,15 @@ def _estado_erro(e: Exception) -> dict:
 def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
            criar: Callable[..., Cliente] = Cliente, hoje: Optional[date] = None) -> dict:
     hoje = hoje or datetime.now(TZ).date()
-    ini, fim = janela(dias, hoje)
+    falha, _ = buscar(dias, contas, obter_token, criar, hoje)
+    return juntar(dias, contas, hoje, falha)
+
+
+def buscar(dias: int, contas: list[str], obter_token: Callable[[str], str],
+           criar: Callable[..., Cliente] = Cliente, hoje: Optional[date] = None) -> tuple[dict[str, dict], list]:
+    """Busca no TikTok so' os (marca, dia) que faltam ou venceram. Devolve (falhas, chaves lidas agora)."""
+    hoje = hoje or datetime.now(TZ).date()
+    ini, _fim = janela(dias, hoje)
     datas = [ini + timedelta(days=i) for i in range(dias)]
 
     # tokens e lojas em sequencia (a sessao do banco nao e' thread-safe)
@@ -225,11 +234,22 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
         except TikTokErro as e:
             return t, e
 
+    lidas = []
     with ThreadPoolExecutor(max_workers=PARALELO) as ex:
-        for (c, _), e in ex.map(uma, tarefas):
-            if e is not None and c not in falha:
-                falha[c] = _estado_erro(e)
+        for t, e in ex.map(uma, tarefas):
+            if e is None:
+                lidas.append(t)
+            elif t[0] not in falha:
+                falha[t[0]] = _estado_erro(e)
+    return falha, lidas
 
+
+def juntar(dias: int, contas: list[str], hoje: Optional[date] = None, falha: Optional[dict] = None) -> dict:
+    """Monta a resposta so' com o que ja' esta' em memoria (dia que falta = marca parcial)."""
+    hoje = hoje or datetime.now(TZ).date()
+    falha = falha or {}
+    ini, fim = janela(dias, hoje)
+    datas = [ini + timedelta(days=i) for i in range(dias)]
     marcas, motivos = [], Counter()
     autores: dict[tuple, Counter] = defaultdict(Counter)
     por_motivo_marca: dict[tuple, Counter] = defaultdict(Counter)
@@ -238,8 +258,8 @@ def montar(dias: int, contas: list[str], obter_token: Callable[[str], str],
     for conta in contas:
         dias_ag = [_dias.get((conta, d)) for d in datas]
         faltam = sum(1 for x in dias_ag if x is None)
-        if faltam == len(datas) and conta in falha:  # nenhum dia lido: a marca vem com o motivo
-            marcas.append({"marca": conta, **falha[conta]})
+        if faltam == len(datas):  # nenhum dia lido: a marca vem com o motivo (ou ainda lendo)
+            marcas.append({"marca": conta, **falha.get(conta, {"estado": "lendo", "motivo": "Lendo o TikTok desta marca."})})
             continue
         ags = [x[1] for x in dias_ag if x]
         # dia que falhou (limite do TikTok) entra na proxima rodada; ate' la' a marca e' parcial
@@ -299,6 +319,70 @@ def iniciar_rotina(intervalo_s: int = 540) -> None:
 
 _rodando: set[int] = set()
 
+# --- Persistencia do cache por dia (audit.tiktok_cx_dia): sobrevive ao reinicio do Render Free ---
+SQL_LER_DIAS = """
+SELECT conta, dia, agregado, EXTRACT(EPOCH FROM lido_em) AS lido_em
+  FROM audit.tiktok_cx_dia WHERE conta = ANY(:contas) AND dia BETWEEN :ini AND :fim
+"""
+SQL_GRAVAR_DIA = """
+INSERT INTO audit.tiktok_cx_dia (conta, dia, agregado, lido_em)
+VALUES (:conta, :dia, CAST(:agregado AS jsonb), to_timestamp(:lido_em))
+ON CONFLICT (conta, dia) DO UPDATE SET agregado = EXCLUDED.agregado, lido_em = EXCLUDED.lido_em
+"""
+
+
+def para_json(a: dict) -> dict:
+    """Agregado do dia (Counters com tuplas) -> JSON."""
+    return {**{k: a[k] for k in ("devolucoes", "reembolsado", "cancelamentos", "nao_pagos", "comprador", "truncado", "nomes")},
+            "motivos": [[t, m, n] for (t, m), n in a["motivos"].items()],
+            "autores": [[t, m, au, n] for (t, m), c in a["autores"].items() for au, n in c.items()],
+            "skus": [[t, m, sku, n] for (t, m, sku), n in a["skus"].items()]}
+
+
+def de_json(j: dict) -> dict:
+    autores: dict[tuple, Counter] = defaultdict(Counter)
+    for t, m, au, n in j.get("autores", []):
+        autores[(t, m)][au] += n
+    return {**{k: j.get(k) for k in ("devolucoes", "reembolsado", "cancelamentos", "nao_pagos", "comprador", "truncado")},
+            "nomes": j.get("nomes") or {},
+            "motivos": Counter({(t, m): n for t, m, n in j.get("motivos", [])}),
+            "autores": autores,
+            "skus": Counter({(t, m, sku): n for t, m, sku, n in j.get("skus", [])})}
+
+
+def _carregar_do_banco(db, contas: list[str], ini: date, fim: date) -> None:
+    """Poe na memoria os dias guardados no banco que ainda nao estao nela (falha = segue sem)."""
+    import json as _json
+
+    from sqlalchemy import text
+
+    try:
+        for r in db.execute(text(SQL_LER_DIAS), {"contas": contas, "ini": ini, "fim": fim}).mappings():
+            k = (r["conta"], r["dia"])
+            ag = r["agregado"] if isinstance(r["agregado"], dict) else _json.loads(r["agregado"])
+            with _trava:
+                if k not in _dias or _dias[k][0] < float(r["lido_em"]):
+                    _dias[k] = (float(r["lido_em"]), de_json(ag))
+        db.rollback()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        logger.warning("cx tiktok: cache do banco indisponivel")
+
+
+def _gravar_no_banco(db, chaves: list) -> None:
+    import json as _json
+
+    from sqlalchemy import text
+
+    try:
+        for k in chaves:
+            ts, ag = _dias[k]
+            db.execute(text(SQL_GRAVAR_DIA), {"conta": k[0], "dia": k[1], "agregado": _json.dumps(para_json(ag)), "lido_em": ts})
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        logger.warning("cx tiktok: nao gravou o cache no banco")
+
 
 def _atualizar(dias: int) -> None:
     """Le o TikTok inteiro da janela em segundo plano (sessao propria) e guarda no cache."""
@@ -310,8 +394,13 @@ def _atualizar(dias: int) -> None:
         with _uma_leitura, SessionLocal() as db:
             todas = [r[0] for r in db.execute(text("SELECT conta FROM audit.tiktok_oauth_token ORDER BY conta")).all()]
             db.rollback()
+            hoje = datetime.now(TZ).date()
+            ini, fim = janela(dias, hoje)
+            _carregar_do_banco(db, todas, ini, fim)
             armazem = tiktok_token.ArmazemPg(db)
-            dados = montar(dias, todas, lambda c: tiktok_token.obter_access_token(armazem, c))
+            falha, lidas = buscar(dias, todas, lambda c: tiktok_token.obter_access_token(armazem, c), hoje=hoje)
+            _gravar_no_banco(db, lidas)
+            dados = juntar(dias, todas, hoje, falha)
         _anotar_pedidos(dados)
         with _trava:
             _cache[dias] = (time.time(), dados)
@@ -363,7 +452,14 @@ def obter(dias: int, contas: Optional[list[str]] = None, iniciar: Callable[[int]
     if precisa:
         (iniciar or (lambda d: threading.Thread(target=_atualizar, args=(d,), daemon=True).start()))(dias)
     if not hit:
-        return {"carregando": True, "dias": dias, "marcas": [], "motivos": []}
+        with _trava:
+            tem = bool(_dias)
+        if not tem:
+            return {"carregando": True, "dias": dias, "marcas": [], "motivos": []}
+        with _trava:
+            contas_mem = sorted({c for c, _ in _dias})
+        parcial = {**juntar(dias, contas_mem), "carregando": True}
+        return _filtrar(parcial, contas) if contas else parcial
     dados = hit[1]
     return _filtrar(dados, contas) if contas else dados
 
