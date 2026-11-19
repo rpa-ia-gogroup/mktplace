@@ -33,6 +33,7 @@ from app.schemas.performance_oficial import (
     PerformanceOficialResponse,
 )
 from app.services.cx_atendimento_service import SHOPEE_MARCAS, SHOPEE_SAUDE_EXPORT
+from app.services import tiktok_performance_service as tiktok_performance
 from app.services.gold_service import BRANDS_IN_SCOPE, ML_BRANDS, TZ_OPERACIONAL
 
 logger = logging.getLogger(__name__)
@@ -59,7 +60,7 @@ MOTIVO_SEM_BOT = "Aguardando a primeira captura do bot no Seller Centre (Saúde 
 
 FONTE_ML = "Mercado Livre · reputação do vendedor (API /users), fotografia diária"
 FONTE_SHOPEE = "Shopee · Saúde da Conta (API account_health), fotografia diária"
-FONTE_TIKTOK = "TikTok Shop · Shop Performance Score"
+FONTE_TIKTOK = "TikTok Shop · Atendimento (Open API), últimos 7 dias fechados"
 
 # ---------------------------------------------------------------------------
 # Mercado Livre
@@ -395,7 +396,8 @@ def _contas_shopee_export(consultar_torre: Consultar, marcas: list[str],
 def montar_performance_oficial(*, canal: str, brands: Optional[list[str]] = None,
                                consultar: Optional[Consultar] = None,
                                consultar_torre: Optional[Consultar] = None,
-                               agora: Optional[datetime] = None) -> PerformanceOficialResponse:
+                               agora: Optional[datetime] = None,
+                               contas_tiktok: Optional[Callable[..., tuple]] = None) -> PerformanceOficialResponse:
     agora = agora or datetime.now(timezone.utc)
     consultar = consultar or consultar_datamart
     consultar_torre = consultar_torre or consultar_torre_padrao
@@ -403,13 +405,14 @@ def montar_performance_oficial(*, canal: str, brands: Optional[list[str]] = None
     marcas = [m for m in MARCAS_PERMITIDAS if brands is None or m in brands]
 
     if canal == "tiktokshop":
-        return _resposta_base(
-            canal, agora, FONTE_TIKTOK, _cobertura(marcas, MARCAS_PERMITIDAS, ""),
-            estado="sem_fonte",
-            motivo="A nota oficial da loja no TikTok (Shop Performance Score) só tem API para lojas dos "
-                   "EUA pela documentação. O teste com as lojas BR está pendente; se não houver API, "
-                   "a nota entra por captura manual semanal.",
-        )
+        # SPS (nota oficial) nao tem API para loja BR; o atendimento (customer_service) tem.
+        cobertura = _cobertura(marcas, MARCAS_PERMITIDAS, "")
+        try:
+            contas, sem_foto = (contas_tiktok or tiktok_performance.obter_contas)(cobertura.marcas, agora=agora)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("performance_oficial: tiktok falhou (%s)", type(exc).__name__)
+            return _resposta_base(canal, agora, FONTE_TIKTOK, cobertura, estado="erro", motivo=MOTIVO_ERRO)
+        return _resposta_base(canal, agora, FONTE_TIKTOK, cobertura, estado="dado", contas=contas, sem_foto=sem_foto)
 
     if canal == "mercadolivre":
         cobertura = _cobertura(marcas, tuple(ML_BRANDS), "Sem conta Mercado Livre integrada.")

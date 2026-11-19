@@ -227,10 +227,50 @@ def test_shopee_sem_meta_nao_ganha_situacao():
 # ---------------------------------------------------------------------------
 # TikTok e filtro
 # ---------------------------------------------------------------------------
-def test_tiktok_sem_fonte_explicado_sem_consulta():
-    resp, fonte = _montar("tiktokshop")
-    assert resp.estado == "sem_fonte" and "EUA" in resp.motivo
-    assert fonte.chamadas == []
+class _CliTikTok:
+    def __init__(self, perf):
+        self.perf, self.chamadas = perf, []
+
+    def chamar(self, metodo, path, params):
+        self.chamadas.append(params)
+        return {"performance": self.perf[len(self.chamadas) - 1]}
+
+
+def test_tiktok_atendimento_vira_conta_sem_consultar_o_data_mart():
+    from app.services import tiktok_performance_service as tp
+
+    tp._cache.clear()
+    atual = {"response_percentage": "86.98", "response_time_mins": "598.3", "satisfaction_percentage": "75.3",
+             "conversion_rate": "14.95", "cs_guided_gmv": "8718", "support_session_count": 4776}
+    anterior = {"response_percentage": "91.0", "response_time_mins": "300"}
+    cli = _CliTikTok([atual, anterior])
+
+    def criar(m):
+        if m != "kokeshi":
+            raise RuntimeError("sem token")
+        return cli
+
+    resp, fonte = _montar("tiktokshop", contas_tiktok=lambda marcas, agora: tp.obter_contas(
+        marcas, agora=agora, criar_cliente=criar))
+    assert resp.estado == "dado" and fonte.chamadas == []
+    [c] = resp.contas
+    assert c.marca == "kokeshi" and c.tom == "atencao" and c.nivel == "Resposta 87%"
+    m = {x.codigo: x for x in c.metricas}
+    assert m["tt_resposta"].valor == 86.98 and m["tt_resposta"].anterior == 91.0
+    assert m["tt_tempo"].valor == 10.0 and m["tt_tempo"].unidade == "horas" and m["tt_tempo"].anterior == 5.0
+    assert "tt_conversao" in m and m["tt_satisfacao"].anterior is None
+    assert [d.valor for d in c.destaques] == ["4.776", "R$ 8.718"]
+    # 7 dias fechados (ate' ontem) e os 7 anteriores
+    assert cli.chamadas[0]["support_date_ge"] == cli.chamadas[1]["support_date_lt"]
+    assert {s.marca for s in resp.sem_foto} == {"apice", "barbours", "lescent", "rituaria"}
+
+
+def test_tiktok_falha_geral_vira_erro():
+    def explode(marcas, agora):
+        raise RuntimeError("x")
+
+    resp, _ = _montar("tiktokshop", contas_tiktok=explode)
+    assert resp.estado == "erro"
 
 
 def test_filtro_so_kokeshi_nao_consulta_o_data_mart():

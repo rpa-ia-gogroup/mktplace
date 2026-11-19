@@ -12,7 +12,7 @@ Cada numero vem do mesmo servico que a tela usa:
   LDR Shopee   expedicao_shopee_ldr_service.obter_ldr (reserva: shopee_ldr_dm_service)
   LDR ML       ml_ldr_service.obter_ldr_ml
   LDR TikTok   expedicao_tiktok_service.obter_serie (coleta)
-  Performance  performance_oficial_service.montar_performance_oficial (ML, Shopee; TikTok sem fonte)
+  Performance  performance_oficial_service.montar_performance_oficial (ML, Shopee; TikTok = atendimento, sem meta)
   Vencidos TT  marts.expedicao_tiktok_dispatch_daily, com a MESMA consulta e as
                MESMAS colunas da /expedicao/tiktok (A4, ver `ler_vencidos_tiktok`)
 
