@@ -1345,7 +1345,9 @@ def full_slow_moving():
     """SKUs parados no Marketplace pela regra do Supply (Painel S&OE): curva B/C,
     descontinuado ou brinde com mais de 120 dias de cobertura. So' leitura do Data Mart."""
     try:
-        return slow_svc.get_slow_moving(datamart_leitura.consultar, hoje=today_brt())
+        from app.services import torre_leitura
+
+        return slow_svc.get_slow_moving(datamart_leitura.consultar, hoje=today_brt(), consultar_torre=torre_leitura.consultar)
     except Exception as exc:  # noqa: BLE001 -- texto do banco nunca sai
         logger.exception("full-slow-moving falhou")
         raise HTTPException(503, "Base do Supply indisponivel.") from exc

@@ -42,3 +42,7 @@ class SlowMovingResponse(BaseModel):
     skus: list[SkuSlowMoving]
     #: Capital de todo o estoque do Marketplace por marca (R$, a custo); vazio = nao lido.
     capital_marketplace: dict[str, float] = {}
+    #: Capital no Full do Mercado Livre por marca (pecas no armazem x custo do Supply); vazio = nao lido.
+    capital_full: dict[str, float] = {}
+    #: Desse capital do Full, quanto e' de SKU em slow moving, por marca.
+    parado_full: dict[str, float] = {}

@@ -51,3 +51,16 @@ def test_kit_vira_pecas_e_canal_separa_ml_shopee_tiktok():
     e = series_por_sku(linhas, 3, depara, kits)[("barbours", "BB02084")]
     assert e["q"] == {"SP-F": [0, 0, 3], "ML-N": [0, 2, 0]}  # kit = 2 pecas; sem de-para e lista quebrada nao entram
     assert e["r"]["ML-N"] == [0, 50, 0]
+
+
+def test_capital_full_abre_kit_e_separa_o_parado():
+    from app.services.full_slow_moving_service import capital_full
+
+    full = [{"marca": "barbours", "sku": "10056", "pecas": 10}, {"marca": "barbours", "sku": "KIT009", "pecas": 3},
+            {"marca": "barbours", "sku": "SEMCUSTO", "pecas": 99}, {"marca": "kokeshi", "sku": "KS1", "pecas": 4}]
+    custos = [{"marca": "Barbours", "chave": "BB-BB02084", "sku_unico": "BB02084", "custo_und": 2.0},
+              {"marca": "Kokeshi", "chave": "KK-KS1", "sku_unico": "KS1", "custo_und": 5.0}]
+    lookups = ({"barbours": {"10056": "BB02084"}}, {"barbours": {"KIT009": {"BB02084": 2}}})
+    total, parado = capital_full(full, custos, lookups, {("kokeshi", "KS1")})
+    assert total == {"barbours": 32.0, "kokeshi": 20.0}  # (10 + 3x2) x 2; sem custo nao entra
+    assert parado == {"kokeshi": 20.0}
