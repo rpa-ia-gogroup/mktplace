@@ -40,6 +40,48 @@ SELECT marca,
  GROUP BY marca
 """
 
+#: Custo unitario de todos os SKUs (base do capital do Full). Gocase fica de fora: nao e' marca da
+#: Torre e passaria do corte de 2.000 linhas do Metabase.
+SQL_CUSTOS = """
+SELECT marca, chave, sku_unico, custo_und FROM staging.si_disponibilidade
+ WHERE custo_und > 0 AND marca <> 'Gocase'
+"""
+#: Pecas no armazem do Full ML (disponivel + nao disponivel) por anuncio, na ultima fotografia (Neon).
+SQL_FULL_ML = """
+WITH ult AS (SELECT MAX(ref_date) AS d FROM marts.fact_ml_full_stock_inventory_daily),
+p AS (SELECT DISTINCT ON (l.brand, l.item_id) l.brand, l.item_id, l.seller_sku
+        FROM marts.fact_marketplace_listing_price_daily l, ult
+       WHERE l.marketplace = 'ml' AND l.ref_date <= ult.d AND l.ref_date > ult.d - 30
+       ORDER BY l.brand, l.item_id, l.ref_date DESC)
+SELECT i.brand AS marca, p.seller_sku AS sku,
+       SUM(COALESCE(i.disponivel, 0) + COALESCE(i.nao_disponivel, 0)) AS pecas
+  FROM marts.fact_ml_full_stock_inventory_daily i JOIN ult ON i.ref_date = ult.d
+  LEFT JOIN p ON p.brand = i.brand AND p.item_id = i.anuncio_ancora_item_id
+ WHERE i.eh_full
+ GROUP BY 1, 2
+"""
+
+
+def capital_full(linhas_full: list[dict], linhas_custo: list[dict], lookups, parados: set) -> tuple[dict, dict]:
+    """(capital no Full por marca, parte dele em SKU slow moving). Kit vira pecas; SKU sem custo nao entra."""
+    depara, kits = lookups or ({}, {})
+    custo = {(_marca(r.get("marca")), vendas.ncode(_sku(r))): float(r["custo_und"]) for r in linhas_custo}
+    total: dict[str, float] = {}
+    parado: dict[str, float] = {}
+    for r in linhas_full:
+        m, code = vendas.nbrand(r.get("marca")), vendas.ncode(r.get("sku"))
+        q = _num(r.get("pecas")) or 0.0
+        kit = kits.get(m, {}).get(code)
+        for su, n in (kit.items() if kit else [(depara.get(m, {}).get(code) or code, 1)]):
+            cu = custo.get((m, su))
+            if cu is None:
+                continue
+            v = q * n * cu
+            total[m] = total.get(m, 0.0) + v
+            if (m, su) in parados:
+                parado[m] = parado.get(m, 0.0) + v
+    return ({m: round(v, 2) for m, v in total.items()}, {m: round(v, 2) for m, v in parado.items()})
+
 
 def _marca(nome: Optional[str]) -> str:
     s = unicodedata.normalize("NFD", str(nome or "")).encode("ascii", "ignore").decode().lower()
@@ -83,7 +125,8 @@ def _anotar_vendas(skus: list[SkuSlowMoving], consultar, hoje: date, lookups) ->
 
 
 def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional[date] = None,
-                    lookups: Callable = vendas.obter_lookups) -> SlowMovingResponse:
+                    lookups: Callable = vendas.obter_lookups,
+                    consultar_torre: Optional[Callable[[str, dict], list[dict]]] = None) -> SlowMovingResponse:
     skus = []
     for r in consultar(SQL_SLOW, {}):
         marca = _marca(r.get("marca"))
@@ -111,7 +154,14 @@ def get_slow_moving(consultar: Callable[[str, dict], list[dict]], hoje: Optional
     except Exception:  # noqa: BLE001 -- sem a base, a tela so' nao mostra a %
         capital = {}
     skus.sort(key=lambda s: s.valor_parado, reverse=True)
+    cap_full, par_full = {}, {}
+    if consultar_torre is not None:
+        try:
+            parados = {(s.marca, vendas.ncode(s.sku)) for s in skus}
+            cap_full, par_full = capital_full(consultar_torre(SQL_FULL_ML, {}), consultar(SQL_CUSTOS, {}), lookups(), parados)
+        except Exception:  # noqa: BLE001 -- sem o Full, a tela so' nao mostra essa linha
+            logger.exception("slow moving: capital do Full nao lido")
     dias = _anotar_vendas(skus, consultar, hoje or date.today(), lookups)
     return SlowMovingResponse(fonte=FONTE, atualizado_em=dia[0]["dia"] if dia else None,
                               meta_dias=META_DIAS, dias=dias, vendas_disponivel=bool(dias), skus=skus,
-                              capital_marketplace=capital)
+                              capital_marketplace=capital, capital_full=cap_full, parado_full=par_full)

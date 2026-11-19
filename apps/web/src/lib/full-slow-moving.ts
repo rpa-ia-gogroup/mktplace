@@ -51,6 +51,10 @@ export interface SlowMovingResponse {
   skus: SkuSlowMoving[];
   /** Capital de todo o estoque do Marketplace por marca (R$ a custo); base da % do capital parado. */
   capital_marketplace?: Record<string, number>;
+  /** Capital no Full do Mercado Livre por marca (peças no armazém × custo do Supply). */
+  capital_full?: Record<string, number>;
+  /** Desse capital do Full, a parte em SKU slow moving. */
+  parado_full?: Record<string, number>;
 }
 
 export interface TotaisSlow {

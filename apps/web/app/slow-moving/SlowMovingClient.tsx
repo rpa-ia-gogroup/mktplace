@@ -155,6 +155,10 @@ export default function SlowMovingClient() {
   // % do capital parado sobre TODO o estoque do Marketplace das marcas na tela (base do Supply)
   const baseCapital = dados ? (marcas.length ? marcas : Object.keys(dados.capital_marketplace ?? {})).reduce((a, m) => a + (dados.capital_marketplace?.[m] ?? 0), 0) : 0;
   const pctCapital = baseCapital > 0 ? (t.valor / baseCapital) * 100 : null;
+  const somaMarcas = (r?: Record<string, number>) => (marcas.length ? marcas : Object.keys(r ?? {})).reduce((a, m) => a + (r?.[m] ?? 0), 0);
+  const capFull = somaMarcas(dados?.capital_full);
+  const parFull = somaMarcas(dados?.parado_full);
+  const pct1 = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
   const { sort, toggleSort, sortedRows } = useSortableTable(lista, valorDe, COLUNAS);
 
   /** Pontos do grafico: uma barra por marketplace dentro do filtro + media de 7 dias. */
@@ -237,8 +241,11 @@ export default function SlowMovingClient() {
               valor={int(t.skus)} comparacao={`${int(t.estoque)} peças no Marketplace`}
               onAbrir={() => setDialogo({ tipo: "skus" })} />
             <KpiTile variante="gerencial" identidade="gmv" icone={CircleDollarSign} rotulo="Capital parado"
-              ajuda={<InfoDica emControle texto={`Estoque parado do Marketplace a preço de custo. A % compara com o capital de todo o estoque do Marketplace das marcas na tela. Fonte: Supply Intelligence (Data Mart, staging.si_disponibilidade), fotografia de ${dados?.atualizado_em ? dataBr(dados.atualizado_em) : "hoje"}.`} />}
-              valor={fmtBrlCurto(t.valor)} comparacao={pctCapital == null ? "a preço de custo" : `${pctCapital.toFixed(1).replace(".", ",")}% do estoque do Marketplace (${fmtBrlCurto(baseCapital)})`}
+              ajuda={<InfoDica emControle texto={`Estoque parado do Marketplace a preço de custo. A % compara com o capital de todo o estoque do Marketplace das marcas na tela. Full ML: peças no armazém do Full (fotografia diária do Mercado Livre) × custo do Supply, kit aberto em peças; a parte parada são os SKUs desta lista. Fonte: Supply Intelligence (Data Mart, staging.si_disponibilidade), fotografia de ${dados?.atualizado_em ? dataBr(dados.atualizado_em) : "hoje"}.`} />}
+              valor={fmtBrlCurto(t.valor)} comparacao={<span className="flex flex-col">
+                <span>{pctCapital == null ? "a preço de custo" : `${pct1(pctCapital)} do estoque do Marketplace (${fmtBrlCurto(baseCapital)})`}</span>
+                {capFull > 0 && <span>Full ML: {fmtBrlCurto(parFull)} parado de {fmtBrlCurto(capFull)} ({pct1((parFull / capFull) * 100)})</span>}
+              </span>}
               onAbrir={() => setDialogo({ tipo: "capital" })} />
             <KpiTile variante="gerencial" identidade="prazo" icone={Timer} rotulo="Cobertura"
               ajuda={<InfoDica emControle texto="Σ estoque ÷ Σ venda média por dia dos últimos 15 dias, no Marketplace." />}
