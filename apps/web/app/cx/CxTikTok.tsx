@@ -66,7 +66,8 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
     let vivo = true;
     setR(null);
     setAberto(null);
-    carregarCxTikTok({ marca, dias }, torreFetch as typeof fetch, undefined, undefined, () => vivo).then((x) => vivo && setR(x));
+    carregarCxTikTok({ marca, dias }, torreFetch as typeof fetch, undefined, undefined, () => vivo,
+      (parcial) => vivo && setR({ ok: true, dados: parcial })).then((x) => vivo && setR(x));
     return () => {
       vivo = false;
     };
@@ -98,7 +99,9 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
   const periodo = `${dataBr(d.inicio)} a ${dataBr(d.fim)}`;
   const selo = (
     <span className="flex flex-wrap items-center gap-1.5">
-      {s.parcial && <Chip tom="atencao" title="Alguma marca ainda tem dias por ler (limite do TikTok) ou passou de 10 mil registros num dia.">Parcial</Chip>}
+      {d.carregando ? (
+        <Chip tom="atencao" title="A API ainda está lendo o TikTok: os números sobem sozinhos até completar.">Atualizando…</Chip>
+      ) : s.parcial && <Chip tom="atencao" title="Alguma marca ainda tem dias por ler (limite do TikTok) ou passou de 10 mil registros num dia.">Parcial</Chip>}
       <SeloAtualizado em={d.gerado_em} detalhe={`Direto da API do TikTok Shop · por data de abertura · ${intervalo}`} />
     </span>
   );

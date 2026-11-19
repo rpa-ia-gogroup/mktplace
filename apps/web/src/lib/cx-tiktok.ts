@@ -8,7 +8,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export interface MarcaTikTok {
   marca: string;
-  estado: "dado" | "sem_permissao" | "erro" | "nao_autorizada";
+  estado: "dado" | "sem_permissao" | "erro" | "nao_autorizada" | "lendo";
   motivo: string | null;
   truncado?: boolean;
   devolucoes?: number;
@@ -44,7 +44,7 @@ export interface CxTikTokResponse {
 /** Cada pergunta e' rapida (a API nunca espera o TikTok); a 1a leitura da janela vem por repeticao. */
 export const TIMEOUT_TIKTOK_MS = 30_000;
 export const INTERVALO_TIKTOK_MS = 5_000;
-export const MAX_TENTATIVAS_TIKTOK = 60; // ~5 min
+export const MAX_TENTATIVAS_TIKTOK = 120; // ~10 min (com parcial na tela)
 
 export function urlCxTikTok(base: string, f: FiltrosCx): string {
   const qs = new URLSearchParams({ dias: String(f.dias) });
@@ -61,10 +61,13 @@ export async function carregarCxTikTok(
   base: string = API_URL,
   esperar: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   vivo: () => boolean = () => true,
+  /** Enquanto a API ainda le o TikTok, o que ja' chegou (dias/marcas lidos): a tela mostra em vez de girar. */
+  aoParcial?: (dados: CxTikTokResponse) => void,
 ): Promise<ResultadoTikTok> {
   for (let n = 0; n < MAX_TENTATIVAS_TIKTOK && vivo(); n++) {
     const r = await umaVezTikTok(f, fetchImpl, base);
     if (!r.ok || !r.dados.carregando) return r;
+    if (r.dados.marcas.length && aoParcial) aoParcial(r.dados);
     await esperar(INTERVALO_TIKTOK_MS);
   }
   return { ok: false, motivo: "O TikTok está demorando para responder. Tente de novo em alguns minutos." };
@@ -195,7 +198,8 @@ export function atencaoTikTok(d: CxTikTokResponse, rotulo: (m: string) => string
     }
   }
   for (const m of d.marcas.filter((x) => x.estado !== "dado")) {
-    itens.push({ chave: `${m.marca}:sem`, severidade: "info", titulo: `${rotulo(m.marca)}: sem dado do TikTok agora`, detalhe: m.motivo ?? undefined });
+    itens.push({ chave: `${m.marca}:sem`, severidade: "info",
+      titulo: m.estado === "lendo" ? `${rotulo(m.marca)}: ainda lendo no TikTok` : `${rotulo(m.marca)}: sem dado do TikTok agora`, detalhe: m.motivo ?? undefined });
   }
   for (const l of ls.filter((x) => x.parcial)) {
     itens.push({ chave: `${l.chave}:parcial`, severidade: "info", titulo: `${rotulo(l.chave)}: leitura parcial`, detalhe: "Dias ainda por ler; completa na próxima atualização." });
