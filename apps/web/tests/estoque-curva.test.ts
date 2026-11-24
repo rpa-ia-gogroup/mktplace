@@ -90,5 +90,5 @@ test("Estoque ML: curva no seletor segmentado acima da grade (Todas | AA/A | B |
   assert.doesNotMatch(ml, /<FiltroCurva /);
   assert.match(ml, /aDireita=\{comCurva && <SeletorCurva valor=\{curvas\} aoMudar=\{setCurvas\}/);
   assert.match(comp, /\{ valor: "todas", texto: "Todas" \}, \.\.\.OPCOES_CURVA/);
-  assert.match(comp, /<Segmented\s+rotulo="Curva"/);
+  assert.match(comp, /<span id=\{idRotulo\}[^>]*>Curva<\/span>[\s\S]*<Segmented\s+rotulo="Curva"\s+rotuladoPor=\{idRotulo\}/);
 });

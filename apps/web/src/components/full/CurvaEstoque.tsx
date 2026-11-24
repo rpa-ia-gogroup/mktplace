@@ -4,6 +4,8 @@
  * CURVA-ABC nas abas de estoque (PR4): a celula "Curva" e os chips do filtro,
  * iguais nas abas Shopee e ML. O chip e' o do /full (#301); o filtro, a caixa da Gerencial.
  */
+import { useId } from "react";
+
 import BrandFilter from "@/components/BrandFilter";
 import ChipCurva from "@/components/full/ChipCurva";
 import InfoDica from "@/components/ui/InfoDica";
@@ -36,7 +38,7 @@ export function FiltroCurva({
         value={[...valor]}
         onChange={(v) => aoMudar(v as OpcaoCurva[])}
       />
-      {ajuda && <InfoDica texto={ajuda} />}
+      {ajuda && <span className="shrink-0"><InfoDica texto={ajuda} /></span>}
     </span>
   );
 }
@@ -49,15 +51,22 @@ const OPCOES_SEGMENTADO = [{ valor: "todas", texto: "Todas" }, ...OPCOES_CURVA] 
 export function SeletorCurva({
   valor, aoMudar, ajuda,
 }: { valor: readonly OpcaoCurva[]; aoMudar: (v: OpcaoCurva[]) => void; ajuda?: string | null }) {
+  const idRotulo = useId();
   return (
-    <span className="inline-flex items-center gap-1">
-      <Segmented
-        rotulo="Curva"
-        opcoes={OPCOES_SEGMENTADO}
-        valor={valor.length === 1 ? valor[0] : "todas"}
-        aoEscolher={(v) => aoMudar(v === "todas" ? [] : [v])}
-      />
-      {ajuda && <InfoDica texto={ajuda} />}
+    <span className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
+      {/* 390: o rotulo vai para cima e o segmentado cabe inteiro; a trilha so' rola se nem assim couber. */}
+      <span id={idRotulo} className="w-full shrink-0 text-xs text-ink-muted sm:w-auto">Curva</span>
+      <span className="min-w-0 overflow-x-auto">
+        <Segmented
+          rotulo="Curva"
+          rotuladoPor={idRotulo}
+          opcoes={OPCOES_SEGMENTADO}
+          valor={valor.length === 1 ? valor[0] : "todas"}
+          aoEscolher={(v) => aoMudar(v === "todas" ? [] : [v])}
+          className="whitespace-nowrap"
+        />
+      </span>
+      {ajuda && <span className="shrink-0"><InfoDica texto={ajuda} /></span>}
     </span>
   );
 }

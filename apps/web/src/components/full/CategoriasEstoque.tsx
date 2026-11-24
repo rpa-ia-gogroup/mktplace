@@ -88,7 +88,7 @@ export function FaixaCategorias({
               );
             })}
           </div>
-          {aDireita && <div className="ml-auto">{aDireita}</div>}
+          {aDireita && <div className="ml-auto min-w-0 max-w-full">{aDireita}</div>}
         </div>
       )}
     </>
