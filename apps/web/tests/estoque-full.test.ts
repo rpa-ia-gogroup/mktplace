@@ -741,7 +741,7 @@ test("Estoque Shopee: coluna 'Estoque vendedor' e ruptura com estoque proprio vi
   assert.equal(vendedorTemEstoque({ canal: "shopee", estoqueVendedor: null }), false, "ausencia nunca cobre");
   const { readFileSync } = await import("node:fs");
   const src = readFileSync(new URL("../app/estoque-full/EstoqueFullClient.tsx", import.meta.url), "utf8");
-  assert.match(src, /<th scope="col" className="px-3 py-3 text-right">Estoque vendedor<\/th>/);
+  assert.match(src, /Estoque vendedor\s*<InfoDica texto="Estoque próprio da loja, fora do Full\. Não soma ao Full\." \/>/);
   assert.match(src, /\{fmtOpcional\(p\.seller_stock_total\)\}/, "null = travessao, nunca 0");
   assert.match(src, /classe === "RUPTURA_CANDIDATA" && vendedorTemEstoque\(\{ canal: "shopee", estoqueVendedor: vendedor \}\)/);
   assert.match(src, /Sem estoque no Full; a loja tem \$\{fmtInt\(vendedor!\)\} un\. no estoque próprio/);
