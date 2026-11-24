@@ -733,3 +733,18 @@ test("conta e classificacao em caixa (BrandFilter menu da Gerencial), sem pilula
   assert.match(CLIENT_SRC, /type="search"[\s\S]*?min-h-11/);
   assert.ok(CLIENT_SRC.includes("Somente itens que exigem ação"));
 });
+
+test("Estoque Shopee: coluna 'Estoque vendedor' e ruptura com estoque proprio vira 'Ruptura · vendedor cobre' (atencao)", async () => {
+  const { vendedorTemEstoque } = await import("../src/lib/full-visao-geral.ts");
+  assert.equal(vendedorTemEstoque({ canal: "shopee", estoqueVendedor: 40058 }), true);
+  assert.equal(vendedorTemEstoque({ canal: "shopee", estoqueVendedor: 0 }), false);
+  assert.equal(vendedorTemEstoque({ canal: "shopee", estoqueVendedor: null }), false, "ausencia nunca cobre");
+  const { readFileSync } = await import("node:fs");
+  const src = readFileSync(new URL("../app/estoque-full/EstoqueFullClient.tsx", import.meta.url), "utf8");
+  assert.match(src, /<th scope="col" className="px-3 py-3 text-right">Estoque vendedor<\/th>/);
+  assert.match(src, /\{fmtOpcional\(p\.seller_stock_total\)\}/, "null = travessao, nunca 0");
+  assert.match(src, /classe === "RUPTURA_CANDIDATA" && vendedorTemEstoque\(\{ canal: "shopee", estoqueVendedor: vendedor \}\)/);
+  assert.match(src, /Sem estoque no Full; a loja tem \$\{fmtInt\(vendedor!\)\} un\. no estoque próprio/);
+  assert.match(src, /bg-warn-soft[^"]*text-warn-ink">[\s\S]{0,120}Ruptura ·<span className="block">vendedor cobre<\/span>/);
+  assert.doesNotMatch(src, /full_stock_saleable \+ |seller_stock_total \+ /, "vendedor nunca somado ao Full");
+});

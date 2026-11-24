@@ -95,6 +95,7 @@ import {
   type ProdutoEstoque,
 } from "@/lib/estoque-full";
 import { brandLabel } from "@/lib/filters/brands";
+import { vendedorTemEstoque } from "@/lib/full-visao-geral";
 import { abrirCategoria, CATEGORIAS_SHOPEE, categoriaPorChave, classeDaCategoria, contagensNaCurva, CARDS_NA_CURVA, textoChip } from "@/lib/estoque-categorias";
 
 const CHAVES_CATEGORIA = CATEGORIAS_SHOPEE.map((c) => c.chave);
@@ -155,7 +156,18 @@ function SeloSituacao({ rotulo }: { rotulo: string }) {
   return <span className="inline-block whitespace-nowrap rounded-full border border-line bg-raised px-2 py-0.5 text-xs text-ink-muted">{rotulo}</span>;
 }
 
-function Etiqueta({ classe }: { classe: Classificacao }) {
+function Etiqueta({ classe, vendedor }: { classe: Classificacao; vendedor: number | null }) {
+  // Mesma regra da Visao geral: ruptura no Full com estoque proprio da loja = a venda segue (atencao, nao critico).
+  // So' muda a pilula: a classificacao e o estoque Full continuam os da API.
+  if (classe === "RUPTURA_CANDIDATA" && vendedorTemEstoque({ canal: "shopee", estoqueVendedor: vendedor })) {
+    const dica = `Sem estoque no Full; a loja tem ${fmtInt(vendedor!)} un. no estoque próprio`;
+    return (
+      <span title={dica} className="inline-block whitespace-nowrap rounded-xl border border-warn/30 bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink">
+        {/* Duas linhas fixas: a coluna nao alarga e a tabela continua cabendo em 1440. */}
+        Ruptura ·<span className="block">vendedor cobre</span><span className="sr-only"> ({dica})</span>
+      </span>
+    );
+  }
   return (
     <span
       className={`inline-block text-xs font-semibold border rounded-full px-2 py-0.5 whitespace-nowrap ${CLASS_TOM[classe]}`}
@@ -202,7 +214,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
   const base = useMemo(() => [...produtos].sort((a, b) => Number(!!a.situacao) - Number(!!b.situacao)), [produtos]);
   const { sort, toggleSort, sortedRows } = useSortableTable(base, valorOrdenacaoShopee, COLUNAS_SHOPEE);
   return (
-    <div className="bg-surface rounded-2xl border border-line overflow-x-auto">
+    <div className="relative bg-surface rounded-2xl border border-line overflow-x-auto">
       <table className="w-full text-sm">
         <caption className="sr-only">
           {comCurva
@@ -212,9 +224,10 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
         <thead>
           <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
             <th scope="col" className="px-4 py-3">Conta / marca<span className="sr-only"> e Fotografia</span></th>
-            <th scope="col" className="px-4 py-3">SKU e produto</th>
+            <th scope="col" className="min-w-40 px-4 py-3">SKU e produto</th>
             {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
             <SortHeader coluna="disponivel" sort={sort} aoOrdenar={toggleSort} rotulo="Estoque Full vendável" />
+            <th scope="col" className="px-3 py-3 text-right">Estoque vendedor</th>
             <th scope="col" className="px-4 py-3 text-right">Demanda 28d</th>
             <th scope="col" className="px-4 py-3 text-right">
               <span className="inline-flex items-center gap-1">
@@ -265,6 +278,10 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
                 )}
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
+                {/* Estoque proprio da loja (fora do Full): `null` = "—", nunca 0; nunca somado ao Full. */}
+                {fmtOpcional(p.seller_stock_total)}
+              </td>
+              <td className="px-4 py-3 text-right tabular-nums text-ink-muted">
                 {fmtInt(p.units_sold_28d)}
                 <span className="block text-xs text-ink-faint">
                   {fmtDecimal(p.avg_daily_units_28d)}/dia
@@ -281,7 +298,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
                 )}
               </td>
               <td className="px-4 py-3">
-                {rotuloSituacao(p.situacao) ? <SeloSituacao rotulo={rotuloSituacao(p.situacao)!} /> : <Etiqueta classe={p.classificacao_torre} />}
+                {rotuloSituacao(p.situacao) ? <SeloSituacao rotulo={rotuloSituacao(p.situacao)!} /> : <Etiqueta classe={p.classificacao_torre} vendedor={p.seller_stock_total} />}
               </td>
               <td className="px-4 py-3 text-right tabular-nums text-ink-faint">
                 {/* CONTEXTO, nao estoque Full. */}
