@@ -4,6 +4,8 @@ Usado como fonte de dados quando o banco local não está disponível.
 """
 from __future__ import annotations
 
+import json
+
 import httpx
 
 from app.config import settings
@@ -32,13 +34,27 @@ def query(sql: str, timeout: float = TIMEOUT_PADRAO_S) -> list[dict]:
             json=payload,
         )
         resp.raise_for_status()
+        raw = resp.json()
 
-    raw = resp.json()
+        # Metabase pode retornar erro na resposta mesmo com HTTP 200
+        if "error" in raw:
+            raise RuntimeError(f"Metabase query error: {raw['error']}")
 
-    # Metabase pode retornar erro na resposta mesmo com HTTP 200
-    if "error" in raw:
-        raise RuntimeError(f"Metabase query error: {raw['error']}")
+        data = raw["data"]
+        cols = [c["name"] for c in data["cols"]]
+        if not data.get("rows_truncated"):
+            return [dict(zip(cols, row)) for row in data["rows"]]
 
-    data = raw["data"]
-    cols = [c["name"] for c in data["cols"]]
-    return [dict(zip(cols, row)) for row in data["rows"]]
+        # /api/dataset corta em 2000 linhas (ignora `constraints`) e o resultado
+        # vinha pela metade sem aviso. A exportacao devolve tudo; `format_rows`
+        # false = valores crus (data sem hora: '2026-11-02', nao '...T00:00-03:00').
+        resp = client.post(
+            f"{settings.metabase_url}/api/dataset/json",
+            headers={"x-api-key": settings.metabase_api_key},
+            data={"query": json.dumps(payload), "format_rows": "false"},
+        )
+        resp.raise_for_status()
+        linhas = resp.json()
+        if isinstance(linhas, dict):  # erro da exportacao vem como objeto, nao lista
+            raise RuntimeError(f"Metabase export error: {linhas.get('error', 'resposta inesperada')}")
+        return [{c: linha.get(c) for c in cols} for linha in linhas]
