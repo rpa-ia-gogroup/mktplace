@@ -43,7 +43,7 @@ import Aba from "@/components/layout/Aba";
 import { useVisoesFull } from "@/components/full/useVisoesFull";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import BrandFilter from "@/components/BrandFilter";
-import { CelulaCurva, FiltroCurva } from "@/components/full/CurvaEstoque";
+import { CelulaCurva, SeletorCurva } from "@/components/full/CurvaEstoque";
 import GradeCurvaMarca from "@/components/full/GradeCurvaMarca";
 import { type ClasseGrade } from "@/lib/estoque-grade-curva";
 import InfoDica from "@/components/ui/InfoDica";
@@ -477,7 +477,6 @@ export default function MLFullEstoqueClient() {
           onChange={(brands) => setFiltros((f) => ({ ...f, brands }))}
         />
       </span>
-      {comCurva && <FiltroCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
         <label className="flex w-full items-center gap-2 text-sm text-ink-muted sm:w-auto">
           <span className="sr-only">Buscar por SKU ou produto</span>
           <input
@@ -611,6 +610,7 @@ export default function MLFullEstoqueClient() {
             aoEscolher={escolherCategoria}
             parcial={!!parcial}
             chipsDeTodasAsCurvas={filtroCurva.length > 0}
+            aDireita={comCurva && <SeletorCurva valor={curvas} aoMudar={setCurvas} ajuda={avisoCoberturaCurva(metaCurva)} />}
           />
 
           {(

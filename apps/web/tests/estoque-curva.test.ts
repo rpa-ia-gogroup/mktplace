@@ -69,7 +69,7 @@ test("as duas abas: coluna, filtro e ordem so' com a curva lida; resumo de açã
     const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
     assert.match(src, /const comCurva = curvaNaTela\(metaCurva\)/, f);
     assert.match(src, /\{comCurva && <th scope="col" className="(hidden )?px-4 py-3( sm:table-cell)?">Curva<\/th>\}/, f);
-    assert.match(src, /\{comCurva && <FiltroCurva /, f);
+    assert.match(src, /comCurva && <(FiltroCurva|SeletorCurva) /, f);
     assert.match(src, /ordenarPorCurva\(/, f);
     // o resumo e' o panorama: sem o filtro de curva
     assert.match(src, /resumoAcao\(payload\.(produtos|inventarios)[,.]/, f);
@@ -82,4 +82,13 @@ test("as duas abas: coluna, filtro e ordem so' com a curva lida; resumo de açã
   // ML abaixo de sm: chip na linha 1 da Identificacao e coluna escondida
   assert.match(ml, /className="hidden px-4 py-3 sm:table-cell">Curva<\/th>/);
   assert.equal((ml.match(/sm:hidden"><CelulaCurva item=\{i\} \/>/g) ?? []).length, 2);
+});
+
+test("Estoque ML: curva no seletor segmentado acima da grade (Todas | AA/A | B | C | Sem curva), sem a caixa", () => {
+  const ml = readFileSync(new URL("../app/estoque-ml-full/MLFullEstoqueClient.tsx", import.meta.url), "utf8");
+  const comp = readFileSync(new URL("../src/components/full/CurvaEstoque.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(ml, /<FiltroCurva /);
+  assert.match(ml, /aDireita=\{comCurva && <SeletorCurva valor=\{curvas\} aoMudar=\{setCurvas\}/);
+  assert.match(comp, /\{ valor: null, texto: "Todas" \}, \.\.\.OPCOES_CURVA/);
+  assert.match(comp, /aria-pressed=\{on\}/);
 });

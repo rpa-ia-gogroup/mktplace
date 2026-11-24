@@ -39,3 +39,37 @@ export function FiltroCurva({
     </span>
   );
 }
+
+/**
+ * Pedido da Nath (24/11): a curva a vista, na faixa logo acima de "Estoque por curva e marca".
+ * "Todas | AA/A | B | C | Sem curva" — uma escolha por vez; Todas = sem filtro (mesmo estado do filtro antigo).
+ */
+export function SeletorCurva({
+  valor, aoMudar, ajuda,
+}: { valor: readonly OpcaoCurva[]; aoMudar: (v: OpcaoCurva[]) => void; ajuda?: string | null }) {
+  const opcoes: { valor: OpcaoCurva | null; texto: string }[] = [{ valor: null, texto: "Todas" }, ...OPCOES_CURVA];
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span aria-hidden="true" className="text-xs font-medium text-ink-muted">Curva</span>
+      <span role="group" aria-label="Curva" className="inline-flex rounded-lg border border-line bg-surface p-0.5">
+        {opcoes.map((o) => {
+          const on = o.valor === null ? valor.length === 0 : valor.length === 1 && valor[0] === o.valor;
+          return (
+            <button
+              key={o.texto}
+              type="button"
+              aria-pressed={on}
+              onClick={() => aoMudar(o.valor === null || on ? [] : [o.valor])}
+              className={`min-h-11 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors duration-[120ms] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:min-h-8 ${
+                on ? "bg-accent-soft font-semibold text-accent-ink" : "text-ink-muted hover:text-ink"
+              }`}
+            >
+              {o.texto}
+            </button>
+          );
+        })}
+      </span>
+      {ajuda && <InfoDica texto={ajuda} />}
+    </span>
+  );
+}
