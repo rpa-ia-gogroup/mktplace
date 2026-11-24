@@ -15,7 +15,7 @@
  */
 
 import Link from "next/link";
-import { Boxes, PackageX, TrendingDown } from "lucide-react";
+import { Boxes, CircleCheck, PackageX, TrendingDown } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -42,6 +42,7 @@ import {
   QUERY_ML,
   QUERY_SHOPEE,
   fmtReais,
+  fmtPct,
   descricaoTop,
   dicaImpacto,
   fracao,
@@ -89,6 +90,7 @@ import {
   heroiRuptura,
   kpiImpacto,
   kpiParamVenda,
+  perdaDestaque,
   pctDestaque,
   mediana,
   oks,
@@ -101,7 +103,7 @@ import {
   type ResumoOk,
   type Antes,
 } from "@/lib/full-visao-geral";
-import VisaoRapidaEstoque from "@/components/full/VisaoRapidaEstoque";
+import { compararPerda, indoBem, intensidade, matrizOndeDoi, META_FULL, statusMeta, veredito } from "@/lib/full-veredito";
 import { tituloMarca, validarPayloadML } from "@/lib/ml-full-estoque";
 
 const DICA_RUPTURA =
@@ -114,6 +116,11 @@ const DICA_COBERTURA =
   "Mediana da cobertura em dias dos itens com venda nos 28 dias, como a API calcula item a item. Itens sem venda ficam fora.";
 
 const CANAIS: Canal[] = ["ml", "shopee"];
+
+const PILULA_CMP = { ok: "bg-ok-soft text-ok-ink", crit: "bg-crit-soft text-crit-ink", neutro: "bg-raised text-ink-muted" } as const;
+const DICA_ONDE_DOI =
+  "Impacto potencial por marca, em R$ por dia. ML: venda média de 28 dias × preço. Shopee: só os itens sem estoque do vendedor. " +
+  "Quanto mais forte a cor, mais dinheiro. R$ não é somado entre canais. “—”: sem fotografia ou sem preço (o motivo no hover).";
 
 function motivoErro(e: unknown): string {
   return e instanceof Error ? e.message : "Falha ao carregar.";
@@ -440,6 +447,17 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
   const baseOk = ok.reduce((n, c) => n + c.base, 0);
   const rupturaOk = ok.reduce((n, c) => n + c.ruptura, 0);
   const maxVenda = Math.max(0, ...lista.map((t) => t.mediaDiaria));
+  // Modelo da Nath (24/11): veredito, KPIs com meta, "Onde dói" e "Indo bem". R$ nunca somado entre canais.
+  const comAnterior = antes?.impacto ?? null;
+  const aaA = comCurva && curvaH ? Object.values(curvaH.blocos).reduce((n, b) => n + (b?.n ?? 0), 0) : null;
+  const rupturaFrac = baseOk > 0 ? rupturaOk / baseOk : null;
+  const ver = veredito(impacto, comAnterior, comCurva ? curvaH?.blocos.shopee?.n ?? null : null);
+  const impMl = impactosOk(impacto).find((c) => c.canal === "ml");
+  const perdaMl = impMl ? perdaDestaque("ml", impMl) : null;
+  const cmpMl = compararPerda("ml", impacto, comAnterior);
+  const kpiMl = kpiImpacto("ml", impacto);
+  const matriz = matrizOndeDoi(impacto);
+  const bons = indoBem({ impacto, comAnterior, ruptura: rupturaFrac, aaA });
   // So' o que pede acao: com perda medida (sem "sem perda"), do maior impacto potencial/dia para o menor.
   const topo = doCanalEscolhido
     .filter((t) => typeof t.perdaDia === "number" && t.perdaDia > 0 && !celulaImpacto(t).zeroMedido)
@@ -484,16 +502,40 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
       }
       faixa={
         <>
+          {ver && (
+            <section aria-label="Veredito do Full" className="rounded-xl border border-accent/30 bg-surface px-4 py-3">
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className={`text-lg font-bold tracking-tight tabular-nums sm:text-xl ${ver.perda > 0 ? "text-crit-ink" : "text-ok-ink"}`}>{ver.titulo}</span>
+                {ver.comparacoes.map(({ canal, cmp }) => (
+                  <span key={canal} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums ${PILULA_CMP[cmp.tom]}`}>{NOME_CANAL[canal]} {cmp.texto}</span>
+                ))}
+              </p>
+              {ver.linha && <p className="mt-1 text-sm text-ink-muted">{ver.linha}</p>}
+            </section>
+          )}
           <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
             <CartaoIndicador
-              rotulo="Produtos-chave sem estoque"
+              rotulo="Perda potencial/dia · ML"
+              icone={TrendingDown}
+              cor="rgb(var(--tc-kpi-gmv))"
+              // Mesmo formato do cartao da Shopee: % no valor, R$/dia na legenda (com a meta).
+              valor={kpiMl.valor === "—" ? null : kpiMl.valor}
+              pilula={statusMeta(perdaMl, META_FULL.perdaDia)}
+              progresso={kpiMl.valor.endsWith("%") && impMl ? pctDestaque("ml", impMl) : null}
+              legenda={perdaMl === null ? kpiMl.comparacao : `${kpiMl.comparacao} · meta ≤ ${fmtReais(META_FULL.perdaDia)}/dia`}
+              tendencia={cmpMl ? `vs ${cmpMl.texto}` : null}
+              ajuda={<InfoDica emControle texto={dicaImpacto("ml", impacto)} />}
+              onAbrir={() => aplicar("ml", "todas", true)}
+            />
+            <CartaoIndicador
+              rotulo="AA/A sem estoque"
               icone={PackageX}
               cor="rgb(var(--tc-kpi-ads))"
               valor={!curvaH || curvaH.valor === "—" ? null : curvaH.valor}
-              pilula={curvaH?.critico ? { texto: "AA/A", tom: "crit" } : null}
+              pilula={statusMeta(aaA, META_FULL.aaA)}
               legenda={
                 curvaH && Object.keys(curvaH.blocos).length
-                  ? CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]} ${fmtInt(curvaH.blocos[c]!.n)}`).join(" · ")
+                  ? ["meta 0", ...CANAIS.filter((c) => curvaH.blocos[c]).map((c) => `${NOME_CANAL[c]} ${fmtInt(curvaH.blocos[c]!.n)}`)].join(" · ")
                   : curvaH?.contexto || undefined
               }
               // Por canal: % do impacto potencial ou a cobertura curta da curva (o que o heroi antigo mostrava).
@@ -510,18 +552,18 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
               onAbrir={() => aplicar("todos", comCurva ? "aa_a" : "todas", true)}
             />
             <CartaoIndicador
-              rotulo="Sem estoque com demanda"
+              rotulo="Ruptura com demanda"
               icone={Boxes}
               cor="rgb(var(--tc-kpi-pedidos))"
               valor={heroi.valor}
-              pilula={pilulaPp(aHeroi)}
-              progresso={baseOk > 0 ? rupturaOk / baseOk : null}
-              legenda={heroi.detalhe}
-              tendencia={[aHeroi?.texto, motivoHeroi].filter(Boolean).join(" · ") || null}
+              pilula={statusMeta(rupturaFrac, META_FULL.ruptura)}
+              progresso={rupturaFrac}
+              legenda={`meta ≤ ${fmtPct(META_FULL.ruptura)}`}
+              tendencia={[heroi.detalhe, aHeroi && `${fmtDelta(aHeroi.pp, "pp")}, ${aHeroi.texto}`, motivoHeroi].filter(Boolean).join(" · ") || null}
               ajuda={<InfoDica emControle texto={DICA_RUPTURA} nota={NOTA_VENDEDOR} />}
               onAbrir={() => aplicar(filtroCanal, "todas", true)}
             />
-            {CANAIS.map((canal) => {
+            {(["shopee"] as Canal[]).map((canal) => {
               const k = kpiImpacto(canal, impacto, canal === "shopee" ? semVendedor : null);
               const a = antesImpacto(canal, impacto, antes?.impacto ?? null);
               const motivo = antes && !a ? semComparacao(canal, antes.impacto) : null;
@@ -530,7 +572,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
               return (
                 <CartaoIndicador
                   key={canal}
-                  rotulo={`Impacto potencial · ${NOME_CANAL[canal]}`}
+                  rotulo="Impacto · Shopee"
                   icone={TrendingDown}
                   cor="rgb(var(--tc-kpi-gmv))"
                   valor={k.valor === "—" ? null : k.valor}
@@ -548,74 +590,106 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
         </>
       }
     >
-      {/* Visao rapida logo abaixo dos 4 indicadores: marca, barra, ruptura/baixo e impacto do canal (era "Ruptura por marca" + "Estoque por marca") */}
-      <VisaoRapidaEstoque canais={canais} impacto={impacto} />
-
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Panel
-          titulo="Sem estoque por curva"
-          ajuda={comCurva ? dicaCurva(abc, impacto) : undefined}
-          acao={
-            <Segmented
-              rotulo="Canal da curva"
-              opcoes={(["todos", ...CANAIS] as FiltroCanal[]).map((c) => ({ valor: c, texto: c === "todos" ? "Todos" : NOME_CANAL[c] }))}
-              valor={canalCurva}
-              aoEscolher={setCanalCurva}
-            />
-          }
-        >
-          {/* Um quadro por canal: R$ nunca somado entre canais. */}
-          <div className="flex flex-col gap-4">
-            {CANAIS.filter((c) => canalCurva === "todos" || c === canalCurva).map((c) => (
-              <div key={c} className="flex flex-col gap-1">
-                {canalCurva === "todos" && (
-                  <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                    <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SELO_CANAL[c].ponto}`} />
-                    {NOME_CANAL_LONGO[c]}
-                  </span>
-                )}
-                <DetalheCurva canal={c} impacto={impacto} abc={abc} />
-              </div>
-            ))}
-          </div>
-        </Panel>
-        <Panel
-          titulo="O que exige atenção"
-          ajuda={DICA_ORDEM_FILA}
-          acao={
-            <a
-              href="#fila-full"
-              onClick={(e) => { e.preventDefault(); document.getElementById("fila-full")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-              className="inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
-            >
-              Ver todos →
-            </a>
-          }
-        >
-          {topo.length === 0 ? (
-            <StateBlock tipo="vazio" titulo="Nenhuma ruptura com perda no Full" compacto />
+      {/* Modelo da Nath: onde dói (marca x canal) | top 3 ações + indo bem */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+        <Panel titulo="Onde dói (R$/dia potencial)" ajuda={DICA_ONDE_DOI} className="lg:col-span-7 lg:self-start" semPadding>
+          {!matriz ? (
+            <StateBlock tipo="indisponivel" titulo="Impacto indisponível agora" compacto />
           ) : (
-            <ul className="divide-y divide-line">
-              {topo.map((t, i) => (
-                <li key={`${t.canal}-${i}`} className="flex items-start justify-between gap-3 py-2.5">
-                  <span className="flex min-w-0 flex-col gap-1">
-                    <span className="flex min-w-0 items-start gap-1.5">
-                      {comCurva && <ChipCurva curva={curvaDe(t, abc)} className="mt-0.5" />}
-                      <span className="line-clamp-2 text-sm font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
-                        {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
-                      </span>
-                    </span>
-                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink-muted">
-                      <SeloCanal canal={t.canal} />
-                      <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></span>
-                </li>
-              ))}
-            </ul>
+            <table className="w-full table-fixed text-sm">
+              <caption className="sr-only">Impacto potencial por marca e canal, em R$ por dia; R$ não somado entre canais</caption>
+              <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                <tr>
+                  <th scope="col" className="px-4 py-2 text-left">Marca</th>
+                  {matriz.canais.map((c) => (
+                    <th key={c} scope="col" className="w-[30%] px-2 py-2 text-right last:pr-4">
+                      <span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${SELO_CANAL[c].ponto}`} />{NOME_CANAL[c]}</span>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {matriz.linhas.map((l) => (
+                  <tr key={l.marca}>
+                    <th scope="row" className="truncate px-4 py-1.5 text-left text-xs font-semibold uppercase tracking-wide text-ink">{tituloMarca(l.marca)}</th>
+                    {matriz.canais.map((c) => {
+                      const cel = l.celulas[c];
+                      const a = intensidade(cel?.valor ?? null, matriz.max);
+                      const motivo = cel ? cel.motivo : "marca sem itens no Full deste canal";
+                      return (
+                        <td key={c} className="px-1 py-1 last:pr-3">
+                          <span
+                            title={motivo}
+                            className={`block rounded-md px-2 py-2 text-right tabular-nums ${a > 0 ? "font-semibold text-ink" : "text-ink-faint"}`}
+                            // Cor pelo dinheiro: o token de critico, mais forte quanto maior o R$/dia.
+                            style={a > 0 ? { backgroundColor: `rgb(var(--tc-crit) / ${(0.08 + a * 0.32).toFixed(2)})` } : undefined}
+                          >
+                            {cel ? cel.texto : "sem itens"}
+                            {motivo && <span className="sr-only"> ({motivo})</span>}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </Panel>
+        <div className="flex flex-col gap-3 lg:col-span-5">
+          <Panel
+            titulo="Top 3 ações"
+            ajuda={DICA_ORDEM_FILA}
+            acao={
+              <a
+                href="#fila-full"
+                onClick={(e) => { e.preventDefault(); document.getElementById("fila-full")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+                className="inline-flex min-h-11 items-center text-sm font-medium text-accent hover:underline"
+              >
+                Ver todos →
+              </a>
+            }
+          >
+            {topo.length === 0 ? (
+              <StateBlock tipo="vazio" titulo="Nenhuma ruptura com perda no Full" compacto />
+            ) : (
+              <ol className="divide-y divide-line">
+                {topo.slice(0, 3).map((t, i) => (
+                  <li key={`${t.canal}-${i}`} className="flex items-start justify-between gap-3 py-2.5">
+                    <span className="flex min-w-0 flex-col gap-1">
+                      <span className="flex min-w-0 items-start gap-1.5">
+                        <span aria-hidden="true" className="mt-0.5 w-4 shrink-0 text-xs font-semibold tabular-nums text-ink-faint">{i + 1}.</span>
+                        {comCurva && <ChipCurva curva={curvaDe(t, abc)} className="mt-0.5" />}
+                        <span className="line-clamp-2 text-sm font-medium text-ink" title={t.sku ? `${t.nome} · código ${t.sku}` : t.nome}>
+                          Repor {t.nome}{t.sku && <span className="sr-only"> (código {t.sku})</span>}
+                        </span>
+                      </span>
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 pl-5 text-xs text-ink-muted">
+                        <SeloCanal canal={t.canal} />
+                        <span className="font-semibold uppercase tracking-wide">{tituloMarca(t.marca)}</span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right text-sm font-semibold tabular-nums"><CelulaImpacto t={t} /></span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Panel>
+          <Panel titulo="Indo bem">
+            {bons.length === 0 ? (
+              <p className="text-sm text-ink-muted">Nada dentro da meta agora.</p>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {bons.map((b) => (
+                  <li key={b} className="flex items-start gap-2 text-sm text-ink">
+                    <CircleCheck aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0 text-ok" />
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </div>
       </div>
 
       {/* Tabela larga: a fila inteira, com o filtro de curva no proprio painel */}
@@ -740,6 +814,35 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
             </ul>
           </>
         )}
+      </Panel>
+
+      {/* Impacto por curva (era ao lado do "O que exige atenção") */}
+      <Panel
+        titulo="Sem estoque por curva"
+        ajuda={comCurva ? dicaCurva(abc, impacto) : undefined}
+        acao={
+          <Segmented
+            rotulo="Canal da curva"
+            opcoes={(["todos", ...CANAIS] as FiltroCanal[]).map((c) => ({ valor: c, texto: c === "todos" ? "Todos" : NOME_CANAL[c] }))}
+            valor={canalCurva}
+            aoEscolher={setCanalCurva}
+          />
+        }
+      >
+        {/* Um quadro por canal: R$ nunca somado entre canais. */}
+        <div className="flex flex-col gap-4">
+          {CANAIS.filter((c) => canalCurva === "todos" || c === canalCurva).map((c) => (
+            <div key={c} className="flex flex-col gap-1">
+              {canalCurva === "todos" && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                  <span aria-hidden="true" className={`h-2 w-2 rounded-full ${SELO_CANAL[c].ponto}`} />
+                  {NOME_CANAL_LONGO[c]}
+                </span>
+              )}
+              <DetalheCurva canal={c} impacto={impacto} abc={abc} />
+            </div>
+          ))}
+        </div>
       </Panel>
 
       {/* 4b. Brindes e descontinuados: fora da fila e dos numeros, recolhidos */}

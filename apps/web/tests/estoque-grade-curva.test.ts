@@ -115,18 +115,12 @@ test("texto da barra: so' o que existe, singular e plural", () => {
   assert.equal(descreverPartes({ itens: 12, ruptura: 3, baixo: 2, excesso: 0, demais: 7 }), "12 itens: 3 em ruptura, 2 com estoque baixo, 7 demais");
 });
 
-test("Visao geral: bloco fundido logo abaixo dos indicadores, sem a tabela antiga; grade nao rola na horizontal", () => {
+test("Visao geral: a matriz Onde doi substitui a visao rapida; grade nao rola na horizontal", () => {
   const vg = readFileSync(join(import.meta.dirname, "../app/full/VisaoGeralFull.tsx"), "utf8");
   const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
-  const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
-  assert.match(vg, /<VisaoRapidaEstoque canais=\{canais\} impacto=\{impacto\}/);
-  assert.doesNotMatch(vg, /titulo="Ruptura por marca"/); // a tabela antiga saiu: um bloco so'
-  assert.ok(vg.indexOf("<VisaoRapidaEstoque") < vg.indexOf('titulo="Sem estoque por curva"')); // logo abaixo dos 4 indicadores
+  assert.doesNotMatch(vg, /VisaoRapidaEstoque|titulo="Ruptura por marca"/);
+  assert.ok(vg.indexOf('titulo="Onde dói (R$/dia potencial)"') < vg.indexOf('titulo="Sem estoque por curva"'));
   assert.doesNotMatch(grade, /TableScrollHint|min-w-max/); // so o seletor de curva rola, a lista de marcas nao
-  assert.match(rapida, /hrefAba\(ABA\[c\.canal\]\)/); // link para o detalhe do canal
-  assert.match(rapida, /perdaDestaque\(canal/); // R$ e % sao do proprio canal...
-  assert.doesNotMatch(rapida, /reduce\(/); // ...e nunca somados entre canais
-  assert.match(rapida, /<LegendaBarra excessoComoDemais/); // legenda de uma linha; excesso cinza junto com demais
   assert.match(grade, /<LegendaBarra/);
 });
 
@@ -138,8 +132,6 @@ test("barra: excesso em tom fraco (nao o roxo cheio); na visao rapida vira demai
   const css = readFileSync(join(import.meta.dirname, "../app/globals.css"), "utf8");
   const [claro, escuro] = [...css.matchAll(/--tc-accent-excesso:\s*(\d+) (\d+) (\d+)/g)].map((m) => [+m[1], +m[2], +m[3]]);
   assert.ok(claro && escuro && escuro[0] < claro[0], "token de excesso existe nos dois temas e o escuro e' mais saturado");
-  const rapida = readFileSync(join(import.meta.dirname, "../src/components/full/VisaoRapidaEstoque.tsx"), "utf8");
-  assert.match(rapida, /Impacto potencial \{p !== null/); // % primeiro, depois R$/dia, com a palavra "potencial"
   assert.equal(descreverPartes({ itens: 5, ruptura: 0, baixo: 0, excesso: 0, demais: 5 }), "5 itens: 5 demais");
 });
 
