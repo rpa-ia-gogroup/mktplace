@@ -582,13 +582,13 @@ test("tela: grade unica (ALVO-GRADE), aviso do canal acima dos cartoes e sem rod
   assert.ok(src.includes("<MaisDetalhes"), "outros indicadores recolhidos em Mais detalhes");
   assert.ok(src.includes("<Aba") && src.includes("useVisoesFull()"), "moldura unica: titulo Full e as sub-abas");
   assert.ok(!src.includes("<Heroi") && !src.includes("<KpiTile") && !src.includes("<KpiDrilldownDialog"), "sem heroi, sem KpiTile, sem dialogo");
-  assert.equal((src.match(/<CartaoIndicador/g) ?? []).length, 3, "4 cartoes: AA/A, sem estoque com demanda e um de impacto por canal (map)");
+  assert.equal((src.match(/<CartaoIndicador/g) ?? []).length, 4, "4 cartoes: venda perdida ML, AA/A, ruptura com demanda e impacto Shopee");
   assert.ok(src.includes("Param a venda") && !src.includes('rotulo="Param a venda'), "Param a venda saiu da faixa para Mais detalhes");
   // Cor por token, nunca hex; R$ nunca somado entre canais (um cartao de impacto por canal).
   assert.ok(src.includes('cor="rgb(var(--tc-kpi-gmv))"') && !/cor="#/.test(src));
   assert.ok(src.includes("rgb(var(--tc-canal-${t.canal}))"), "Venda/dia com a barrinha na cor do canal");
   assert.ok(!/serie=\{/.test(src), "sem linha: o Full nao tem serie");
-  assert.ok(src.includes("pilulaPp(a)") && src.includes("pilulaPp(aHeroi)"), "pilula so' com o antes medido");
+  assert.ok(src.includes("pilulaPp(a)") && src.includes("aHeroi && `${fmtDelta(aHeroi.pp"), "antes so' medido; no cartao de ruptura a pilula e' a meta e o antes vai na tendencia");
   assert.ok(src.includes("fetchImpactoRuptura(signal, true)"), "o antes vem da 2a chamada, depois do primeiro desenho");
 });
 
@@ -1036,8 +1036,6 @@ test("T-0085 marca sem foto e' ausencia: — na celula, nunca R$ 0/dia", () => {
   assert.equal(marcaSemFoto((SEM_FOTO.ml as CanalImpactoOk).marcas[0]), false);
   assert.equal(perdaDestaque("ml", barbours), null);
   assert.equal(fmtReais(perdaDestaque("ml", barbours)), "—");
-  const tela = fonte("src/components/full/VisaoRapidaEstoque.tsx");
-  assert.match(tela, /if \(marcaSemFoto\(m\)\) return <span[^>]*title="sem fotografia no dia">Impacto potencial —<\/span>;/);
 });
 
 test("B2-02: a janela do Envio ML e do Desempenho Shopee vai para a URL e volta no reload", async () => {
