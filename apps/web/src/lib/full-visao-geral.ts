@@ -387,7 +387,7 @@ export function topRupturas(
  * grupo: impacto R$/dia desc; desempate pela venda/dia.
  */
 /** Shopee com estoque do vendedor: o Full rompeu, mas a venda segue. */
-export function vendedorTemEstoque(t: ItemRuptura): boolean {
+export function vendedorTemEstoque(t: Pick<ItemRuptura, "canal" | "estoqueVendedor">): boolean {
   return t.canal === "shopee" && (t.estoqueVendedor ?? 0) > 0;
 }
 
