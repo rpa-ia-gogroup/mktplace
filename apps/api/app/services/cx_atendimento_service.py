@@ -78,10 +78,10 @@ MARCAS_PERMITIDAS: tuple[str, ...] = tuple(BRANDS_IN_SCOPE)
 #: daqui. A Kokeshi entrou em 11/11/2026 (T-0114): a Silver tem a conta de
 #: 31/08 a 13/11 (medido em 13/11, VAL-B2) e o export do bot parou em ~11/11.
 SHOPEE_MARCAS: tuple[str, ...] = ("apice", "barbours", "kokeshi", "lescent", "rituaria")
-#: Contas cuja Saude da Conta AINDA so' vem do bot do Seller Centre (Neon):
-#: `raw.shopee_account_health_*` nao tem a Kokeshi (C1-102). Tirar daqui quando
-#: a DAG de health gravar a conta.
-SHOPEE_SAUDE_EXPORT: tuple[str, ...] = ("kokeshi",)
+#: Contas cuja Saude da Conta so' vem do bot do Seller Centre (Neon). Vazia desde
+#: 24/11/2026: a Kokeshi publica em `raw.shopee_account_health_*` (airflow#2770
+#: tirou a falta de folga do token) e o bot parou em 09/11.
+SHOPEE_SAUDE_EXPORT: tuple[str, ...] = ()
 
 JANELA_PADRAO_DIAS = 30
 DIAS_FOTOGRAFIA_DEVOLUCAO = 90
