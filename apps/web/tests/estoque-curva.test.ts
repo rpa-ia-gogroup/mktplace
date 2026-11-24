@@ -89,6 +89,6 @@ test("Estoque ML: curva no seletor segmentado acima da grade (Todas | AA/A | B |
   const comp = readFileSync(new URL("../src/components/full/CurvaEstoque.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(ml, /<FiltroCurva /);
   assert.match(ml, /aDireita=\{comCurva && <SeletorCurva valor=\{curvas\} aoMudar=\{setCurvas\}/);
-  assert.match(comp, /\{ valor: null, texto: "Todas" \}, \.\.\.OPCOES_CURVA/);
-  assert.match(comp, /aria-pressed=\{on\}/);
+  assert.match(comp, /\{ valor: "todas", texto: "Todas" \}, \.\.\.OPCOES_CURVA/);
+  assert.match(comp, /<Segmented\s+rotulo="Curva"/);
 });
