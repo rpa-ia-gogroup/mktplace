@@ -18,6 +18,7 @@ FONTES
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -145,6 +146,9 @@ class Report:
     notas: list[str] = field(default_factory=list)
     #: OPORTUNIDADES-1: as 3 de maior ganho (R$ em 30 dias) com a acao; vazio = secao some.
     oportunidades: list[str] = field(default_factory=list)
+    #: Mesmos problemas, estruturados, para o report agrupar por tipo (LDR e performance oficial).
+    ldr_alertas: list = field(default_factory=list)
+    sinais: list = field(default_factory=list)
 
 
 def linhas_oportunidades(itens: list[dict]) -> list[str]:
@@ -237,9 +241,11 @@ def compor_report(d: Dados) -> Report:
     for c in validas:
         if c.faixa == ta.CRITICO:
             rep.problemas.append(f"{CRIT} {ta.texto_celula(c)}")
+            rep.ldr_alertas.append(c)
     for c in validas:
         if c.faixa == ta.ATENCAO:
             rep.problemas.append(f"{ATEN} {ta.texto_celula(c)}")
+            rep.ldr_alertas.append(c)
     na_meta = sum(1 for c in validas if c.faixa == ta.DENTRO)
     if validas and na_meta:
         rep.avancos.append(f"LDR na meta em {na_meta} de {len(validas)} contas.")
@@ -249,6 +255,7 @@ def compor_report(d: Dados) -> Report:
     # --- Kokeshi (performance oficial)
     for s in d.saude.sinais:
         rep.problemas.append(f"{CRIT if s.nivel == ta.CRITICO else ATEN} {s.texto}")
+        rep.sinais.append(s)
     for canal in ta.CANAIS_SAUDE:
         ok = [m for m, c in d.saude.em_ordem if c == canal]
         if ok:
@@ -330,67 +337,122 @@ def _plural(n: int, um: str, varios: str) -> str:
     return f"{n} {um if n == 1 else varios}"
 
 
-def montar_blocos(rep: Report) -> sb.Mensagem:
-    """O report em blocos: numeros do dia, marcas, avancos, problemas, atalhos."""
+CANAL_CURTO = {"shopee": "Shopee", "mercadolivre": "ML", "tiktokshop": "TikTok"}
+
+
+def _marca(m: str) -> str:
+    return ta.rotulo_marca(m).title()
+
+
+def _metrica_do_sinal(s) -> tuple[str, str]:
+    """'KOKESHI na Shopee: Taxa de envio atrasado em 11,96%, fora...' -> ('Taxa de envio atrasado', '11,96%')."""
+    _, _, resto = s.texto.partition(": ")
+    resto = resto or s.texto
+    rotulo, sep, depois = resto.partition(" em ")
+    if sep:
+        return rotulo.strip(), depois.split(", ")[0].strip()
+    m = re.match(r"(\d+(?:,\d+)?) (.+)", resto.rstrip("."))  # "4 ponto(s) de penalidade no trimestre"
+    if m:
+        return m.group(2).replace("ponto(s)", "pontos").capitalize(), m.group(1)
+    return resto.rstrip("."), ""
+
+
+def _linhas_atencao(rep: Report) -> list[str]:
+    """Problemas agrupados por tipo: uma linha por tipo, as marcas lado a lado (pior primeiro)."""
+    linhas: list[str] = []
+    for faixa, rotulo in ((ta.CRITICO, "LDR acima do teto"), (ta.ATENCAO, "LDR em atenção")):
+        cel = sorted((c for c in rep.ldr_alertas if c.faixa == faixa), key=lambda c: -c.taxa)
+        if cel:
+            linhas.append(f"- **{rotulo}:** " + " · ".join(
+                f"{_marca(c.marca)} {CANAL_CURTO.get(c.canal, c.canal)} {ta.pct(c.taxa)}" for c in cel))
+    grupos: dict[tuple[str, str], list] = {}
+    for s in rep.sinais:
+        rot, val = _metrica_do_sinal(s)
+        grupos.setdefault((s.codigo, s.canal), []).append((s, val, rot))
+    for (_, canal), itens in grupos.items():
+        rot = itens[0][2]
+        linhas.append(f"- **{rot} ({CANAL_CURTO.get(canal, canal)}):** "
+                      + " · ".join(f"{_marca(s.marca)} {v}".strip() for s, v, _ in itens))
+    estruturados = ({f"{e} {ta.texto_celula(c)}" for c in rep.ldr_alertas for e in (CRIT, ATEN)}
+                    | {f"{e} {s.texto}" for s in rep.sinais for e in (CRIT, ATEN)})
+    for p in rep.problemas:
+        if p not in estruturados:
+            linhas.append("- " + p.replace(f"{CRIT} ", "").replace(f"{ATEN} ", ""))
+    return linhas
+
+
+def _prioridade(rep: Report) -> Optional[str]:
+    """A pior coisa do dia numa frase: o LDR mais acima do teto; senao, o 1o sinal critico."""
+    criticos = [c for c in rep.ldr_alertas if c.faixa == ta.CRITICO]
+    if criticos:
+        c = max(criticos, key=lambda c: c.taxa / ta.META_TETO[c.canal][1])
+        return (f"LDR da {_marca(c.marca)} {ta.NO_CANAL[c.canal]} "
+                f"({ta.pct(c.taxa)}, teto {ta.pct(ta.META_TETO[c.canal][1])}).")
+    s = next((s for s in rep.sinais if s.nivel == ta.CRITICO), None)
+    return s.texto if s else None
+
+
+def montar_markdown(rep: Report) -> str:
+    """O report no formato do agente SDR: titulo, numero principal, tabela, atencao agrupada."""
     o = rep.ontem
     dia_sem = DIAS_SEMANA[o.weekday()]
     t = rep.total
-    resumo = (f"{brl(t.gmv)} de GMV ontem ({divisao(t)}), {_plural(len(rep.avancos), 'avanço', 'avanços')}, "
-              f"{_plural(len(rep.problemas), 'problema', 'problemas')}")
-
-    numeros = [("GMV de ontem", f"{brl(t.gmv)}\n{divisao(t)}")]
+    evento = metas_curva.evento_do_dia(o)
+    md = [f"### ☀️ Ontem · {dia_sem}, {o:%d/%m}" + (f" · {evento}" if evento else "")]
+    destaque = [f"**{brl(t.gmv)}** de GMV"]
     if t.pct_meta_dia is not None:
-        numeros.append(("Meta do dia", f"{_bola_meta(t.pct_meta_dia)} {pct0(t.pct_meta_dia)}"))
+        destaque.append(f"**{pct0(t.pct_meta_dia)} da meta** do dia")
     if t.var_semana is not None:
-        numeros.append((f"vs {dia_sem} passada", variacao(t.var_semana)))
+        destaque.append(f"{variacao(t.var_semana)} vs {dia_sem} passada")
+    canais = " | ".join(ROTULO_CURTO.values())
+    md += [" · ".join(destaque), "",
+           f"| Marca | GMV | {canais} | Meta do dia | vs {dia_sem} |",
+           "|---|---:|" + "---:|" * len(ROTULO_CURTO) + "---:|---:|"]
+
+    def celulas(x: LinhaMarca) -> list[str]:
+        return [brl(x.gmv), *(brl(x.por_canal.get(c, 0.0)) for c in ROTULO_CURTO),
+                pct0(x.pct_meta_dia) if x.pct_meta_dia is not None else "—",
+                variacao(x.var_semana) if x.var_semana is not None else "—"]
+
+    for x in rep.linhas:
+        md.append(f"| {_marca(x.marca)} | " + " | ".join(celulas(x)) + " |")
+    md.append("| **Total** | " + " | ".join(f"**{c}**" for c in celulas(t)) + " |")
     if rep.mes:
         real, esperado, meta = rep.mes
-        numeros.append((f"{MESES[o.month - 1].capitalize()} até ontem",
-                        f"{brl(real)} · {pct0(real / meta)} da meta"))
+        partes = [brl(real), f"{pct0(real / meta)} da meta do mês"]
         if esperado > 0:
-            numeros.append(("Ritmo do mês", f"{_bola_meta(real / esperado)} {pct0(real / esperado)} do esperado"))
+            partes.append(f"ritmo de {pct0(real / esperado)}")
+        md += ["", f"**{MESES[o.month - 1].capitalize()}:** " + " · ".join(partes)]
 
-    blocos: list[dict] = [
-        sb.titulo(f":sunrise: Bom dia! Resumo de ontem · {dia_sem}, {o:%d/%m}"),
-        sb.nota(f"*{resumo}*"),
-        sb.campos(*numeros),
-    ]
-    evento = metas_curva.evento_do_dia(o)
-    rodape = []
-    if evento:
-        rodape.append(f":tada: Dia de evento: *{evento}*")
-    rodape.append("GMV e meta contam Shopee e Mercado Livre")
-    blocos.append(sb.nota("  ·  ".join(rodape)))
-
-    blocos.append(sb.divisor())
-    linhas = ["*GMV por marca*"]
-    for x in rep.linhas:
-        partes = [f"*{ta.rotulo_marca(x.marca)}*  {brl(x.gmv)} ({divisao(x)})"]
-        if x.pct_meta_dia is not None:
-            partes.append(f"{pct0(x.pct_meta_dia)} da meta")
-        if x.var_semana is not None:
-            partes.append(f"{variacao(x.var_semana)} vs {dia_sem}")
-        linhas.append(f"{_bola_meta(x.pct_meta_dia)} " + "  ·  ".join(partes))
-    blocos.append(sb.secao("\n".join(linhas), sb.botao("Ver metas", sb.url_metas())))
-
+    atencao = _linhas_atencao(rep)
+    if atencao:
+        md += ["", f"### Precisa de atenção ({len(rep.problemas)})", *atencao]
     if rep.oportunidades:
-        blocos.append(sb.divisor())
-        blocos.append(sb.secao(":bulb: *Maiores oportunidades (R$ em 30 dias)*\n" + "\n".join(rep.oportunidades),
-                               sb.botao("Ver na Torre", URL_DA_TORRE)))
-    blocos.append(sb.divisor())
-    blocos.append(sb.secao(f":white_check_mark: *Avanços ({len(rep.avancos)})*\n"
-                           + ("\n".join(f"• {a}" for a in rep.avancos) or "• Nenhum destaque ontem.")))
-    blocos.append(sb.secao(f":warning: *Problemas ({len(rep.problemas)})*\n"
-                           + ("\n".join(rep.problemas) or ":tada: Nenhum problema.")))
-    if rep.notas:
-        blocos.append(sb.nota(" ".join(rep.notas)))
-    blocos.append(sb.divisor())
-    blocos.append(sb.atalhos(
+        md += ["", "### Oportunidades (30 dias)"]
+        # as linhas vem em mrkdwn (*negrito*); no markdown o negrito e' **x**
+        md += [re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"**\1**", linha) for linha in rep.oportunidades]
+    prio = _prioridade(rep)
+    if prio:
+        md += ["", f"> Prioridade: {prio}"]
+    if rep.avancos:
+        md += ["", f"✅ **{_plural(len(rep.avancos), 'avanço', 'avanços')}:** "
+               + " · ".join(a.rstrip(".") for a in rep.avancos[:4])
+               + (" · …" if len(rep.avancos) > 4 else "")]
+    md += ["", "_" + " ".join([*rep.notas, "GMV e meta contam Shopee e Mercado Livre."]) + "_"]
+    return "\n".join(md)
+
+
+def montar_blocos(rep: Report) -> sb.Mensagem:
+    """O report: um bloco `markdown` (formato do agente SDR) e os atalhos da Torre."""
+    t = rep.total
+    resumo = (f"{brl(t.gmv)} de GMV ontem ({divisao(t)}), {_plural(len(rep.avancos), 'avanço', 'avanços')}, "
+              f"{_plural(len(rep.problemas), 'problema', 'problemas')}")
+    blocos = [sb.markdown(montar_markdown(rep)), sb.atalhos(
         sb.botao("Metas", sb.url_metas(), "primary"),
         sb.botao("Expedição", sb.url_expedicao()),
         sb.botao("Performance", sb.url_performance()),
-    ))
-    return sb.Mensagem(texto=f":sunrise: Bom dia! {resumo}.", blocos=sb.limitar(blocos))
+    )]
+    return sb.Mensagem(texto=f":sunrise: Bom dia! {resumo}.", blocos=blocos)
 
 
 def chave_do_report(rep: Report) -> str:

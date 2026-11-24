@@ -124,19 +124,31 @@ def test_curva_python_igual_a_do_web():
 
 
 def test_blocos_do_report_numeros_marcas_e_atalhos():
+    """Formato do agente SDR: um bloco `markdown` (titulo, numero principal, tabela) + atalhos."""
     meta = 3_000_000.0
     alvo = meta * metas_curva.fracao_do_dia(ONTEM, "ml")
     gmv = {("kokeshi", "ml", ONTEM): alvo * 0.75, ("kokeshi", "ml", SEMANA): alvo}
     m = tr.montar_blocos(tr.compor_report(_dados(gmv, {("kokeshi", "ml"): meta})))
     assert m.texto.startswith(":sunrise: Bom dia! R$ ")
-    titulo, resumo, numeros = m.blocos[:3]
-    assert titulo["text"]["text"] == ":sunrise: Bom dia! Resumo de ontem · qua, 04/11"
-    rotulos = [f["text"].split("\n")[0] for f in numeros["fields"]]
-    assert rotulos[:3] == ["*GMV de ontem*", "*Meta do dia*", "*vs qua passada*"]
-    marcas = next(b for b in m.blocos if "GMV por marca" in b.get("text", {}).get("text", ""))
-    assert ":large_orange_circle: *KOKESHI*" in marcas["text"]["text"]  # 75%: entre 70% e 80%
-    assert marcas["accessory"]["url"].endswith("/metas")
-    assert [b["text"]["text"] for b in m.blocos[-1]["elements"]] == ["Metas", "Expedição", "Performance"]
+    corpo, atalhos = m.blocos
+    assert corpo["type"] == "markdown"
+    md = corpo["text"]
+    assert md.startswith("### ☀️ Ontem · qua, 04/11")
+    assert "**75% da meta** do dia" in md and "−25% vs qua passada" in md
+    assert "| Marca | GMV | Shopee | Meli | Meta do dia | vs qua |" in md
+    assert "| Kokeshi |" in md and "| **Total** |" in md
+    assert [b["text"]["text"] for b in atalhos["elements"]] == ["Metas", "Expedição", "Performance"]
+
+
+def test_atencao_agrupa_por_tipo_e_destaca_a_prioridade():
+    rep = tr.compor_report(_dados({}))
+    rep.ldr_alertas = [
+        ta.CelulaLdr("mercadolivre", "barbours", 0.175, 187, 1069, ta.CRITICO),
+        ta.CelulaLdr("shopee", "rituaria", 0.091, 74, 815, ta.CRITICO)]
+    rep.problemas = [f"{tr.CRIT} {ta.texto_celula(c)}" for c in rep.ldr_alertas]
+    md = tr.montar_markdown(rep)
+    assert "- **LDR acima do teto:** Barbours ML 17,5% · Rituária Shopee 9,1%" in md
+    assert "> Prioridade: LDR da Barbours no Mercado Livre (17,5%, teto 6,0%)." in md
 
 
 def test_bolas_da_meta():
@@ -154,7 +166,7 @@ def test_gmv_dividido_entre_shopee_e_meli():
     assert "R$ 300,0 mil (Shopee R$ 200,0 mil + Meli R$ 100,0 mil)" in tr.montar_mensagem(rep)
     m = tr.montar_blocos(rep)
     assert "(Shopee R$ 250,0 mil + Meli R$ 100,0 mil)" in m.texto
-    assert tr.divisao(k) in str(m.blocos)
+    assert "| Kokeshi | R$ 300,0 mil | R$ 200,0 mil | R$ 100,0 mil |" in m.blocos[0]["text"]
 
 
 def test_tiktok_nao_entra_em_gmv_nem_meta():

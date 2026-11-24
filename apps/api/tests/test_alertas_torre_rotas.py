@@ -131,7 +131,7 @@ def test_report_envia_com_a_chave_do_dia(ambiente):
     (item,) = itens
     msg = montar(itens)
     assert item.chave == "report:2026-11-04" and msg.texto.startswith(":sunrise: Bom dia!")
-    assert msg.blocos[0]["type"] == "header"
+    assert msg.blocos[0]["type"] == "markdown"
 
 
 def test_report_leitura_falhou_503_sem_texto_da_excecao(ambiente):
