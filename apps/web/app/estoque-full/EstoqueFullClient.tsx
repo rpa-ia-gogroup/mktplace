@@ -227,7 +227,12 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
             <th scope="col" className="min-w-40 px-4 py-3">SKU e produto</th>
             {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
             <SortHeader coluna="disponivel" sort={sort} aoOrdenar={toggleSort} rotulo="Estoque Full vendável" />
-            <th scope="col" className="px-3 py-3 text-right">Estoque vendedor</th>
+            <th scope="col" className="px-3 py-3 text-right">
+              <span className="inline-flex items-center gap-1">
+                Estoque vendedor
+                <InfoDica texto="Estoque próprio da loja, fora do Full. Não soma ao Full." />
+              </span>
+            </th>
             <th scope="col" className="px-4 py-3 text-right">Demanda 28d</th>
             <th scope="col" className="px-4 py-3 text-right">
               <span className="inline-flex items-center gap-1">
