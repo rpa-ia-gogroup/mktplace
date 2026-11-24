@@ -111,9 +111,11 @@ export const COR_CX = {
 
 export const GRADE_FAIXA = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
 
-/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados). */
-export const intervaloDaJanela = (j: { inicio: string; fim: string }): string =>
-  `${j.inicio.slice(8, 10)}/${j.inicio.slice(5, 7)}–${j.fim.slice(8, 10)}/${j.fim.slice(5, 7)}`;
+/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados); Hoje, so' "24/11". */
+export const intervaloDaJanela = (j: { inicio: string; fim: string }): string => {
+  const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  return j.inicio === j.fim ? dm(j.fim) : `${dm(j.inicio)}–${dm(j.fim)}`;
+};
 
 export function AbaCx({ canal, filtros, intervalo, selo, faixa, children }: { canal: CanalCx; filtros: FiltrosCx; intervalo?: string; selo?: ReactNode; faixa?: ReactNode; children?: ReactNode }) {
   const router = useRouter();

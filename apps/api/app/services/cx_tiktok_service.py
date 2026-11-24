@@ -90,9 +90,15 @@ def _autor(c: dict) -> str:
 
 
 def janela(dias: int, hoje: date) -> tuple[date, date]:
-    """Dias fechados ate' ontem (mesma regra das outras abas de CX)."""
+    """Dias fechados ate' ontem (mesma regra das outras abas de CX); `dias=0` = so' hoje (parcial)."""
+    if dias == 0:
+        return hoje, hoje
     fim = hoje - timedelta(days=1)
     return fim - timedelta(days=dias - 1), fim
+
+
+def _datas(ini: date, fim: date) -> list[date]:
+    return [ini + timedelta(days=i) for i in range((fim - ini).days + 1)]
 
 
 def _ts(d: date, fim: bool = False) -> int:
@@ -208,8 +214,7 @@ def buscar(dias: int, contas: list[str], obter_token: Callable[[str], str],
            criar: Callable[..., Cliente] = Cliente, hoje: Optional[date] = None) -> tuple[dict[str, dict], list]:
     """Busca no TikTok so' os (marca, dia) que faltam ou venceram. Devolve (falhas, chaves lidas agora)."""
     hoje = hoje or datetime.now(TZ).date()
-    ini, _fim = janela(dias, hoje)
-    datas = [ini + timedelta(days=i) for i in range(dias)]
+    datas = _datas(*janela(dias, hoje))
 
     # tokens e lojas em sequencia (a sessao do banco nao e' thread-safe)
     clientes: dict[str, Cliente] = {}
@@ -249,7 +254,7 @@ def juntar(dias: int, contas: list[str], hoje: Optional[date] = None, falha: Opt
     hoje = hoje or datetime.now(TZ).date()
     falha = falha or {}
     ini, fim = janela(dias, hoje)
-    datas = [ini + timedelta(days=i) for i in range(dias)]
+    datas = _datas(ini, fim)
     marcas, motivos = [], Counter()
     autores: dict[tuple, Counter] = defaultdict(Counter)
     por_motivo_marca: dict[tuple, Counter] = defaultdict(Counter)

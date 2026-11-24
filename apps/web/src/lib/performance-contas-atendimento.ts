@@ -354,6 +354,7 @@ export function textoJanela(j: AtendimentoResponse["janela"]): string {
     const [, mes, dia] = iso.split("-");
     return `${dia}/${mes}`;
   };
+  if (j.dias === 0) return `hoje até agora · ${dm(j.fim)}`; // "Hoje" da aba CX (dias=0)
   return `${j.dias} dias fechados · ${dm(j.inicio)} a ${dm(j.fim)}`;
 }
 

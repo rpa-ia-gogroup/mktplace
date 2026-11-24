@@ -208,6 +208,9 @@ def _cobre(janela: Janela) -> bool:
     return janela.inicio >= COLETA_DESDE
 
 
+INDICADORES_ML = ("resposta", "reclamacao", "cancelamento", "mediacao", "reembolso", "devolucao")
+
+
 def sem_anterior_ml(janela: Janela, anterior: Janela, hoje: date) -> dict[str, SemComparacao]:
     """Por indicador: ausente = a janela anterior esta' coberta. Pedidos, cancelamento e
     reembolso so' dependem da base de pedidos de 90 dias; resposta, reclamacao e mediacao
@@ -237,7 +240,9 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
         marcas=[m for m in marcas if m in ML_BRANDS],
         fora=[MarcaFora(marca=m, motivo="Sem conta Mercado Livre integrada.") for m in marcas if m not in ML_BRANDS])
     janela = base.calcular_janela(dias, agora)
-    anterior = Janela(inicio=janela.inicio - timedelta(days=dias), fim=janela.inicio - timedelta(days=1), dias=dias)
+    eh_hoje = dias == base.DIAS_HOJE  # parcial de hoje: sem anterior nem serie diaria
+    anterior = None if eh_hoje else Janela(
+        inicio=janela.inicio - timedelta(days=dias), fim=janela.inicio - timedelta(days=1), dias=dias)
     hoje = agora.astimezone(TZ_OPERACIONAL).date()
     resp = dict(gerado_em=agora, janela=janela, janela_anterior=anterior, cobertura=cobertura,
                 coleta_desde=COLETA_DESDE)
@@ -245,7 +250,7 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
         return CxMercadoLivreResponse(**resp)
 
     res = base._rodar_juntas({
-        "ml_cx_diario": (consultar, SQL_DIARIO, {"marcas": cobertura.marcas, "desde": anterior.inicio}),
+        "ml_cx_diario": (consultar, SQL_DIARIO, {"marcas": cobertura.marcas, "desde": janela.inicio if eh_hoje else anterior.inicio}),
         "ml_cx_reclamacoes": (consultar, SQL_RECLAMACOES, {"marcas": cobertura.marcas,
                                                             "inicio": janela.inicio, "fim": janela.fim}),
         "ml_reputacao": (consultar, po.SQL_ML, {"marcas": cobertura.marcas}),
@@ -270,7 +275,8 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
         if horas > LIMITE_FRESCOR_HORAS:
             resp["aviso_frescor"] = f"Coleta sem atualização há {horas:.0f} h (esperado até {LIMITE_FRESCOR_HORAS:.0f} h)."
 
-    sem = sem_anterior_ml(janela, anterior, hoje)
+    sem = ({i: base.SEM_HOJE for i in INDICADORES_ML} if eh_hoje
+           else sem_anterior_ml(janela, anterior, hoje))
     resp["sem_anterior"] = sem
     # pedidos, cancelamento e reembolso: so' a base de pedidos; o resto tambem a coleta de reclamacoes
     base_anterior = diario is not None and "cancelamento" not in sem
@@ -337,7 +343,7 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
                                           "Nenhuma reclamação no período.", recl, claims_ok)
     resp["cancelamentos_motivos"] = _motivos(por_bloco.get("motivo"), "cancelamento", "Motivos dos cancelamentos",
                                             "Nenhum pedido de cancelamento no período.", recl, claims_ok)
-    if diario is not None:
+    if diario is not None and not eh_hoje:
         resp["serie_diaria"] = _serie(diario, cobertura.marcas, janela, claims_ok)
     resp["pendencias"] = PENDENCIAS
     return CxMercadoLivreResponse(**resp)
