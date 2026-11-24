@@ -81,7 +81,8 @@ def test_pedidos_do_motivo_da_kokeshi_pelo_data_mart():
     assert {tuple(p["marcas"]) for _, p in dm.chamadas if "marcas" in p}  # a leitura dos itens (#503) filtra por pedido == {("kokeshi",)}
 
 
-def test_saude_da_conta_da_kokeshi_continua_no_bot_com_aviso_de_atraso():
+def test_saude_da_conta_da_kokeshi_continua_no_bot_com_aviso_de_atraso(monkeypatch):
+    monkeypatch.setattr(po, "SHOPEE_SAUDE_EXPORT", ("kokeshi",))  # caminho do bot, lista vazia desde 24/11
     foto = dict(base_po._shopee()[0], brand="kokeshi", captured_date=date(2026, 10, 30))
     torre = base_po.FonteTorre(existe=True, shopee=[foto],
                                metricas=[dict(m, brand="kokeshi") for m in base_po._shopee_metricas()[:2]])

@@ -110,6 +110,14 @@ class FonteTorre:
         return {"shopee": self.shopee, "shopee_metricas": self.metricas}[nome]
 
 
+@pytest.fixture(autouse=True)
+def _kokeshi_no_bot(monkeypatch, request):
+    """O caminho do bot segue no codigo (lista vazia desde 24/11): estes testes o exercitam
+    com a Kokeshi na lista. Testes marcados `sem_bot` usam a lista real (vazia)."""
+    if "sem_bot" not in request.keywords:
+        monkeypatch.setattr(svc, "SHOPEE_SAUDE_EXPORT", ("kokeshi",))
+
+
 def _montar(canal, **kw):
     fonte = kw.pop("fonte", None) or Fonte()
     torre = kw.pop("torre", None) or FonteTorre()
@@ -367,3 +375,15 @@ def test_entrada_invalida_e_422_sem_eco(cliente, params):
     r = c.get(URL, params=params)
     assert r.status_code == 422 and chamadas == []
     assert "<x>" not in r.text and "amazon" not in r.text
+
+
+@pytest.mark.sem_bot
+def test_kokeshi_sai_do_data_mart_quando_o_bot_esta_fora_da_lista():
+    """24/11: a DAG de health publica a Kokeshi; ela vem do Data Mart, sem o aviso do bot."""
+    foto = dict(_shopee()[0], brand="kokeshi")
+    met = [dict(m, brand="kokeshi") for m in _shopee_metricas()]
+    torre = FonteTorre(existe=True)
+    resp, fonte = _montar("shopee", brands=["kokeshi"], fonte=Fonte(shopee=[foto], metricas=met), torre=torre)
+    k = resp.contas[0]
+    assert k.marca == "kokeshi" and svc.AVISO_EXPORT not in k.avisos
+    assert [n for n, _ in torre.chamadas if n != "existe"] == []
