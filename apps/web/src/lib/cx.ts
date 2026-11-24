@@ -55,6 +55,9 @@ export interface NaoLidas {
   /** Tempo de resposta no periodo (segundos): mediana (lojas com app) ou media do Seller Centre (Kokeshi). */
   tempo_resposta_s?: number | null;
   tempo_resposta_p90_s?: number | null;
+  /** Media da mesma espera (lojas com app) e respostas acima de 1 dia. Ausente na API antiga. */
+  tempo_resposta_media_s?: number | null;
+  respostas_mais_1d?: number | null;
   respostas?: number | null;
   respostas_ate_1h_pct?: number | null;
   respostas_desde?: string | null;

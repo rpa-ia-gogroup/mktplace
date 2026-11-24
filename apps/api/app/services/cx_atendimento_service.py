@@ -744,7 +744,9 @@ SELECT brand AS marca,
        COUNT(*) AS respostas,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY espera_s) AS mediana_s,
        percentile_cont(0.9) WITHIN GROUP (ORDER BY espera_s) AS p90_s,
+       AVG(espera_s) AS media_s,
        COUNT(*) FILTER (WHERE espera_s <= 3600) AS ate_1h,
+       COUNT(*) FILTER (WHERE espera_s > 86400) AS mais_1d,
        MIN(respondido_em) AS desde_em
   FROM raw.shopee_chat_respostas
  WHERE brand = ANY(:marcas)
@@ -920,8 +922,10 @@ def _com_tempo_resposta(consultar: Consultar, nao_lidas: list[NaoLidas], marcas:
             out.append(n)
             continue
         ate_1h = _int(r.get("ate_1h")) or 0
-        mediana, p90 = r.get("mediana_s"), r.get("p90_s")
+        mediana, p90, media = r.get("mediana_s"), r.get("p90_s"), r.get("media_s")
         out.append(n.model_copy(update={
+            "tempo_resposta_media_s": None if media is None else int(round(float(media))),
+            "respostas_mais_1d": _int(r.get("mais_1d")),
             "tempo_resposta_s": None if mediana is None else int(round(float(mediana))),
             "tempo_resposta_p90_s": None if p90 is None else int(round(float(p90))),
             "respostas": total,

@@ -48,6 +48,7 @@ import {
   type ResultadoMl,
   type ResumoMl,
 } from "@/lib/cx-ml";
+import { qualidadeMl } from "@/lib/cx-qualidade";
 import { brandLabel } from "@/lib/filters/brands";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
@@ -81,6 +82,7 @@ import {
   pilulaCartao,
   pilulaSelo,
 } from "./CxConteudo";
+import QualidadeResposta from "./QualidadeResposta";
 
 export default function CxMercadoLivre({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
@@ -156,6 +158,7 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
   const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
   // Cartao de taxa aberto no detalhe por marca (um dialogo por vez: o da marca fica fechado enquanto este abre).
   const [taxaAberta, setTaxaAberta] = useState<TaxaDoCartao | null>(null);
+  const [respostaAberta, setRespostaAberta] = useState(false);
   const aberta = status.find((x) => x.chave === marcaAberta) ?? null;
   // a marca fora (Apice) nao e' problema: so' no ⓘ do heroi
   const fora = dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ");
@@ -181,6 +184,7 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
             .filter(Boolean)
             .join(" ")}
           abrir={setTaxaAberta}
+          abrirResposta={() => setRespostaAberta(true)}
         />
       }
     >
@@ -219,6 +223,15 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
         identidade={taxaAberta ? VISUAL_TAXA[taxaAberta].identidade : undefined}
       >
         {taxaAberta && <DetalheTaxa i={taxaAberta} r={r} linhas={prob.linhas} periodo={textoJanela(dados.janela)} geradoEm={dados.gerado_em} />}
+      </KpiDrilldownDialog>
+
+      <KpiDrilldownDialog open={respostaAberta} onClose={() => setRespostaAberta(false)} title={`${ROTULO_ML.resposta} · qualidade por marca`} icone={MessageCircle}>
+        {respostaAberta && (
+          <div className="flex flex-col gap-4 text-sm">
+            <DrilldownContextLine leading="Mercado Livre" periodLabel={textoJanela(dados.janela)} refreshedAt={dados.gerado_em} />
+            <QualidadeResposta v={qualidadeMl(dados, brandLabel, agora)} ajuda="Perguntas de pré-venda: tempo médio até a resposta, valor oficial do ML (média de 14 dias). Aguardando = perguntas ainda sem resposta; acima de 24 h fica fora." />
+          </div>
+        )}
       </KpiDrilldownDialog>
 
       <KpiDrilldownDialog open={aberta != null} onClose={() => setMarcaAberta(null)} title={aberta ? `${aberta.marca} · Saúde da Conta` : ""}>
@@ -276,6 +289,7 @@ function Faixa({
   erro,
   ajudaResposta,
   abrir,
+  abrirResposta,
 }: {
   r: ResumoMl;
   dias: number;
@@ -285,6 +299,7 @@ function Faixa({
   erro: string | null;
   ajudaResposta: string;
   abrir: (i: TaxaDoCartao) => void;
+  abrirResposta: () => void;
 }) {
   const taxa = (i: TaxaDoCartao, cor: string, icone: typeof Ban, contagem: string | null) => {
     const c = r.comparacao[i];
@@ -329,6 +344,7 @@ function Faixa({
           legenda={erro ?? (pilulaResposta ? legendaSelo(selo) : null)}
           rodape={fila}
           ajuda={<InfoDica texto={ajudaResposta} />}
+          onAbrir={abrirResposta}
         />
         {taxa("cancelamento", COR_CX.cancelamento, Ban, n("cancelamento", "pedido cancelado", "pedidos cancelados"))}
         {taxa("devolucao", COR_CX.devolucao, PackageX, n("devolucao", "devolução", "devoluções"))}

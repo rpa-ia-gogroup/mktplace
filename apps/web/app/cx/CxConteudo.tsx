@@ -32,6 +32,7 @@ import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
 import EvidenceRow from "@/components/drilldown/EvidenceRow";
 import CxDrilldownContent from "@/components/gerencial/CxDrilldown";
+import { qualidadeShopee } from "@/lib/cx-qualidade";
 import { notasDoTile, rodapeComparacao } from "@/components/gerencial/CxResumo";
 import Aba from "@/components/layout/Aba";
 import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
@@ -91,6 +92,7 @@ import { torreFetch } from "@/lib/torre-fetch";
 
 import AvaliacoesProduto from "./AvaliacoesProduto";
 import FiltrosCxBarra from "./FiltrosCx";
+import QualidadeResposta from "./QualidadeResposta";
 
 // ---------------------------------------------------------------------------
 // Moldura da aba (ALVO-GRADE): titulo + selo, os canais como ABAS, filtros, faixa
@@ -400,6 +402,9 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
             periodo={janela}
             dias={filtros.dias}
           />
+        )}
+        {dialogo && "indicador" in dialogo && dialogo.indicador === "resposta" && (
+          <QualidadeResposta v={qualidadeShopee(dados, brandLabel)} ajuda="Tempo da pergunta do comprador até a resposta da loja no chat, sem as automáticas." />
         )}
         {dialogo && "marca" in dialogo && (
           <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} />

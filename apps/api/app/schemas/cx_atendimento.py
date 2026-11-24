@@ -139,6 +139,9 @@ class NaoLidas(BaseModel):
     #: Kokeshi: media que o bot le no Seller Centre.
     tempo_resposta_s: Optional[int] = None
     tempo_resposta_p90_s: Optional[int] = None
+    #: Media da mesma espera (lojas com app) e quantas respostas passaram de 1 dia (SLA da operacao).
+    tempo_resposta_media_s: Optional[int] = None
+    respostas_mais_1d: Optional[int] = None
     respostas: Optional[int] = None
     respostas_ate_1h_pct: Optional[float] = None
     #: Primeira resposta medida (a coleta comecou em 05/11/2026).
