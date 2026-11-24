@@ -119,7 +119,7 @@ test("Visao geral: a matriz Onde doi substitui a visao rapida; grade nao rola na
   const vg = readFileSync(join(import.meta.dirname, "../app/full/VisaoGeralFull.tsx"), "utf8");
   const grade = readFileSync(join(import.meta.dirname, "../src/components/full/GradeCurvaMarca.tsx"), "utf8");
   assert.doesNotMatch(vg, /VisaoRapidaEstoque|titulo="Ruptura por marca"/);
-  assert.ok(vg.indexOf('titulo="Onde dói (R$/dia perdido)"') < vg.indexOf('titulo="Sem estoque por curva"'));
+  assert.ok(vg.indexOf('titulo="Onde dói (R$/dia potencial)"') < vg.indexOf('titulo="Sem estoque por curva"'));
   assert.doesNotMatch(grade, /TableScrollHint|min-w-max/); // so o seletor de curva rola, a lista de marcas nao
   assert.match(grade, /<LegendaBarra/);
 });

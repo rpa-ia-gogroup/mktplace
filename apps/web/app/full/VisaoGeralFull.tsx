@@ -455,6 +455,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
   const impMl = impactosOk(impacto).find((c) => c.canal === "ml");
   const perdaMl = impMl ? perdaDestaque("ml", impMl) : null;
   const cmpMl = compararPerda("ml", impacto, comAnterior);
+  const kpiMl = kpiImpacto("ml", impacto);
   const matriz = matrizOndeDoi(impacto);
   const bons = indoBem({ impacto, comAnterior, ruptura: rupturaFrac, aaA });
   // So' o que pede acao: com perda medida (sem "sem perda"), do maior impacto potencial/dia para o menor.
@@ -514,12 +515,14 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
           )}
           <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
             <CartaoIndicador
-              rotulo="Venda perdida/dia · ML"
+              rotulo="Perda potencial/dia · ML"
               icone={TrendingDown}
               cor="rgb(var(--tc-kpi-gmv))"
-              valor={perdaMl === null ? null : `${fmtReais(perdaMl)}/dia`}
+              // Mesmo formato do cartao da Shopee: % no valor, R$/dia na legenda (com a meta).
+              valor={kpiMl.valor === "—" ? null : kpiMl.valor}
               pilula={statusMeta(perdaMl, META_FULL.perdaDia)}
-              legenda={perdaMl === null ? kpiImpacto("ml", impacto).comparacao : `meta ≤ ${fmtReais(META_FULL.perdaDia)}/dia`}
+              progresso={kpiMl.valor.endsWith("%") && impMl ? pctDestaque("ml", impMl) : null}
+              legenda={perdaMl === null ? kpiMl.comparacao : `${kpiMl.comparacao} · meta ≤ ${fmtReais(META_FULL.perdaDia)}/dia`}
               tendencia={cmpMl ? `vs ${cmpMl.texto}` : null}
               ajuda={<InfoDica emControle texto={dicaImpacto("ml", impacto)} />}
               onAbrir={() => aplicar("ml", "todas", true)}
@@ -589,7 +592,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
     >
       {/* Modelo da Nath: onde dói (marca x canal) | top 3 ações + indo bem */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <Panel titulo="Onde dói (R$/dia perdido)" ajuda={DICA_ONDE_DOI} className="lg:col-span-7" semPadding>
+        <Panel titulo="Onde dói (R$/dia potencial)" ajuda={DICA_ONDE_DOI} className="lg:col-span-7 lg:self-start" semPadding>
           {!matriz ? (
             <StateBlock tipo="indisponivel" titulo="Impacto indisponível agora" compacto />
           ) : (

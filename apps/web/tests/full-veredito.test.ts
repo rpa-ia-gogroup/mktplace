@@ -27,7 +27,7 @@ const IMP: ImpactoRuptura = {
 
 test("veredito: um valor por canal, lado a lado (nunca somado), concentração no canal que mais perde e AA/A da Shopee", () => {
   const v = veredito(IMP, null, 3)!;
-  assert.equal(sp(v.titulo), "Perdendo R$ 10 mil/dia no ML e R$ 1,5 mil/dia na Shopee por ruptura no Full");
+  assert.equal(sp(v.titulo), "Perda potencial de R$ 10 mil/dia no ML e R$ 1,5 mil/dia na Shopee por ruptura no Full");
   assert.equal(v.perda, 10000);
   assert.equal(v.linha, "92% da perda do ML está na KOKESHI · 3 produtos AA/A zerados na Shopee");
   assert.deepEqual(v.comparacoes, [], "sem a 2a chamada, sem comparação (nunca 'igual')");
@@ -35,7 +35,7 @@ test("veredito: um valor por canal, lado a lado (nunca somado), concentração n
   assert.deepEqual(veredito(IMP, pior, 0)!.comparacoes.map((c) => [c.canal, c.cmp.tom]), [["ml", "crit"]]);
   // ML fora: so' a Shopee
   const soShopee = veredito({ ...IMP, ml: { canal: "ml", status: "unavailable", motivo: "x" } }, null, 0)!;
-  assert.equal(sp(soShopee.titulo), "Perdendo R$ 1,5 mil/dia na Shopee por ruptura no Full");
+  assert.equal(sp(soShopee.titulo), "Perda potencial de R$ 1,5 mil/dia na Shopee por ruptura no Full");
   assert.equal(soShopee.linha, "100% da perda da Shopee está na BARBOURS");
   assert.equal(veredito(null, null, null), null);
 });
@@ -64,7 +64,7 @@ test("matriz Onde dói: marca x canal, ausência é '—' com motivo, vendedor c
   assert.equal(m.max, 9200);
   const rit = m.linhas.find((l) => l.marca === "rituaria")!;
   assert.equal(rit.celulas.ml, undefined, "marca sem conta no canal: sem célula");
-  assert.deepEqual(rit.celulas.shopee, { valor: null, texto: "—", motivo: "sem fotografia no dia" });
+  assert.deepEqual(rit.celulas.shopee, { valor: null, texto: "sem foto", motivo: "sem fotografia no dia" });
   assert.equal(m.linhas.find((l) => l.marca === "lescent")!.celulas.shopee!.texto, "sem perda");
   assert.equal(intensidade(9200, m.max), 1);
   assert.equal(intensidade(0, m.max), 0);
@@ -81,7 +81,8 @@ test("indo bem: só o que foi medido e está bom", () => {
     "ML: perda melhor que em 17/11 (R$ 12 mil/dia)",
   ]);
   // ML dentro da meta e marca sem perda em todos os canais medidos
-  const leve: ImpactoRuptura = { ...IMP, ml: canal("ml", 1200, [marca("kokeshi", 1200), marca("barbours", 0)]), shopee: canal("shopee", 0, [marca("barbours", 0)]) };
+  const leve: ImpactoRuptura = { ...IMP, ml: canal("ml", 1200, [marca("kokeshi", 1200), marca("barbours", 0)]), shopee: canal("shopee", 0, [marca("barbours", 0), marca("kokeshi", 0), marca("rituaria", null, { rupturas: null })]) };
+  // RITUÁRIA so' na Shopee e sem foto: ausencia nunca vira "sem perda"
   assert.deepEqual(indoBem({ impacto: leve, comAnterior: null, ruptura: null, aaA: null }).map((x) => sp(x)), [
     "Venda perdida no ML dentro da meta (≤ R$ 2 mil/dia)",
     "BARBOURS: sem perda por ruptura",
@@ -91,7 +92,7 @@ test("indo bem: só o que foi medido e está bom", () => {
 
 test("tela: veredito no topo, 4 KPIs com meta, Onde dói, Top 3 ações e Indo bem", () => {
   const src = readFileSync(new URL("../app/full/VisaoGeralFull.tsx", import.meta.url), "utf-8");
-  for (const t of ["Venda perdida/dia · ML", "AA/A sem estoque", "Ruptura com demanda", "Impacto · Shopee", "Onde dói (R$/dia perdido)", "Top 3 ações", "Indo bem"]) {
+  for (const t of ["Perda potencial/dia · ML", "AA/A sem estoque", "Ruptura com demanda", "Impacto · Shopee", "Onde dói (R$/dia potencial)", "Top 3 ações", "Indo bem"]) {
     assert.ok(src.includes(t), t);
   }
   assert.ok(src.indexOf("veredito(") < src.indexOf("<CartaoIndicador"), "veredito antes dos KPIs");

@@ -77,7 +77,7 @@ export function veredito(impacto: ImpactoRuptura | null, comAnterior: ImpactoRup
   return {
     perda,
     titulo: perda > 0
-      ? `Perdendo ${valores.join(" e ")} por ruptura no Full`
+      ? `Perda potencial de ${valores.join(" e ")} por ruptura no Full`
       : `Sem perda por ruptura no Full ${medidos.length === 1 ? doCanal(pior.canal, NOME_CANAL[pior.canal]) : ""}`.trim(),
     linha: partes.join(" · "),
     comparacoes: medidos.flatMap((x) => {
@@ -105,7 +105,7 @@ export function matrizOndeDoi(impacto: ImpactoRuptura | null): { canais: Canal[]
     for (const m of c.marcas) {
       const l = linhas.get(m.brand) ?? { marca: m.brand, celulas: {}, maior: 0 };
       const v = perdaDestaque(c.canal, m);
-      l.celulas[c.canal] = marcaSemFoto(m) ? { valor: null, texto: "—", motivo: "sem fotografia no dia" }
+      l.celulas[c.canal] = marcaSemFoto(m) ? { valor: null, texto: "sem foto", motivo: "sem fotografia no dia" }
         : v === null ? { valor: null, texto: "—", motivo: "sem preço" }
         : v === 0 && c.canal === "shopee" && (m.perda_dia ?? 0) > 0 ? { valor: 0, texto: "sem perda", motivo: "o vendedor tem estoque: a venda segue fora do Full" }
         : { valor: v, texto: v === 0 ? "R$ 0" : fmtReais(v) };
@@ -140,7 +140,8 @@ export function indoBem(o: {
   const m = matrizOndeDoi(o.impacto);
   const semPerda = m?.linhas.filter((l) => {
     const cs = Object.values(l.celulas);
-    return cs.some((x) => x.valor !== null) && cs.every((x) => x.valor === 0 || x.valor === null);
+    // Ausencia nao vira "sem perda": a marca entra so' medida (e zerada) em todos os canais onde tem conta.
+    return cs.length > 0 && cs.every((x) => x.valor === 0);
   }).map((l) => tituloMarca(l.marca)) ?? [];
   if (semPerda.length) out.push(`${semPerda.join(", ")}: sem perda por ruptura`);
   return out.slice(0, 4);
