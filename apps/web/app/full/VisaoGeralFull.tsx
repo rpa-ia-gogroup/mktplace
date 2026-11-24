@@ -615,7 +615,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
                     {matriz.canais.map((c) => {
                       const cel = l.celulas[c];
                       const a = intensidade(cel?.valor ?? null, matriz.max);
-                      const motivo = cel ? cel.motivo : "sem conta no canal";
+                      const motivo = cel ? cel.motivo : "marca sem itens no Full deste canal";
                       return (
                         <td key={c} className="px-1 py-1 last:pr-3">
                           <span
@@ -624,7 +624,7 @@ function Conteudo({ abas, canais, impacto, antes, abc, recarregar }: { abas: Ret
                             // Cor pelo dinheiro: o token de critico, mais forte quanto maior o R$/dia.
                             style={a > 0 ? { backgroundColor: `rgb(var(--tc-crit) / ${(0.08 + a * 0.32).toFixed(2)})` } : undefined}
                           >
-                            {cel ? cel.texto : "—"}
+                            {cel ? cel.texto : "sem itens"}
                             {motivo && <span className="sr-only"> ({motivo})</span>}
                           </span>
                         </td>

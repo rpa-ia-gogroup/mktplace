@@ -106,7 +106,7 @@ export function matrizOndeDoi(impacto: ImpactoRuptura | null): { canais: Canal[]
       const l = linhas.get(m.brand) ?? { marca: m.brand, celulas: {}, maior: 0 };
       const v = perdaDestaque(c.canal, m);
       l.celulas[c.canal] = marcaSemFoto(m) ? { valor: null, texto: "sem foto", motivo: "sem fotografia no dia" }
-        : v === null ? { valor: null, texto: "—", motivo: "sem preço" }
+        : v === null ? { valor: null, texto: "sem preço", motivo: "sem preço" }
         : v === 0 && c.canal === "shopee" && (m.perda_dia ?? 0) > 0 ? { valor: 0, texto: "sem perda", motivo: "o vendedor tem estoque: a venda segue fora do Full" }
         : { valor: v, texto: v === 0 ? "R$ 0" : fmtReais(v) };
       l.maior = Math.max(l.maior, l.celulas[c.canal]!.valor ?? 0);
