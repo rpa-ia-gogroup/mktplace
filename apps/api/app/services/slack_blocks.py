@@ -33,6 +33,8 @@ EMOJI_CANAL = {"shopee": ":large_orange_circle:", "mercadolivre": ":large_yellow
 MAX_BLOCOS = 50
 MAX_TITULO = 150
 MAX_SECAO = 3000
+#: Bloco `markdown` (Markdown padrao: ###, **negrito**, tabela, citacao). Limite do Slack: 12.000.
+MAX_MARKDOWN = 11_000
 
 
 @dataclass
@@ -87,6 +89,11 @@ def campos(*pares: tuple[str, str]) -> dict:
     """Secao em duas colunas: cada par vira "*rotulo*\\nvalor" (ate' 10)."""
     return {"type": "section",
             "fields": [{"type": "mrkdwn", "text": f"*{r}*\n{v}"} for r, v in pares[:10]]}
+
+
+def markdown(md: str) -> dict:
+    """Markdown de verdade (o mesmo do agente SDR): titulos, tabela, listas e citacao num bloco so'."""
+    return {"type": "markdown", "text": _corta(md, MAX_MARKDOWN)}
 
 
 def nota(*md: str) -> dict:
