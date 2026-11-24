@@ -745,6 +745,6 @@ test("Estoque Shopee: coluna 'Estoque vendedor' e ruptura com estoque proprio vi
   assert.match(src, /\{fmtOpcional\(p\.seller_stock_total\)\}/, "null = travessao, nunca 0");
   assert.match(src, /classe === "RUPTURA_CANDIDATA" && vendedorTemEstoque\(\{ canal: "shopee", estoqueVendedor: vendedor \}\)/);
   assert.match(src, /Sem estoque no Full; a loja tem \$\{fmtInt\(vendedor!\)\} un\. no estoque próprio/);
-  assert.match(src, /bg-warn-soft[^"]*text-warn-ink">\s*Ruptura · vendedor cobre/);
+  assert.match(src, /bg-warn-soft[^"]*text-warn-ink">[\s\S]{0,120}Ruptura ·<span className="block">vendedor cobre<\/span>/);
   assert.doesNotMatch(src, /full_stock_saleable \+ |seller_stock_total \+ /, "vendedor nunca somado ao Full");
 });

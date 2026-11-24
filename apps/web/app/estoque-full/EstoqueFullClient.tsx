@@ -162,8 +162,9 @@ function Etiqueta({ classe, vendedor }: { classe: Classificacao; vendedor: numbe
   if (classe === "RUPTURA_CANDIDATA" && vendedorTemEstoque({ canal: "shopee", estoqueVendedor: vendedor })) {
     const dica = `Sem estoque no Full; a loja tem ${fmtInt(vendedor!)} un. no estoque próprio`;
     return (
-      <span title={dica} className="inline-block max-w-[8.5rem] rounded-xl border border-warn/30 bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink">
-        Ruptura · vendedor cobre<span className="sr-only"> ({dica})</span>
+      <span title={dica} className="inline-block whitespace-nowrap rounded-xl border border-warn/30 bg-warn-soft px-2 py-0.5 text-xs font-semibold text-warn-ink">
+        {/* Duas linhas fixas: a coluna nao alarga e a tabela continua cabendo em 1440. */}
+        Ruptura ·<span className="block">vendedor cobre</span><span className="sr-only"> ({dica})</span>
       </span>
     );
   }
@@ -223,7 +224,7 @@ function Tabela({ produtos, comCurva }: { produtos: ProdutoEstoque[]; comCurva: 
         <thead>
           <tr className="text-left text-xs font-semibold text-ink-muted uppercase tracking-wide border-b border-line">
             <th scope="col" className="px-4 py-3">Conta / marca<span className="sr-only"> e Fotografia</span></th>
-            <th scope="col" className="min-w-44 px-4 py-3">SKU e produto</th>
+            <th scope="col" className="min-w-40 px-4 py-3">SKU e produto</th>
             {comCurva && <th scope="col" className="px-4 py-3">Curva</th>}
             <SortHeader coluna="disponivel" sort={sort} aoOrdenar={toggleSort} rotulo="Estoque Full vendável" />
             <th scope="col" className="px-3 py-3 text-right">Estoque vendedor</th>
