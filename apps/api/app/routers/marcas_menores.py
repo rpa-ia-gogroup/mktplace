@@ -1,3 +1,4 @@
+import logging
 from datetime import date
 from typing import Optional
 
@@ -13,10 +14,12 @@ from app.schemas.marcas_menores import (
     ProdutosDaMarca,
     ProdutosResponse,
 )
-from app.services import bling_warm
+from app.services import bling_token, bling_warm
 from app.services import marcas_menores_service as svc
 from app.services.bling_cache import ArmazemCachePg
 from app.services.bling_client import BlingCliente, cliente_com_sessao
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/performance", tags=["marcas-menores"])
 
@@ -56,6 +59,20 @@ def cliente_bling(db: Session) -> BlingCliente:
     return cliente_com_sessao(db)
 
 
+def cliente_bling_denavita(db: Optional[Session]) -> Optional[BlingCliente]:
+    """Cliente do Bling da Denavita so' quando a conta tem app configurado e token gravado (callback OAuth).
+    Sem isso, None: a Denavita segue pelo caminho provisorio, com aviso."""
+    if db is None or not all(bling_token.credenciais(bling_token.CONTA_DENAVITA)):
+        return None
+    try:
+        if bling_token.ArmazemPg(db).ler(bling_token.CONTA_DENAVITA) is None:
+            return None
+    except Exception as exc:  # noqa: BLE001 - banco fora: segue sem o Bling dela
+        logger.warning("marcas_menores: token da Denavita ilegivel (%s)", type(exc).__name__)
+        return None
+    return cliente_com_sessao(db, bling_token.CONTA_DENAVITA)
+
+
 def cache_bling(db: Session):
     """Cache persistente (lista e itens), aquecido pela rotina; None sem banco."""
     return ArmazemCachePg(db) if db is not None else None
@@ -63,14 +80,15 @@ def cache_bling(db: Session):
 
 @router.get("/marcas-menores", response_model=MarcasMenoresComFonte)
 def marcas_menores(date_from: Optional[date] = Query(None), date_to: Optional[date] = Query(None), db: Session = Depends(get_db)):
-    """Yenzah, Auá e By Samia pelo Bling. Denavita: TikTok via Data Mart (gold.tiktok_brand_daily,
-    fonte provisória) e Shopee pendente (conta do Bling sem autorização); o consolidado vem `parcial`.
+    """Yenzah, Auá e By Samia pelo Bling da Rituária. Denavita: ML e Shopee pelo Bling dela (quando a
+    conta tem token) e TikTok via Data Mart (gold.tiktok_brand_daily); sem token, só o TikTok (fonte
+    provisória) e o consolidado vem `parcial`.
     Fora do GMV total, da meta e da rosca da Gerencial."""
     hoje = today_brt()
     p = resolve_period(date_from=date_from, date_to=date_to, default_days=30, today=hoje)
     return svc.get_marcas_menores(
         cliente_bling(db), p.start, p.end, hoje, cache=cache_bling(db), ao_faltar_cache=bling_warm.disparar_em_segundo_plano,
-        consultar_dm=svc.consultar_datamart,
+        consultar_dm=svc.consultar_datamart, cli_denavita=cliente_bling_denavita(db),
     )
 
 
