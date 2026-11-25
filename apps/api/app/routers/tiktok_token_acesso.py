@@ -4,7 +4,8 @@ GET /api/v1/tiktok/token/{marca}   Authorization: Bearer torre_pat_...
 
 So' o access_token sai daqui (renovado pela Torre quando falta < 1 dia); o refresh_token nunca
 sai, entao so' a Torre renova e nao ha' disputa de renovacao. Quem pode e quais marcas: Variable
-de ambiente TIKTOK_TOKEN_ACESSO ("email:marca|marca;email2:*"). Vazia = ninguem (fail-closed).
+de ambiente TIKTOK_TOKEN_ACESSO ("email:marca|marca;email2:*"; "*:*" = qualquer chave valida).
+Vazia = ninguem (fail-closed).
 A rota confere a chave sozinha (nao depende do modo do gate). Nada de token em log ou erro.
 """
 from __future__ import annotations
@@ -41,7 +42,9 @@ def acessos(config: str) -> dict[str, set[str]]:
 
 
 def liberado(email: str, marca: str, config: str) -> bool:
-    marcas = acessos(config).get(email.lower(), set())
+    """'*' no lugar do e-mail = qualquer dono de chave pessoal valida (dominio da empresa)."""
+    regras = acessos(config)
+    marcas = regras.get(email.lower(), set()) | regras.get("*", set())
     return "*" in marcas or marca in marcas
 
 
