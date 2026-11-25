@@ -3,7 +3,9 @@
 A cada ~15 min, em segundo plano no proprio processo:
   1. a lista de pedidos das 6 lojas: ontem e hoje a cada ciclo, os ultimos 90 dias a cada 6 h, e os
      pedidos ALTERADOS desde a ultima sincronizacao (pega cancelamentos de pedidos antigos);
-  2. os itens dos pedidos novos (mes anterior em diante) que ainda nao foram lidos.
+  2. os itens dos pedidos novos (mes anterior em diante) que ainda nao foram lidos;
+  3. a Denavita (conta propria do Bling, so' com token): lista e itens de ML e Shopee dela, nas MESMAS tabelas, com
+     id negativo (ver `svc._id_banco`). UM limite de itens por ciclo para as duas contas, Rituaria primeiro.
 Assim o filtro de uma marca menor so' le o banco. Respeita ~3 req/s (cliente compartilhado), roda uma
 vez por vez (advisory lock) e nunca loga token: so' contagens.
 """
@@ -36,53 +38,89 @@ def _primeiro_dia_do_mes_anterior(hoje: date) -> date:
     return (primeiro - timedelta(days=1)).replace(day=1)
 
 
+def _sincronizar_lista(cli: BlingCliente, cache: CacheBling, loja: int, hoje: date, agora: datetime, sinal: int = 1) -> int:
+    """Renova a lista de pedidos de UMA loja no banco e devolve quantas linhas leu. `sinal` -1 = loja da Denavita:
+    o id vai ao banco NEGATIVO (ver `svc._id_banco`) e o `loja_id` e' a loja real dela."""
+    hist_ini = hoje - timedelta(days=svc.JANELA_HISTORICO_DIAS)
+    recente_ini = hoje - timedelta(days=1)
+    ant = cache.ler_sync(f"lista:{loja}")
+    hist = cache.ler_sync(f"hist:{loja}")
+    ultima = ant[1] if ant and ant[0] else None
+    if ultima is not None and ultima.tzinfo is None:
+        ultima = ultima.replace(tzinfo=timezone.utc)
+    hist_velho = (
+        hist is None
+        or (agora - (hist[1] if hist[1].tzinfo else hist[1].replace(tzinfo=timezone.utc))).total_seconds() > HISTORICO_RENOVA_S
+    )
+    linhas: list[dict] = []
+    if hist_velho:
+        linhas += svc.listar_bruto(cli, loja, hist_ini, hoje)  # a janela toda: o que mudou de situacao tambem volta
+    else:
+        linhas += svc.listar_bruto(cli, loja, recente_ini, hoje)
+        if ultima is not None:
+            desde = (ultima - MARGEM_ALTERACAO).strftime("%Y-%m-%d %H:%M:%S")
+            linhas += svc.listar_bruto(cli, loja, hist_ini, hoje, {"dataAlteracaoInicial": desde})
+    cache.salvar_pedidos([{**l, "id": sinal * l["id"], "loja_id": loja} for l in linhas])
+    if hist_velho:
+        cache.marcar_sync(f"hist:{loja}", hist_ini.isoformat())
+        cache.marcar_sync(f"lista:{loja}", hist_ini.isoformat())
+    else:
+        cache.marcar_sync(f"lista:{loja}", ant[0] if ant and ant[0] else hist_ini.isoformat())
+    return len(linhas)
+
+
 def sincronizar(
     cli: BlingCliente,
     cache: CacheBling,
     hoje: date,
     agora_dt: Callable[[], datetime] = svc._agora_dt,
     limite_detalhes: int = DETALHES_POR_CICLO,
+    cli_denavita: Optional[BlingCliente] = None,
 ) -> dict:
-    """Um ciclo. Devolve so' contagens (nada sensivel)."""
+    """Um ciclo. Devolve so' contagens (nada sensivel). `cli_denavita`: cliente do Bling da Denavita (com token);
+    com ele o ciclo aquece tambem a conta dela (lista e itens, ML e Shopee), com UM limite de itens dividido entre as
+    contas: Rituaria primeiro. O Bling dela fora do ar nunca derruba a parte da Rituaria."""
     with cache.trava() as ok:
         if not ok:
             return {"pulado": True}
         cancelado = svc.id_cancelado(cli, cache)
         agora = agora_dt()
-        hist_ini = hoje - timedelta(days=svc.JANELA_HISTORICO_DIAS)
-        recente_ini = hoje - timedelta(days=1)
         n_lista = 0
         for loja in svc.LOJAS:
-            ant = cache.ler_sync(f"lista:{loja}")
-            hist = cache.ler_sync(f"hist:{loja}")
-            ultima = ant[1] if ant and ant[0] else None
-            if ultima is not None and ultima.tzinfo is None:
-                ultima = ultima.replace(tzinfo=timezone.utc)
-            hist_velho = (
-                hist is None
-                or (agora - (hist[1] if hist[1].tzinfo else hist[1].replace(tzinfo=timezone.utc))).total_seconds() > HISTORICO_RENOVA_S
-            )
-            linhas: list[dict] = []
-            if hist_velho:
-                linhas += svc.listar_bruto(cli, loja, hist_ini, hoje)  # a janela toda: o que mudou de situacao tambem volta
-            else:
-                linhas += svc.listar_bruto(cli, loja, recente_ini, hoje)
-                if ultima is not None:
-                    desde = (ultima - MARGEM_ALTERACAO).strftime("%Y-%m-%d %H:%M:%S")
-                    linhas += svc.listar_bruto(cli, loja, hist_ini, hoje, {"dataAlteracaoInicial": desde})
-            cache.salvar_pedidos([{**l, "loja_id": loja} for l in linhas])
-            n_lista += len(linhas)
-            if hist_velho:
-                cache.marcar_sync(f"hist:{loja}", hist_ini.isoformat())
-                cache.marcar_sync(f"lista:{loja}", hist_ini.isoformat())
-            else:
-                cache.marcar_sync(f"lista:{loja}", ant[0] if ant and ant[0] else hist_ini.isoformat())
-        faltam = cache.ids_sem_itens(svc.LOJAS.keys(), _primeiro_dia_do_mes_anterior(hoje), hoje, cancelado)
+            n_lista += _sincronizar_lista(cli, cache, loja, hoje, agora)
+        lojas_den: dict[int, str] = {}
+        cancelado_den = 0
+        if cli_denavita is not None:
+            try:
+                cancelado_den = svc.id_cancelado(cli_denavita, cache, conta=svc.CONTA_DENAVITA)
+                cache.marcar_sync("cancelado_id:denavita", str(cancelado_den))  # a leitura das requisicoes nao chama o Bling
+                lojas_den = svc.lojas_denavita(cli_denavita, cache, atualizar=True)
+                for loja in lojas_den:
+                    n_lista += _sincronizar_lista(cli_denavita, cache, loja, hoje, agora, sinal=-1)
+            except BlingIndisponivel as exc:  # motivo ja' sanitizado; a Rituaria segue
+                logger.warning("bling aquecimento: lista da Denavita adiada (%s)", exc)
+                lojas_den = {}
+        mes_ini = _primeiro_dia_do_mes_anterior(hoje)
+        faltam = cache.ids_sem_itens(svc.LOJAS.keys(), mes_ini, hoje, cancelado)
         lidos = 0
         for pid in faltam[:limite_detalhes]:
             svc._itens(cli, pid, cache)
             lidos += 1
-        return {"pedidos": n_lista, "itens_lidos": lidos, "itens_faltando": max(0, len(faltam) - lidos)}
+        stats = {"pedidos": n_lista, "itens_lidos": lidos, "itens_faltando": max(0, len(faltam) - lidos)}
+        if lojas_den:
+            faltam_den = cache.ids_sem_itens(lojas_den.keys(), mes_ini, hoje, cancelado_den)  # ids negativos
+            lidos_den = 0
+            try:
+                for pid in faltam_den[: max(0, limite_detalhes - lidos)]:
+                    svc._itens(cli_denavita, -pid, cache, svc.CONTA_DENAVITA)
+                    lidos_den += 1
+            except BlingIndisponivel as exc:
+                logger.warning("bling aquecimento: itens da Denavita adiados (%s)", exc)
+            stats["denavita_itens_lidos"] = lidos_den
+            stats["denavita_itens_faltando"] = max(0, len(faltam_den) - lidos_den)
+            stats["itens_lidos"] += lidos_den
+            stats["itens_faltando"] += stats["denavita_itens_faltando"]
+        return stats
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +143,7 @@ def _ciclo() -> Optional[dict]:
     from app.database import SessionLocal
     from app.deps.period import today_brt
     from app.services.bling_cache import ArmazemCachePg
+    from app.services.bling_client import cliente_denavita
 
     if SessionLocal is None or not settings.bling_client_id:
         return None
@@ -113,7 +152,7 @@ def _ciclo() -> Optional[dict]:
     db = SessionLocal()
     stats: Optional[dict] = None
     try:
-        stats = sincronizar(cliente_com_sessao(db), ArmazemCachePg(db), today_brt())
+        stats = sincronizar(cliente_com_sessao(db), ArmazemCachePg(db), today_brt(), cli_denavita=cliente_denavita(db)[0])
         logger.info("bling aquecido: %s", stats)
     except BlingIndisponivel as exc:
         logger.warning("bling aquecimento adiado: %s", exc)

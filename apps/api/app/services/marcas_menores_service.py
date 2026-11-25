@@ -117,7 +117,7 @@ def limpar_cache() -> None:
 
 def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None, conta: str = CONTA_PADRAO) -> int:
     """Id da situacao 'Cancelado' (modulo de vendas). Sem achar, falha: nunca chuta.
-    O id fixo das settings e o cache do banco valem so' para a conta da Rituaria."""
+    O id fixo das settings vale so' para a Rituaria; o do banco (`bling_sync`) e' uma chave por conta."""
     propria = conta == CONTA_PADRAO
     if propria and settings.bling_situacao_cancelado_id:
         return settings.bling_situacao_cancelado_id
@@ -125,7 +125,8 @@ def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None, conta: s
         return settings.bling_denavita_situacao_cancelado_id
     if conta in _cancelado:
         return _cancelado[conta]
-    guardado = cache.ler_sync("cancelado_id") if cache and propria else None
+    chave_sync = "cancelado_id" if propria else f"cancelado_id:{conta}"
+    guardado = cache.ler_sync(chave_sync) if cache else None
     if guardado and guardado[0]:
         _cancelado[conta] = int(guardado[0])
         return _cancelado[conta]
@@ -136,8 +137,8 @@ def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None, conta: s
         sit = next((s for s in situacoes if str(s.get("nome", "")).strip().casefold() == "cancelado"), None)
         if sit:
             _cancelado[conta] = int(sit["id"])
-            if cache and propria:
-                cache.marcar_sync("cancelado_id", str(_cancelado[conta]))
+            if cache:
+                cache.marcar_sync(chave_sync, str(_cancelado[conta]))
             return _cancelado[conta]
     raise BlingIndisponivel("Situação 'Cancelado' não encontrada no Bling.")
 
@@ -180,14 +181,19 @@ def _pedidos_da_loja(cli: BlingCliente, loja: int, inicio: date, fim: date, canc
     return saida
 
 
-def cache_cobre(cache: Optional[CacheBling], inicio: date, agora_dt: Callable[[], datetime] = _agora_dt) -> bool:
-    """O cache do banco serve a janela quando TODAS as lojas foram sincronizadas desde antes de `inicio`
-    e a ultima sincronizacao e' recente. Senao, a leitura vai ao Bling (e a rotina e' acionada)."""
+def cache_cobre(
+    cache: Optional[CacheBling], inicio: date, agora_dt: Callable[[], datetime] = _agora_dt, lojas: Optional[Iterable[int]] = None,
+) -> bool:
+    """O cache do banco serve a janela quando TODAS as lojas (`lojas`; padrao: as da Rituaria) foram sincronizadas
+    desde antes de `inicio` e a ultima sincronizacao e' recente. Senao, a leitura vai ao Bling (e a rotina e' acionada)."""
     if cache is None:
+        return False
+    lojas = list(LOJAS if lojas is None else lojas)
+    if not lojas:
         return False
     agora = agora_dt()
     marcas = cache.ler_sync_prefixo("lista:")  # uma consulta so', nao uma por loja
-    for loja in LOJAS:
+    for loja in lojas:
         s = marcas.get(f"lista:{loja}")
         if not s or not s[0] or s[0] > inicio.isoformat():
             return False
@@ -234,32 +240,83 @@ def _plataforma_do_canal(canal: dict) -> Optional[str]:
     return None  # TikTok da Denavita vem do Data Mart; outros canais ficam fora
 
 
-def lojas_denavita(cli: BlingCliente) -> dict[int, str]:
+def _ler_lojas(texto: str) -> dict[int, str]:
+    """"id:MELI,id:SHOPEE" -> {id: plataforma}; so' MELI e SHOPEE."""
+    mapa = {}
+    for par in texto.split(","):
+        id_, _, plat = par.strip().partition(":")
+        if id_.strip().isdigit() and plat.strip().upper() in ("MELI", "SHOPEE"):
+            mapa[int(id_)] = plat.strip().upper()
+    return mapa
+
+
+def _sem_coincidencia(mapa: dict[int, str]) -> dict[int, str]:
+    """A Denavita vive nas MESMAS tabelas do cache (ids negativos) e e' separada da Rituaria so' pela loja:
+    loja repetida entre as contas misturaria as duas. Nunca acontece de fato; se acontecer, para."""
+    if mapa.keys() & LOJAS.keys():
+        raise BlingIndisponivel("Loja da Denavita coincide com uma loja da Rituária.")
+    return mapa
+
+
+def lojas_denavita(cli: BlingCliente, cache: Optional[CacheBling] = None, atualizar: bool = False) -> dict[int, str]:
     """id da loja (canal) no Bling da Denavita -> plataforma (so' MELI e SHOPEE).
-    BLING_DENAVITA_LOJAS ("id:MELI,id:SHOPEE") vence; senao, descobre por /canais-venda."""
+    BLING_DENAVITA_LOJAS ("id:MELI,id:SHOPEE") vence; senao, o banco (`bling_sync`, gravado pela rotina) e,
+    sem ele, /canais-venda. `atualizar` (a rotina) ignora a memoria e o banco, le' o Bling e regrava: um canal
+    novo ou renomeado entra no proximo ciclo, sem esperar reinicio."""
     if settings.bling_denavita_lojas.strip():
-        mapa = {}
-        for par in settings.bling_denavita_lojas.split(","):
-            id_, _, plat = par.strip().partition(":")
-            if id_.strip().isdigit() and plat.strip().upper() in ("MELI", "SHOPEE"):
-                mapa[int(id_)] = plat.strip().upper()
+        mapa = _ler_lojas(settings.bling_denavita_lojas)
         if mapa:
-            return mapa
+            return _sem_coincidencia(mapa)
+    if atualizar:
+        _lojas_denavita.clear()
+    elif not _lojas_denavita and cache is not None:
+        guardado = cache.ler_sync("lojas_denavita")
+        if guardado and guardado[0]:
+            _lojas_denavita.update(_ler_lojas(guardado[0]))
     if not _lojas_denavita:
         for c in cli.get("/canais-venda").get("data") or []:
             plat = _plataforma_do_canal(c)
             if plat and str(c.get("id", "")).isdigit():
                 _lojas_denavita[int(c["id"])] = plat
+        if _lojas_denavita and cache is not None:
+            cache.marcar_sync("lojas_denavita", ",".join(f"{i}:{p}" for i, p in sorted(_lojas_denavita.items())))
     if not _lojas_denavita:
         raise BlingIndisponivel("Lojas de ML e Shopee da Denavita não encontradas no Bling.")
-    return dict(_lojas_denavita)
+    return _sem_coincidencia(dict(_lojas_denavita))
 
 
-def pedidos_denavita_bling(cli: BlingCliente, inicio: date, fim: date, agora: Callable[[], float] = time.monotonic) -> list[dict]:
-    """Pedidos nao cancelados de ML e Shopee no Bling da Denavita (mesma regra das outras marcas). Falha sobe."""
-    cancelado = id_cancelado(cli, conta=CONTA_DENAVITA)
+#: SHORTCUT: sem DDL, a Denavita usa as MESMAS tabelas do cache (audit.bling_pedido e audit.bling_pedido_itens) com o
+#: id do pedido NEGATIVO (-id do Bling): nunca colide com a Rituaria, e o `loja_id` e' a loja real dela. Limite: "id
+#: negativo = conta denavita" e' convencao do codigo; quando a migration puder rodar, trocar por uma coluna `conta`
+#: com chave (conta, id). Nada da Rituaria le' id negativo: toda leitura filtra por `loja_id` (lojas dela).
+def _id_banco(conta: str, pedido_id: int) -> int:
+    return -pedido_id if conta == CONTA_DENAVITA else pedido_id
+
+
+def pedidos_denavita_bling(
+    cli: BlingCliente,
+    inicio: date,
+    fim: date,
+    agora: Callable[[], float] = time.monotonic,
+    cache: Optional[CacheBling] = None,
+    ao_faltar_cache: Optional[Callable[[], None]] = None,
+    agora_dt: Callable[[], datetime] = _agora_dt,
+) -> list[dict]:
+    """Pedidos nao cancelados de ML e Shopee da Denavita (mesma regra das outras marcas): do banco quando a rotina
+    ja' o aqueceu (sem chamar o Bling) e, senao, ao vivo (e aciona a rotina). Falha sobe."""
+    cancelado = id_cancelado(cli, cache, conta=CONTA_DENAVITA)
+    lojas = lojas_denavita(cli, cache)
+    if cache is not None:
+        if cache_cobre(cache, inicio, agora_dt, lojas):
+            return [
+                {"id": -int(r["id"]), "data": r["data"], "total": r["total"], "marca": DENAVITA, "plataforma": lojas[int(r["loja_id"])]}
+                for r in cache.pedidos(lojas.keys(), inicio, fim)
+                if int(r["id"]) < 0 and r["situacao_id"] != cancelado
+            ]
+        if ao_faltar_cache is not None:
+            ao_faltar_cache()
     saida = []
-    for loja, plat in lojas_denavita(cli).items():
+    for loja, plat in lojas.items():
         for p in _pedidos_da_loja(cli, loja, inicio, fim, cancelado, agora):
             saida.append({**p, "marca": DENAVITA, "plataforma": plat})
     return saida
@@ -435,7 +492,7 @@ def get_marcas_menores(
     motivo_bling = motivo_sem_bling_denavita
     if cli_denavita is not None:
         try:
-            den = pedidos_denavita_bling(cli_denavita, ant_ini, fim, agora)  # atual + anterior numa leitura so'
+            den = pedidos_denavita_bling(cli_denavita, ant_ini, fim, agora, cache, ao_faltar_cache)  # atual + anterior numa leitura so'
             linhas = linhas + [l for l in den if l["data"] >= inicio]
             ant = ant + [l for l in den if l["data"] <= ant_fim]
             com_bling = True
@@ -474,14 +531,14 @@ def _chave(p: dict) -> tuple[str, int]:
 
 
 def _itens(cli: BlingCliente, pedido_id: int, cache: Optional[CacheBling] = None, conta: str = CONTA_PADRAO) -> list[dict]:
-    """`cache` (banco) so' vale para a Rituaria: `audit.bling_pedido_itens` tem o id do pedido como chave unica,
-    sem a conta, e ids de contas diferentes podem coincidir. Os itens da Denavita ficam so' na memoria."""
+    """Itens de um pedido da `conta`, na memoria e (com `cache`) no banco. No banco a Denavita usa o id NEGATIVO
+    (ver `_id_banco`): o id de um pedido so' vale dentro da conta que o emitiu."""
     chave = (conta, pedido_id)
     if chave not in _detalhe_cache:
         itens = (cli.get(f"/pedidos/vendas/{pedido_id}").get("data") or {}).get("itens") or []
         _detalhe_cache[chave] = itens
-        if cache is not None and conta == CONTA_PADRAO:
-            cache.salvar_itens(pedido_id, itens)  # pedido com detalhe lido nao muda: nunca mais e' relido
+        if cache is not None:
+            cache.salvar_itens(_id_banco(conta, pedido_id), itens)  # pedido com detalhe lido nao muda: nunca mais e' relido
     return _detalhe_cache[chave]
 
 
@@ -505,10 +562,12 @@ def get_produtos(
     Os MESMOS filtros do GMV valem para os itens: periodo, canal (`plataformas`) e marca (`marcas`),
     com cancelados fora. Itens de um canal ou marca fora do recorte nunca entram (nem sao lidos).
 
-    Denavita: ML e Shopee pelo Bling DELA (`cli_denavita`, so' quando a conta tem token), lidos ao vivo e por
-    partes, no mesmo limite de `limite_detalhes` (a rotina de aquecimento so' conhece as lojas da Rituaria).
-    O TikTok dela vem do Data Mart, sem itens: nesse canal ficam ausentes, com motivo. Sem `cli_denavita`,
-    a marca fica sem itens e o motivo diz por que (`motivo_sem_bling_denavita`); nunca 0."""
+    Denavita: ML e Shopee pelo Bling DELA (`cli_denavita`, so' quando a conta tem token). Lista e itens vem do
+    cache do banco, aquecido pela rotina (ids negativos, ver `_id_banco`); com cache e rotina ligados a requisicao
+    NAO chama o Bling dela: devolve o que o banco tem e aciona a rotina, como na Rituaria. Sem cache ou sem rotina,
+    le ao vivo por partes, no mesmo limite de `limite_detalhes`. O TikTok dela vem do Data Mart, sem itens: nesse
+    canal ficam ausentes, com motivo. Sem `cli_denavita`, a marca fica sem itens e o motivo diz por que
+    (`motivo_sem_bling_denavita`); nunca 0."""
     fim = min(date_to, hoje)
     inicio = min(date_from, fim)
     plat_ok = {p.upper() for p in plataformas} if plataformas is not None else None
@@ -551,16 +610,25 @@ def get_produtos(
             try:
                 den = [
                     {**p, "conta": CONTA_DENAVITA}
-                    for p in pedidos_denavita_bling(cli_denavita, inicio, fim, agora) if p["plataforma"] in den_plat
+                    for p in pedidos_denavita_bling(cli_denavita, inicio, fim, agora, cache, ao_faltar_cache)
+                    if p["plataforma"] in den_plat
                 ]
                 lista = lista + den
-                for p in den:
-                    if _chave(p) in _detalhe_cache:
-                        continue
-                    if novos >= orcamento:
-                        break
-                    _itens(cli_denavita, p["id"], None, CONTA_DENAVITA)
-                    novos += 1
+                if cache is not None:  # itens ja' lidos (pela rotina ou por pedidos anteriores): 1 consulta ao banco
+                    faltam_den = [p["id"] for p in den if _chave(p) not in _detalhe_cache]
+                    achados = cache.itens([_id_banco(CONTA_DENAVITA, i) for i in faltam_den])
+                    _detalhe_cache.update({(CONTA_DENAVITA, -k): v for k, v in achados.items()})
+                if not ao_vivo:
+                    if ao_faltar_cache is not None and any(_chave(p) not in _detalhe_cache for p in den):
+                        ao_faltar_cache()
+                else:
+                    for p in den:
+                        if _chave(p) in _detalhe_cache:
+                            continue
+                        if novos >= orcamento:
+                            break
+                        _itens(cli_denavita, p["id"], cache, CONTA_DENAVITA)
+                        novos += 1
             except BlingIndisponivel as exc:  # motivo ja' sanitizado; o que foi lido ate' aqui fica
                 logger.warning("marcas_menores: itens do Bling da Denavita indisponiveis (%s)", exc)
                 den_status, den_motivo = STATUS_FONTE_INDISPONIVEL, f"Bling da Denavita: {exc}"
