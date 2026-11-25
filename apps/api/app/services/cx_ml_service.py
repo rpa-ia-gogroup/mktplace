@@ -209,6 +209,10 @@ def _cobre(janela: Janela) -> bool:
 
 
 INDICADORES_ML = ("resposta", "reclamacao", "cancelamento", "mediacao", "reembolso", "devolucao")
+CAMPOS_COLETA_DIARIA = ("perguntas", "perguntas_respondidas", "reclamacoes", "mediacoes", "devolucoes")
+PENDENCIA_HOJE = Pendencia(codigo="hoje_coleta_diaria", titulo="Hoje",
+                           motivo="Resposta, reclamações, mediações e devoluções vêm da coleta diária do ML (06:20): "
+                                  "ficam sem dado no Hoje. Pedidos, cancelamentos e reembolsos seguem até agora.")
 
 
 def sem_anterior_ml(janela: Janela, anterior: Janela, hoje: date) -> dict[str, SemComparacao]:
@@ -324,6 +328,11 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
                     for campo in ("reclamacoes", "mediacoes"):
                         c[campo + "_anterior"] = _soma(rows, campo, anterior.inicio, anterior.fim) or 0
                 c["devolucoes_anterior"] = _soma_completa(rows, "devolucoes", anterior.inicio, anterior.fim)
+            if eh_hoje:
+                # perguntas, reclamacoes e devolucoes vem da coleta diaria (06:20 BRT): de hoje so' a madrugada.
+                # Sem dado (nunca 0 parcial, ex.: "0 de 2 perguntas = 0%"); pedidos e cancelamentos seguem.
+                for campo in CAMPOS_COLETA_DIARIA:
+                    c[campo] = None
         if recl is not None and tem:
             q = perguntas.get(m)
             c.update(perguntas_sem_resposta=base._int(q["n1"]) if q else 0,
@@ -345,7 +354,7 @@ def montar_cx_ml(*, brands: Optional[list[str]] = None, dias: int = base.JANELA_
                                             "Nenhum pedido de cancelamento no período.", recl, claims_ok)
     if diario is not None and not eh_hoje:
         resp["serie_diaria"] = _serie(diario, cobertura.marcas, janela, claims_ok)
-    resp["pendencias"] = PENDENCIAS
+    resp["pendencias"] = [*PENDENCIAS, PENDENCIA_HOJE] if eh_hoje else PENDENCIAS
     return CxMercadoLivreResponse(**resp)
 
 

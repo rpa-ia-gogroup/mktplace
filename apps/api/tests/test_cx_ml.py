@@ -339,3 +339,7 @@ def test_hoje_sem_anterior_nem_serie_diaria():
     assert set(r.sem_anterior) == {"resposta", "reclamacao", "cancelamento", "mediacao", "reembolso", "devolucao"}
     assert all(m.pedidos_anterior is None for m in r.marcas)
     assert dict(f.chamadas)["diario"]["desde"] == date(2026, 11, 10)
+    # coleta diaria (06:20): perguntas, reclamacoes e devolucoes de hoje = sem dado, nunca 0 parcial
+    for m in r.marcas:
+        assert (m.perguntas, m.perguntas_respondidas, m.reclamacoes, m.mediacoes, m.devolucoes) == (None,) * 5
+    assert any(p.codigo == "hoje_coleta_diaria" for p in r.pendencias)
