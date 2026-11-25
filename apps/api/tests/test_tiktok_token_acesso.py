@@ -73,3 +73,30 @@ def test_marca_fora_da_lista_e_403(cliente):
 def test_limite_por_chave(cliente):
     codigos = [_get(cliente, "kokeshi").status_code for _ in range(31)]
     assert codigos[-1] == 429 and codigos[0] == 200
+
+
+def test_assinar_devolve_chamada_pronta_sem_o_secret(cliente, monkeypatch):
+    monkeypatch.setattr(settings, "tiktok_app_key", "APPKEY")
+    monkeypatch.setattr(settings.tiktok_app_secret, "get_secret_value", lambda: "SEGREDO-NUNCA-SAI")
+    import app.services.cx_tiktok_service as cx
+    monkeypatch.setattr(cx, "_cliente_da_marca", lambda conta, tok, criar: SimpleNamespace(cipher="CIPHER-K"))
+    r = cliente.post("/api/v1/tiktok/token/kokeshi/assinar", headers={"Authorization": "Bearer torre_pat_ok"},
+                     json={"metodo": "POST", "path": "/customer_service/202309/conversations/123/messages",
+                           "params": {"page_size": 20}, "corpo": {"type": "TEXT", "content": "{\"content\":\"oi\"}"}})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert "SEGREDO-NUNCA-SAI" not in r.text and "NUNCA-SAI" not in r.text
+    p = d["params"]
+    assert p["app_key"] == "APPKEY" and p["shop_cipher"] == "CIPHER-K" and p["page_size"] == "20"
+    from app.services import tiktok_client
+    esperado = tiktok_client.assinar(
+        "/customer_service/202309/conversations/123/messages", {k: v for k, v in p.items() if k != "sign"},
+        d["corpo_texto"], "SEGREDO-NUNCA-SAI")
+    assert p["sign"] == esperado and d["headers"]["x-tts-access-token"] == "tok-vivo"
+    assert d["url"].startswith("https://open-api.tiktokglobalshop.com/customer_service/")
+
+
+def test_assinar_recusa_path_estranho(cliente):
+    r = cliente.post("/api/v1/tiktok/token/kokeshi/assinar", headers={"Authorization": "Bearer torre_pat_ok"},
+                     json={"path": "https://evil.com/x"})
+    assert r.status_code == 422
