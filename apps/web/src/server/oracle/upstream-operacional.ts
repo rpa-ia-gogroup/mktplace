@@ -376,6 +376,8 @@ const estoqueOk = z.object({
       is_kit: z.boolean(),
       full_stock_saleable: count,
       full_stock_total: count,
+      /** Estoque PROPRIO do vendedor, fora do Full. Contexto: nunca soma ao Full. */
+      seller_stock_total: count.nullish(),
       units_sold_28d: count,
       avg_daily_units_28d: decimal,
       cobertura_torre_dias: optDecimal,

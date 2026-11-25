@@ -83,8 +83,7 @@ const ALLOWED_PARAMS = new Set([
 /**
  * MCP-COVERAGE-2 — allowlist POR ENDPOINT para as superficies operacionais.
  * Mais estrita que a global: `channel` vale na Expedicao e continua sendo typo
- * de `channels` no overview. De proposito FORA de todas as listas: `busca`
- * (estoque), `product_query` (precos), `accounts`/`shop_account`, `order_by`
+ * de `channels` no overview. De proposito FORA de todas as listas: `product_query` (precos), `accounts`/`shop_account`, `order_by`
  * e `offset` — texto livre, ou recorte/paginacao que o modelo nao escolhe.
  * Qualquer um deles falha antes do fetch.
  */
@@ -94,7 +93,8 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
   expedicaoTiktok: new Set(["event", "days", "brands"]),
   mlFulfillment: new Set(["brands", "date_from", "date_to"]),
   shopeeFbs: new Set(["brands", "date_from", "date_to"]),
-  shopeeFbsEstoque: new Set(["brands", "classificacoes", "somente_acao", "limite"]),
+  // `busca` (sku/nome, max 120) so' aqui: a rota do ML nao a tem, e o adapter filtra la'.
+  shopeeFbsEstoque: new Set(["brands", "classificacoes", "somente_acao", "limite", "busca"]),
   // `ref_date` e `incluir_fora_do_full` ficam FORA: a tool le sempre a ultima
   // fotografia, so' de inventario Full, e sempre com `limite` (o default da
   // fonte e' 1000 linhas, perto do teto de bytes).
@@ -130,6 +130,8 @@ const ENDPOINT_MAX_BYTES: Partial<Record<EndpointKey, number>> = {
   // A rota manda a serie de 60 dias por SKU: ~280-950 B por linha (medido em payload
   // sintetico). A tool devolve no maximo 25 itens; o teto so' evita derrubar a leitura.
   fullSlowMoving: 2 * 1024 * 1024,
+  // `busca` no estoque ML varre ate' 1000 inventarios (default da rota), perto do teto padrao.
+  mlFullEstoque: 1024 * 1024,
 };
 
 /** Unicos parametros que a fonte le como lista (`list[str] = Query`). */

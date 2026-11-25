@@ -363,7 +363,8 @@ test("estoque: limites e texto livre falham antes do GET; periodo so' com dias f
   const client = await connect(STOCK_ROUTES, calls);
   for (const args of [
     { limite: 51 },
-    { busca: "esfoliante" },
+    { busca: "x" }, // curta demais
+    { busca: "a".repeat(61) },
     { classificacoes: ["ruptura"] },
     { severidade: "alta" },
     { periodo: "personalizado", data_inicio: "2026-08-01", data_fim: "2026-08-18" }, // D0
@@ -374,10 +375,66 @@ test("estoque: limites e texto livre falham antes do GET; periodo so' com dias f
   assert.equal(calls.length, 0);
 
   const c = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl: routedFetch(STOCK_ROUTES, calls) });
-  for (const p of [{ busca: "x" }, { accounts: ["apice"] }, { limit: 10 }]) {
+  for (const p of [{ accounts: ["apice"] }, { limit: 10 }]) {
     await assert.rejects(() => c.get("shopeeFbsEstoque", p as never), (e: unknown) => e instanceof OracleToolError);
   }
-  assert.equal(calls.length, 0, "texto livre nunca sai");
+  // `busca` so' existe na rota da Shopee; a do ML nao a tem.
+  await assert.rejects(() => c.get("mlFullEstoque", { busca: "x" } as never), (e: unknown) => e instanceof OracleToolError);
+  assert.equal(calls.length, 0, "parametro fora da allowlist nunca sai");
+});
+
+test("estoque: busca na Shopee vai para a API; itens saudaveis aparecem e o estoque do vendedor vem ao lado do Full", async () => {
+  const calls: Calls = [];
+  const delight = {
+    ...SHOPEE_ESTOQUE,
+    produtos: [
+      { ...SHOPEE_ESTOQUE.produtos[1], brand: "barbours", item_id: "9", item_sku: "DEL-1", item_name: "Delight Barbours",
+        full_stock_saleable: 0, full_stock_total: 0, seller_stock_total: 36000, cobertura_torre_dias: "0", classificacao_torre: "RUPTURA_CANDIDATA" },
+      // Fonte sem o campo: ausencia, nunca 0.
+      { ...SHOPEE_ESTOQUE.produtos[1], item_id: "10", item_sku: "DEL-2", item_name: "Delight Mini", seller_stock_total: undefined },
+    ],
+    total_no_filtro: 2,
+  };
+  const env = await call(
+    await connect({ ...STOCK_ROUTES, "/api/v1/performance/shopee-fbs-estoque": delight }, calls),
+    "torre_estoque_full", { canais: ["shopee"], busca: "  delight ", limite: 5 },
+  );
+  const est = calls.filter((u) => u.pathname === "/api/v1/performance/shopee-fbs-estoque");
+  assert.equal(est[0].searchParams.get("busca"), "delight", "trim e repasse");
+  const [i9, i10] = env.data.shopee_estoque.itens;
+  assert.equal(i9.estoque_vendavel, 0);
+  assert.equal(i9.estoque_vendedor_fora_do_full, 36000);
+  assert.equal(i10.estoque_vendedor_fora_do_full, null, "campo ausente nao vira 0");
+  assert.equal(env.meta.filters_applied.busca, "delight");
+  assert.match(env.meta.coverage, /casam com a busca/);
+  const desc = (await (await connect({})).listTools()).tools.find((t) => t.name === "torre_estoque_full")!.description!;
+  assert.match(desc, /fora do Full; nao somar ao Full/);
+});
+
+test("estoque: busca no ML filtra por sku/titulo (sem acento, sem caixa) e nao limita aos de risco", async () => {
+  const calls: Calls = [];
+  const env = await call(await connect(STOCK_ROUTES, calls), "torre_estoque_full", { canais: ["ml"], busca: "SKINCARE" });
+  const ml = calls.filter((u) => u.pathname === "/api/v1/performance/ml-full-estoque");
+  assert.equal(ml[0].searchParams.get("limite"), "1000", "le' o inventario inteiro e filtra aqui");
+  assert.equal(ml[0].searchParams.get("busca"), null, "a rota do ML nao recebe busca");
+  const itens = env.data.ml_estoque.itens;
+  assert.equal(itens.length, 1);
+  assert.equal(itens[0].titulo, "Kit Skincare Kokeshi");
+  assert.equal(itens[0].classificacao, "SUFICIENTE", "item saudavel aparece");
+  assert.equal(env.data.ml_estoque.itens_no_filtro, 1);
+  const porSku = await call(await connect(STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"], busca: "40121" });
+  assert.deepEqual(porSku.data.ml_estoque.itens.map((i: any) => i.sku), ["40121"]);
+  const nada = await call(await connect(STOCK_ROUTES), "torre_estoque_full", { canais: ["ml"], busca: "zzzz" });
+  assert.equal(nada.data.ml_estoque.itens.length, 0);
+});
+
+test("estoque: busca no ML com leitura truncada nao afirma total", async () => {
+  const trunc = { ...ML_FULL_ESTOQUE, truncado: true, total_no_filtro: 1500 };
+  const env = await call(
+    await connect({ ...STOCK_ROUTES, "/api/v1/performance/ml-full-estoque": trunc }),
+    "torre_estoque_full", { canais: ["ml"], busca: "skincare" },
+  );
+  assert.equal(env.data.ml_estoque.itens_no_filtro, null);
 });
 
 test("estoque: no maximo 50 itens e truncamento declarado", async () => {
