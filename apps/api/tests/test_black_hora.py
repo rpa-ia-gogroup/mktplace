@@ -30,6 +30,14 @@ def test_interpretar_le_so_marca_x_canal_e_a_meta_do_dia():
     assert k["meta_hora"][0] == 2000.5 and len(k["meta_hora"]) == 24
 
 
+def test_interpretar_para_no_fim_do_bloco_mesmo_com_outro_bloco_hora_abaixo():
+    """25/11: a aba ganhou 'Total' e um 2o bloco 'Hora' (base do 11/11) abaixo; so' o 1o vale."""
+    v = aba() + [["Total", "R$ 24.000", "R$ 48.012", "R$ 72.000"], [], ["Base: venda do 11/11 por hora"], CAB]
+    v += [[f"{h:02d}h", "R$ 9", "R$ 9", "R$ 9"] for h in range(24)]
+    k = S.interpretar(v)[1]
+    assert k["meta_hora"][0] == 2000.5 and k["meta_dia"] == 598618.0
+
+
 def test_interpretar_formato_quebrado_vira_erro_de_formato():
     with pytest.raises(S.FormatoInesperado):
         S.interpretar([["sem cabecalho"]])
