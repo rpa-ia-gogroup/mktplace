@@ -3,7 +3,10 @@
 A cada ~15 min, em segundo plano no proprio processo:
   1. a lista de pedidos das 6 lojas: ontem e hoje a cada ciclo, os ultimos 90 dias a cada 6 h, e os
      pedidos ALTERADOS desde a ultima sincronizacao (pega cancelamentos de pedidos antigos);
-  2. os itens dos pedidos novos (mes anterior em diante) que ainda nao foram lidos.
+  2. os itens dos pedidos novos (mes anterior em diante) que ainda nao foram lidos;
+  3. a Denavita (conta propria do Bling, so' com token): os itens dos pedidos de ML e Shopee dela, guardados
+     com a conta 'denavita'. Nao ha' lista dela no banco: a rotina lista ao vivo (memoria, 15 min) e le so'
+     o que falta. O limite de itens por ciclo e' UM so', dividido entre as duas contas (Rituaria primeiro).
 Assim o filtro de uma marca menor so' le o banco. Respeita ~3 req/s (cliente compartilhado), roda uma
 vez por vez (advisory lock) e nunca loga token: so' contagens.
 """
@@ -42,8 +45,9 @@ def sincronizar(
     hoje: date,
     agora_dt: Callable[[], datetime] = svc._agora_dt,
     limite_detalhes: int = DETALHES_POR_CICLO,
+    cli_denavita: Optional[BlingCliente] = None,
 ) -> dict:
-    """Um ciclo. Devolve so' contagens (nada sensivel)."""
+    """Um ciclo. Devolve so' contagens (nada sensivel). `cli_denavita`: cliente do Bling da Denavita (com token)."""
     with cache.trava() as ok:
         if not ok:
             return {"pulado": True}
@@ -82,7 +86,33 @@ def sincronizar(
         for pid in faltam[:limite_detalhes]:
             svc._itens(cli, pid, cache)
             lidos += 1
-        return {"pedidos": n_lista, "itens_lidos": lidos, "itens_faltando": max(0, len(faltam) - lidos)}
+        faltando = max(0, len(faltam) - lidos)
+        stats = {"pedidos": n_lista, "itens_lidos": lidos, "itens_faltando": faltando}
+        if cli_denavita is not None:
+            den = _itens_denavita(cli_denavita, cache, hoje, max(0, limite_detalhes - lidos))
+            stats["denavita_itens_lidos"] = den["lidos"]
+            stats["denavita_itens_faltando"] = den["faltando"]
+            stats["itens_lidos"] += den["lidos"]
+            stats["itens_faltando"] += den["faltando"]
+        return stats
+
+
+def _itens_denavita(cli: BlingCliente, cache: CacheBling, hoje: date, limite: int) -> dict:
+    """Le e guarda (conta 'denavita') os itens que faltam dos pedidos de ML e Shopee dela, mais novos primeiro.
+    O Bling dela fora do ar nunca derruba o ciclo da Rituaria: devolve so' contagens."""
+    try:
+        pedidos = svc.pedidos_denavita_bling(cli, _primeiro_dia_do_mes_anterior(hoje), hoje)
+        pedidos.sort(key=lambda p: (p["data"], p["id"]), reverse=True)
+        guardados = cache.itens([p["id"] for p in pedidos], svc.CONTA_DENAVITA)
+        faltam = [p["id"] for p in pedidos if p["id"] not in guardados]
+        lidos = 0
+        for pid in faltam[:limite]:
+            svc._itens(cli, pid, cache, svc.CONTA_DENAVITA)
+            lidos += 1
+        return {"lidos": lidos, "faltando": max(0, len(faltam) - lidos)}
+    except BlingIndisponivel as exc:
+        logger.warning("bling aquecimento: itens da Denavita adiados (%s)", exc)
+        return {"lidos": 0, "faltando": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -105,6 +135,7 @@ def _ciclo() -> Optional[dict]:
     from app.database import SessionLocal
     from app.deps.period import today_brt
     from app.services.bling_cache import ArmazemCachePg
+    from app.services.bling_client import cliente_denavita
 
     if SessionLocal is None or not settings.bling_client_id:
         return None
@@ -113,7 +144,7 @@ def _ciclo() -> Optional[dict]:
     db = SessionLocal()
     stats: Optional[dict] = None
     try:
-        stats = sincronizar(cliente_com_sessao(db), ArmazemCachePg(db), today_brt())
+        stats = sincronizar(cliente_com_sessao(db), ArmazemCachePg(db), today_brt(), cli_denavita=cliente_denavita(db)[0])
         logger.info("bling aquecido: %s", stats)
     except BlingIndisponivel as exc:
         logger.warning("bling aquecimento adiado: %s", exc)

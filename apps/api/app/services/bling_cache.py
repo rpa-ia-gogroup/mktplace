@@ -10,6 +10,10 @@ from contextlib import contextmanager
 from datetime import date, datetime
 from typing import Iterable, Iterator, Optional, Protocol
 
+#: Conta Bling dona das linhas sem conta explicita (a Rituaria). Igual a `bling_token.CONTA_PADRAO` e ao
+#: DEFAULT da coluna `audit.bling_pedido_itens.conta` (migration 052).
+CONTA_PADRAO = "rituaria"
+
 #: Chave do advisory lock da rotina de aquecimento (so' uma instancia sincroniza por vez).
 CHAVE_LOCK = 4242043
 
@@ -20,9 +24,10 @@ class CacheBling(Protocol):
 
     def salvar_pedidos(self, linhas: Iterable[dict]) -> None: ...
 
-    def itens(self, ids: Iterable[int]) -> dict[int, list[dict]]: ...
+    def itens(self, ids: Iterable[int], conta: str = CONTA_PADRAO) -> dict[int, list[dict]]:
+        """Itens guardados dos pedidos `ids` DA CONTA: o id do pedido so' vale dentro da conta que o emitiu."""
 
-    def salvar_itens(self, pedido_id: int, itens: list[dict]) -> None: ...
+    def salvar_itens(self, pedido_id: int, itens: list[dict], conta: str = CONTA_PADRAO) -> None: ...
 
     def ids_sem_itens(self, lojas: Iterable[int], inicio: date, fim: date, cancelado: int) -> list[int]:
         """Pedidos nao cancelados da janela que ainda nao tem itens guardados (mais novos primeiro)."""
@@ -79,28 +84,29 @@ class ArmazemCachePg:
             self.db.rollback()
             raise
 
-    def itens(self, ids):
+    def itens(self, ids, conta=CONTA_PADRAO):
         from sqlalchemy import text
 
         ids = list(ids)
         if not ids:
             return {}
         rows = self.db.execute(
-            text("SELECT pedido_id, itens FROM audit.bling_pedido_itens WHERE pedido_id = ANY(:ids)"), {"ids": ids}
+            text("SELECT pedido_id, itens FROM audit.bling_pedido_itens WHERE conta = :conta AND pedido_id = ANY(:ids)"),
+            {"conta": conta, "ids": ids},
         ).all()
         self.db.rollback()
         return {int(pid): (it if isinstance(it, list) else json.loads(it)) for pid, it in rows}
 
-    def salvar_itens(self, pedido_id, itens):
+    def salvar_itens(self, pedido_id, itens, conta=CONTA_PADRAO):
         from sqlalchemy import text
 
         try:
             self.db.execute(
                 text(
-                    "INSERT INTO audit.bling_pedido_itens (pedido_id, itens, lido_em) VALUES (:p, CAST(:i AS JSONB), now()) "
-                    "ON CONFLICT (pedido_id) DO NOTHING"
+                    "INSERT INTO audit.bling_pedido_itens (conta, pedido_id, itens, lido_em) "
+                    "VALUES (:c, :p, CAST(:i AS JSONB), now()) ON CONFLICT (conta, pedido_id) DO NOTHING"
                 ),
-                {"p": pedido_id, "i": json.dumps(itens)},
+                {"c": conta, "p": pedido_id, "i": json.dumps(itens)},
             )
             self._fim()
         except Exception:
@@ -113,11 +119,11 @@ class ArmazemCachePg:
         rows = self.db.execute(
             text(
                 "SELECT p.id FROM audit.bling_pedido p "
-                "LEFT JOIN audit.bling_pedido_itens i ON i.pedido_id = p.id "
+                "LEFT JOIN audit.bling_pedido_itens i ON i.conta = :conta AND i.pedido_id = p.id "
                 "WHERE p.loja_id = ANY(:lojas) AND p.data BETWEEN :i AND :f "
                 "AND COALESCE(p.situacao_id, -1) <> :c AND i.pedido_id IS NULL ORDER BY p.data DESC, p.id DESC"
             ),
-            {"lojas": list(lojas), "i": inicio, "f": fim, "c": cancelado},
+            {"lojas": list(lojas), "i": inicio, "f": fim, "c": cancelado, "conta": CONTA_PADRAO},
         ).all()
         self.db.rollback()
         return [int(r[0]) for r in rows]

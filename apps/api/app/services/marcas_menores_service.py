@@ -474,14 +474,14 @@ def _chave(p: dict) -> tuple[str, int]:
 
 
 def _itens(cli: BlingCliente, pedido_id: int, cache: Optional[CacheBling] = None, conta: str = CONTA_PADRAO) -> list[dict]:
-    """`cache` (banco) so' vale para a Rituaria: `audit.bling_pedido_itens` tem o id do pedido como chave unica,
-    sem a conta, e ids de contas diferentes podem coincidir. Os itens da Denavita ficam so' na memoria."""
+    """Itens de um pedido da `conta`, na memoria e (com `cache`) no banco, onde a chave e' (conta, id): o id de um
+    pedido so' vale dentro da conta que o emitiu."""
     chave = (conta, pedido_id)
     if chave not in _detalhe_cache:
         itens = (cli.get(f"/pedidos/vendas/{pedido_id}").get("data") or {}).get("itens") or []
         _detalhe_cache[chave] = itens
-        if cache is not None and conta == CONTA_PADRAO:
-            cache.salvar_itens(pedido_id, itens)  # pedido com detalhe lido nao muda: nunca mais e' relido
+        if cache is not None:
+            cache.salvar_itens(pedido_id, itens, conta)  # pedido com detalhe lido nao muda: nunca mais e' relido
     return _detalhe_cache[chave]
 
 
@@ -505,10 +505,12 @@ def get_produtos(
     Os MESMOS filtros do GMV valem para os itens: periodo, canal (`plataformas`) e marca (`marcas`),
     com cancelados fora. Itens de um canal ou marca fora do recorte nunca entram (nem sao lidos).
 
-    Denavita: ML e Shopee pelo Bling DELA (`cli_denavita`, so' quando a conta tem token), lidos ao vivo e por
-    partes, no mesmo limite de `limite_detalhes` (a rotina de aquecimento so' conhece as lojas da Rituaria).
-    O TikTok dela vem do Data Mart, sem itens: nesse canal ficam ausentes, com motivo. Sem `cli_denavita`,
-    a marca fica sem itens e o motivo diz por que (`motivo_sem_bling_denavita`); nunca 0."""
+    Denavita: ML e Shopee pelo Bling DELA (`cli_denavita`, so' quando a conta tem token). Os itens vem do
+    cache do banco (conta 'denavita', aquecido pela rotina) e, com o cache e a rotina ligados, a requisicao
+    NAO le item ao vivo: devolve o que o banco tem e aciona a rotina, como na Rituaria. Sem cache ou sem rotina,
+    le ao vivo por partes, no mesmo limite de `limite_detalhes`. A LISTA de pedidos dela segue ao vivo (memoria,
+    15 min). O TikTok dela vem do Data Mart, sem itens: nesse canal ficam ausentes, com motivo. Sem
+    `cli_denavita`, a marca fica sem itens e o motivo diz por que (`motivo_sem_bling_denavita`); nunca 0."""
     fim = min(date_to, hoje)
     inicio = min(date_from, fim)
     plat_ok = {p.upper() for p in plataformas} if plataformas is not None else None
@@ -554,13 +556,20 @@ def get_produtos(
                     for p in pedidos_denavita_bling(cli_denavita, inicio, fim, agora) if p["plataforma"] in den_plat
                 ]
                 lista = lista + den
-                for p in den:
-                    if _chave(p) in _detalhe_cache:
-                        continue
-                    if novos >= orcamento:
-                        break
-                    _itens(cli_denavita, p["id"], None, CONTA_DENAVITA)
-                    novos += 1
+                if cache is not None:  # itens da conta ja' lidos (pela rotina ou por pedidos anteriores)
+                    faltam_den = [p["id"] for p in den if _chave(p) not in _detalhe_cache]
+                    _detalhe_cache.update({(CONTA_DENAVITA, i): v for i, v in cache.itens(faltam_den, CONTA_DENAVITA).items()})
+                if not ao_vivo:
+                    if ao_faltar_cache is not None and any(_chave(p) not in _detalhe_cache for p in den):
+                        ao_faltar_cache()
+                else:
+                    for p in den:
+                        if _chave(p) in _detalhe_cache:
+                            continue
+                        if novos >= orcamento:
+                            break
+                        _itens(cli_denavita, p["id"], cache, CONTA_DENAVITA)
+                        novos += 1
             except BlingIndisponivel as exc:  # motivo ja' sanitizado; o que foi lido ate' aqui fica
                 logger.warning("marcas_menores: itens do Bling da Denavita indisponiveis (%s)", exc)
                 den_status, den_motivo = STATUS_FONTE_INDISPONIVEL, f"Bling da Denavita: {exc}"

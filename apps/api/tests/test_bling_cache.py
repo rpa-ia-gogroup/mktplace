@@ -25,7 +25,8 @@ class FakeCache:
 
     def __init__(self, lock_livre: bool = True):
         self.linhas: dict[int, dict] = {}
-        self.itens_: dict[int, list] = {}
+        self.itens_: dict[int, list] = {}  # conta 'rituaria' (a chave no banco e' (conta, id))
+        self.outras: dict[tuple[str, int], list] = {}  # demais contas, p.ex. ('denavita', id)
         self.sync: dict[str, tuple[str | None, datetime]] = {}
         self.lock_livre = lock_livre
 
@@ -37,11 +38,16 @@ class FakeCache:
         for l in linhas:
             self.linhas[l["id"]] = dict(l)
 
-    def itens(self, ids):
+    def itens(self, ids, conta="rituaria"):
+        if conta != "rituaria":
+            return {i: self.outras[(conta, i)] for i in ids if (conta, i) in self.outras}
         return {i: self.itens_[i] for i in ids if i in self.itens_}
 
-    def salvar_itens(self, pedido_id, itens):
-        self.itens_.setdefault(pedido_id, itens)
+    def salvar_itens(self, pedido_id, itens, conta="rituaria"):
+        if conta != "rituaria":
+            self.outras.setdefault((conta, pedido_id), itens)
+        else:
+            self.itens_.setdefault(pedido_id, itens)
 
     def ids_sem_itens(self, lojas, inicio, fim, cancelado):
         return [r["id"] for r in sorted(self.linhas.values(), key=lambda r: (r["data"], r["id"]), reverse=True)

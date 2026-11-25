@@ -125,24 +125,50 @@ def test_mesmo_id_de_pedido_em_duas_contas_nao_colide():
     assert {p["sku"] for p in _marcas(r2)["denavita"]["produtos"]} == {"DEN-X", "DEN-Y"}
 
 
-def test_cache_do_banco_so_guarda_itens_da_rituaria(monkeypatch):
-    """`audit.bling_pedido_itens` tem o id do pedido como chave unica: itens da Denavita nunca vao para la'."""
-    monkeypatch.setattr(svc.settings, "bling_warm_enabled", False)  # leitura ao vivo: a Rituaria grava no cache
+def test_itens_vao_para_o_cache_do_banco_separados_por_conta(monkeypatch):
+    """A chave no banco e' (conta, id): o id 11 da Rituaria e o id 11 da Denavita convivem sem se sobrescrever."""
+    monkeypatch.setattr(svc.settings, "bling_warm_enabled", False)  # leitura ao vivo: as duas contas gravam no cache
     cache = FakeCache()
     r, *_ = _produtos(cache=cache)
-    assert set(cache.itens_) == {11, 12}, "so' os da Rituaria"
-    assert cache.itens_[11][0]["codigo"] == "RIT-A", "o id 11 do banco e' o da Rituaria, nao o da Denavita"
+    assert set(cache.itens_) == {11, 12}, "conta rituaria"
+    assert cache.itens_[11][0]["codigo"] == "RIT-A"
+    assert set(cache.outras) == {("denavita", 11), ("denavita", 14)}, "conta denavita: so' ML e Shopee, sem cancelado/TikTok"
+    assert cache.outras[("denavita", 11)][0]["codigo"] == "DEN-X"
     assert {p["sku"] for p in _marcas(r)["denavita"]["produtos"]} == {"DEN-X", "DEN-Y"}
 
 
-def test_denavita_le_ao_vivo_mesmo_com_a_rotina_ligada(monkeypatch):
-    """A rotina de aquecimento so' conhece as lojas da Rituaria; sem leitura ao vivo a Denavita nunca encheria."""
+def test_com_cache_e_rotina_a_requisicao_nao_le_a_denavita_ao_vivo_e_aciona_a_rotina(monkeypatch):
     monkeypatch.setattr(svc.settings, "bling_warm_enabled", True)
     cache = FakeCache()
-    r, rit_cli, den_cli = _produtos(cache=cache)
-    assert _detalhes(rit_cli) == [], "Rituaria: so' do banco/rotina"
-    assert sorted(_detalhes(den_cli)) == ["/pedidos/vendas/11", "/pedidos/vendas/14"]
-    assert {p["sku"] for p in _marcas(r)["denavita"]["produtos"]} == {"DEN-X", "DEN-Y"}
+    acionou = []
+    r, rit_cli, den_cli = _produtos(cache=cache, ao_faltar_cache=lambda: acionou.append(1))
+    assert _detalhes(rit_cli) == [] and _detalhes(den_cli) == [], "nenhum item lido ao vivo, de nenhuma conta"
+    assert acionou, "a rotina e' acionada para preencher"
+    d = _marcas(r)["denavita"]
+    assert d["produtos"] == [] and d["receita_itens"] is None, "sem item no banco: sem dado, nunca 0"
+    assert r["completo"] is False and r["pedidos_lidos"] == 0 and r["pedidos_total"] == 4
+    assert d["gmv_pedidos"] == 230.0, "a lista dela segue ao vivo: o GMV dos pedidos aparece"
+
+
+def test_com_cache_e_rotina_o_que_o_banco_tem_da_denavita_ja_aparece(monkeypatch):
+    monkeypatch.setattr(svc.settings, "bling_warm_enabled", True)
+    cache = FakeCache()
+    cache.salvar_itens(11, DEN_ITENS[11], "denavita")  # a rotina ja' leu so' este
+    acionou = []
+    r, _, den_cli = _produtos(cache=cache, ao_faltar_cache=lambda: acionou.append(1))
+    d = _marcas(r)["denavita"]
+    assert {p["sku"] for p in d["produtos"]} == {"DEN-X"} and d["receita_itens"] == 190.0
+    assert r["pedidos_lidos"] == 1 and r["completo"] is False and acionou
+    assert _detalhes(den_cli) == []
+    # a rotina termina; a proxima leitura fecha, ainda sem tocar no Bling dela
+    cache.salvar_itens(14, DEN_ITENS[14], "denavita")
+    cache.salvar_itens(11, RIT_ITENS[11])  # e os da Rituaria
+    cache.salvar_itens(12, RIT_ITENS[12])
+    svc.limpar_cache()
+    r2, _, den2 = _produtos(cache=cache)
+    assert r2["completo"] is True and r2["pedidos_lidos"] == 4 and _detalhes(den2) == []
+    assert {p["sku"] for p in _marcas(r2)["denavita"]["produtos"]} == {"DEN-X", "DEN-Y"}
+    assert {p["sku"] for p in _marcas(r2)["yenzah"]["produtos"]} == {"RIT-A", "RIT-B"}
 
 
 def test_mesmo_limite_por_partes_e_progresso():

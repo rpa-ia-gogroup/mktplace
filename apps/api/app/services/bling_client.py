@@ -72,6 +72,25 @@ class BlingCliente:
         raise BlingIndisponivel("Bling limitou as consultas; tente de novo em instantes.")
 
 
+def cliente_denavita(db) -> tuple[Optional[BlingCliente], Optional[str]]:
+    """(cliente, motivo): cliente do Bling da Denavita so' com app configurado e token gravado (callback OAuth).
+    Sem isso, (None, motivo): a Denavita segue pelo caminho provisorio e a resposta diz por que.
+    Usado pela rota e pela rotina de aquecimento."""
+    from app.services import bling_token
+
+    if db is None:
+        return None, "Bling da Denavita: banco indisponível."
+    if not all(bling_token.credenciais(bling_token.CONTA_DENAVITA)):
+        return None, "Bling da Denavita: app sem credencial na API (BLING_DENAVITA_CLIENT_ID/SECRET)."
+    try:
+        if bling_token.ArmazemPg(db).ler(bling_token.CONTA_DENAVITA) is None:
+            return None, "Bling da Denavita: conta ainda sem autorização (sem token gravado)."
+    except Exception as exc:  # noqa: BLE001 - banco fora: segue sem o Bling dela
+        logger.warning("bling: token da Denavita ilegivel (%s)", type(exc).__name__)
+        return None, "Bling da Denavita: token ilegível no banco."
+    return cliente_com_sessao(db, bling_token.CONTA_DENAVITA), None
+
+
 def cliente_com_sessao(db, conta: Optional[str] = None) -> BlingCliente:
     """Cliente do Bling com o token da conta (tabela do banco), lido UMA vez por uso: nao uma por chamada."""
     from app.services import bling_token

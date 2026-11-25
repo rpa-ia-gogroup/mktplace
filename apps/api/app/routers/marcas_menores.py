@@ -17,7 +17,7 @@ from app.schemas.marcas_menores import (
 from app.services import bling_token, bling_warm
 from app.services import marcas_menores_service as svc
 from app.services.bling_cache import ArmazemCachePg
-from app.services.bling_client import BlingCliente, cliente_com_sessao
+from app.services.bling_client import BlingCliente, cliente_com_sessao, cliente_denavita
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +60,8 @@ def cliente_bling(db: Session) -> BlingCliente:
 
 
 def bling_denavita(db: Optional[Session]) -> tuple[Optional[BlingCliente], Optional[str]]:
-    """(cliente, motivo): cliente do Bling da Denavita so' com app configurado e token gravado (callback OAuth).
-    Sem isso, (None, motivo): a Denavita segue pelo caminho provisorio e a resposta diz por que."""
-    if db is None:
-        return None, "Bling da Denavita: banco indisponível."
-    if not all(bling_token.credenciais(bling_token.CONTA_DENAVITA)):
-        return None, "Bling da Denavita: app sem credencial na API (BLING_DENAVITA_CLIENT_ID/SECRET)."
-    try:
-        if bling_token.ArmazemPg(db).ler(bling_token.CONTA_DENAVITA) is None:
-            return None, "Bling da Denavita: conta ainda sem autorização (sem token gravado)."
-    except Exception as exc:  # noqa: BLE001 - banco fora: segue sem o Bling dela
-        logger.warning("marcas_menores: token da Denavita ilegivel (%s)", type(exc).__name__)
-        return None, "Bling da Denavita: token ilegível no banco."
-    return cliente_com_sessao(db, bling_token.CONTA_DENAVITA), None
+    """(cliente, motivo) da Denavita; a regra mora em `bling_client.cliente_denavita` (a rotina de aquecimento a usa)."""
+    return cliente_denavita(db)
 
 
 def cliente_bling_denavita(db: Optional[Session]) -> Optional[BlingCliente]:
