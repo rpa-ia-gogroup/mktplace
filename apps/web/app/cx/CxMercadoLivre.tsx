@@ -29,7 +29,7 @@ import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import StateBlock from "@/components/ui/StateBlock";
-import { inteiro, pctCx, reais, type FiltrosCx } from "@/lib/cx";
+import { DIAS_HOJE, inteiro, pctCx, reais, type FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_ML,
   INDICADORES_ML,
@@ -80,6 +80,8 @@ import {
   pesosDaColuna,
   pilulaCartao,
   pilulaSelo,
+  MOTIVO_HOJE,
+  SEM_DADO_HOJE,
 } from "./CxConteudo";
 
 export default function CxMercadoLivre({ filtros }: { filtros: FiltrosCx }) {
@@ -286,6 +288,7 @@ function Faixa({
   ajudaResposta: string;
   abrir: (i: TaxaDoCartao) => void;
 }) {
+  const hoje = dias === DIAS_HOJE;
   const taxa = (i: TaxaDoCartao, cor: string, icone: typeof Ban, contagem: string | null) => {
     const c = r.comparacao[i];
     const sem = c?.delta == null && r.taxa[i] != null ? r.semAnterior[i] : undefined;
@@ -294,7 +297,8 @@ function Faixa({
         rotulo={ROTULO_ML[i]}
         icone={icone}
         cor={cor}
-        valor={r.taxa[i] == null ? null : pctCx(r.taxa[i])}
+        valor={r.taxa[i] == null ? (hoje ? SEM_DADO_HOJE : null) : pctCx(r.taxa[i])}
+        ausente={hoje && r.taxa[i] == null}
         pilula={pilulaCartao(c)}
         // cobertura parcial e contagem ficam no cartao; sem periodo anterior, o motivo da API vai para o ⓘ
         legenda={contagem}
@@ -310,7 +314,7 @@ function Faixa({
     );
   };
   const n = (i: IndicadorTaxa, um: string, varios: string) => {
-    if (r.contagem[i] == null) return i === "devolucao" ? "Coleta incompleta no período" : null;
+    if (r.contagem[i] == null) return hoje ? MOTIVO_HOJE.coletaMl : i === "devolucao" ? "Coleta incompleta no período" : null;
     const { lidas, total } = r.marcasNaTaxa[i];
     // cobertura parcial aparece no card, nunca so' no ⓘ
     return `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}${lidas < total ? ` · ${lidas} de ${total} marcas` : ""}`;
@@ -324,9 +328,11 @@ function Faixa({
           rotulo={ROTULO_ML.resposta}
           icone={MessageCircle}
           cor={COR_CX.resposta}
-          valor={r.resposta == null ? null : pctCx(r.resposta)}
-          pilula={pilulaResposta ?? pilulaSelo(selo)}
-          legenda={erro ?? (pilulaResposta ? legendaSelo(selo) : null)}
+          valor={r.resposta == null ? (hoje ? SEM_DADO_HOJE : null) : pctCx(r.resposta)}
+          ausente={hoje && r.resposta == null}
+          // sem dado nao diz "na meta" (Revisor UX, #536)
+          pilula={hoje && r.resposta == null ? null : (pilulaResposta ?? pilulaSelo(selo))}
+          legenda={erro ?? (hoje && r.resposta == null ? MOTIVO_HOJE.coletaMl : pilulaResposta ? legendaSelo(selo) : null)}
           rodape={fila}
           ajuda={<InfoDica texto={ajudaResposta} />}
         />

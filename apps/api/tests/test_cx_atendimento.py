@@ -313,3 +313,21 @@ def test_entrada_invalida_e_422_sem_eco(cliente, params):
     valor = list(params.values())[0]
     assert valor not in r.text or valor.isdigit()
     assert chamadas == []
+
+
+# ---------------------------------------------------------------------------
+# Hoje (aba CX): dias=0 = o dia corrente ate' agora, no fuso do negocio
+# ---------------------------------------------------------------------------
+def test_janela_hoje_e_o_dia_corrente_no_fuso_do_negocio():
+    # 02:00 UTC de 04/11 ainda e' 03/11 em Sao Paulo
+    j = svc.calcular_janela(0, datetime(2026, 11, 4, 2, 0, tzinfo=timezone.utc))
+    assert (j.inicio, j.fim, j.dias) == (date(2026, 11, 3), date(2026, 11, 3), 0)
+    assert svc._texto_janela(j) == "hoje até agora (03/11)"
+
+
+def test_hoje_e_aceito_na_validacao_do_dias(cliente):
+    c, chamadas = cliente
+    assert c.get(URL, params={"dias": "0"}).status_code == 200
+    assert chamadas[-1][1] == 0
+    assert c.get(URL, params={"dias": "00"}).status_code == 200  # isdigit: mesmo valor
+    assert c.get(URL, params={"dias": "1"}).status_code == 422

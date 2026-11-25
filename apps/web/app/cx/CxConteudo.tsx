@@ -50,6 +50,7 @@ import {
   AJUDA_RISCO,
   CANAIS_CX,
   ROTULO_INDICADOR,
+  DIAS_HOJE,
   avisoColetaChat,
   carregarCxShopee,
   carregarPedidosMotivo,
@@ -111,9 +112,11 @@ export const COR_CX = {
 
 export const GRADE_FAIXA = "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4";
 
-/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados). */
-export const intervaloDaJanela = (j: { inicio: string; fim: string }): string =>
-  `${j.inicio.slice(8, 10)}/${j.inicio.slice(5, 7)}–${j.fim.slice(8, 10)}/${j.fim.slice(5, 7)}`;
+/** "13/10–11/11" da janela que a API devolveu (o intervalo real dos dias fechados); Hoje, so' "24/11". */
+export const intervaloDaJanela = (j: { inicio: string; fim: string }): string => {
+  const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  return j.inicio === j.fim ? dm(j.fim) : `${dm(j.inicio)}–${dm(j.fim)}`;
+};
 
 export function AbaCx({ canal, filtros, intervalo, selo, faixa, children }: { canal: CanalCx; filtros: FiltrosCx; intervalo?: string; selo?: ReactNode; faixa?: ReactNode; children?: ReactNode }) {
   const router = useRouter();
@@ -182,6 +185,10 @@ export const legendaSelo = (s: { texto: string; tom: "ok" | "critico" } | null):
 
 /** "—" (ausencia) vira `null`: o cartao escreve "N/D", nunca zero. */
 export const valorCartao = (v: string | null | undefined): string | null => (v && v !== "—" ? v : null);
+
+/** Hoje (dias=0): o que nao existe no dia sai escrito, com o motivo visivel (Revisor UX, #536), nunca "N/D" nem selo de meta. */
+export const SEM_DADO_HOJE = "Sem dado hoje";
+export const MOTIVO_HOJE = { fotografia: "Sai na fotografia de amanhã", coletaMl: "Coleta diária às 06:20" } as const;
 
 export default function CxConteudo({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
@@ -255,6 +262,8 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
         : `${marcaAberta?.marca ?? brandLabel(dialogo.marca)} · Saúde da Conta`;
 
   // Comparacao de cada cartao: as mesmas regras do card CX da Gerencial (`rodapeComparacao`), no formato do cartao novo.
+  // Hoje: a taxa de resposta oficial e' fotografia diaria (nao existe "de hoje")
+  const respostaHoje = filtros.dias === DIAS_HOJE && valorCartao(r.resposta) == null;
   const rodape = { resposta: rodapeComparacao(r, "resposta"), cancelamento: rodapeComparacao(r, "cancelamento"), reembolso: rodapeComparacao(r, "reembolso") };
   const cancelamentoEstavel = r.cancelamentoDelta?.sentido === "estavel";
   const pilulas = {
@@ -304,10 +313,11 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
               rotulo={ROTULO_INDICADOR.resposta}
               icone={MessageCircle}
               cor={COR_CX.resposta}
-              valor={valorCartao(r.resposta)}
-              pilula={pilulas.resposta ?? selo}
+              valor={respostaHoje ? SEM_DADO_HOJE : valorCartao(r.resposta)}
+              ausente={respostaHoje}
+              pilula={respostaHoje ? null : (pilulas.resposta ?? selo)}
               // a fila do chat (N aguardando, M ha mais de 24 h) fica SEMPRE na legenda (regra da Operacao)
-              legenda={erroAtendimento ?? ([pilulas.resposta ? legendaSelo(heroi.selo) : null, heroi.contexto].filter(Boolean).join(" · ") || null)}
+              legenda={erroAtendimento ?? ([respostaHoje ? MOTIVO_HOJE.fotografia : pilulas.resposta ? legendaSelo(heroi.selo) : null, heroi.contexto].filter(Boolean).join(" · ") || null)}
               serie={rodape.resposta.serie}
               ajuda={ajuda("resposta", r.semAnterior.resposta?.texto)}
               onAbrir={() => setDialogo({ indicador: "resposta" })}

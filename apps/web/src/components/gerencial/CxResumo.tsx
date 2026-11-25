@@ -30,8 +30,11 @@ import StateBlock, { RetryButton } from "@/components/ui/StateBlock";
 import {
   AJUDA_CX,
   AJUDA_RISCO,
+  DIAS_HOJE,
   MIN_MARCAS_RISCO,
+  MOTIVO_CONTACT_HOJE,
   MOTIVO_REENVIO,
+  MOTIVO_RESPOSTA_HOJE,
   ROTULO_CURTO,
   ROTULO_INDICADOR,
   carregarCxShopee,
@@ -119,6 +122,7 @@ export function LinhaSemComparacao({ texto, detalhe }: { texto: string; detalhe:
  * `dias`: janela da comparacao (a Gerencial usa sempre 30; a aba CX, o filtro).
  */
 export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias: number = DIAS): string[] {
+  if (dias === DIAS_HOJE) return notasDoTileHoje(i);
   // API-3: com anterior, como a seta compara; sem ele, o motivo da API; API antiga, o texto de antes
   const comparacao = (semApi: string) =>
     r.comparacao[i]?.delta != null
@@ -156,6 +160,15 @@ export function notasDoTile(r: ResumoCx, i: IndicadorCx, dias: number = DIAS): s
     "Valor reembolsado nas devoluções aceitas do período. A taxa é devoluções aceitas ÷ pedidos.",
     comparacao(SEM_HISTORICO_DEVOLUCAO),
   ];
+}
+
+/** "Hoje" (aba CX, dias=0): parcial ate' agora, sem periodo anterior e sem o que so' existe por fotografia. */
+function notasDoTileHoje(i: IndicadorCx): string[] {
+  const parcial = "Hoje é parcial (até agora): não se compara com um período fechado.";
+  if (i === "contactRate") return [`${AJUDA_CX.contactRate} Conversas ÷ pedidos.`, MOTIVO_CONTACT_HOJE];
+  if (i === "resposta") return [MOTIVO_RESPOSTA_HOJE, "A fila do chat e o tempo de resposta mostram o dia até agora."];
+  if (i === "cancelamento") return [`${AJUDA_CX.cancelamentos} Cancelamentos ÷ pedidos.`, parcial];
+  return ["Valor reembolsado nas devoluções aceitas de hoje. A taxa é devoluções aceitas ÷ pedidos.", parcial];
 }
 
 /** Janela do CX na Gerencial: segue o periodo quando ele e' 7, 30 ou 90 dias fechados; senao, 30 (o subtitulo avisa). */
