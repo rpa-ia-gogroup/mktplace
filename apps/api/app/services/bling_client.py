@@ -62,8 +62,9 @@ class BlingCliente:
                 self._invalidar()
                 continue
             if r.status_code >= 400:
-                logger.warning("bling respondeu %s", r.status_code)
-                raise BlingIndisponivel("Bling indisponível agora.")
+                # caminho e status (nunca token nem corpo): diz QUAL chamada falhou (ex.: 403 = app sem o escopo)
+                logger.warning("bling respondeu %s em %s", r.status_code, caminho.split("?")[0])
+                raise BlingIndisponivel(f"Bling respondeu {r.status_code} em {caminho.split('?')[0]}.")
             try:
                 return r.json()
             except Exception as exc:  # noqa: BLE001

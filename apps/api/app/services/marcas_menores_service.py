@@ -117,6 +117,8 @@ def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None, conta: s
     propria = conta == CONTA_PADRAO
     if propria and settings.bling_situacao_cancelado_id:
         return settings.bling_situacao_cancelado_id
+    if conta == CONTA_DENAVITA and settings.bling_denavita_situacao_cancelado_id:
+        return settings.bling_denavita_situacao_cancelado_id
     if conta in _cancelado:
         return _cancelado[conta]
     guardado = cache.ler_sync("cancelado_id") if cache and propria else None
@@ -290,7 +292,10 @@ def pedidos_denavita_tiktok(consultar: Callable[[str, dict], list[dict]], inicio
     return saida
 
 
-def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date, status_denavita: Optional[str] = None) -> dict:
+def _montar(
+    linhas: list[dict], ant: list[dict], inicio: date, fim: date, status_denavita: Optional[str] = None,
+    motivo_bling_denavita: Optional[str] = None,
+) -> dict:
     """Cada linha do Bling e' 1 pedido; a linha agregada da gold traz `pedidos` (None = sem dado, nao conta)."""
     por_marca: dict[str, dict] = {id_: {"plat": {}, "dias": {}, "dias_ped": {}} for id_, _, _ in MARCAS}
     for l in linhas:
@@ -342,6 +347,8 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date, status
         elif id_ == DENAVITA and status_denavita is not None:
             status, aviso = status_denavita, AVISO_DENAVITA
             motivo = MOTIVO_DM_INDISPONIVEL if status_denavita == STATUS_FONTE_INDISPONIVEL else None
+            if motivo_bling_denavita:  # por que o Bling dela nao entrou (sem token, sem credencial, erro da API)
+                motivo = f"{motivo} {motivo_bling_denavita}" if motivo else motivo_bling_denavita
         marcas.append({
             "id": id_,
             "label": label,
@@ -400,6 +407,7 @@ def get_marcas_menores(
     ao_faltar_cache: Optional[Callable[[], None]] = None,
     consultar_dm: Optional[Callable[[str, dict], list[dict]]] = None,
     cli_denavita: Optional[BlingCliente] = None,
+    motivo_sem_bling_denavita: Optional[str] = None,
 ) -> dict:
     """`consultar_dm`: leitura do Data Mart para o TikTok da Denavita. A rota passa
     `consultar_datamart`; sem ela (rotina, chamadas diretas) a Denavita fica indisponivel e
@@ -420,6 +428,7 @@ def get_marcas_menores(
         ant = []  # sem base: a variacao some, nunca vira 0
     ant_ini = ant_fim - timedelta(days=dias - 1)
     com_bling = False
+    motivo_bling = motivo_sem_bling_denavita
     if cli_denavita is not None:
         try:
             den = pedidos_denavita_bling(cli_denavita, ant_ini, fim, agora)  # atual + anterior numa leitura so'
@@ -428,6 +437,7 @@ def get_marcas_menores(
             com_bling = True
         except BlingIndisponivel as exc:  # motivo ja' sanitizado; a Denavita volta ao caminho provisorio
             logger.warning("marcas_menores: Bling da Denavita indisponivel (%s)", exc)
+            motivo_bling = f"Bling da Denavita: {exc}"
     com_dm = False
     if consultar_dm is not None:
         try:
@@ -441,7 +451,7 @@ def get_marcas_menores(
         status_denavita = DENAVITA_BLING if com_dm else DENAVITA_BLING_SEM_DM
     else:
         status_denavita = STATUS_FONTE_PROVISORIA if com_dm else STATUS_FONTE_INDISPONIVEL
-    return _montar(linhas, ant, inicio, fim, status_denavita)
+    return _montar(linhas, ant, inicio, fim, status_denavita, None if com_bling else motivo_bling)
 
 
 # ---------------------------------------------------------------------------

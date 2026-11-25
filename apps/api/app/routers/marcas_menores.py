@@ -59,18 +59,24 @@ def cliente_bling(db: Session) -> BlingCliente:
     return cliente_com_sessao(db)
 
 
-def cliente_bling_denavita(db: Optional[Session]) -> Optional[BlingCliente]:
-    """Cliente do Bling da Denavita so' quando a conta tem app configurado e token gravado (callback OAuth).
-    Sem isso, None: a Denavita segue pelo caminho provisorio, com aviso."""
-    if db is None or not all(bling_token.credenciais(bling_token.CONTA_DENAVITA)):
-        return None
+def bling_denavita(db: Optional[Session]) -> tuple[Optional[BlingCliente], Optional[str]]:
+    """(cliente, motivo): cliente do Bling da Denavita so' com app configurado e token gravado (callback OAuth).
+    Sem isso, (None, motivo): a Denavita segue pelo caminho provisorio e a resposta diz por que."""
+    if db is None:
+        return None, "Bling da Denavita: banco indisponível."
+    if not all(bling_token.credenciais(bling_token.CONTA_DENAVITA)):
+        return None, "Bling da Denavita: app sem credencial na API (BLING_DENAVITA_CLIENT_ID/SECRET)."
     try:
         if bling_token.ArmazemPg(db).ler(bling_token.CONTA_DENAVITA) is None:
-            return None
+            return None, "Bling da Denavita: conta ainda sem autorização (sem token gravado)."
     except Exception as exc:  # noqa: BLE001 - banco fora: segue sem o Bling dela
         logger.warning("marcas_menores: token da Denavita ilegivel (%s)", type(exc).__name__)
-        return None
-    return cliente_com_sessao(db, bling_token.CONTA_DENAVITA)
+        return None, "Bling da Denavita: token ilegível no banco."
+    return cliente_com_sessao(db, bling_token.CONTA_DENAVITA), None
+
+
+def cliente_bling_denavita(db: Optional[Session]) -> Optional[BlingCliente]:
+    return bling_denavita(db)[0]
 
 
 def cache_bling(db: Session):
@@ -86,9 +92,10 @@ def marcas_menores(date_from: Optional[date] = Query(None), date_to: Optional[da
     Fora do GMV total, da meta e da rosca da Gerencial."""
     hoje = today_brt()
     p = resolve_period(date_from=date_from, date_to=date_to, default_days=30, today=hoje)
+    cli_den, motivo_den = bling_denavita(db)
     return svc.get_marcas_menores(
         cliente_bling(db), p.start, p.end, hoje, cache=cache_bling(db), ao_faltar_cache=bling_warm.disparar_em_segundo_plano,
-        consultar_dm=svc.consultar_datamart, cli_denavita=cliente_bling_denavita(db),
+        consultar_dm=svc.consultar_datamart, cli_denavita=cli_den, motivo_sem_bling_denavita=motivo_den,
     )
 
 
