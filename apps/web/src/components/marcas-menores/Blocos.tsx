@@ -34,7 +34,7 @@ import { buildProdutosCsvFile } from "@/lib/produtos-export";
 const SerieDiaria = dynamic(() => import("./SerieDiaria"), { ssr: false, loading: () => <div className="h-36" aria-hidden="true" /> });
 
 export const FONTE_PRODUTOS =
-  "Origem: itens dos pedidos do Bling. Quantidade e receita por produto (valor × quantidade − desconto do item), sem cancelados. A Denavita não tem itens: eles só vêm do Bling, e a conta dela segue sem autorização (o pedido dela vem do TikTok via Data Mart, que não traz itens). Os itens são lidos pedido a pedido: a tabela pode vir parcial e se completa sozinha.";
+  "Origem: itens dos pedidos do Bling. Quantidade e receita por produto (valor × quantidade − desconto do item), sem cancelados. A Denavita tem itens de ML e Shopee pelo Bling dela; o TikTok dela não tem itens (vem do Data Mart, só com o total do dia). Os itens são lidos pedido a pedido: a tabela pode vir parcial e se completa sozinha.";
 
 /** "▲ 12%" contra o período anterior; sem base, nada; com `motivo` (canal sem base no anterior), "—" e o aviso. */
 export function Variacao({ pct, motivo = null }: { pct: number | null; motivo?: string | null }) {

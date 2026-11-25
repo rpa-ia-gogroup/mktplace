@@ -203,6 +203,7 @@ def test_rota_entrega_aviso_motivo_e_parcial_depois_do_response_model(monkeypatc
         p = c.get("/api/v1/performance/marcas-menores/produtos?date_from=2026-10-01&date_to=2026-10-31")
         assert p.status_code == 200, p.text
         pd = {m["id"]: m for m in p.json()["marcas"]}["denavita"]
-        assert pd["status"] == "aguardando_autorizacao" and "sem autorização" in pd["motivo"]
+        # sem sessao de banco (override acima) a rota nao acha o token: o motivo e' o dela, nao um texto fixo
+        assert pd["status"] == "aguardando_autorizacao" and pd["motivo"] == "Bling da Denavita: banco indisponível."
     finally:
         app.dependency_overrides.pop(get_db, None)

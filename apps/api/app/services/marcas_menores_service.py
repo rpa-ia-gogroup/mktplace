@@ -67,7 +67,10 @@ AVISO_DENAVITA = (
     "O GMV dessa gold tem definição própria (1,4% a 3,9% acima do mart da Torre)."
 )
 MOTIVO_DM_INDISPONIVEL = "Data Mart indisponível: sem o TikTok da Denavita agora (Shopee pendente: conta do Bling sem autorização)."
-MOTIVO_ITENS_DENAVITA = "Itens só pelo Bling; a conta da Denavita segue sem autorização (a gold por marca não tem itens)."
+#: Sem token da conta (a rota manda o motivo exato: sem credencial, sem token, banco fora). Este e' o padrao.
+MOTIVO_ITENS_DENAVITA = "Bling da Denavita sem autorização."
+#: Denavita no TikTok vem do Data Mart (so' o total do dia): nunca ha' itens nesse canal.
+MOTIVO_TIKTOK_SEM_ITENS = "TikTok sem itens: o Data Mart só traz o total do dia."
 #: Denavita com o Bling dela (ML e Shopee): com e sem o TikTok do Data Mart.
 DENAVITA_BLING = "bling"
 DENAVITA_BLING_SEM_DM = "bling_sem_data_mart"
@@ -98,7 +101,8 @@ def _agora_dt() -> datetime:
     return datetime.now(timezone.utc)
 
 _lista_cache: dict[tuple, tuple[float, list[dict]]] = {}
-_detalhe_cache: dict[int, list[dict]] = {}
+#: Itens por (conta Bling, id do pedido): o id de um pedido so' vale dentro da conta que o emitiu.
+_detalhe_cache: dict[tuple[str, int], list[dict]] = {}
 #: conta Bling -> id da situacao "Cancelado" (cada conta tem os seus ids)
 _cancelado: dict[str, int] = {}
 _lojas_denavita: dict[int, str] = {}
@@ -465,13 +469,20 @@ def receita_do_item(item: dict) -> Optional[float]:
         return None
 
 
-def _itens(cli: BlingCliente, pedido_id: int, cache: Optional[CacheBling] = None) -> list[dict]:
-    if pedido_id not in _detalhe_cache:
+def _chave(p: dict) -> tuple[str, int]:
+    return (p["conta"], p["id"])
+
+
+def _itens(cli: BlingCliente, pedido_id: int, cache: Optional[CacheBling] = None, conta: str = CONTA_PADRAO) -> list[dict]:
+    """`cache` (banco) so' vale para a Rituaria: `audit.bling_pedido_itens` tem o id do pedido como chave unica,
+    sem a conta, e ids de contas diferentes podem coincidir. Os itens da Denavita ficam so' na memoria."""
+    chave = (conta, pedido_id)
+    if chave not in _detalhe_cache:
         itens = (cli.get(f"/pedidos/vendas/{pedido_id}").get("data") or {}).get("itens") or []
-        _detalhe_cache[pedido_id] = itens
-        if cache is not None:
+        _detalhe_cache[chave] = itens
+        if cache is not None and conta == CONTA_PADRAO:
             cache.salvar_itens(pedido_id, itens)  # pedido com detalhe lido nao muda: nunca mais e' relido
-    return _detalhe_cache[pedido_id]
+    return _detalhe_cache[chave]
 
 
 def get_produtos(
@@ -485,35 +496,43 @@ def get_produtos(
     marcas: Optional[Iterable[str]] = None,
     cache: Optional[CacheBling] = None,
     ao_faltar_cache: Optional[Callable[[], None]] = None,
+    cli_denavita: Optional[BlingCliente] = None,
+    motivo_sem_bling_denavita: Optional[str] = None,
 ) -> dict:
     """Produto x quantidade x receita por marca. O detalhe de cada pedido custa 1 chamada (~3/s):
     le ate' `limite_detalhes` por vez e devolve `completo=False` com o progresso; o cache aquece.
 
     Os MESMOS filtros do GMV valem para os itens: periodo, canal (`plataformas`) e marca (`marcas`),
-    com cancelados fora. Itens de um canal ou marca fora do recorte nunca entram (nem sao lidos)."""
+    com cancelados fora. Itens de um canal ou marca fora do recorte nunca entram (nem sao lidos).
+
+    Denavita: ML e Shopee pelo Bling DELA (`cli_denavita`, so' quando a conta tem token), lidos ao vivo e por
+    partes, no mesmo limite de `limite_detalhes` (a rotina de aquecimento so' conhece as lojas da Rituaria).
+    O TikTok dela vem do Data Mart, sem itens: nesse canal ficam ausentes, com motivo. Sem `cli_denavita`,
+    a marca fica sem itens e o motivo diz por que (`motivo_sem_bling_denavita`); nunca 0."""
     fim = min(date_to, hoje)
     inicio = min(date_from, fim)
     plat_ok = {p.upper() for p in plataformas} if plataformas is not None else None
     marca_ok = set(marcas) if marcas is not None else None
+    orcamento = limite_detalhes  # o mesmo teto de leituras ao vivo vale para as duas contas
     try:
         lista = [
-            p for p in pedidos(cli, inicio, fim, agora, cache, ao_faltar_cache)
+            {**p, "conta": CONTA_PADRAO} for p in pedidos(cli, inicio, fim, agora, cache, ao_faltar_cache)
             if (plat_ok is None or p["plataforma"] in plat_ok) and (marca_ok is None or p["marca"] in marca_ok)
         ]
         novos = 0
         if cache is not None:  # itens ja' lidos (pela rotina ou por pedidos anteriores): 1 consulta ao banco
-            faltam = [p["id"] for p in lista if p["id"] not in _detalhe_cache]
-            _detalhe_cache.update(cache.itens(faltam))
+            faltam = [p["id"] for p in lista if _chave(p) not in _detalhe_cache]
+            _detalhe_cache.update({(CONTA_PADRAO, i): v for i, v in cache.itens(faltam).items()})
         # Com o cache persistente e a rotina ligados, a REQUISICAO nao le item no Bling (36 itens ~ 30 s): devolve o
         # que o banco tem, com o progresso, e aciona a rotina, que preenche o resto. Sem cache (ou rotina
         # desligada) continua lendo ao vivo, por partes.
         ao_vivo = cache is None or not settings.bling_warm_enabled
         if not ao_vivo:
             limite_detalhes = 0
-            if ao_faltar_cache is not None and any(p["id"] not in _detalhe_cache for p in lista):
+            if ao_faltar_cache is not None and any(_chave(p) not in _detalhe_cache for p in lista):
                 ao_faltar_cache()
         for p in lista:
-            if p["id"] in _detalhe_cache:
+            if _chave(p) in _detalhe_cache:
                 continue
             if novos >= limite_detalhes:
                 break
@@ -521,7 +540,33 @@ def get_produtos(
             novos += 1
     except BlingIndisponivel as exc:
         return {"disponivel": False, "motivo": str(exc), "marcas": []}
-    lidos = [p for p in lista if p["id"] in _detalhe_cache]
+
+    # Denavita (conta propria no Bling): ML e Shopee; o Bling dela falhar nao derruba as outras marcas.
+    den_status, den_motivo = "ok", None
+    if cli_denavita is None:
+        den_status, den_motivo = "aguardando_autorizacao", motivo_sem_bling_denavita or MOTIVO_ITENS_DENAVITA
+    else:
+        den_plat = {"MELI", "SHOPEE"} if plat_ok is None else {"MELI", "SHOPEE"} & plat_ok
+        if den_plat and (marca_ok is None or DENAVITA in marca_ok):
+            try:
+                den = [
+                    {**p, "conta": CONTA_DENAVITA}
+                    for p in pedidos_denavita_bling(cli_denavita, inicio, fim, agora) if p["plataforma"] in den_plat
+                ]
+                lista = lista + den
+                for p in den:
+                    if _chave(p) in _detalhe_cache:
+                        continue
+                    if novos >= orcamento:
+                        break
+                    _itens(cli_denavita, p["id"], None, CONTA_DENAVITA)
+                    novos += 1
+            except BlingIndisponivel as exc:  # motivo ja' sanitizado; o que foi lido ate' aqui fica
+                logger.warning("marcas_menores: itens do Bling da Denavita indisponiveis (%s)", exc)
+                den_status, den_motivo = STATUS_FONTE_INDISPONIVEL, f"Bling da Denavita: {exc}"
+        if den_motivo is None and (plat_ok is None or "TIKTOK" in plat_ok):
+            den_motivo = MOTIVO_TIKTOK_SEM_ITENS
+    lidos = [p for p in lista if _chave(p) in _detalhe_cache]
     acum: dict[str, dict[str, dict]] = {id_: {} for id_, _, _ in MARCAS}
     por_canal: dict[str, dict[tuple, dict]] = {id_: {} for id_, _, _ in MARCAS}
     gmv_pedidos: dict[str, float] = {}
@@ -529,7 +574,7 @@ def get_produtos(
         gmv_pedidos[p["marca"]] = gmv_pedidos.get(p["marca"], 0.0) + p["total"]
     for p in lidos:
         no_pedido: set = set()  # um produto conta 1 pedido, mesmo repetido nos itens dele
-        for it in _detalhe_cache[p["id"]]:
+        for it in _detalhe_cache[_chave(p)]:
             chave = str(it.get("codigo") or it.get("descricao") or "").strip()
             if not chave:
                 continue
@@ -558,9 +603,9 @@ def get_produtos(
             {
                 "id": id_,
                 "label": label,
-                "status": "ok" if conectada else "aguardando_autorizacao",
-                #: Por que a marca nao tem itens (Denavita: so' o Bling tem itens); nunca 0.
-                "motivo": MOTIVO_ITENS_DENAVITA if id_ == DENAVITA else (None if conectada else AGUARDANDO),
+                "status": den_status if id_ == DENAVITA else ("ok" if conectada else "aguardando_autorizacao"),
+                #: Por que a marca nao tem itens (ou so' parte deles); nunca 0.
+                "motivo": den_motivo if id_ == DENAVITA else (None if conectada else AGUARDANDO),
                 "produtos": sorted(acum[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:30],
                 #: Mesmo produto por canal (o Gerencial tem filtro de canal): so' o que o recorte tem.
                 "itens_por_canal": sorted(por_canal[id_].values(), key=lambda l: l["receita"] or 0.0, reverse=True)[:100],

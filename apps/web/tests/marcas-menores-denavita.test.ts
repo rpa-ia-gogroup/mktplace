@@ -78,7 +78,8 @@ test("textos fixos: a Denavita vem do TikTok via Data Mart; so' Shopee e itens p
   assert.match(pagina, /a Shopee e os itens dela seguem pendentes/);
   // A regra das demais marcas fora do GMV total, da meta e da rosca continua no texto da pagina.
   assert.match(pagina, /Estas marcas ficam fora do GMV total, da meta e da rosca da Gerencial/);
-  assert.match(blocos, /A Denavita não tem itens: eles só vêm do Bling/);
+  assert.match(blocos, /A Denavita tem itens de ML e Shopee pelo Bling dela; o TikTok dela não tem itens/);
+  assert.doesNotMatch(blocos, /segue sem autorização/);
   assert.match(blocos, /rotuloDaFonte\(m\)/);
 });
 
