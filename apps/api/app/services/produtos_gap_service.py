@@ -7,18 +7,30 @@ da fato `marts.fact_marketplace_hourly_sales`, so' que com o item):
   ML      silver.stg_ml_order_items x stg_ml_orders   (status 'paid'; hora BRT = date_created + 1h)
   Shopee  silver.stg_shopee_order_items x stg_shopee_orders (sem cancelado/nao pago/brinde; item_total)
   TikTok  raw.tiktok_shop_orders (ultima versao do pedido, status comerciais) x api.vw_tiktok_shop_line_items
-          (uma linha por peca; receita = sale_price)
+          (a tabela de itens tem UMA linha por SKU por pedido, sem quantidade: pecas e receita
+          do TikTok saem ~3% abaixo da gold diaria; medido 23/11/2026, kokeshi. O vies e' igual
+          nos dois dias, entao o gap continua comparavel)
 O corte e' o do `hoje_por_hora_service`: cada canal na sua ultima hora fechada, hoje e o dia
 comparado somados ate' a MESMA hora. Nao ha' escalonamento por curva: tem hora por SKU.
 
-Uma consulta so' ao Data Mart (UNION ALL dos canais pedidos, ja' agregada por SKU/janela):
-em prod cada consulta e' uma vaga na fila do Metabase.
+No MAXIMO duas consultas ao Data Mart, ja' agregadas por SKU/janela (em prod cada uma e' uma
+vaga na fila do Metabase): ML+Shopee juntos (UNION ALL) e o TikTok a' parte. Medido no Data Mart
+(kokeshi, hoje x ontem, `clock_timestamp` dentro da SQL): ML 0,6 s, Shopee 0,08 s, TikTok 0,1 s.
+MAS a mesma SQL do TikTok ja' levou 17,0 s numa execucao e 0,12 s na seguinte (a forma antiga
+tambem): variacao do Data Mart, nao da forma da consulta. Por isso o TikTok e' separado e tem
+orcamento de tempo (`TIMEOUT_TIKTOK_S`): se estourar ou falhar, ML e Shopee saem normalmente e
+o TikTok sai `sem_dado` ("demorou demais"), sem cache, em vez de derrubar a rota inteira.
+
+CACHE: a resposta pronta fica 5 min por (marca, canais, comparar, limite, dia, corte de cada canal);
+o corte muda de hora em hora, entao a chave troca sozinha. A consulta ao Data Mart tem ainda o
+cache de 10 min do `datamart_leitura`.
 
 Numeros calculados AQUI. Ausencia nunca vira zero: canal sem corte/sem pedido nos dois dias
 e canal que a marca nao tem saem como `sem_dado`; so' canal COM dado tem SKU "zero medido".
 """
 from __future__ import annotations
 
+import copy
 import logging
 from datetime import date, datetime, timedelta
 from typing import Callable, Optional
@@ -28,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.deps.period import APP_TIMEZONE
+from app.services import datamart_leitura
 from app.services import hoje_por_hora_service as hph
 from app.services import ml_full_stock_service as ml_stock
 from app.services import shopee_fbs_stock_service as fbs_stock
@@ -35,12 +48,19 @@ from app.services.gold_service import BRANDS_IN_SCOPE, ML_BRANDS
 
 logger = logging.getLogger(__name__)
 
-Consultar = Callable[[str, dict], list[dict]]
+Consultar = Callable[..., list[dict]]
 
 MKT_ID = {"tiktok": 1, "ml": 2, "shopee": 3}
 CANAIS = ("ml", "shopee", "tiktok")
 COMPARAR_DIAS = {"ontem": 1, "semana_passada": 7}
 TOP_ALTAS = 5
+CACHE_TTL_S = 300.0
+_CACHE_MAX = 64
+_cache: dict[tuple, tuple[float, dict]] = {}
+
+
+def limpar_cache() -> None:
+    _cache.clear()
 #: Espelha pipelines.connectors.tiktok.connector.COMMERCIAL_ORDER_STATUSES (a API nao importa de pipelines).
 TIKTOK_STATUS_COMERCIAIS = ("COMPLETED", "DELIVERED", "IN_TRANSIT", "AWAITING_COLLECTION", "AWAITING_SHIPMENT")
 #: Mais arriscada primeiro; a classificacao de um SKU com varias linhas e' a pior delas.
@@ -75,19 +95,35 @@ SELECT 'shopee' AS canal, COALESCE(NULLIF(i.sku, ''), i.item_id) AS sku, MAX(i.i
  GROUP BY 1, 2, 4""",
     "tiktok": f"""
 SELECT 'tiktok' AS canal, COALESCE(NULLIF(li.seller_sku, ''), li.product_id) AS sku, MAX(li.product_name) AS nome,
-       {_JANELA.format(dia="o.created_at::date")} AS janela,
+       {_JANELA.format(dia="f.created_at::date")} AS janela,
        COUNT(*) AS pecas, SUM(li.sale_price) AS receita
-  FROM (SELECT DISTINCT ON (order_id) order_id, brand, order_status, created_at
-          FROM raw.tiktok_shop_orders
-         WHERE brand = :marca
-           AND created_at >= CAST(:comp AS timestamp) AND created_at < CAST(:hoje AS timestamp) + INTERVAL '1 day'
-         ORDER BY order_id, updated_at DESC NULLS LAST, id DESC) o
-  JOIN api.vw_tiktok_shop_line_items li ON li.order_id = o.order_id AND li.brand = o.brand
- WHERE o.order_status = ANY(:status_tiktok)
-   AND o.created_at::date IN (CAST(:hoje AS date), CAST(:comp AS date))
-   AND EXTRACT(HOUR FROM o.created_at) < :corte_tiktok
+  FROM tk_f f
+  JOIN tk_i li ON li.order_id = f.order_id
  GROUP BY 1, 2, 4""",
 }
+
+#: TikTok, a' parte. Pedidos filtrados em CTEs MATERIALIZED e os itens lidos por `ANY(ARRAY(...))`
+#: de order_id: so' o indice de order_id e' plausivel (~7 mil sondagens); o planner nao tem como
+#: escolher varrer os ~4 milhoes de itens se as estatisticas estiverem velhas.
+_TIKTOK_CTES = """
+tk_o AS MATERIALIZED (
+  SELECT DISTINCT ON (order_id) order_id, order_status, created_at
+    FROM raw.tiktok_shop_orders
+   WHERE brand = :marca
+     AND created_at >= CAST(:comp AS timestamp) AND created_at < CAST(:hoje AS timestamp) + INTERVAL '1 day'
+   ORDER BY order_id, updated_at DESC NULLS LAST, id DESC),
+tk_f AS MATERIALIZED (
+  SELECT order_id, created_at FROM tk_o
+   WHERE order_status = ANY(:status_tiktok)
+     AND created_at::date IN (CAST(:hoje AS date), CAST(:comp AS date))
+     AND EXTRACT(HOUR FROM created_at) < :corte_tiktok),
+tk_i AS MATERIALIZED (
+  SELECT order_id, seller_sku, product_id, product_name, sale_price
+    FROM api.vw_tiktok_shop_line_items
+   WHERE order_id = ANY(ARRAY(SELECT order_id FROM tk_f)))"""
+SQL_TIKTOK = "WITH" + _TIKTOK_CTES + "\n" + _ARMS["tiktok"]
+#: Espera maxima pelo Metabase na consulta do TikTok. Passou disso, o canal sai sem_dado.
+TIMEOUT_TIKTOK_S = 8.0
 
 
 def _f(v) -> float:
@@ -217,15 +253,33 @@ def get_produtos_gap(db: Session, consultar: Consultar, marca: str, canais: Opti
         if not motivo:
             consultaveis.append(c)
 
+    chave = (marca, tuple(pedidos), comparar, limite, hoje,
+             tuple((c, estados[c]["corte_hora"]) for c in pedidos))
+    guardado = _cache.get(chave)
+    agora_s = datamart_leitura._agora()
+    if guardado and agora_s - guardado[0] < CACHE_TTL_S:
+        return copy.deepcopy(guardado[1])
+
     linhas: list[dict] = []
+    falhou_tiktok = False
     if consultaveis:
         params: dict = {"marca": marca, "hoje": hoje, "comp": comp}
         for c in consultaveis:
             params[f"corte_{c}"] = estados[c]["corte_hora"]
         if "tiktok" in consultaveis:
             params["status_tiktok"] = list(TIKTOK_STATUS_COMERCIAIS)
-        sql = "\nUNION ALL\n".join(_ARMS[c] for c in consultaveis)
-        linhas = consultar(sql, params)
+        rapidos = [c for c in consultaveis if c != "tiktok"]
+        if rapidos:
+            linhas = consultar("\nUNION ALL\n".join(_ARMS[c] for c in rapidos), params)
+        if "tiktok" in consultaveis:
+            try:
+                linhas = linhas + consultar(SQL_TIKTOK, params, timeout_metabase=TIMEOUT_TIKTOK_S)
+            except Exception:  # noqa: BLE001 — texto do banco/Metabase nunca sai; o canal sai sem_dado
+                logger.exception("produtos-gap: leitura do TikTok falhou ou estourou o orcamento")
+                falhou_tiktok = True
+                consultaveis.remove("tiktok")
+                estados["tiktok"].update(estado="sem_dado", corte_hora=None,
+                                         motivo="A leitura do TikTok demorou demais ou falhou; tente de novo em instantes.")
     # Canal sem nenhum pedido nos dois dias = ausencia (nao "tudo zero").
     com_dado = [c for c in consultaveis if any(r["canal"] == c for r in linhas)]
     for c in consultaveis:
@@ -261,7 +315,7 @@ def get_produtos_gap(db: Session, consultar: Consultar, marca: str, canais: Opti
     tot["diferenca_pct"] = _pct(tot["diferenca_rs"], tot["receita_comparado"])
     if any(e["estado"] == "sem_dado" for e in estados.values()):
         limitacoes.append("Canal sem dado fica fora dos totais e da lista (ausencia, nao venda zero).")
-    return {
+    resultado = {
         "disponivel": bool(com_dado), "marca": marca, "dia": hoje.isoformat(), "dia_comparado": comp.isoformat(),
         "comparar": comparar,
         "fonte": "venda por hora por SKU (pedidos e itens do Data Mart), cada canal no seu corte; sem escalonamento por curva",
@@ -269,3 +323,9 @@ def get_produtos_gap(db: Session, consultar: Consultar, marca: str, canais: Opti
         "total": tot if com_dado else None, "skus_considerados": len(itens) if com_dado else None,
         "maiores_quedas": quedas, "maiores_altas": altas, "limitacoes": limitacoes,
     }
+    if falhou_tiktok:  # resposta degradada nao fica em cache: a proxima tentativa le de novo
+        return resultado
+    if len(_cache) >= _CACHE_MAX:
+        _cache.pop(min(_cache, key=lambda k: _cache[k][0]))
+    _cache[chave] = (agora_s, copy.deepcopy(resultado))
+    return resultado
