@@ -22,6 +22,7 @@ const EXPECTED_TOOLS = [
   "torre_metas",
   "torre_monitoramento_precos",
   "torre_performance_contas",
+  "torre_produtos_gap",
   "torre_produtos_prioritarios",
   "torre_qualidade_dados",
   "torre_regioes_vendas",
@@ -49,7 +50,7 @@ test("P2/P3: tools/list expoe exatamente as quatorze tools (MVP + operacionais +
   const names = listed.tools.map((t) => t.name).sort();
 
   assert.deepEqual(names, EXPECTED_TOOLS);
-  assert.equal(names.length, 14, "nenhuma tool a mais");
+  assert.equal(names.length, 15, "nenhuma tool a mais");
 
   for (const t of listed.tools) {
     assert.ok(t.description && t.description.length > 40, `${t.name} precisa de description util`);
@@ -273,7 +274,7 @@ test("P11: cliente oficial conecta por HTTP real e cumpre o lifecycle 2025", asy
     assert.equal(emitted[0], "initialize", "initialize e' a PRIMEIRA mensagem do lifecycle");
 
     const listed = await client.listTools();
-    assert.equal(listed.tools.length, 14, "exatamente quatorze tools");
+    assert.equal(listed.tools.length, 15, "exatamente quinze tools");
     assert.deepEqual(
       listed.tools.map((t) => t.name).sort(),
       EXPECTED_TOOLS,
