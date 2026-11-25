@@ -20,6 +20,8 @@ def test_acessos_e_liberado():
     assert not rota.liberado("ana@gocase.com", "apice", cfg)
     assert rota.liberado("BIA@gobeaute.com.br", "apice", cfg)
     assert not rota.liberado("ana@gocase.com", "kokeshi", "")  # vazia = ninguem
+    assert rota.liberado("qualquer@gocase.com", "apice", "*:*")  # qualquer chave valida
+    assert rota.liberado("x@gocase.com", "kokeshi", "*:kokeshi") and not rota.liberado("x@gocase.com", "apice", "*:kokeshi")
 
 
 @pytest.fixture
