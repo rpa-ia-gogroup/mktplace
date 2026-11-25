@@ -357,7 +357,7 @@ test("2025: notifications/initialized e' aceita, sem erro e sem backend", async 
   assert.equal(spy.calls.length, 0);
 });
 
-test("2025: tools/list apos o lifecycle expoe exatamente as nove tools", async () => {
+test("2025: tools/list apos o lifecycle expoe exatamente as quatorze tools", async () => {
   const spy = spyFetch();
   await handleMcpRequest(legacyPost(initializeBody("2025-06-18")), ENABLED, { fetchImpl: spy.impl });
   await handleMcpRequest(legacyPost({ jsonrpc: "2.0", method: "notifications/initialized" }), ENABLED, {
@@ -379,16 +379,21 @@ test("2025: tools/list apos o lifecycle expoe exatamente as nove tools", async (
   const names = msg.result.tools.map((t) => t.name).sort();
   assert.deepEqual(names, [
     "torre_comparar_canais_marcas",
+    "torre_cx",
     "torre_desempenho_marketplaces",
     "torre_dre",
     "torre_estoque_full",
     "torre_expedicao_operacional",
+    "torre_hoje",
+    "torre_metas",
     "torre_monitoramento_precos",
+    "torre_performance_contas",
     "torre_produtos_prioritarios",
     "torre_qualidade_dados",
     "torre_regioes_vendas",
+    "torre_slow_moving",
   ]);
-  assert.equal(names.length, 9, "nenhuma decima tool");
+  assert.equal(names.length, 14, "nenhuma decima quinta tool");
   for (const t of msg.result.tools) assert.ok(t.inputSchema, `${t.name} precisa de inputSchema`);
   assert.equal(spy.calls.length, 0, "o lifecycle inteiro nao toca o backend");
 });

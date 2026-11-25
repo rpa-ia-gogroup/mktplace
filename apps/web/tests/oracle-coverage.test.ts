@@ -58,18 +58,23 @@ const mlRow = (brand: string, available: boolean, pct: number | null) => ({
 // Afirmacoes congeladas nas descricoes
 // ---------------------------------------------------------------------------
 
-test("tools/list tem exatamente as nove tools", async () => {
+test("tools/list tem exatamente as quatorze tools", async () => {
   const { tools } = await (await connect()).listTools();
   assert.deepEqual(tools.map((t) => t.name).sort(), [
     "torre_comparar_canais_marcas",
+    "torre_cx",
     "torre_desempenho_marketplaces",
     "torre_dre",
     "torre_estoque_full",
     "torre_expedicao_operacional",
+    "torre_hoje",
+    "torre_metas",
     "torre_monitoramento_precos",
+    "torre_performance_contas",
     "torre_produtos_prioritarios",
     "torre_qualidade_dados",
     "torre_regioes_vendas",
+    "torre_slow_moving",
   ]);
 });
 
