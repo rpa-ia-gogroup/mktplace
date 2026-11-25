@@ -183,7 +183,7 @@ export default function BlackClient() {
                     <p className="truncate text-xs tabular-nums text-ink-muted">{fmtBrlCurto(rc.realizado)}{rc.metaAteAgora !== null && ` de ${reais(rc.metaAteAgora)}`}</p>
                     {u && u.meta !== null && (
                       <p className="mt-0.5 text-xs tabular-nums text-ink-faint">
-                        {intervaloHora(u.hora)} <span className={`font-semibold ${tu ? TINTA[tu] : ""}`}>{pct(u.realizado / u.meta)}</span>
+                        Última hora ({intervaloHora(u.hora)}): <span className={`font-semibold ${tu ? TINTA[tu] : ""}`}>{pct(u.realizado / u.meta)}</span>
                       </p>
                     )}
                   </div>
@@ -191,10 +191,10 @@ export default function BlackClient() {
               })}
               <div className="min-w-0 rounded-lg bg-raised/60 px-3 py-2">
                 <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                  Projeção<InfoDica texto="No ritmo da curva da meta: realizado ÷ a parte da meta que já devia ter saído." />
+                  Projeção do dia<InfoDica texto="No ritmo da curva da meta: realizado ÷ a parte da meta que já devia ter saído." />
                 </p>
-                <p className={`mt-0.5 text-xl font-bold tabular-nums ${tProj ? TINTA[tProj] : "text-ink"}`}>{reais(r.projecao)}</p>
-                <p className="truncate text-xs tabular-nums text-ink-muted">de {reais(r.metaDia)}</p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${tProj ? TINTA[tProj] : "text-ink"}`}>{pctProj !== null ? pct(pctProj) : reais(r.projecao)}</p>
+                <p className="truncate text-xs tabular-nums text-ink-muted">{reais(r.projecao)} de {reais(r.metaDia)}</p>
               </div>
             </div>
           }
@@ -235,7 +235,7 @@ export default function BlackClient() {
                     const sel = linhas.filter((l) => (m === TOTAL || l.marca === m) && (c === TOTAL || l.canal === c));
                     // 390: a coluna Total sai (a linha Total fica); a tabela cabe sem rolar.
                     const soLargo = c === TOTAL ? "hidden sm:table-cell" : "";
-                    if (!sel.length) return <td key={c} className={`px-3 py-2.5 text-right text-xs text-ink-faint sm:px-4 ${soLargo}`}>—</td>;
+                    if (!sel.length) return <td key={c} className={`px-3 py-2.5 text-right text-xs text-ink-faint sm:px-4 ${soLargo}`}>sem meta</td>;
                     const x = resumoBlack(sel);
                     const t = tomDesvio(x.pct);
                     const dica = `${fmtBrlCurto(x.realizado)} de ${reais(x.metaAteAgora)} até ${ate ?? "agora"} · meta do dia ${reais(x.metaDia)}`;

@@ -5,7 +5,7 @@
  * última hora fechada e o marcador da hora atual. Carregado por
  * `next/dynamic` (recharts fora do bundle inicial).
  */
-import { useId } from "react";
+import { useEffect, useId, useState } from "react";
 import { Area, CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { useTema } from "@/components/theme/ThemeProvider";
@@ -23,9 +23,21 @@ export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]
   const tema = temaDoGrafico(useTema().resolvido);
   const grad = useId().replace(/:/g, "");
   const atual = ultimaHora >= 0 ? horas[ultimaHora] : null;
+  // Passo fixo no eixo: 3 h no largo, 6 h no celular. O ponto -1 e' o "00h" (acumulado zero).
+  const [estreito, setEstreito] = useState(false);
+  useEffect(() => {
+    const m = window.matchMedia("(max-width: 639px)");
+    const f = () => setEstreito(m.matches);
+    f();
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, []);
+  const passo = estreito ? 6 : 3;
+  const ticks = Array.from({ length: 24 / passo + 1 }, (_, i) => i * passo - 1);
+  const dados = [{ hora: -1, metaAcum: horas[0]?.metaAcum === null ? null : 0, realizadoAcum: horas[0]?.realizadoAcum === null ? null : 0 }, ...horas];
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={horas} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+      <ComposedChart data={dados} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
         <defs>
           <linearGradient id={grad} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={tema.total} stopOpacity={0.28} />
@@ -33,7 +45,7 @@ export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]
           </linearGradient>
         </defs>
         <CartesianGrid stroke={tema.grade} vertical={false} />
-        <XAxis dataKey="hora" tickFormatter={ateHora} tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={20} />
+        <XAxis dataKey="hora" type="number" domain={[-1, 23]} ticks={ticks} tickFormatter={ateHora} tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} />
         <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={60} tickFormatter={eixoY} />
         <Tooltip
           contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 8, color: tema.tooltipTinta, fontSize: 12 }}
