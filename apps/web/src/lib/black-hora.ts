@@ -34,6 +34,8 @@ export interface RespostaBlack {
 export const NOME_CANAL_BLACK: Record<CanalBlack, string> = { shopee: "Shopee", ml: "Mercado Livre" };
 export const HORAS = Array.from({ length: 24 }, (_, h) => h);
 export const rotuloHora = (h: number) => `${String(h).padStart(2, "0")}h`;
+/** A hora fechada como intervalo: "21h–22h" (o herói diz "até 22h": a mesma hora). */
+export const intervaloHora = (h: number) => `${rotuloHora(h)}–${rotuloHora(h + 1)}`;
 
 /** Semana da Black no menu: de segunda 24/11 até domingo 30/11 (BRT). */
 export const SEMANA_BLACK = { de: "2026-11-24", ate: "2026-11-30" } as const;
@@ -132,7 +134,9 @@ export function tomDesvio(pct: number | null): "ok" | "warn" | "crit" | null {
 
 export interface CelulaMarcaCanal {
   metaDia: number | null; realizado: number; pct: number | null;
-  /** Realizado ÷ meta até a última hora fechada: é o que dá a cor (o % do dia cresce ao longo do dia). */
+  /** Meta somada até a última hora fechada da linha (a base do herói). */
+  metaAteAgora: number | null;
+  /** Realizado ÷ meta até a última hora fechada: o número E a cor do quadro (mesma base do herói). */
   ritmo: number | null;
 }
 
@@ -147,7 +151,7 @@ export function quadroMarcaCanal(ls: LinhaBlack[]): { marcas: string[]; canais: 
       if (!l) return null;
       const realizado = soma(l.realizado_hora);
       const ateAgora = l.meta_dia !== null ? soma(l.meta_hora.slice(0, corteDaLinha(l))) : 0;
-      return { metaDia: l.meta_dia, realizado, pct: l.meta_dia ? realizado / l.meta_dia : null, ritmo: ateAgora > 0 ? realizado / ateAgora : null };
+      return { metaDia: l.meta_dia, realizado, pct: l.meta_dia ? realizado / l.meta_dia : null, metaAteAgora: l.meta_dia !== null ? ateAgora : null, ritmo: ateAgora > 0 ? realizado / ateAgora : null };
     },
   };
 }

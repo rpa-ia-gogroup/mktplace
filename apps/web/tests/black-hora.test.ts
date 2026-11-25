@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
-  filtrarBlack, horaAHora, naSemanaDaBlack, quadroMarcaCanal, resumoBlack, tomDesvio, ultimaHoraDoCanal, type LinhaBlack,
+  filtrarBlack, horaAHora, intervaloHora, naSemanaDaBlack, quadroMarcaCanal, resumoBlack, tomDesvio, ultimaHoraDoCanal, type LinhaBlack,
 } from "../src/lib/black-hora.ts";
 import { navSections, getRouteTitle } from "../src/components/shell/nav-config.ts";
 
@@ -52,6 +52,7 @@ test("filtros, última hora por canal, desvio e quadro marca × canal", () => {
   assert.equal(filtrarBlack(L, [], "ml").length, 2);
   assert.deepEqual(ultimaHoraDoCanal(L, "ml"), { hora: 11, meta: 100, realizado: 90 });
   assert.equal(ultimaHoraDoCanal(L, "shopee")?.hora, 9);
+  assert.equal(intervaloHora(21), "21h–22h", "a mesma hora que o herói chama de 'até 22h'");
   assert.equal(tomDesvio(1.02), "ok");
   assert.equal(tomDesvio(0.95), "warn");
   assert.equal(tomDesvio(0.5), "crit");
@@ -62,7 +63,8 @@ test("filtros, última hora por canal, desvio e quadro marca × canal", () => {
   const k = q.celula("kokeshi", "shopee")!;
   assert.equal(k.realizado, 1200);
   assert.equal(k.pct, 0.5);
-  assert.equal(k.ritmo, 1.2, "a cor vem do ritmo até a hora fechada, não do % do dia");
+  assert.equal(k.ritmo, 1.2, "número e cor: % da meta acumulada até a hora fechada (a base do herói)");
+  assert.equal(k.metaAteAgora, 1000);
 });
 
 test("menu: Black Friday só na semana (24 a 30/11, BRT), logo depois da Gerencial", () => {
@@ -82,6 +84,8 @@ test("tela: sem TikTok, filtros de marca e canal, tema e releitura", () => {
   assert.match(src, /\/api\/v1\/performance\/black-hora\?dia=/);
   assert.match(src, /<BrandFilter variante="menu"/);
   assert.match(src, /rotulo="Canal"/);
+  assert.match(src, /texto: "Mercado Livre"/);
+  assert.doesNotMatch(src, /"Meli"/, "o canal tem um nome só na tela");
   assert.match(src, /setInterval\(ler, RELER_MS\)/);
   const tema = readFileSync(new URL("../src/lib/theme.ts", import.meta.url), "utf8");
   assert.match(tema, /"\/black"\] as const/);

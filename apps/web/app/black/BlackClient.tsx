@@ -11,7 +11,7 @@
  */
 import dynamic from "next/dynamic";
 import { Clock, Target, TrendingUp } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Aba from "@/components/layout/Aba";
 import BrandFilter from "@/components/BrandFilter";
@@ -26,7 +26,7 @@ import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto } from "@/lib/formatters";
 import { torreFetch } from "@/lib/torre-fetch";
 import {
-  filtrarBlack, horaAHora, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, rotuloHora, tomDesvio, ultimaHoraDoCanal,
+  filtrarBlack, horaAHora, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
   type CanalBlack, type FiltroCanalBlack, type RespostaBlack,
 } from "@/lib/black-hora";
 
@@ -83,6 +83,13 @@ export default function BlackClient() {
   const horas = useMemo(() => horaAHora(linhas), [linhas]);
   const quadro = useMemo(() => quadroMarcaCanal(linhas), [linhas]);
   const tom = tomDesvio(r.pct);
+  // A tabela e' longa: abre rolada ate' a ultima hora fechada (destacada).
+  const rolagemHoras = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const caixa = rolagemHoras.current;
+    const linha = caixa?.querySelector<HTMLElement>('tr[aria-current="true"]');
+    if (caixa && linha) caixa.scrollTop = Math.max(0, linha.offsetTop - caixa.clientHeight / 2);
+  }, [r.ultimaHora, dados]);
 
   const filtros = (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
@@ -106,7 +113,7 @@ export default function BlackClient() {
   const direita = (
     <Segmented
       rotulo="Canal"
-      opcoes={[{ valor: "todos", texto: "Todos" }, { valor: "shopee", texto: "Shopee" }, { valor: "ml", texto: "Meli" }]}
+      opcoes={[{ valor: "todos", texto: "Todos" }, { valor: "shopee", texto: "Shopee" }, { valor: "ml", texto: "Mercado Livre" }]}
       valor={canal}
       aoEscolher={(c) => setCanal(c as FiltroCanalBlack)}
       className="whitespace-nowrap"
@@ -149,11 +156,11 @@ export default function BlackClient() {
       faixa={
         <>
           <Heroi
-            rotulo={`Realizado até ${ate ?? "a 1ª hora fechada"} x meta`}
+            rotulo={ate ? `Realizado x meta até ${ate}` : "Realizado x meta"}
             ajuda={<InfoDica emControle texto={DICA_META} />}
-            valor={fmtBrlCurto(r.realizado)}
+            valor={r.pct !== null ? pct(r.pct) : fmtBrlCurto(r.realizado)}
             tom={tom === "ok" ? "bom" : tom === "warn" ? "atencao" : tom === "crit" ? "critico" : "neutro"}
-            contexto={r.metaAteAgora !== null ? <>{pct(r.pct)} da meta acumulada ({reais(r.metaAteAgora)})</> : "sem meta para comparar"}
+            contexto={r.metaAteAgora !== null ? <>{fmtBrlCurto(r.realizado)} de {reais(r.metaAteAgora)} da meta acumulada</> : "sem meta para comparar"}
             // Um canal por linha: cada um contra a meta até a SUA última hora fechada.
             meio={
               <ul className="flex flex-col gap-1.5 text-sm">
@@ -167,9 +174,9 @@ export default function BlackClient() {
                         {NOME_CANAL_BLACK[c]}{rc.ultimaHora >= 0 && <span className="text-xs text-ink-faint"> até {rotuloHora(rc.ultimaHora + 1)}</span>}
                       </span>
                       <span className="tabular-nums">
+                        {rc.pct !== null && <span className={`font-semibold ${tc ? TINTA[tc] : ""}`}>{pct(rc.pct)} · </span>}
                         <span className="font-semibold text-ink">{fmtBrlCurto(rc.realizado)}</span>
                         <span className="text-ink-muted"> de {reais(rc.metaAteAgora)}</span>
-                        {rc.pct !== null && <span className={`ml-1.5 font-semibold ${tc ? TINTA[tc] : ""}`}>{pct(rc.pct)}</span>}
                       </span>
                     </li>
                   );
@@ -206,7 +213,7 @@ export default function BlackClient() {
                   cor={`rgb(var(--tc-canal-${c}))`}
                   valor={u ? fmtBrlCurto(u.realizado) : null}
                   pilula={t && u?.meta ? { texto: pct(u.realizado / u.meta), tom: PILULA[t] } : null}
-                  legenda={!canais.includes(c) ? "fora do filtro" : u ? `${rotuloHora(u.hora)} · meta ${reais(u.meta)}` : "nenhuma hora fechada"}
+                  legenda={!canais.includes(c) ? "fora do filtro" : u ? `${intervaloHora(u.hora)} · meta ${reais(u.meta)}` : "nenhuma hora fechada"}
                 />
               );
             })}
@@ -222,7 +229,7 @@ export default function BlackClient() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <Panel titulo="Hora a hora" className="xl:col-span-7" semPadding>
-          <div className="relative max-h-[32rem] overflow-auto">
+          <div ref={rolagemHoras} className="relative max-h-[32rem] overflow-auto">
             <table className="w-full text-sm">
               <caption className="sr-only">Meta, realizado, diferença e % acumulado por hora</caption>
               <thead className="sticky top-0 bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -238,7 +245,7 @@ export default function BlackClient() {
                 {horas.map((h) => {
                   const t = tomDesvio(h.pctAcum);
                   return (
-                    <tr key={h.hora} className={h.realizado === null ? "text-ink-faint" : undefined}>
+                    <tr key={h.hora} aria-current={h.hora === r.ultimaHora ? "true" : undefined} className={h.hora === r.ultimaHora ? "bg-accent-soft/60" : h.realizado === null ? "text-ink-faint" : undefined}>
                       <th scope="row" className="px-3 py-1.5 text-left font-medium sm:px-4">{rotuloHora(h.hora)}</th>
                       <td className="px-2 py-1.5 text-right">{reais(h.meta)}</td>
                       <td className="px-2 py-1.5 text-right font-semibold text-ink">{h.realizado === null ? <span className="font-normal text-ink-faint" title="hora ainda não fechada">—</span> : fmtBrlCurto(h.realizado)}</td>
@@ -256,7 +263,7 @@ export default function BlackClient() {
           </div>
         </Panel>
 
-        <Panel titulo="Marca × canal" descricao="Realizado até agora, meta do dia e % do dia; a cor é o ritmo até a última hora fechada" className="xl:col-span-5 xl:self-start" semPadding>
+        <Panel titulo="Marca × canal" descricao={ate ? `% da meta acumulada até ${ate}; embaixo, realizado, meta até ${ate} e meta do dia` : "% da meta acumulada até a última hora fechada"} className="xl:col-span-5 xl:self-start" semPadding>
           <table className="w-full text-sm">
             <caption className="sr-only">Meta do dia, realizado e % por marca e canal</caption>
             <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
@@ -275,10 +282,11 @@ export default function BlackClient() {
                     const t = tomDesvio(x.ritmo);
                     return (
                       <td key={c} className="px-3 py-2 text-right sm:px-4">
-                        <span className="block font-semibold text-ink">{fmtBrlCurto(x.realizado)}</span>
-                        <span className="block text-xs text-ink-muted">
-                          de {reais(x.metaDia)}{x.pct !== null && <> · <span className={t ? TINTA[t] : undefined}>{pct(x.pct)}</span></>}
-                        </span>
+                        {/* % da meta ACUMULADA ate' a hora fechada: a mesma base do heroi e da cor. */}
+                        <span className={`block font-semibold ${t ? TINTA[t] : "text-ink"}`}>{x.ritmo !== null ? pct(x.ritmo) : "—"}</span>
+                        <span className="block whitespace-nowrap text-xs text-ink-muted">{fmtBrlCurto(x.realizado)}</span>
+                        <span className="block whitespace-nowrap text-xs text-ink-muted">de {reais(x.metaAteAgora)}</span>
+                        <span className="block whitespace-nowrap text-xs text-ink-faint">dia: {reais(x.metaDia)}</span>
                       </td>
                     );
                   })}
