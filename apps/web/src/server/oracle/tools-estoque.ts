@@ -22,8 +22,10 @@
  *   nao_aplicavel   a pergunta nao se aplica (mantido no vocabulario por
  *                   compatibilidade; o estoque ML NAO usa mais este estado)
  *
- * Filtros SO' por enum. O parametro de texto livre `busca` da API nao e'
- * exposto e o adapter o recusa antes do fetch.
+ * Filtros por enum, mais `busca` (texto curto em sku/titulo/produto). Sem busca a
+ * tool devolve os itens de maior risco; com busca, os itens que casam (ate' `limite`),
+ * saudaveis ou nao. Shopee: a API filtra. ML: a rota nao tem `busca`, entao o adapter
+ * le' o inventario inteiro (ate' 1000) e filtra por texto — so' selecao de linhas.
  */
 import { z } from "zod";
 
@@ -43,6 +45,12 @@ import {
 } from "./upstream-operacional.ts";
 
 export const ESTOQUE_MAX_ITENS = 50;
+/** Com busca, o ML le' o inventario inteiro (default da rota) e filtra aqui. */
+const ML_BUSCA_LIMITE = 1000;
+
+function normaliza(s: string): string {
+  return s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
 /** Janela das superficies de desempenho Full/FBS. */
 export const ESTOQUE_MAX_DIAS = 92;
 
@@ -59,6 +67,8 @@ export const estoqueInput = z
       .default("ultimos_30_dias_fechados"),
     data_inicio: isoDate.optional(),
     data_fim: isoDate.optional(),
+    /** Texto livre curto, so' para achar produto (ex.: "delight"). Casa sku ou nome. */
+    busca: z.string().trim().min(2).max(60).optional(),
     limite: z.number().int().min(1).max(ESTOQUE_MAX_ITENS).default(20),
   })
   .strict();
@@ -115,6 +125,8 @@ const itemSchema = z.object({
   classificacao: z.string(),
   estoque_vendavel: z.number(),
   estoque_total: z.number(),
+  /** Estoque proprio da loja, FORA do Full; nao somar ao Full. null = a fonte nao informou (nunca 0). */
+  estoque_vendedor_fora_do_full: z.number().nullable(),
   /** zero_real | medido | nao_conciliado. */
   estado_estoque: z.enum(ESTADOS),
   unidades_vendidas_28d: z.number(),
@@ -358,6 +370,7 @@ async function shopeeEstoque(input: EstoqueInput, deps: ToolDeps): Promise<Shope
     await deps.client.get("shopeeFbsEstoque", {
       brands: marcas ? [...marcas].sort() : undefined,
       classificacoes: input.classificacoes ? [...input.classificacoes] : undefined,
+      busca: input.busca,
       somente_acao: input.severidade === "exige_acao" ? "true" : undefined,
       limite: input.limite,
     }),
@@ -383,6 +396,7 @@ async function shopeeEstoque(input: EstoqueInput, deps: ToolDeps): Promise<Shope
       classificacao: r.classificacao_torre,
       estoque_vendavel: r.full_stock_saleable,
       estoque_total: r.full_stock_total,
+      estoque_vendedor_fora_do_full: r.seller_stock_total ?? null,
       estado_estoque: kit ? ("nao_conciliado" as const) : r.full_stock_saleable === 0 ? ("zero_real" as const) : ("medido" as const),
       unidades_vendidas_28d: r.units_sold_28d,
       media_diaria_28d: decOrNull(r.avg_daily_units_28d),
@@ -539,7 +553,7 @@ async function mlEstoque(input: EstoqueInput, deps: ToolDeps): Promise<MlEstoque
     mlFullEstoqueContract,
     await deps.client.get("mlFullEstoque", {
       brands: marcas ? [...marcas].sort() : undefined,
-      limite: input.limite,
+      limite: input.busca ? ML_BUSCA_LIMITE : input.limite,
     }),
   );
   if (p.status === "unavailable") {
@@ -549,7 +563,10 @@ async function mlEstoque(input: EstoqueInput, deps: ToolDeps): Promise<MlEstoque
   }
 
   // A fonte ja ordena por prioridade operacional; a ordem e' preservada.
-  const itens = p.inventarios.slice(0, input.limite).map((r, i) => {
+  const termo = input.busca ? normaliza(input.busca) : null;
+  const casam = termo === null ? p.inventarios
+    : p.inventarios.filter((r) => normaliza(`${r.sku ?? ""} ${r.titulo ?? ""}`).includes(termo));
+  const itens = casam.slice(0, input.limite).map((r, i) => {
     const disponivel = r.read_status === "OK" ? numOrNull(r.disponivel) : null;
     const cobertura = decOrNull(r.cobertura_torre_dias);
     const semDemanda =
@@ -618,7 +635,8 @@ async function mlEstoque(input: EstoqueInput, deps: ToolDeps): Promise<MlEstoque
     },
     marcas: marcasOut,
     itens,
-    itens_no_filtro: p.total_no_filtro,
+    // Com busca o total e' o de linhas que casam; se a leitura foi truncada ele so' seria um piso.
+    itens_no_filtro: termo === null ? p.total_no_filtro : p.truncado ? null : casam.length,
     curva_disponivel: p.curva_meta ? p.curva_meta.disponivel : null,
     marcas_nao_cobertas: naoCobertasPedidas,
     notas_da_fonte: safeTexts(p.limitacoes, 400),
@@ -727,7 +745,9 @@ export const estoqueTool: OracleTool = {
       "Cada item e bloco declara estado: zero_real (mediu zero), sem_dado (sem medicao), nao_conciliado (kits) ou nao_aplicavel. Nenhum dos tres ultimos vira zero.",
       "Cobertura e classificacao sao calculo da Torre com limiares PROVISORIOS, nao numero oficial da Shopee. Marcas fora da esteira vem em marcas_nao_cobertas e NAO estao nos totais.",
       "Escopo sem nenhum pedido no periodo (FBS ou Full ML) sai como sem_dado, de proposito: a fonte devolve 0 tanto para marca sem loja quanto para janela sem serie, e o conector nao afirma venda zero que nao consegue distinguir de ausencia.",
-      "Filtros apenas por enums (canal, marca, classificacao, severidade). Periodo de dias fechados, ate 92 dias.",
+      "Para um produto especifico (ex.: 'estoque do Delight'), passe `busca` com parte do sku ou do nome: devolve os itens que casam, saudaveis ou nao, ate o limite (max 50). Sem `busca`, so' os itens de maior risco.",
+      "Shopee: cada item traz estoque_vendedor_fora_do_full = estoque proprio da loja, fora do Full; nao somar ao Full (o Full vendavel e' estoque_vendavel; null = a fonte nao informou, nao e' zero).",
+      "Demais filtros por enum (canal, marca, classificacao, severidade). Periodo de dias fechados, ate 92 dias.",
     ].join(" "),
     inputSchema: estoqueInput,
     outputSchema: estoqueOutput,
@@ -810,12 +830,12 @@ export const estoqueTool: OracleTool = {
         marcas: input.marcas ?? null,
         classificacoes: input.classificacoes ?? null,
         severidade: input.severidade,
-        busca: null,
+        busca: input.busca ?? null,
       },
       metricDefinition:
         "Estoque Full Shopee = soma do estoque VENDAVEL no CD; estoque Full ML = disponivel no CD por inventario (contado uma vez); cobertura = estoque / media diaria de 28 dias (calculo da Torre). Shares FBS/Full = participacao da modalidade no GMV, pedidos ou unidades do periodo. O periodo vale para FBS e Full ML; o estoque e' a ultima fotografia.",
       refreshedAt: stamps[0] ?? null,
-      coverage: `ate ${input.limite} itens de maior risco por canal de estoque (Shopee e ML); Shopee na cobertura da esteira API`,
+      coverage: `ate ${input.limite} itens ${input.busca ? `que casam com a busca "${input.busca}"` : "de maior risco"} por canal de estoque (Shopee e ML); Shopee na cobertura da esteira API`,
       limit: input.limite,
       returnedCount: itens,
       totalCount: totalItens,
