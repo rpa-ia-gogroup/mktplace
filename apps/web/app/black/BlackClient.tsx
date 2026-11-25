@@ -10,13 +10,11 @@
  * Regras em `src/lib/black-hora.ts`.
  */
 import dynamic from "next/dynamic";
-import { Clock, Target, TrendingUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Aba from "@/components/layout/Aba";
 import BrandFilter from "@/components/BrandFilter";
-import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
-import Heroi, { type TomSelo } from "@/components/ui/Heroi";
+import Heroi from "@/components/ui/Heroi";
 import InfoDica from "@/components/ui/InfoDica";
 import Panel from "@/components/ui/Panel";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
@@ -44,13 +42,13 @@ const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleStr
 const reais = (v: number | null) => (v === null ? "—" : fmtBrlCurto(v));
 const TINTA = { ok: "text-ok-ink", warn: "text-warn-ink", crit: "text-crit-ink" } as const;
 const FUNDO = { ok: "bg-ok-soft", warn: "bg-warn-soft", crit: "bg-crit-soft" } as const;
-const SELO: Record<"ok" | "warn" | "crit", TomSelo> = { ok: "ok", warn: "atencao", crit: "critico" };
-const PILULA: Record<"ok" | "warn" | "crit", TomPilula> = { ok: "ok", warn: "warn", crit: "crit" };
+const TOM_HEROI = { ok: "bom", warn: "atencao", crit: "critico", neutro: "neutro" } as const;
+const TOTAL = "__total";
 const PONTO: Record<CanalBlack, string> = { shopee: "bg-canal-shopee", ml: "bg-canal-ml" };
 const MARCAS_BLACK = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
 const DICA_META =
-  "Meta da planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black' (definida pela Nath; sem TikTok). " +
-  "Cada canal compara com a meta até a SUA última hora fechada. Realizado: vendas pagas por hora (o mesmo do Hoje da Gerencial).";
+  "Meta da planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black' (sem TikTok). " +
+  "Cada canal compara com a meta até a sua última hora fechada. Realizado: vendas pagas por hora.";
 
 export default function BlackClient() {
   const [dia, setDia] = useState(hojeBrt);
@@ -124,14 +122,14 @@ export default function BlackClient() {
   if (erro && !dados) {
     return (
       <Aba titulo="Black Friday" selo={selo} filtros={filtros} direita={direita}>
-        <StateBlock tipo="erro" titulo="Black Friday sem dado agora" descricao={erro} acao={<RetryButton onClick={recarregar} />} />
+        <StateBlock tipo="erro" titulo="Sem dado agora" descricao={erro} acao={<RetryButton onClick={recarregar} />} />
       </Aba>
     );
   }
   if (!dados) {
     return (
       <Aba titulo="Black Friday" selo={selo} filtros={filtros} direita={direita}>
-        <StateBlock tipo="carregando" titulo="Carregando a meta e as vendas por hora" />
+        <StateBlock tipo="carregando" titulo="Carregando" />
       </Aba>
     );
   }
@@ -145,6 +143,8 @@ export default function BlackClient() {
 
   const ate = r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null;
   const canais = (["shopee", "ml"] as CanalBlack[]).filter((c) => canal === "todos" || c === canal);
+  const pctProj = r.projecao !== null && r.metaDia ? r.projecao / r.metaDia : null;
+  const tProj = tomDesvio(pctProj);
 
   return (
     <Aba
@@ -152,141 +152,98 @@ export default function BlackClient() {
       selo={selo}
       filtros={filtros}
       direita={direita}
-      atencao={!dados.meta.disponivel ? <p role="status" className="text-sm text-warn-ink">{dados.meta.motivo ?? "Meta indisponível agora."} O realizado segue na tela.</p> : undefined}
+      atencao={!dados.meta.disponivel ? (
+        <p role="status" className="inline-flex items-center gap-1 text-sm text-warn-ink">Meta indisponível<InfoDica texto={dados.meta.motivo ?? "A planilha da meta não respondeu."} /></p>
+      ) : undefined}
       faixa={
-        <>
-          <Heroi
-            rotulo={ate ? `Realizado x meta até ${ate}` : "Realizado x meta"}
-            ajuda={<InfoDica emControle texto={DICA_META} />}
-            valor={r.pct !== null ? pct(r.pct) : fmtBrlCurto(r.realizado)}
-            tom={tom === "ok" ? "bom" : tom === "warn" ? "atencao" : tom === "crit" ? "critico" : "neutro"}
-            contexto={r.metaAteAgora !== null ? <>{fmtBrlCurto(r.realizado)} de {reais(r.metaAteAgora)} da meta acumulada</> : "sem meta para comparar"}
-            // Um canal por linha: cada um contra a meta até a SUA última hora fechada.
-            meio={
-              <ul className="flex flex-col gap-1.5 text-sm">
-                {canais.map((c) => {
-                  const rc = resumoBlack(linhas.filter((l) => l.canal === c));
-                  const tc = tomDesvio(rc.pct);
-                  return (
-                    <li key={c} className="flex flex-wrap items-baseline justify-between gap-x-3">
-                      <span className="inline-flex items-center gap-1.5 text-ink-muted">
-                        <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />
-                        {NOME_CANAL_BLACK[c]}{rc.ultimaHora >= 0 && <span className="text-xs text-ink-faint"> até {rotuloHora(rc.ultimaHora + 1)}</span>}
-                      </span>
-                      <span className="tabular-nums">
-                        {rc.pct !== null && <span className={`font-semibold ${tc ? TINTA[tc] : ""}`}>{pct(rc.pct)} · </span>}
-                        <span className="font-semibold text-ink">{fmtBrlCurto(rc.realizado)}</span>
-                        <span className="text-ink-muted"> de {reais(rc.metaAteAgora)}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            }
-            selo={tom ? { texto: tom === "ok" ? "No ritmo" : tom === "warn" ? "Perto da meta" : "Abaixo da meta", tom: SELO[tom] } : undefined}
-          />
-          <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
-            <CartaoIndicador
-              rotulo="Projeção do dia"
-              icone={TrendingUp}
-              cor="rgb(var(--tc-kpi-gmv))"
-              valor={r.projecao === null ? null : fmtBrlCurto(r.projecao)}
-              pilula={r.projecao !== null && r.metaDia ? { texto: pct(r.projecao / r.metaDia), tom: PILULA[tomDesvio(r.projecao / r.metaDia)!] } : null}
-              legenda={r.projecao === null ? "sem hora fechada ou sem meta" : "no ritmo da curva da meta"}
-              ajuda={<InfoDica emControle texto="Realizado até agora ÷ fração da meta que já devia ter saído pela curva hora a hora da planilha." />}
-            />
-            <CartaoIndicador
-              rotulo="Meta do dia"
-              icone={Target}
-              cor="rgb(var(--tc-kpi-ticket))"
-              valor={r.metaDia === null ? null : fmtBrlCurto(r.metaDia)}
-              legenda={r.metaDia === null ? "meta indisponível" : `falta ${reais(Math.max(0, r.metaDia - r.realizado))}`}
-            />
-            {(["shopee", "ml"] as CanalBlack[]).map((c) => {
-              const u = canais.includes(c) ? ultimaHoraDoCanal(linhas, c) : null;
-              const t = u && u.meta ? tomDesvio(u.realizado / u.meta) : null;
-              return (
-                <CartaoIndicador
-                  key={c}
-                  rotulo={`Última hora · ${NOME_CANAL_BLACK[c]}`}
-                  icone={Clock}
-                  cor={`rgb(var(--tc-canal-${c}))`}
-                  valor={u ? fmtBrlCurto(u.realizado) : null}
-                  pilula={t && u?.meta ? { texto: pct(u.realizado / u.meta), tom: PILULA[t] } : null}
-                  legenda={!canais.includes(c) ? "fora do filtro" : u ? `${intervaloHora(u.hora)} · meta ${reais(u.meta)}` : "nenhuma hora fechada"}
-                />
-              );
-            })}
-          </div>
-        </>
+        <Heroi
+          rotulo={ate ? `% da meta até ${ate}` : "% da meta"}
+          ajuda={<InfoDica emControle texto={DICA_META} />}
+          valor={r.pct !== null ? pct(r.pct) : fmtBrlCurto(r.realizado)}
+          tom={TOM_HEROI[tom ?? "neutro"]}
+          contexto={
+            <span className="text-sm">
+              <span className="font-semibold text-ink">{fmtBrlCurto(r.realizado)}</span>
+              {r.metaAteAgora !== null && <span className="text-ink-muted"> de {reais(r.metaAteAgora)}</span>}
+            </span>
+          }
+          meio={
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {canais.map((c) => {
+                const rc = resumoBlack(linhas.filter((l) => l.canal === c));
+                const tc = tomDesvio(rc.pct);
+                const u = ultimaHoraDoCanal(linhas, c);
+                const tu = u?.meta ? tomDesvio(u.realizado / u.meta) : null;
+                return (
+                  <div key={c} className="min-w-0 rounded-lg bg-raised/60 px-3 py-2">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                      <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />{NOME_CANAL_BLACK[c]}
+                    </p>
+                    <p className={`mt-0.5 text-xl font-bold tabular-nums ${tc ? TINTA[tc] : "text-ink"}`}>{rc.pct !== null ? pct(rc.pct) : fmtBrlCurto(rc.realizado)}</p>
+                    <p className="truncate text-xs tabular-nums text-ink-muted">{fmtBrlCurto(rc.realizado)}{rc.metaAteAgora !== null && ` de ${reais(rc.metaAteAgora)}`}</p>
+                    {u && u.meta !== null && (
+                      <p className="mt-0.5 text-xs tabular-nums text-ink-faint">
+                        {intervaloHora(u.hora)} <span className={`font-semibold ${tu ? TINTA[tu] : ""}`}>{pct(u.realizado / u.meta)}</span>
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              <div className="min-w-0 rounded-lg bg-raised/60 px-3 py-2">
+                <p className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                  Projeção<InfoDica texto="No ritmo da curva da meta: realizado ÷ a parte da meta que já devia ter saído." />
+                </p>
+                <p className={`mt-0.5 text-xl font-bold tabular-nums ${tProj ? TINTA[tProj] : "text-ink"}`}>{reais(r.projecao)}</p>
+                <p className="truncate text-xs tabular-nums text-ink-muted">de {reais(r.metaDia)}</p>
+              </div>
+            </div>
+          }
+        />
       }
     >
-      <Panel titulo="Acumulado do dia: realizado x meta" descricao={`${dia.split("-").reverse().join("/")} · por hora`}>
-        <div className="h-64 sm:h-72">
-          <Grafico horas={horas} />
+      <Panel
+        titulo="Acumulado do dia"
+        descricao={dia.split("-").reverse().slice(0, 2).join("/")}
+        acao={
+          <span aria-hidden="true" className="flex items-center gap-3 text-xs text-ink-muted">
+            <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-accent" />Realizado</span>
+            <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-ink-faint" />Meta</span>
+          </span>
+        }
+      >
+        <div className="h-64 sm:h-80">
+          <Grafico horas={horas} ultimaHora={r.ultimaHora} />
         </div>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <Panel titulo="Hora a hora" className="xl:col-span-7" semPadding>
-          <div ref={rolagemHoras} className="relative max-h-[32rem] overflow-auto">
-            <table className="w-full text-sm">
-              <caption className="sr-only">Meta, realizado, diferença e % acumulado por hora</caption>
-              <thead className="sticky top-0 bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
-                <tr>
-                  <th scope="col" className="px-3 py-2 text-left sm:px-4">Hora</th>
-                  <th scope="col" className="px-2 py-2 text-right">Meta</th>
-                  <th scope="col" className="px-2 py-2 text-right">Realizado</th>
-                  <th scope="col" className="hidden px-2 py-2 text-right sm:table-cell">Diferença</th>
-                  <th scope="col" className="px-3 py-2 text-right sm:px-4">% acum.</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line whitespace-nowrap tabular-nums">
-                {horas.map((h) => {
-                  const t = tomDesvio(h.pctAcum);
-                  return (
-                    <tr key={h.hora} aria-current={h.hora === r.ultimaHora ? "true" : undefined} className={h.hora === r.ultimaHora ? "bg-accent-soft/60" : h.realizado === null ? "text-ink-faint" : undefined}>
-                      <th scope="row" className="px-3 py-1.5 text-left font-medium sm:px-4">{rotuloHora(h.hora)}</th>
-                      <td className="px-2 py-1.5 text-right">{reais(h.meta)}</td>
-                      <td className="px-2 py-1.5 text-right font-semibold text-ink">{h.realizado === null ? <span className="font-normal text-ink-faint" title="hora ainda não fechada">—</span> : fmtBrlCurto(h.realizado)}</td>
-                      <td className={`hidden px-2 py-1.5 text-right sm:table-cell ${h.diferenca === null ? "" : h.diferenca >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
-                        {h.diferenca === null ? "—" : `${h.diferenca >= 0 ? "+" : "−"}${fmtBrlCurto(Math.abs(h.diferenca))}`}
-                      </td>
-                      <td className="px-3 py-1 text-right sm:px-4">
-                        {t ? <span className={`rounded-md px-1.5 py-0.5 font-semibold ${FUNDO[t]} ${TINTA[t]}`}>{pct(h.pctAcum)}</span> : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-
-        <Panel titulo="Marca × canal" descricao={ate ? `% da meta acumulada até ${ate}; embaixo, realizado, meta até ${ate} e meta do dia` : "% da meta acumulada até a última hora fechada"} className="xl:col-span-5 xl:self-start" semPadding>
+      <Panel titulo="Marca × canal" ajuda="% da meta acumulada até a última hora fechada (a mesma conta do topo). Embaixo, o realizado; a meta fica no hover." semPadding>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <caption className="sr-only">Meta do dia, realizado e % por marca e canal</caption>
+            <caption className="sr-only">% da meta acumulada e realizado por marca e canal</caption>
             <thead className="bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
               <tr>
                 <th scope="col" className="px-3 py-2 text-left sm:px-4">Marca</th>
                 {quadro.canais.map((c) => <th key={c} scope="col" className="px-3 py-2 text-right sm:px-4">{NOME_CANAL_BLACK[c]}</th>)}
+                {quadro.canais.length > 1 && <th scope="col" className="hidden px-3 py-2 text-right sm:table-cell sm:px-4">Total</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-line tabular-nums">
-              {quadro.marcas.map((m) => (
-                <tr key={m}>
-                  <th scope="row" className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-ink sm:px-4">{brandLabel(m)}</th>
-                  {quadro.canais.map((c) => {
-                    const x = quadro.celula(m, c);
-                    if (!x) return <td key={c} className="px-3 py-2 text-right text-xs text-ink-faint sm:px-4">sem meta</td>;
-                    const t = tomDesvio(x.ritmo);
+              {[...quadro.marcas, TOTAL].map((m) => (
+                <tr key={m} className={m === TOTAL ? "border-t-2 border-line-strong bg-raised" : undefined}>
+                  <th scope="row" className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-ink sm:px-4">{m === TOTAL ? "Total" : brandLabel(m)}</th>
+                  {[...quadro.canais, ...(quadro.canais.length > 1 ? [TOTAL] : [])].map((c) => {
+                    const sel = linhas.filter((l) => (m === TOTAL || l.marca === m) && (c === TOTAL || l.canal === c));
+                    // 390: a coluna Total sai (a linha Total fica); a tabela cabe sem rolar.
+                    const soLargo = c === TOTAL ? "hidden sm:table-cell" : "";
+                    if (!sel.length) return <td key={c} className={`px-3 py-2.5 text-right text-xs text-ink-faint sm:px-4 ${soLargo}`}>—</td>;
+                    const x = resumoBlack(sel);
+                    const t = tomDesvio(x.pct);
+                    const dica = `${fmtBrlCurto(x.realizado)} de ${reais(x.metaAteAgora)} até ${ate ?? "agora"} · meta do dia ${reais(x.metaDia)}`;
                     return (
-                      <td key={c} className="px-3 py-2 text-right sm:px-4">
-                        {/* % da meta ACUMULADA ate' a hora fechada: a mesma base do heroi e da cor. */}
-                        <span className={`block font-semibold ${t ? TINTA[t] : "text-ink"}`}>{x.ritmo !== null ? pct(x.ritmo) : "—"}</span>
+                      <td key={c} className={`px-3 py-2.5 text-right sm:px-4 ${soLargo}`} title={dica}>
+                        <span className={`block font-semibold ${t ? TINTA[t] : "text-ink"}`}>{x.pct !== null ? pct(x.pct) : "—"}</span>
                         <span className="block whitespace-nowrap text-xs text-ink-muted">{fmtBrlCurto(x.realizado)}</span>
-                        <span className="block whitespace-nowrap text-xs text-ink-muted">de {reais(x.metaAteAgora)}</span>
-                        <span className="block whitespace-nowrap text-xs text-ink-faint">dia: {reais(x.metaDia)}</span>
+                        <span className="sr-only"> ({dica})</span>
                       </td>
                     );
                   })}
@@ -294,8 +251,45 @@ export default function BlackClient() {
               ))}
             </tbody>
           </table>
-        </Panel>
-      </div>
+        </div>
+      </Panel>
+
+      <Panel titulo="Hora a hora" ajuda="Cor e diferença de cada hora: realizado contra a meta daquela hora. Acum.: desde 00h." semPadding>
+        <div ref={rolagemHoras} className="relative max-h-[28rem] overflow-auto">
+          <table className="w-full text-sm">
+            <caption className="sr-only">Meta, realizado, diferença e % acumulado por hora</caption>
+            <thead className="sticky top-0 z-10 bg-raised text-xs font-semibold uppercase tracking-wide text-ink-faint">
+              <tr>
+                <th scope="col" className="px-3 py-2 text-left sm:px-4">Hora</th>
+                <th scope="col" className="px-2 py-2 text-right">Meta</th>
+                <th scope="col" className="px-2 py-2 text-right">Realizado</th>
+                <th scope="col" className="hidden px-2 py-2 text-right sm:table-cell">Diferença</th>
+                <th scope="col" className="px-3 py-2 text-right sm:px-4">Acum.</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line whitespace-nowrap tabular-nums">
+              {horas.map((h) => {
+                const th = h.meta && h.realizado !== null ? tomDesvio(h.realizado / h.meta) : null;
+                const ta = tomDesvio(h.pctAcum);
+                const atual = h.hora === r.ultimaHora;
+                return (
+                  <tr key={h.hora} aria-current={atual ? "true" : undefined} className={atual ? "bg-accent-soft/60" : h.realizado === null ? "text-ink-faint" : undefined}>
+                    <th scope="row" className="px-3 py-1.5 text-left font-medium sm:px-4">{rotuloHora(h.hora)}</th>
+                    <td className="px-2 py-1.5 text-right text-ink-muted">{reais(h.meta)}</td>
+                    <td className={`px-2 py-1.5 text-right font-semibold ${th ? TINTA[th] : "text-ink"}`}>{h.realizado === null ? <span className="font-normal text-ink-faint">—</span> : fmtBrlCurto(h.realizado)}</td>
+                    <td className={`hidden px-2 py-1.5 text-right sm:table-cell ${th ? TINTA[th] : ""}`}>
+                      {h.diferenca === null ? "—" : `${h.diferenca >= 0 ? "+" : "−"}${fmtBrlCurto(Math.abs(h.diferenca))}`}
+                    </td>
+                    <td className="px-3 py-1 text-right sm:px-4">
+                      {ta ? <span className={`rounded-md px-1.5 py-0.5 font-semibold ${FUNDO[ta]} ${TINTA[ta]}`}>{pct(h.pctAcum)}</span> : "—"}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
     </Aba>
   );
 }

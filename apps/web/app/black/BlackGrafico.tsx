@@ -1,35 +1,50 @@
 "use client";
 
 /**
- * Acumulado do dia, hora a hora: meta (referência, tracejada) x realizado (só
- * até a última hora fechada). Carregado por `next/dynamic` (recharts fora do bundle inicial).
+ * Acumulado do dia: meta tracejada, realizado sólido (com área suave) até a
+ * última hora fechada e o marcador da hora atual. Carregado por
+ * `next/dynamic` (recharts fora do bundle inicial).
  */
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { useId } from "react";
+import { Area, CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { useTema } from "@/components/theme/ThemeProvider";
 import { temaDoGrafico } from "@/lib/chart-theme";
-import { fmtBrlCurto, fmtNumCurto } from "@/lib/formatters";
+import { fmtBrlCurto } from "@/lib/formatters";
 import { rotuloHora, type HoraBlack } from "@/lib/black-hora";
 
-const NOME: Record<string, string> = { metaAcum: "Meta acumulada", realizadoAcum: "Realizado acumulado" };
+const NOME: Record<string, string> = { metaAcum: "Meta", realizadoAcum: "Realizado" };
+/** Ponto da hora h = acumulado ATÉ o fim dela: o eixo mostra a hora em que o acumulado fecha. */
+const ateHora = (h: number) => rotuloHora(h + 1);
+/** Eixo curto, sem quebra: "1,5 mi", "500 mil". */
+const eixoY = (v: number) => (v >= 1e6 ? `${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : v >= 1e3 ? `${Math.round(v / 1e3)} mil` : String(v));
 
-export default function BlackGrafico({ horas }: { horas: HoraBlack[] }) {
+export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]; ultimaHora: number }) {
   const tema = temaDoGrafico(useTema().resolvido);
+  const grad = useId().replace(/:/g, "");
+  const atual = ultimaHora >= 0 ? horas[ultimaHora] : null;
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={horas} margin={{ top: 8, right: 8, bottom: 0, left: 4 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke={tema.grade} vertical={false} />
-        <XAxis dataKey="hora" tickFormatter={rotuloHora} tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} minTickGap={16} />
-        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={52} tickFormatter={(v: number) => fmtNumCurto(v)} />
+      <ComposedChart data={horas} margin={{ top: 12, right: 12, bottom: 0, left: 0 }}>
+        <defs>
+          <linearGradient id={grad} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={tema.total} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={tema.total} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={tema.grade} vertical={false} />
+        <XAxis dataKey="hora" tickFormatter={ateHora} tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} interval="preserveStartEnd" minTickGap={20} />
+        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={60} tickFormatter={eixoY} />
         <Tooltip
           contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 8, color: tema.tooltipTinta, fontSize: 12 }}
-          labelFormatter={(h: number) => `Até ${rotuloHora(h + 1 === 24 ? 0 : h + 1)}${h + 1 === 24 ? " (fim do dia)" : ""}`}
+          labelFormatter={(h: number) => `Até ${ateHora(h)}`}
           formatter={(v: number, nome: string) => [fmtBrlCurto(v), NOME[nome] ?? nome]}
         />
-        <Legend formatter={(nome: string) => NOME[nome] ?? nome} wrapperStyle={{ fontSize: 12 }} />
-        <Line dataKey="metaAcum" stroke={tema.referencia} strokeWidth={2} strokeDasharray="5 4" dot={false} type="monotone" isAnimationActive={false} />
-        <Line dataKey="realizadoAcum" stroke={tema.total} strokeWidth={2.5} dot={false} type="monotone" connectNulls={false} isAnimationActive={false} />
-      </LineChart>
+        {atual && <ReferenceLine x={ultimaHora} stroke={tema.eixo} strokeOpacity={0.5} label={{ value: ateHora(ultimaHora), position: "insideTopRight", fill: tema.eixo, fontSize: 11 }} />}
+        <Line dataKey="metaAcum" stroke={tema.referencia} strokeWidth={2} strokeDasharray="6 5" dot={false} activeDot={false} type="monotone" isAnimationActive={false} />
+        <Area dataKey="realizadoAcum" stroke={tema.total} strokeWidth={2.5} fill={`url(#${grad})`} dot={false} type="monotone" connectNulls={false} isAnimationActive={false} />
+        {atual?.realizadoAcum != null && <ReferenceDot x={ultimaHora} y={atual.realizadoAcum} r={4.5} fill={tema.total} stroke={tema.tooltipFundo} strokeWidth={2} />}
+      </ComposedChart>
     </ResponsiveContainer>
   );
 }
