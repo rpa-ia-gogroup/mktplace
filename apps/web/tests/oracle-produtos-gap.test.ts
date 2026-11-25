@@ -1,5 +1,5 @@
 // torre_produtos_gap — fixtures FICTICIAS; a forma espelha `produtos_gap_service.get_produtos_gap` (apps/api).
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 
 import { OracleToolError } from "../src/server/oracle/errors.ts";
@@ -165,4 +165,35 @@ test("produtos_gap: descricao em pt-BR diz o corte, a fonte e o estoque do vende
   assert.ok(d.length < 2200);
   const out = JSON.stringify((await run(RESP)).data);
   assert.doesNotMatch(out, /buyer|comprador|cpf|nickname/i);
+});
+
+test("produtos_gap: timeout maior (20 s) so' nesta rota; as demais seguem em 8 s; timeout fixado vence", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const sinais: Record<string, AbortSignal> = {};
+    const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      sinais[new URL(input.toString()).pathname] = init!.signal!;
+      return new Promise(() => {});
+    }) as unknown as typeof fetch;
+    const client = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl });
+    const ignora = () => {};
+    void client.get("produtosGap", { brand: "kokeshi" }).catch(ignora);
+    void client.get("hojePorHora", {}).catch(ignora);
+    await Promise.resolve();
+    mock.timers.tick(9_000);
+    assert.equal(sinais["/api/v1/performance/hoje-por-hora"]?.aborted, true, "padrao: 8 s");
+    assert.equal(sinais["/api/v1/performance/produtos-gap"]?.aborted, false, "rota lenta ainda espera");
+    mock.timers.tick(11_001);
+    assert.equal(sinais["/api/v1/performance/produtos-gap"]?.aborted, true, "mas nao para sempre: 20 s");
+
+    const fixo = new TorreClient({ baseUrl: "https://mktplace-api-6wif.onrender.com", fetchImpl, timeoutMs: 1_000 });
+    void fixo.get("produtosGap", { brand: "apice" }).catch(ignora);
+    await Promise.resolve();
+    const antes = Object.keys(sinais).length;
+    mock.timers.tick(1_001);
+    assert.ok(antes >= 2);
+    assert.equal(sinais["/api/v1/performance/produtos-gap"].aborted, true);
+  } finally {
+    mock.timers.reset();
+  }
 });

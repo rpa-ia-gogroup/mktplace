@@ -47,13 +47,15 @@ class Consulta:
     def __init__(self, linhas):
         self.linhas, self.chamadas = linhas, []
 
-    def __call__(self, sql, params):
-        self.chamadas.append((sql, params))
-        return self.linhas
+    def __call__(self, sql, params, **kw):
+        self.chamadas.append((sql, params, kw))
+        # cada consulta devolve so' os canais que ela tem no SQL
+        return [r for r in self.linhas if f"'{r['canal']}' AS canal" in sql]
 
 
 @pytest.fixture(autouse=True)
 def sem_estoque(monkeypatch):
+    S.limpar_cache()
     # Estoque desligado por padrao; os testes de estoque ligam.
     monkeypatch.setattr(S.settings, "ml_full_stock_api_enabled", False, raising=False)
     monkeypatch.setattr(S.settings, "shopee_fbs_stock_enabled", False, raising=False)
@@ -65,20 +67,23 @@ def gap(linhas, marca="kokeshi", canais=None, comparar="ontem", limite=10, sessa
     return r, c
 
 
-def test_uma_consulta_so_com_o_corte_de_cada_canal():
+def test_no_maximo_duas_consultas_com_o_corte_de_cada_canal():
     r, c = gap([v("ml", "A", "hoje", 1, 10), v("shopee", "A", "hoje", 1, 10), v("tiktok", "A", "hoje", 1, 10)])
-    assert len(c.chamadas) == 1, "uma vaga na fila do Metabase"
-    sql, p = c.chamadas[0]
+    assert len(c.chamadas) == 2, "ML+Shopee juntos e o TikTok a' parte: 2 vagas na fila do Metabase"
+    (sql, p, kw), (sql_tt, p_tt, kw_tt) = c.chamadas
     assert (p["corte_ml"], p["corte_shopee"], p["corte_tiktok"]) == (15, 14, 15)
     assert p["hoje"] == date(2026, 11, 25) and p["comp"] == date(2026, 11, 24)
-    assert sql.count("UNION ALL") == 2
+    assert sql.count("UNION ALL") == 1 and "tiktok" not in sql and kw == {}
+    assert "tk_i" in sql_tt and "'ml' AS canal" not in sql_tt
+    assert kw_tt == {"timeout_metabase": S.TIMEOUT_TIKTOK_S}, "orcamento de tempo so' no TikTok"
     assert {e["canal"]: e["corte_hora"] for e in r["canais"]} == {"ml": 15, "shopee": 14, "tiktok": 15}
-    datamart_leitura.renderizar(sql, p)  # a reserva pelo Metabase escreve todos os parametros
+    for q, pr, _ in c.chamadas:
+        datamart_leitura.renderizar(q, pr)  # a reserva pelo Metabase escreve todos os parametros
 
 
 def test_semana_passada_e_so_um_canal():
     r, c = gap([v("ml", "A", "hoje", 1, 10)], canais=["ml"], comparar="semana_passada")
-    sql, p = c.chamadas[0]
+    sql, p, _ = c.chamadas[0]
     assert p["comp"] == date(2026, 11, 18) and "UNION ALL" not in sql and "corte_shopee" not in p
     assert r["dia_comparado"] == "2026-11-18" and [e["canal"] for e in r["canais"]] == ["ml"]
 
@@ -128,7 +133,7 @@ def test_canal_sem_dado_fica_fora_dos_totais_e_e_dito():
     assert est["ml"]["estado"] == "sem_dado" and "Mercado Livre" in est["ml"]["motivo"]
     assert est["tiktok"]["estado"] == "sem_dado" and est["tiktok"]["corte_hora"] is None
     assert est["shopee"]["estado"] == "medido"
-    assert "corte_ml" not in c.chamadas[0][1], "canal sem loja nem e' consultado"
+    assert all("corte_ml" not in ch[1] for ch in c.chamadas), "canal sem loja nem e' consultado"
     assert r["total"]["diferenca_rs"] == -30
     assert any("fora dos totais" in m for m in r["limitacoes"])
 
@@ -196,3 +201,69 @@ def test_rota_valida_a_entrada_antes_de_qualquer_banco():
                    {"brand": "kokeshi", "comparar": "mes"}, {"brand": "kokeshi", "limite": 0},
                    {"brand": "kokeshi", "limite": 51}):
         assert cli.get(base, params=params).status_code == 422, params
+
+
+def test_tiktok_vai_em_ctes_materializadas_e_a_sql_renderiza():
+    r, c = gap([v("tiktok", "A", "hoje", 1, 10)], canais=["tiktok"])
+    sql, p, _ = c.chamadas[0]
+    assert sql.startswith("WITH") and "tk_o AS MATERIALIZED" in sql and "tk_f AS MATERIALIZED" in sql
+    assert "ANY(ARRAY(SELECT order_id FROM tk_f))" in sql, "itens so' dos pedidos ja' filtrados, pelo indice de order_id"
+    assert "FROM tk_f f" in sql and "JOIN tk_i" in sql
+    assert "corte_tiktok" in p and p["status_tiktok"]
+    datamart_leitura.renderizar(sql, p)
+    # sem TikTok nao ha CTE
+    _, c2 = gap([v("ml", "A", "hoje", 1, 10)], canais=["ml"])
+    assert not c2.chamadas[0][0].startswith("WITH") and len(c2.chamadas) == 1
+
+
+def test_cache_de_5_min_por_marca_canal_comparar_e_corte(monkeypatch):
+    relogio = [1000.0]
+    monkeypatch.setattr(datamart_leitura, "_agora", lambda: relogio[0])
+    c = Consulta([v("ml", "A", "hoje", 1, 10), v("ml", "A", "comp", 2, 40)])
+    chamar = lambda **k: S.get_produtos_gap(Sessao(), c, k.pop("marca", "kokeshi"), k.pop("canais", ["ml"]),
+                                            k.pop("comparar", "ontem"), 10, agora=AGORA)
+    primeira = chamar()
+    segunda = chamar()
+    assert len(c.chamadas) == 1, "2a chamada vem do cache, sem consulta"
+    assert segunda == primeira and segunda is not primeira, "copia: quem chama nao suja o cache"
+    segunda["total"]["diferenca_rs"] = 999
+    assert chamar()["total"]["diferenca_rs"] == -30
+    chamar(comparar="semana_passada")
+    chamar(marca="lescent")
+    assert len(c.chamadas) == 3, "comparar e marca diferentes = chaves diferentes"
+    # a hora fechada do canal muda o corte -> chave nova
+    c2 = Consulta([v("ml", "A", "hoje", 1, 10)])
+    S.get_produtos_gap(Sessao({2: datetime(2026, 11, 25, 14, 10, tzinfo=BRT)}), c2, "kokeshi", ["ml"], "ontem", 10, agora=AGORA)
+    assert len(c2.chamadas) == 1
+    relogio[0] += S.CACHE_TTL_S + 1
+    chamar()
+    assert len(c.chamadas) == 4, "vencido o TTL, consulta de novo"
+
+
+def test_tiktok_que_estoura_o_orcamento_sai_sem_dado_e_nao_derruba_nem_fica_em_cache():
+    class Lenta(Consulta):
+        def __call__(self, sql, params, **kw):
+            if "tk_i" in sql:
+                self.chamadas.append((sql, params, kw))
+                raise TimeoutError("metabase demorou")
+            return super().__call__(sql, params, **kw)
+
+    c = Lenta([v("ml", "A", "hoje", 1, 10), v("ml", "A", "comp", 2, 40), v("tiktok", "A", "hoje", 9, 900)])
+    chamar = lambda: S.get_produtos_gap(Sessao(), c, "kokeshi", None, "ontem", 10, agora=AGORA)
+    r = chamar()
+    est = {e["canal"]: e for e in r["canais"]}
+    assert est["tiktok"]["estado"] == "sem_dado" and "demorou demais" in est["tiktok"]["motivo"]
+    assert est["tiktok"]["corte_hora"] is None
+    assert r["total"]["receita_hoje"] == 10, "so' o que foi lido; o TikTok nao entra nem como zero"
+    assert r["maiores_quedas"][0]["por_canal"][0]["canal"] == "ml"
+    n = len(c.chamadas)
+    chamar()
+    assert len(c.chamadas) > n + 1, "resposta degradada nao fica em cache: a proxima tentativa le de novo"
+
+
+def test_falha_do_ml_shopee_continua_derrubando_a_rota():
+    def quebra(sql, params, **kw):
+        raise RuntimeError("banco fora")
+
+    with pytest.raises(RuntimeError):
+        S.get_produtos_gap(Sessao(), quebra, "kokeshi", ["ml"], "ontem", 10, agora=AGORA)

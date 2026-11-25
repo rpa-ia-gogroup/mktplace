@@ -123,6 +123,16 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
 const CSV_ONLY_ENDPOINTS: ReadonlySet<EndpointKey> = new Set(["dre", "hojePorHora"]);
 
 /**
+ * Timeout POR ENDPOINT, acima do padrao de 8 s. `produtosGap` le o Data Mart pelo Metabase em
+ * fila: depois de um reinicio da API a 1a consulta espera ~10 s da conexao direta antes do
+ * Metabase (memoria datamart-via-metabase-fila), e a propria rota tem orcamento de ~8 s so' para
+ * o TikTok. A rota responde sozinha com o TikTok `sem_dado` se estourar; 20 s cobre o pior caso.
+ */
+const ENDPOINT_TIMEOUT_MS: Partial<Record<EndpointKey, number>> = {
+  produtosGap: 20_000,
+};
+
+/**
  * Teto de bytes POR ENDPOINT, acima do padrao. So' a DRE: o payload bruto de
  * um mes mede 417 KB (outubro/2026) e nunca chega ao modelo — a tool devolve
  * uma projecao compacta medida contra o proprio teto (`DRE_MAX_RESPONSE_BYTES`).
@@ -188,6 +198,8 @@ export class TorreClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  /** true = o chamador fixou o timeout; entao nenhum override por endpoint vale. */
+  private readonly timeoutFixed: boolean;
   private readonly maxBytes: number;
   private readonly serviceKey: string | undefined;
 
@@ -201,6 +213,7 @@ export class TorreClient {
     this.baseUrl = new URL(opts.baseUrl).origin;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.timeoutFixed = opts.timeoutMs !== undefined;
     this.maxBytes = opts.maxBytes ?? DEFAULT_MAX_BYTES;
     this.serviceKey = opts.serviceKey?.trim() || undefined;
   }
@@ -255,7 +268,8 @@ export class TorreClient {
 
     const maxBytes = ENDPOINT_MAX_BYTES[endpoint] ?? this.maxBytes;
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timeoutMs = this.timeoutFixed ? this.timeoutMs : (ENDPOINT_TIMEOUT_MS[endpoint] ?? this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       let res: Response;
