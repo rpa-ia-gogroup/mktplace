@@ -1587,13 +1587,15 @@ function celulaCsv(v: string): string {
 }
 
 /** CSV com `;` (Excel pt-BR). Valor com virgula decimal. */
-export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string): string {
-  const cab = ["pedido", "devolucao", "marca", "dia", "situacao", "valor_reembolsado", "motivo"];
+/** `canal`: a base de varios motivos/canais junta numa planilha so' (pedido da Nath, 24/11). */
+export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string, canal: CanalPedidos = "shopee"): string {
+  const cab = ["pedido", "devolucao", "marca", "canal", "dia", "situacao", "valor_reembolsado", "motivo"];
   const linhas = dados.pedidos.map((p) =>
     [
       p.pedido ?? "",
       p.devolucao ?? "",
       p.marca,
+      canal === "ml" ? "Mercado Livre" : "Shopee",
       p.dia ?? "",
       p.situacao ?? "",
       p.valor == null ? "" : String(p.valor).replace(".", ","),
