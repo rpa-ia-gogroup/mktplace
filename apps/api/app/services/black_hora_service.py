@@ -1,0 +1,182 @@
+"""BLACK-HORA — acompanhamento da Black Friday (27/11) hora a hora.
+
+Meta: planilha 'Meta diária Marketplace — nov/26 (validação)', aba 'Meta hora
+Black' (bloco com cabeçalho "Hora": linhas 00h..23h, uma coluna por marca ×
+canal; "Total ..." e "Acumulado" são calculados aqui, não lidos). Lida com a
+mesma service account da curva ABC (`GOOGLE_SA_JSON_ABC`, readonly), cache de
+10 min; a leitura falhando devolve a última meta lida, ou `meta.disponivel =
+False` com o motivo (a tela segue com o realizado, sem inventar meta).
+
+Realizado: `marts.fact_marketplace_hourly_sales` (o mesmo do Hoje por hora),
+só ML e Shopee (a meta não tem TikTok), só as marca × canal que a meta tem
+(sem isso o realizado teria marcas que a meta não cobre). Cada canal corta na
+sua última hora fechada: hora sem dado fechado volta `None`, nunca 0.
+"""
+from __future__ import annotations
+
+import re
+import threading
+import time
+import unicodedata
+from datetime import date, datetime
+from typing import Callable, Optional
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from app.deps.period import APP_TIMEZONE
+from app.services import full_curva_abc_service as abc
+from app.services.hoje_por_hora_service import FONTES, TABELA, hora_fechada_do_canal
+
+PLANILHA_ID = "1LHKwXuSzZqjPV6tCtuF-WEAZWOL0s5A2E-Fxe4TMKEw"
+ABA = "Meta hora Black"
+FONTE = "Planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black'"
+CACHE_SEGUNDOS = 600
+RETENTAR_SEGUNDOS = 60
+
+CANAIS = {"shopee": 3, "meli": 2}
+NOME_CANAL = {"shopee": "shopee", "meli": "ml"}
+
+MOTIVO_SEM_CREDENCIAL = "Meta indisponível agora: credencial da planilha não configurada."
+MOTIVO_LEITURA = "Meta indisponível agora: a planilha não respondeu (confira se está compartilhada com a conta de serviço)."
+MOTIVO_FORMATO = "Meta indisponível agora: a aba 'Meta hora Black' mudou de formato."
+
+
+class FormatoInesperado(Exception):
+    pass
+
+
+def _norm(v: object) -> str:
+    s = unicodedata.normalize("NFKD", str(v or "")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9 ]", "", s).strip()
+
+
+def _reais(v: object) -> Optional[float]:
+    """'R$ 9.275' / 'R$ 9.275,50' -> 9275.0 / 9275.5. Vazio = None (nunca 0)."""
+    s = str(v or "").replace("R$", "").replace(" ", "").strip()
+    if not s:
+        return None
+    try:
+        return float(s.replace(".", "").replace(",", "."))
+    except ValueError:
+        return None
+
+
+def interpretar(valores: list[list[str]]) -> list[dict]:
+    """O bloco "Hora": [{marca, canal, meta_dia, meta_hora[24]}] para cada coluna 'Marca Canal'."""
+    i = next((n for n, l in enumerate(valores) if l and _norm(l[0]) == "hora"), None)
+    if i is None:
+        raise FormatoInesperado("sem a linha de cabecalho 'Hora'")
+    cab = valores[i]
+    colunas: list[tuple[int, str, str]] = []
+    for j, nome in enumerate(cab[1:], start=1):
+        partes = _norm(nome).split()
+        if len(partes) == 2 and partes[0] != "total" and partes[1] in CANAIS:
+            colunas.append((j, partes[0], NOME_CANAL[partes[1]]))
+    if not colunas:
+        raise FormatoInesperado("sem colunas 'Marca Shopee/Meli'")
+    linhas = {c: {"marca": m, "canal": k, "meta_dia": None, "meta_hora": [None] * 24} for c, m, k in colunas}
+    horas = 0
+    for l in valores[i + 1:]:
+        if not l:
+            continue
+        rot = _norm(l[0])
+        hora = re.fullmatch(r"(\d{1,2})h", rot)
+        if rot == "meta do dia":
+            for c in linhas:
+                linhas[c]["meta_dia"] = _reais(l[c]) if c < len(l) else None
+        elif hora and int(hora.group(1)) < 24:
+            horas += 1
+            for c in linhas:
+                linhas[c]["meta_hora"][int(hora.group(1))] = _reais(l[c]) if c < len(l) else None
+    if horas != 24:
+        raise FormatoInesperado(f"{horas} linhas de hora (esperadas 24)")
+    for x in linhas.values():
+        # Sem a linha "Meta do dia": a soma das horas (mesma conta da planilha).
+        if x["meta_dia"] is None:
+            x["meta_dia"] = round(sum(v or 0 for v in x["meta_hora"]), 2)
+    return list(linhas.values())
+
+
+_cache: dict = {"meta": None, "lida_em": None, "em_s": 0.0, "motivo": None}
+_trava = threading.Lock()
+
+
+def obter_meta(*, ler: Optional[Callable[[], list[list[str]]]] = None,
+               relogio: Callable[[], float] = time.monotonic, cache: dict = _cache) -> tuple[Optional[list[dict]], Optional[str], Optional[str]]:
+    """(meta, motivo, lida_em). Cache de 10 min; falha devolve a última meta boa."""
+    if ler is None:
+        sa = abc._credencial()
+        if sa is None:
+            return cache["meta"], (None if cache["meta"] else MOTIVO_SEM_CREDENCIAL), cache["lida_em"]
+        ler = lambda: abc.ler_aba(sa, aba=ABA, planilha=PLANILHA_ID, faixa="A1:Z80")  # noqa: E731
+    with _trava:
+        validade = CACHE_SEGUNDOS if cache["meta"] is not None else RETENTAR_SEGUNDOS
+        if cache["em_s"] and relogio() - cache["em_s"] < validade:
+            return cache["meta"], cache["motivo"], cache["lida_em"]
+        try:
+            cache["meta"], cache["motivo"] = interpretar(ler()), None
+            cache["lida_em"] = datetime.now(APP_TIMEZONE).isoformat()
+        except FormatoInesperado:
+            cache["motivo"] = MOTIVO_FORMATO
+        except Exception:  # noqa: BLE001 — rede/credencial: a tela segue sem meta
+            cache["motivo"] = MOTIVO_LEITURA
+        cache["em_s"] = relogio()
+        return cache["meta"], (None if cache["meta"] else cache["motivo"]), cache["lida_em"]
+
+
+def corte_do_dia(fonte_ate: Optional[datetime], dia: date, agora: datetime) -> int:
+    """Horas fechadas do canal NAQUELE dia (0..24), nunca além do relógio."""
+    local = agora.astimezone(APP_TIMEZONE)
+    if dia > local.date():
+        return 0
+    teto = local.hour if dia == local.date() else 24
+    return min(hora_fechada_do_canal(fonte_ate, dia), teto)
+
+
+def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[datetime] = None,
+                   obter: Callable = obter_meta) -> dict:
+    agora = (agora or datetime.now(APP_TIMEZONE)).astimezone(APP_TIMEZONE)
+    dia = dia or agora.date()
+    meta, motivo_meta, lida_em = obter()
+    base = {"dia": dia.isoformat(), "meta": {"disponivel": meta is not None, "motivo": motivo_meta,
+                                             "fonte": FONTE, "lida_em": lida_em}}
+    existe = db.execute(text("SELECT to_regclass(:t) IS NOT NULL AND to_regclass(:f) IS NOT NULL"),
+                        {"t": TABELA, "f": FONTES}).scalar()
+    if not existe:
+        return {**base, "disponivel": False, "motivo": "As vendas por hora ainda não estão publicadas no banco.",
+                "cortes": {}, "linhas": []}
+    ids = list(CANAIS.values())
+    fontes = {r[0]: r[1] for r in db.execute(
+        text(f"SELECT marketplace_id, fonte_ate FROM {FONTES} WHERE marketplace_id = ANY(:m)"), {"m": ids})}
+    cortes = {NOME_CANAL[k]: corte_do_dia(fontes.get(m), dia, agora) for k, m in CANAIS.items()}
+    por_id = {m: NOME_CANAL[k] for k, m in CANAIS.items()}
+    vendas = db.execute(text(f"""
+        SELECT l.brand_key AS brand, h.marketplace_id, h.hora, SUM(h.gmv) AS gmv
+        FROM {TABELA} h
+        JOIN marts.dim_loja l ON l.loja_id = h.loja_id
+        WHERE h.dia = :dia AND h.marketplace_id = ANY(:m)
+        GROUP BY 1, 2, 3
+    """), {"dia": dia, "m": ids}).mappings().all()
+    real: dict[tuple[str, str], list[float]] = {}
+    for r in vendas:
+        canal = por_id.get(r["marketplace_id"])
+        if canal is None or r["hora"] is None or not 0 <= int(r["hora"]) < 24:
+            continue
+        real.setdefault((_norm(r["brand"]), canal), [0.0] * 24)[int(r["hora"])] += float(r["gmv"] or 0)
+
+    # As marca × canal da meta; sem meta lida, as que venderam no dia (só o realizado).
+    pares = [(x["marca"], x["canal"]) for x in meta] if meta else sorted(real)
+    por_par = {(x["marca"], x["canal"]): x for x in meta or []}
+    linhas = []
+    for marca, canal in pares:
+        r = real.get((marca, canal), [0.0] * 24)
+        m = por_par.get((marca, canal))
+        linhas.append({
+            "marca": marca, "canal": canal,
+            "meta_dia": m["meta_dia"] if m else None,
+            "meta_hora": m["meta_hora"] if m else [None] * 24,
+            # Hora ainda não fechada no canal: None (nunca 0).
+            "realizado_hora": [round(v, 2) if h < cortes[canal] else None for h, v in enumerate(r)],
+        })
+    return {**base, "disponivel": True, "motivo": None, "cortes": cortes, "linhas": linhas}

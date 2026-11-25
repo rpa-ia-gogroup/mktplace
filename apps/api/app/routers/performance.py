@@ -39,6 +39,7 @@ from app.services import avoe_snapshot_service as avoe_svc
 from app.services import executive_summary_service
 from app.services import gold_service as svc
 from app.services import hoje_por_hora_service as hph_svc
+from app.services import black_hora_service as black_svc
 from app.services import monitoramento_preco_service as mp_svc
 from app.services import performance_service as perf_svc
 from app.services import datamart_leitura
@@ -580,6 +581,16 @@ def hoje_por_hora(
     ontem e a semana passada ate' a mesma hora. O periodo do filtro e' ignorado:
     a resposta e' sempre do dia corrente (BRT)."""
     return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands, base=base)
+
+
+@router.get("/black-hora")
+def black_hora(
+    dia: Optional[date] = Query(None, description="Dia (AAAA-MM-DD). Padrão: hoje (BRT)."),
+    db: Session = Depends(get_db),
+):
+    """Black Friday hora a hora: meta da planilha 'Meta hora Black' x realizado por
+    hora (ML e Shopee, sem TikTok), cada canal cortado na sua última hora fechada."""
+    return black_svc.get_black_hora(_require_db(db), dia)
 
 
 @router.get("/tempo-real", response_model=TempoRealResponse)

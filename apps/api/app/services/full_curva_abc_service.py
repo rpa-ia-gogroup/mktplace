@@ -173,7 +173,8 @@ def _credencial() -> Optional[dict]:
     return json.loads(bruto)
 
 
-def ler_aba(sa: dict, cliente: Optional[httpx.Client] = None, aba: str = ABA) -> list[list[str]]:
+def ler_aba(sa: dict, cliente: Optional[httpx.Client] = None, aba: str = ABA,
+            planilha: str = PLANILHA_ID, faixa: str = "A1:F5000") -> list[list[str]]:
     """Le a aba com a service account. So' leitura (escopo readonly)."""
     agora = int(time.time())
     afirmacao = jwt.encode(
@@ -184,8 +185,8 @@ def ler_aba(sa: dict, cliente: Optional[httpx.Client] = None, aba: str = ABA) ->
         tok = c.post(URL_TOKEN, data={
             "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": afirmacao})
         tok.raise_for_status()
-        intervalo = quote(f"'{aba}'!A1:F5000", safe="")
-        r = c.get(f"https://sheets.googleapis.com/v4/spreadsheets/{PLANILHA_ID}/values/{intervalo}",
+        intervalo = quote(f"'{aba}'!{faixa}", safe="")
+        r = c.get(f"https://sheets.googleapis.com/v4/spreadsheets/{planilha}/values/{intervalo}",
                   headers={"Authorization": f"Bearer {tok.json()['access_token']}"})
         r.raise_for_status()
         return r.json().get("values", [])
