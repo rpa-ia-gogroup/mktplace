@@ -10,6 +10,8 @@
  * a menor primeiro). Marca sem medida vem no fim com "—" e o motivo.
  * Tudo derivado do payload ja' carregado: zero fetch novo.
  */
+import type { ReactNode } from "react";
+
 import DrilldownContextLine from "@/components/drilldown/DrilldownContextLine";
 import DrilldownCta from "@/components/drilldown/DrilldownCta";
 import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
@@ -32,6 +34,7 @@ export default function CxDrilldownContent({
   cxHref,
   periodo = "Últimos 30 dias até ontem",
   dias = 30,
+  depoisDasMarcas,
 }: {
   indicador: IndicadorCx;
   resumo: ResumoCx;
@@ -44,6 +47,8 @@ export default function CxDrilldownContent({
   periodo?: string;
   /** Janela da seta do cancelamento ("vs N dias antes"). */
   dias?: number;
+  /** Secao extra logo depois de "Por marca", antes da metodologia (ex.: Qualidade da resposta na aba CX). */
+  depoisDasMarcas?: ReactNode;
 }) {
   const linhas = linhasDrilldownCx(r, indicador);
   const mediana = r.medianas[indicador];
@@ -89,6 +94,8 @@ export default function CxDrilldownContent({
           )}
         </ul>
       </DrilldownSecao>
+
+      {depoisDasMarcas}
 
       {notas.length > 0 && (
         <ul className="flex flex-col gap-1 border-t border-line pt-3 text-xs text-ink-faint">

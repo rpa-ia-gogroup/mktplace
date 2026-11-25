@@ -95,8 +95,9 @@ export default function CxTikTok({ filtros }: { filtros: FiltrosCx }) {
   const total = totalTikTok(linhas);
   const itens = itensParetoTikTok(d);
   const abertoItem = itens.find((i) => i.chave === aberto) ?? null;
-  const intervalo = `${dataBr(d.inicio)}–${dataBr(d.fim)}`;
-  const periodo = `${dataBr(d.inicio)} a ${dataBr(d.fim)}`;
+  const eHoje = d.inicio === d.fim; // dias=0: so' hoje, ate' agora
+  const intervalo = eHoje ? dataBr(d.fim) : `${dataBr(d.inicio)}–${dataBr(d.fim)}`;
+  const periodo = eHoje ? `hoje até agora · ${dataBr(d.fim)}` : `${dataBr(d.inicio)} a ${dataBr(d.fim)}`;
   const selo = (
     <span className="flex flex-wrap items-center gap-1.5">
       {d.carregando ? (

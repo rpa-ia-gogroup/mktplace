@@ -31,6 +31,18 @@ import { presetRange } from "./filters/presets.ts";
 
 export { JANELAS_DIAS, JANELA_PADRAO, type JanelaDias };
 
+/**
+ * "Hoje" (so' a aba CX): `dias=0` na URL e na API = o dia corrente ate' agora, no fuso
+ * America/Sao_Paulo. `JANELAS_DIAS` (compartilhada com outras telas) continua so' com os
+ * dias fechados ate' ontem; a CX acrescenta o Hoje no topo da lista.
+ */
+export const DIAS_HOJE = 0;
+export const JANELAS_CX = [DIAS_HOJE, ...JANELAS_DIAS] as const;
+export type JanelaCx = (typeof JANELAS_CX)[number];
+
+/** "Hoje" ou "Últimos 30 dias": o rotulo do periodo no seletor, no resumo e nos textos da aba. */
+export const rotuloPeriodoCx = (dias: number): string => (dias === DIAS_HOJE ? "Hoje" : `Últimos ${dias} dias`);
+
 type ParamBruto = string | string[] | undefined;
 
 export interface NaoLidas {
@@ -55,6 +67,9 @@ export interface NaoLidas {
   /** Tempo de resposta no periodo (segundos): mediana (lojas com app) ou media do Seller Centre (Kokeshi). */
   tempo_resposta_s?: number | null;
   tempo_resposta_p90_s?: number | null;
+  /** Media da mesma espera (lojas com app) e respostas acima de 1 dia. Ausente na API antiga. */
+  tempo_resposta_media_s?: number | null;
+  respostas_mais_1d?: number | null;
   respostas?: number | null;
   respostas_ate_1h_pct?: number | null;
   respostas_desde?: string | null;
@@ -173,7 +188,7 @@ export type ChaveApiCx = "contact_rate" | "resposta" | "cancelamento" | "reembol
 // ---------------------------------------------------------------------------
 export interface FiltrosCx {
   marca: string | null;
-  dias: JanelaDias;
+  dias: JanelaCx;
 }
 
 function primeiro(v: ParamBruto): string | undefined {
@@ -185,10 +200,11 @@ export function lerFiltrosCx(
   marcasPermitidas: readonly string[],
 ): FiltrosCx {
   const marca = primeiro(params.brands)?.trim().toLowerCase();
-  const dias = Number(primeiro(params.dias));
+  const bruto = primeiro(params.dias)?.trim();
+  const dias = bruto ? Number(bruto) : NaN; // `dias=` vazio nao vira Hoje (Number("") = 0)
   return {
     marca: marca && marcasPermitidas.includes(marca) ? marca : null,
-    dias: (JANELAS_DIAS as readonly number[]).includes(dias) ? (dias as JanelaDias) : JANELA_PADRAO,
+    dias: (JANELAS_CX as readonly number[]).includes(dias) ? (dias as JanelaCx) : JANELA_PADRAO,
   };
 }
 
@@ -238,7 +254,7 @@ export function marcaUnica(escolha: readonly string[], atual: string | null): st
 
 /** Resumo do botao "Filtros" no celular, no formato do `resumoDosFiltros` do app. */
 export function resumoFiltrosCx(f: FiltrosCx, rotuloMarca: (m: string) => string, canal: CanalCx = "shopee"): string {
-  return [CANAIS_CX.find((c) => c.valor === canal)?.rotulo ?? "Shopee", f.marca ? rotuloMarca(f.marca) : "Todas as marcas", `Últimos ${f.dias} dias`].join(" · ");
+  return [CANAIS_CX.find((c) => c.valor === canal)?.rotulo ?? "Shopee", f.marca ? rotuloMarca(f.marca) : "Todas as marcas", rotuloPeriodoCx(f.dias)].join(" · ");
 }
 
 // ---------------------------------------------------------------------------
@@ -457,6 +473,7 @@ export function montarAtendimentoCx(
 ): VisaoAtendimentoCx {
   const { chat, atendimento } = dados;
   const dias = dados.janela.dias;
+  const hoje = dias === DIAS_HOJE;
   const usa7 = dias === 7;
   const comContactRate = dias === 7 || dias === 30;
   const contas = new Map(chat.contas.map((c) => [c.marca, c]));
@@ -467,7 +484,8 @@ export function montarAtendimentoCx(
 
   const brutas = marcas.map((m) => {
     const n = conversas.get(m);
-    const conv = n ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
+    // Hoje: a coleta guarda conversas de 7 e 30 dias, nao por dia
+    const conv = n && !hoje ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
     return { m, n, conv, ped: pedidos.get(m) ?? null };
   });
   const linhas: LinhaAtendimentoCx[] = brutas.map(({ m, n, conv, ped }) => ({
@@ -475,10 +493,12 @@ export function montarAtendimentoCx(
     marca: rotuloMarca(m),
     conversas: conv == null ? "—" : `${n?.conversas_truncado ? "≥ " : ""}${inteiro(conv)}`,
     // conversas truncadas sao piso, entao o % e' teto
-    aguardandoPct: conv && n?.aguardando_resposta != null ? `${n.conversas_truncado ? "≤ " : ""}${pct((n.aguardando_resposta / conv) * 100)}` : "—",
+    // Hoje: sem conversas do dia nao ha' %; a fila e' de agora, entao vai a contagem (a mesma do card)
+    aguardandoPct: hoje ? inteiro(n?.aguardando_resposta) : conv && n?.aguardando_resposta != null ? `${n.conversas_truncado ? "≤ " : ""}${pct((n.aguardando_resposta / conv) * 100)}` : "—",
     aguardando: inteiro(n?.aguardando_resposta),
     naoLidas: inteiro(n?.valor),
-    respondido: celulaMeta(contas.get(m), COD_RESPONDIDO),
+    // Hoje: a taxa de resposta da Saude da Conta e' fotografia diaria, nao "de hoje"
+    respondido: hoje ? null : celulaMeta(contas.get(m), COD_RESPONDIDO),
     nota: celulaMeta(contas.get(m), COD_NOTA),
     notaNum: contas.get(m)?.metricas.find((x) => x.codigo === COD_NOTA)?.valor ?? null,
     contactRate: comContactRate && conv != null && ped ? pct((conv / ped) * 100) : "—",
@@ -501,10 +521,12 @@ export function montarAtendimentoCx(
   const notas: string[] = [];
   if (chat.nao_lidas_estado === "erro") {
     notas.push("Conversas indisponíveis nesta carga.");
+  } else if (hoje) {
+    notas.push(NOTA_HOJE_CHAT);
   } else if (brutas.every((b) => b.conv == null)) {
     notas.push("Conversas e contact rate: aguardando a coleta com a lista de conversas (shopee_cx_coleta, a cada 2 h).");
   }
-  if (!comContactRate) notas.push("Conversas cobrem os últimos 30 dias; contact rate só em 7 e 30 dias.");
+  if (!comContactRate && !hoje) notas.push("Conversas cobrem os últimos 30 dias; contact rate só em 7 e 30 dias.");
   if (brutas.every((b) => b.n?.tempo_resposta_s == null)) {
     notas.push("Tempo de resposta: aguardando as primeiras respostas medidas pela coleta (a cada 2 h).");
   } else {
@@ -524,7 +546,7 @@ export function montarAtendimentoCx(
   return {
     estado: linhas.length ? "dado" : chat.estado === "erro" ? "erro" : "sem_fonte",
     motivo: linhas.length ? null : (chat.motivo ?? "Nenhuma loja Shopee no filtro."),
-    rotuloConversas: usa7 ? "Conversas (7 dias)" : "Conversas (30 dias)",
+    rotuloConversas: hoje ? "Conversas" : usa7 ? "Conversas (7 dias)" : "Conversas (30 dias)",
     totais: {
       // conversas truncadas sao piso: o total tambem
       conversas: (() => {
@@ -532,7 +554,7 @@ export function montarAtendimentoCx(
         return t !== "—" && brutas.some((b) => b.conv != null && b.n?.conversas_truncado) ? `≥ ${t}` : t;
       })(),
       aguardando: inteiro(somar(brutas.map((b) => b.n?.aguardando_resposta))),
-      aguardandoPct: (() => {
+      aguardandoPct: hoje ? inteiro(somar(brutas.map((b) => b.n?.aguardando_resposta))) : (() => {
         const v = razaoPct(brutas.map((b) => [b.n?.aguardando_resposta, b.conv]));
         return v != null && brutas.some((b) => b.n?.conversas_truncado) ? `≤ ${pct(v)}` : pct(v);
       })(),
@@ -594,6 +616,11 @@ export function montarAvaliacaoLoja(
 // ---------------------------------------------------------------------------
 // Ajuda dos numeros (o "ⓘ" ao lado do rotulo; a tela fica so' com o numero)
 // ---------------------------------------------------------------------------
+/** Hoje (dias=0): o que a Saude da Conta e a coleta do chat nao trazem por dia. */
+export const MOTIVO_RESPOSTA_HOJE = "A taxa de resposta oficial da Shopee é uma fotografia diária da Saúde da Conta: não existe “de hoje”.";
+export const MOTIVO_CONTACT_HOJE = "O contact rate só existe em 7 e 30 dias: a coleta do chat não guarda conversas por dia.";
+const NOTA_HOJE_CHAT = `${MOTIVO_RESPOSTA_HOJE} ${MOTIVO_CONTACT_HOJE} A fila, as não lidas e o tempo de resposta são lidos até agora.`;
+
 export const AJUDA_CX = {
   conversas:
     "Conversas do chat da Shopee com mensagem no período (7 ou 30 dias, pela última mensagem). Cada comprador conta uma vez, mesmo que mande várias mensagens.",
@@ -1086,6 +1113,7 @@ function porIndicador<T>(f: (i: IndicadorCx) => T): Record<IndicadorCx, T> {
 export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: string) => string): ResumoCx {
   const { chat, atendimento, devolucoes: dev } = dados;
   const usa7 = dados.janela.dias === 7;
+  const hoje = dados.janela.dias === DIAS_HOJE;
   const comFotos = chat.nao_lidas_estado === "dado";
   const fotos = new Map((comFotos ? chat.nao_lidas ?? [] : []).map((n) => [n.marca, n]));
   const contas = new Map(chat.contas.map((c) => [c.marca, c]));
@@ -1096,17 +1124,18 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
   const devs = new Map((devOk ? dev.marcas : []).map((m) => [m.marca, m]));
   const conv = (m: string) => {
     const n = fotos.get(m);
-    return n ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
+    return n && !hoje ? ((usa7 ? n.conversas_7d : n.conversas_30d) ?? null) : null;
   };
   const metricaResposta = (m: string) => contas.get(m)?.metricas.find((x) => x.codigo === COD_RESPONDIDO);
   const resposta = (m: string) => {
+    if (hoje) return null; // fotografia diaria da Saude da Conta: nao existe "de hoje"
     const v = metricaResposta(m)?.valor;
     return v != null && Number.isFinite(v) ? v : null;
   };
   const comChat = [...fotos.keys()].filter((m) => conv(m) != null);
   // "≥ 1.000" na coleta: a conversa e' um piso, entao o contact rate e' piso.
   const truncado = comChat.some((m) => fotos.get(m)?.conversas_truncado);
-  const comCr = dados.janela.dias <= 30;
+  const comCr = dados.janela.dias === 7 || dados.janela.dias === 30;
 
   /** (numerador, denominador) das tres taxas sobre pedidos/conversas. */
   const par = (i: IndicadorCx, m: string): [Num, Num] => {
@@ -1136,6 +1165,7 @@ export function resumoCxGerencial(dados: CxShopeeResponse, rotuloMarca: (m: stri
   const motivo = (i: IndicadorCx, m: string): string | null => {
     if (valor(i, m) != null) return null;
     const semPedidos = !pedidos(m) ? "Sem pedidos no período." : null;
+    if (hoje && (i === "contactRate" || i === "resposta")) return i === "resposta" ? MOTIVO_RESPOSTA_HOJE : MOTIVO_CONTACT_HOJE;
     if (i === "contactRate") {
       if (!comCr) return "Contact rate só em 7 e 30 dias.";
       if (conv(m) == null) return comFotos ? "Sem leitura de conversas na coleta do chat." : "Conversas indisponíveis nesta carga.";
@@ -1587,13 +1617,15 @@ function celulaCsv(v: string): string {
 }
 
 /** CSV com `;` (Excel pt-BR). Valor com virgula decimal. */
-export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string): string {
-  const cab = ["pedido", "devolucao", "marca", "dia", "situacao", "valor_reembolsado", "motivo"];
+/** `canal`: a base de varios motivos/canais junta numa planilha so' (pedido da Nath, 24/11). */
+export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string, canal: CanalPedidos = "shopee"): string {
+  const cab = ["pedido", "devolucao", "marca", "canal", "dia", "situacao", "valor_reembolsado", "motivo"];
   const linhas = dados.pedidos.map((p) =>
     [
       p.pedido ?? "",
       p.devolucao ?? "",
       p.marca,
+      canal === "ml" ? "Mercado Livre" : "Shopee",
       p.dia ?? "",
       p.situacao ?? "",
       p.valor == null ? "" : String(p.valor).replace(".", ","),
@@ -1606,7 +1638,7 @@ export function csvPedidosMotivo(dados: PedidosMotivoResponse, rotulo: string): 
 }
 
 export function nomeDoCsvPedidos(tipo: TipoPedidos, codigo: string, f: FiltrosCx, agora: Date): string {
-  return `cx-${tipo}-${codigo}${f.marca ? `-${f.marca}` : ""}-${f.dias}d-${agora.toISOString().slice(0, 10)}.csv`;
+  return `cx-${tipo}-${codigo}${f.marca ? `-${f.marca}` : ""}-${f.dias === DIAS_HOJE ? "hoje" : `${f.dias}d`}-${agora.toISOString().slice(0, 10)}.csv`;
 }
 
 /** Pareto -> marca -> SKU: o motivo aberto por marca e, dentro dela, por produto. */

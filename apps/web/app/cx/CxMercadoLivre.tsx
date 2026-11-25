@@ -29,7 +29,7 @@ import MaisDetalhes from "@/components/ui/MaisDetalhes";
 import Panel from "@/components/ui/Panel";
 import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import StateBlock from "@/components/ui/StateBlock";
-import { inteiro, pctCx, reais, type FiltrosCx } from "@/lib/cx";
+import { DIAS_HOJE, inteiro, pctCx, reais, type FiltrosCx } from "@/lib/cx";
 import {
   AJUDA_ML,
   INDICADORES_ML,
@@ -48,6 +48,7 @@ import {
   type ResultadoMl,
   type ResumoMl,
 } from "@/lib/cx-ml";
+import { qualidadeMl } from "@/lib/cx-qualidade";
 import { brandLabel } from "@/lib/filters/brands";
 import { textoJanela } from "@/lib/performance-contas-atendimento";
 import { TITULO_SEGUNDA_TENTATIVA } from "@/lib/performance-contas";
@@ -80,7 +81,10 @@ import {
   pesosDaColuna,
   pilulaCartao,
   pilulaSelo,
+  MOTIVO_HOJE,
+  SEM_DADO_HOJE,
 } from "./CxConteudo";
+import QualidadeResposta from "./QualidadeResposta";
 
 export default function CxMercadoLivre({ filtros }: { filtros: FiltrosCx }) {
   const { marca, dias } = filtros;
@@ -156,6 +160,7 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
   const [marcaAberta, setMarcaAberta] = useState<string | null>(null);
   // Cartao de taxa aberto no detalhe por marca (um dialogo por vez: o da marca fica fechado enquanto este abre).
   const [taxaAberta, setTaxaAberta] = useState<TaxaDoCartao | null>(null);
+  const [respostaAberta, setRespostaAberta] = useState(false);
   const aberta = status.find((x) => x.chave === marcaAberta) ?? null;
   // a marca fora (Apice) nao e' problema: so' no ⓘ do heroi
   const fora = dados.cobertura.fora.map((f) => brandLabel(f.marca)).join(", ");
@@ -181,6 +186,7 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
             .filter(Boolean)
             .join(" ")}
           abrir={setTaxaAberta}
+          abrirResposta={() => setRespostaAberta(true)}
         />
       }
     >
@@ -219,6 +225,15 @@ function Corpo({ dados, filtros, selo }: { dados: CxMlResponse; filtros: Filtros
         identidade={taxaAberta ? VISUAL_TAXA[taxaAberta].identidade : undefined}
       >
         {taxaAberta && <DetalheTaxa i={taxaAberta} r={r} linhas={prob.linhas} periodo={textoJanela(dados.janela)} geradoEm={dados.gerado_em} />}
+      </KpiDrilldownDialog>
+
+      <KpiDrilldownDialog open={respostaAberta} onClose={() => setRespostaAberta(false)} title={`${ROTULO_ML.resposta} · qualidade por marca`} icone={MessageCircle}>
+        {respostaAberta && (
+          <div className="flex flex-col gap-4 text-sm">
+            <DrilldownContextLine leading="Mercado Livre" periodLabel={textoJanela(dados.janela)} refreshedAt={dados.gerado_em} />
+            <QualidadeResposta v={qualidadeMl(dados, brandLabel, agora)} ajuda="Perguntas de pré-venda: tempo médio até a resposta, valor oficial do ML (média de 14 dias). Aguardando = perguntas ainda sem resposta; acima de 24 h fica fora." />
+          </div>
+        )}
       </KpiDrilldownDialog>
 
       <KpiDrilldownDialog open={aberta != null} onClose={() => setMarcaAberta(null)} title={aberta ? `${aberta.marca} · Saúde da Conta` : ""}>
@@ -276,6 +291,7 @@ function Faixa({
   erro,
   ajudaResposta,
   abrir,
+  abrirResposta,
 }: {
   r: ResumoMl;
   dias: number;
@@ -285,7 +301,9 @@ function Faixa({
   erro: string | null;
   ajudaResposta: string;
   abrir: (i: TaxaDoCartao) => void;
+  abrirResposta: () => void;
 }) {
+  const hoje = dias === DIAS_HOJE;
   const taxa = (i: TaxaDoCartao, cor: string, icone: typeof Ban, contagem: string | null) => {
     const c = r.comparacao[i];
     const sem = c?.delta == null && r.taxa[i] != null ? r.semAnterior[i] : undefined;
@@ -294,7 +312,8 @@ function Faixa({
         rotulo={ROTULO_ML[i]}
         icone={icone}
         cor={cor}
-        valor={r.taxa[i] == null ? null : pctCx(r.taxa[i])}
+        valor={r.taxa[i] == null ? (hoje ? SEM_DADO_HOJE : null) : pctCx(r.taxa[i])}
+        ausente={hoje && r.taxa[i] == null}
         pilula={pilulaCartao(c)}
         // cobertura parcial e contagem ficam no cartao; sem periodo anterior, o motivo da API vai para o ⓘ
         legenda={contagem}
@@ -310,7 +329,7 @@ function Faixa({
     );
   };
   const n = (i: IndicadorTaxa, um: string, varios: string) => {
-    if (r.contagem[i] == null) return i === "devolucao" ? "Coleta incompleta no período" : null;
+    if (r.contagem[i] == null) return hoje ? MOTIVO_HOJE.coletaMl : i === "devolucao" ? "Coleta incompleta no período" : null;
     const { lidas, total } = r.marcasNaTaxa[i];
     // cobertura parcial aparece no card, nunca so' no ⓘ
     return `${inteiro(r.contagem[i])} ${r.contagem[i] === 1 ? um : varios}${lidas < total ? ` · ${lidas} de ${total} marcas` : ""}`;
@@ -324,11 +343,14 @@ function Faixa({
           rotulo={ROTULO_ML.resposta}
           icone={MessageCircle}
           cor={COR_CX.resposta}
-          valor={r.resposta == null ? null : pctCx(r.resposta)}
-          pilula={pilulaResposta ?? pilulaSelo(selo)}
-          legenda={erro ?? (pilulaResposta ? legendaSelo(selo) : null)}
+          valor={r.resposta == null ? (hoje ? SEM_DADO_HOJE : null) : pctCx(r.resposta)}
+          ausente={hoje && r.resposta == null}
+          // sem dado nao diz "na meta" (Revisor UX, #536)
+          pilula={hoje && r.resposta == null ? null : (pilulaResposta ?? pilulaSelo(selo))}
+          legenda={erro ?? (hoje && r.resposta == null ? MOTIVO_HOJE.coletaMl : pilulaResposta ? legendaSelo(selo) : null)}
           rodape={fila}
           ajuda={<InfoDica texto={ajudaResposta} />}
+          onAbrir={abrirResposta}
         />
         {taxa("cancelamento", COR_CX.cancelamento, Ban, n("cancelamento", "pedido cancelado", "pedidos cancelados"))}
         {taxa("devolucao", COR_CX.devolucao, PackageX, n("devolucao", "devolução", "devoluções"))}

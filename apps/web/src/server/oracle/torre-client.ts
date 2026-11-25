@@ -44,6 +44,18 @@ export const ENDPOINTS = {
   monitoramentoPreco: "/api/v1/performance/monitoramento-preco",
   // T-0080 P2: DRE gerencial mensal (tool torre_dre).
   dre: "/api/v1/dre",
+  // MCP-AMPLIADO — o que o time pergunta ao bot da Torre. Todas GET, so' agregados.
+  hojePorHora: "/api/v1/performance/hoje-por-hora",
+  // `{mes}` e' o unico segmento dinamico; so' passa `AAAA-MM` valido (ver `get`).
+  metas: "/api/v1/metas/{mes}",
+  expedicaoMlLdr: "/api/v1/expedicao/ml/ldr",
+  expedicaoShopeeLdr: "/api/v1/expedicao/shopee/ldr",
+  performanceOficial: "/api/v1/expedicao/performance",
+  cxAtendimento: "/api/v1/cx/atendimento",
+  cxShopee: "/api/v1/cx/shopee",
+  cxMercadoLivre: "/api/v1/cx/mercadolivre",
+  cxTiktok: "/api/v1/cx/tiktok",
+  fullSlowMoving: "/api/v1/performance/full-slow-moving",
 } as const;
 
 export type EndpointKey = keyof typeof ENDPOINTS;
@@ -92,10 +104,21 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
   ]),
   // A rota le `channels` e `brands` como CSV (`Optional[str]`), nunca lista.
   dre: new Set(["ref_month", "channels", "brands"]),
+  // `channels` e `brands` sao CSV (`Optional[str]`); `base` = pagos | realizados.
+  hojePorHora: new Set(["channels", "brands", "base"]),
+  metas: new Set(["mes"]),
+  expedicaoMlLdr: new Set(["days", "brands"]),
+  expedicaoShopeeLdr: new Set(["days", "brands"]),
+  performanceOficial: new Set(["canal", "brands"]),
+  cxAtendimento: new Set(["brands", "dias"]),
+  cxShopee: new Set(["brands", "dias"]),
+  cxMercadoLivre: new Set(["brands", "dias"]),
+  cxTiktok: new Set(["brands", "dias"]),
+  fullSlowMoving: new Set([]),
 };
 
 /** Endpoints cujos parametros sao CSV: lista repetida seria lida pela METADE. */
-const CSV_ONLY_ENDPOINTS: ReadonlySet<EndpointKey> = new Set(["dre"]);
+const CSV_ONLY_ENDPOINTS: ReadonlySet<EndpointKey> = new Set(["dre", "hojePorHora"]);
 
 /**
  * Teto de bytes POR ENDPOINT, acima do padrao. So' a DRE: o payload bruto de
@@ -104,10 +127,16 @@ const CSV_ONLY_ENDPOINTS: ReadonlySet<EndpointKey> = new Set(["dre"]);
  */
 const ENDPOINT_MAX_BYTES: Partial<Record<EndpointKey, number>> = {
   dre: 1024 * 1024,
+  // A rota manda a serie de 60 dias por SKU: ~280-950 B por linha (medido em payload
+  // sintetico). A tool devolve no maximo 25 itens; o teto so' evita derrubar a leitura.
+  fullSlowMoving: 2 * 1024 * 1024,
 };
 
 /** Unicos parametros que a fonte le como lista (`list[str] = Query`). */
 const LIST_PARAMS = new Set(["brands", "classificacoes"]);
+
+/** Unico segmento dinamico de caminho aceito: o mes das metas. */
+const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function allowedParamsFor(endpoint: EndpointKey): ReadonlySet<string> {
   return OPERATIONAL_PARAMS[endpoint] ?? ALLOWED_PARAMS;
@@ -182,7 +211,15 @@ export class TorreClient {
     const path = ENDPOINTS[endpoint];
     if (!path) throw toolError("MISSING_CONFIGURATION");
 
-    const url = new URL(this.baseUrl + path);
+    // `{mes}` so' e' preenchido com `AAAA-MM` valido; qualquer outra coisa (inclusive
+    // `../`) falha ANTES do fetch. O parametro nao vai para a query string.
+    let caminho: string = path;
+    if (path.includes("{mes}")) {
+      const mes = params.mes;
+      if (typeof mes !== "string" || !MES_VALIDO.test(mes)) throw toolError("MISSING_CONFIGURATION");
+      caminho = path.replace("{mes}", mes);
+    }
+    const url = new URL(this.baseUrl + caminho);
     for (const [k, v] of Object.entries(params)) {
       // A allowlist e' checada ANTES do descarte de `undefined`: um typo cujo
       // valor por acaso seja `undefined` tambem precisa falhar, senao o erro
@@ -191,7 +228,7 @@ export class TorreClient {
         // Falha ANTES do fetch: zero chamada upstream.
         throw toolError("MISSING_CONFIGURATION");
       }
-      if (v === undefined) continue;
+      if (v === undefined || (k === "mes" && endpoint === "metas")) continue;
       // Lista em parametro escalar e' recusada: o FastAPI le o ULTIMO valor e
       // a guarda abaixo o primeiro — os dois nunca podem discordar.
       if (Array.isArray(v) && (!LIST_PARAMS.has(k) || CSV_ONLY_ENDPOINTS.has(endpoint))) {

@@ -267,3 +267,15 @@ def test_cancelamento_anterior_so_das_lojas_com_app_e_falha_vira_nulo():
     assert all(x.pedidos_anterior is None for x in caiu.atendimento.marcas)
     assert caiu.atendimento.indicadores[0].estado == "dado"
     assert base_cx.SEGREDO not in caiu.model_dump_json()
+
+
+def test_hoje_nao_compara_com_ontem_nem_tem_serie_diaria():
+    resp, fonte = _montar(dias=0)
+    assert resp.janela.dias == 0 and resp.janela.inicio == resp.janela.fim
+    assert resp.janela_anterior is None and resp.serie_diaria == []
+    assert set(resp.sem_anterior) == set(resp.sem_serie) == {"contact_rate", "resposta", "cancelamento", "reembolso"}
+    assert all(m.pedidos_anterior is None for m in resp.atendimento.marcas)
+    # nenhuma consulta da comparacao (janela anterior) e' feita
+    params = dict(fonte.cx.chamadas)
+    assert not any("anterior" in nome for nome, _ in fonte.cx.chamadas + fonte.chamadas)
+    assert params["shopee_marcas"]["inicio"] == params["shopee_marcas"]["fim"] == resp.janela.fim

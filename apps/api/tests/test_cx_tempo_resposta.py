@@ -16,7 +16,7 @@ def _fonte(respostas=True, tempo=None, falhas=()):
     f.coleta[svc.SQL_TABELAS_CX] = ("tabelas_cx", [{"returns": True, "chat": True, "respostas": respostas}])
     f.coleta[svc.SQL_TEMPO_RESPOSTA] = ("tempo_resposta", tempo if tempo is not None else [
         {"marca": "apice", "respostas": 40, "mediana_s": 754.4, "p90_s": 7200.0, "ate_1h": 30,
-         "desde_em": AGORA - timedelta(hours=10)},
+         "media_s": 9000.4, "mais_1d": 3, "desde_em": AGORA - timedelta(hours=10)},
     ])
     return f
 
@@ -35,7 +35,9 @@ def test_tempo_de_resposta_e_a_mediana_das_respostas_do_periodo():
     assert (a.tempo_resposta_s, a.tempo_resposta_p90_s, a.respostas) == (754, 7200, 40)
     assert a.respostas_ate_1h_pct == 75.0 and a.tempo_resposta_fonte == "mediana"
     assert a.respostas_desde == AGORA - timedelta(hours=10)
+    assert (a.tempo_resposta_media_s, a.respostas_mais_1d) == (9000, 3)
     # loja sem resposta medida fica sem tempo (nunca zero)
+    assert nl["barbours"].tempo_resposta_media_s is None and nl["barbours"].respostas_mais_1d is None
     assert nl["barbours"].tempo_resposta_s is None and nl["barbours"].tempo_resposta_fonte is None
     params = next(p for n, p in fonte.chamadas if n == "tempo_resposta")
     assert params["desde"] == AGORA - timedelta(days=7) and set(params["marcas"]) <= set(svc.SHOPEE_MARCAS)
@@ -67,3 +69,8 @@ def test_inicio_da_medicao_sobrevive_a_leitura_pelo_metabase():
     assert "AS desde_em" in svc.SQL_TEMPO_RESPOSTA
     linha = datamart_leitura.normalizar([{"desde_em": "2026-11-05T13:00:00Z"}])[0]
     assert svc._utc(linha["desde_em"]) is not None
+
+
+def test_sql_mede_media_e_respostas_acima_de_1_dia():
+    assert "AVG(espera_s) AS media_s" in svc.SQL_TEMPO_RESPOSTA
+    assert "espera_s > 86400) AS mais_1d" in svc.SQL_TEMPO_RESPOSTA

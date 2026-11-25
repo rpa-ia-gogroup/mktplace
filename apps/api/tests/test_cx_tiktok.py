@@ -110,3 +110,14 @@ def test_agregado_vai_e_volta_do_json_e_parcial_aparece_enquanto_le():
     r = svc.obter(7, iniciar=lambda d: None)
     assert r["carregando"] is True and r["marcas"][0]["marca"] == "kokeshi" and r["marcas"][0]["cancelamentos"] == 3
     svc._dias.clear()
+
+
+def test_hoje_le_so_o_dia_corrente(monkeypatch):
+    monkeypatch.setattr(settings, "tiktok_app_key", "k")
+    monkeypatch.setattr(settings, "tiktok_app_secret", SecretStr("s"))
+    svc._cipher.clear(); svc._dias.clear()
+    hoje = date(2026, 11, 18)
+    assert svc.janela(0, hoje) == (hoje, hoje)
+    d = svc.montar(0, ["kokeshi"], lambda c: "ok", criar=Fake, hoje=hoje)
+    assert (d["dias"], d["inicio"], d["fim"]) == (0, "2026-11-18", "2026-11-18")
+    assert d["marcas"][0]["devolucoes"] == 1 and d["marcas"][0]["dias_faltando"] == 0

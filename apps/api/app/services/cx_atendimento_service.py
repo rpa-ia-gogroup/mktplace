@@ -84,6 +84,8 @@ SHOPEE_MARCAS: tuple[str, ...] = ("apice", "barbours", "kokeshi", "lescent", "ri
 SHOPEE_SAUDE_EXPORT: tuple[str, ...] = ()
 
 JANELA_PADRAO_DIAS = 30
+#: `dias=0` = "Hoje" (so' a aba CX): o dia corrente ate' agora, no fuso do negocio.
+DIAS_HOJE = 0
 DIAS_FOTOGRAFIA_DEVOLUCAO = 90
 
 #: Publicacao mais velha que isto ganha aviso. O `ml_orders_etl` roda a cada
@@ -180,13 +182,19 @@ def rotular_shopee(motivo: Any, autor: Any) -> tuple[str, str, str, bool]:
 # Janela
 # ---------------------------------------------------------------------------
 def calcular_janela(dias: int, agora: Optional[datetime] = None) -> Janela:
-    """`dias` fechados ate' D-1 no fuso do negocio (o dia corrente e' parcial)."""
+    """`dias` fechados ate' D-1 no fuso do negocio (o dia corrente e' parcial).
+
+    `DIAS_HOJE` (0): so' o dia corrente, parcial de proposito (inicio = fim = hoje)."""
     hoje = (agora or datetime.now(timezone.utc)).astimezone(TZ_OPERACIONAL).date()
+    if dias == DIAS_HOJE:
+        return Janela(inicio=hoje, fim=hoje, dias=DIAS_HOJE)
     fim = hoje - timedelta(days=1)
     return Janela(inicio=fim - timedelta(days=dias - 1), fim=fim, dias=dias)
 
 
 def _texto_janela(j: Janela) -> str:
+    if j.dias == DIAS_HOJE:
+        return f"hoje até agora ({j.fim.strftime('%d/%m')})"
     return f"{j.dias} dias fechados ({j.inicio.strftime('%d/%m')} a {j.fim.strftime('%d/%m')})"
 
 
@@ -744,7 +752,9 @@ SELECT brand AS marca,
        COUNT(*) AS respostas,
        percentile_cont(0.5) WITHIN GROUP (ORDER BY espera_s) AS mediana_s,
        percentile_cont(0.9) WITHIN GROUP (ORDER BY espera_s) AS p90_s,
+       AVG(espera_s) AS media_s,
        COUNT(*) FILTER (WHERE espera_s <= 3600) AS ate_1h,
+       COUNT(*) FILTER (WHERE espera_s > 86400) AS mais_1d,
        MIN(respondido_em) AS desde_em
   FROM raw.shopee_chat_respostas
  WHERE brand = ANY(:marcas)
@@ -920,8 +930,10 @@ def _com_tempo_resposta(consultar: Consultar, nao_lidas: list[NaoLidas], marcas:
             out.append(n)
             continue
         ate_1h = _int(r.get("ate_1h")) or 0
-        mediana, p90 = r.get("mediana_s"), r.get("p90_s")
+        mediana, p90, media = r.get("mediana_s"), r.get("p90_s"), r.get("media_s")
         out.append(n.model_copy(update={
+            "tempo_resposta_media_s": None if media is None else int(round(float(media))),
+            "respostas_mais_1d": _int(r.get("mais_1d")),
             "tempo_resposta_s": None if mediana is None else int(round(float(mediana))),
             "tempo_resposta_p90_s": None if p90 is None else int(round(float(p90))),
             "respostas": total,
@@ -948,9 +960,12 @@ def montar_cx_shopee(*, brands: Optional[list[str]] = None, dias: int = JANELA_P
     janela = calcular_janela(dias, agora)
     marcas_shopee = [m for m in marcas if m in SHOPEE_MARCAS]
     saude_exp = [m for m in marcas_shopee if m in SHOPEE_SAUDE_EXPORT]
+    hoje = agora.astimezone(TZ_OPERACIONAL).date()
+    if dias == DIAS_HOJE:  # parcial de hoje nao se compara com dia fechado: sem anterior nem serie
+        return _montar_cx_shopee(consultar, consultar_torre, marcas, marcas_shopee, brands,
+                                 janela, None, agora, hoje, None)
     anterior = Janela(inicio=janela.inicio - timedelta(days=janela.dias),
                       fim=janela.inicio - timedelta(days=1), dias=janela.dias)
-    hoje = agora.astimezone(TZ_OPERACIONAL).date()
     # API-3: as consultas da comparacao correm em paralelo com as da aba
     with ThreadPoolExecutor(max_workers=1) as pool:
         comparacao = pool.submit(_rodar_juntas, _tarefas_comparacao(
@@ -961,23 +976,30 @@ def montar_cx_shopee(*, brands: Optional[list[str]] = None, dias: int = JANELA_P
 
 def _montar_cx_shopee(consultar: Consultar, consultar_torre: Consultar, marcas: list[str],
                       marcas_shopee: list[str], brands: Optional[list[str]],
-                      janela: Janela, anterior: Janela, agora: datetime, hoje: date,
-                      comparacao: Callable[[], dict]) -> CxShopeeResponse:
+                      janela: Janela, anterior: Optional[Janela], agora: datetime, hoje: date,
+                      comparacao: Optional[Callable[[], dict]]) -> CxShopeeResponse:
     # sem loja com app no filtro: nada a checar no Data Mart (bloco vazio legitimo)
     tabelas = _tabelas_cx(consultar) if marcas_shopee else {"returns": True, "chat": True}
     chat = _chat_shopee(brands, consultar, agora, consultar_torre)
 
     estado_nl, nao_lidas = _nao_lidas(consultar, marcas_shopee,
                                       None if tabelas is None else tabelas["chat"])
+    # Hoje: as respostas desde 00:00 (BRT); senao, as de `dias` atras ate' agora
+    desde = (datetime.combine(janela.inicio, datetime.min.time(), tzinfo=TZ_OPERACIONAL)
+             if janela.dias == DIAS_HOJE else agora - timedelta(days=janela.dias))
     nao_lidas = _com_tempo_resposta(consultar, nao_lidas, marcas_shopee,
-                                    None if tabelas is None else tabelas.get("respostas"),
-                                    agora - timedelta(days=janela.dias))
+                                    None if tabelas is None else tabelas.get("respostas"), desde)
     chat = chat.model_copy(update={"nao_lidas_estado": estado_nl, "nao_lidas": nao_lidas})
     cortes: dict[str, dict[str, date]] = {"cancelamento": {}, "reembolso": {}}
     atendimento = _canal_shopee(consultar, marcas, janela, agora, anterior, cortes["cancelamento"])
     devolucoes = _devolucoes_shopee(consultar, marcas_shopee, janela,
                                     None if tabelas is None else tabelas["returns"],
                                     agora, cortes["reembolso"])
+    if comparacao is None:  # Hoje
+        return CxShopeeResponse(
+            gerado_em=agora, janela=janela, janela_anterior=None, chat=chat, atendimento=atendimento,
+            devolucoes=devolucoes, sem_anterior={i: SEM_HOJE for i in INDICADORES_CX},
+            sem_serie={i: SEM_HOJE for i in INDICADORES_CX})
     novos = _aplicar_comparacao(comparacao(), janela=janela, anterior=anterior, agora=agora, hoje=hoje,
                                 chat=chat, atendimento=atendimento, devolucoes=devolucoes,
                                 lojas=marcas_shopee, cortes=cortes)
@@ -1021,6 +1043,10 @@ SEM_SERIE_CONTACT = SemComparacao(
     detalhe="As conversas vêm de uma foto acumulada (7 ou 30 dias), sem contagem por dia.")
 SEM_CONTACT_90 = SemComparacao(motivo="só em 7 e 30 dias", a_partir_de=None,
                                detalhe="Contact rate só existe nas janelas de 7 e 30 dias.")
+INDICADORES_CX = ("contact_rate", "resposta", "cancelamento", "reembolso")
+SEM_HOJE = SemComparacao(
+    motivo="hoje ainda não fechou", a_partir_de=None,
+    detalhe="Hoje é parcial (até agora): não se compara com um período fechado nem tem série diária.")
 SEM_FONTE_ERRO = SemComparacao(motivo="fonte indisponível", a_partir_de=None, detalhe=MOTIVO_ERRO)
 
 

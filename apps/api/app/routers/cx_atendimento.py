@@ -46,7 +46,9 @@ router = APIRouter(
 )
 
 _MSG_BRANDS = "Marca invalida. Valores aceitos: " + ", ".join(svc.MARCAS_PERMITIDAS)
-_MSG_DIAS = "Janela invalida. Valores aceitos: " + ", ".join(str(d) for d in JANELAS_DIAS)
+# 0 = "Hoje" (parcial, so' a aba CX); os demais sao dias fechados ate' ontem
+_DIAS_ACEITOS = (svc.DIAS_HOJE, *JANELAS_DIAS)
+_MSG_DIAS = "Janela invalida. Valores aceitos: " + ", ".join(str(d) for d in _DIAS_ACEITOS)
 _MAX_ITENS = 20
 
 
@@ -65,11 +67,11 @@ def brands_query(
 
 
 def dias_query(
-    dias: Optional[str] = Query(None, description="Dias fechados ate' ontem: 7, 30 ou 90."),
+    dias: Optional[str] = Query(None, description="Dias fechados ate' ontem (7, 30 ou 90) ou 0 = hoje ate' agora."),
 ) -> int:
     if dias is None:
         return svc.JANELA_PADRAO_DIAS
-    if not dias.isdigit() or int(dias) not in JANELAS_DIAS:
+    if not dias.isdigit() or int(dias) not in _DIAS_ACEITOS:
         raise HTTPException(422, _MSG_DIAS)
     return int(dias)
 

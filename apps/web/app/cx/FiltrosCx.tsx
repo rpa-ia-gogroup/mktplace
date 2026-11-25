@@ -12,7 +12,7 @@
  *   - canal: Shopee ou Mercado Livre sao as ABAS da pagina (ALVO-GRADE,
  *     12/11/2026; `canal=ml` na URL), nao mais um controle desta barra;
  *   - marca: UMA (a URL e a API leem uma), via `marcaUnica`;
- *   - periodo: a janela de dias fechados (7, 30 ou 90), nao datas livres.
+ *   - periodo: Hoje (ate' agora) ou a janela de dias fechados (7, 30 ou 90), nao datas livres.
  *
  * A URL continua a fonte de verdade (`hrefCx`, os mesmos `brands` e `dias`).
  */
@@ -23,7 +23,7 @@ import { CalendarDays, Check, X } from "lucide-react";
 import BrandFilter from "@/components/BrandFilter";
 import Popover from "@/components/ui/Popover";
 import { CLASSE_CONTAGEM, CLASSE_LIMPAR } from "@/components/layout/GlobalFilterControls";
-import { JANELAS_DIAS, JANELA_PADRAO, hrefCx, marcaUnica, resumoFiltrosCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
+import { JANELAS_CX, JANELA_PADRAO, hrefCx, marcaUnica, resumoFiltrosCx, rotuloPeriodoCx, type CanalCx, type FiltrosCx as Filtros } from "@/lib/cx";
 import { brandLabel } from "@/lib/filters/brands";
 
 /** Mesmas classes dos botoes do `BrandFilter`/`DateRangeFilter` no menu. */
@@ -32,7 +32,7 @@ const OPCAO =
 const OPCAO_ATIVA = "bg-surface font-semibold text-ink shadow-sm ring-1 ring-inset ring-line-strong";
 const OPCAO_INATIVA = "text-ink-muted hover:bg-surface/70 hover:text-ink";
 
-/** `intervalo`: "13/10–11/11", a janela de dias fechados que a API devolveu (ausente enquanto carrega). */
+/** `intervalo`: "13/10–11/11" (Hoje: "24/11"), a janela que a API devolveu (ausente enquanto carrega). */
 export default function FiltrosCx({ f, canal, intervalo }: { f: Filtros; canal: CanalCx; intervalo?: string }) {
   const router = useRouter();
   const [aplicando, iniciar] = useTransition();
@@ -89,15 +89,15 @@ export default function FiltrosCx({ f, canal, intervalo }: { f: Filtros; canal: 
 
         <Popover
           rotulo="Período"
-          valor={`Últimos ${f.dias} dias`}
-          // o intervalo real dos dias fechados, fora do truncamento do valor
+          valor={rotuloPeriodoCx(f.dias)}
+          // o intervalo real da janela, fora do truncamento do valor
           sufixo={intervalo}
           icone={<CalendarDays aria-hidden="true" className="h-4 w-4 text-ink-faint" />}
           largura="w-52"
         >
           {(fechar) => (
-            <div role="group" aria-label="Janela de dias fechados" className="flex flex-col gap-0.5">
-              {JANELAS_DIAS.map((d) => {
+            <div role="group" aria-label="Período" className="flex flex-col gap-0.5">
+              {JANELAS_CX.map((d) => {
                 const ativo = f.dias === d;
                 return (
                   <button
@@ -110,7 +110,7 @@ export default function FiltrosCx({ f, canal, intervalo }: { f: Filtros; canal: 
                     }}
                     className={`${OPCAO} ${ativo ? OPCAO_ATIVA : OPCAO_INATIVA}`}
                   >
-                    Últimos {d} dias
+                    {rotuloPeriodoCx(d)}
                     {ativo && <Check aria-hidden="true" className="h-4 w-4 text-accent" />}
                   </button>
                 );

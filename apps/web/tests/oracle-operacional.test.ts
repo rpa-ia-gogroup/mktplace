@@ -83,9 +83,9 @@ async function callError(client: Client, name: string, args: Record<string, unkn
 // Registro
 // ===========================================================================
 
-test("tools/list: exatamente 9, com a DRE registrada (T-0080 P2) e read-only", async () => {
+test("tools/list: exatamente 14, com a DRE registrada (T-0080 P2) e read-only", async () => {
   const { tools } = await (await connect({})).listTools();
-  assert.equal(tools.length, 9);
+  assert.equal(tools.length, 14);
   assert.equal(DRE_TOOL_NAME, "torre_dre");
   assert.ok(tools.some((t) => t.name === DRE_TOOL_NAME), "DRE aparece no tools/list");
   assert.ok(ORACLE_TOOLS.some((t) => t.name === DRE_TOOL_NAME));

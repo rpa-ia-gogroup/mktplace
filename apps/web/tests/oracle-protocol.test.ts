@@ -13,14 +13,19 @@ import { jsonFetch, OVERVIEW, BRANDS, FIXED_NOW } from "./oracle-fixtures.ts";
 
 const EXPECTED_TOOLS = [
   "torre_comparar_canais_marcas",
+  "torre_cx",
   "torre_desempenho_marketplaces",
   "torre_dre",
   "torre_estoque_full",
   "torre_expedicao_operacional",
+  "torre_hoje",
+  "torre_metas",
   "torre_monitoramento_precos",
+  "torre_performance_contas",
   "torre_produtos_prioritarios",
   "torre_qualidade_dados",
   "torre_regioes_vendas",
+  "torre_slow_moving",
 ];
 
 async function connect(fetchImpl: typeof fetch) {
@@ -38,13 +43,13 @@ async function connect(fetchImpl: typeof fetch) {
 }
 
 // P1/P2/P3 — initialize implicito no connect, depois tools/list
-test("P2/P3: tools/list expoe exatamente as nove tools (MVP + operacionais + DRE)", async () => {
+test("P2/P3: tools/list expoe exatamente as quatorze tools (MVP + operacionais + DRE)", async () => {
   const { client } = await connect(jsonFetch({}));
   const listed = await client.listTools();
   const names = listed.tools.map((t) => t.name).sort();
 
   assert.deepEqual(names, EXPECTED_TOOLS);
-  assert.equal(names.length, 9, "nenhuma tool a mais");
+  assert.equal(names.length, 14, "nenhuma tool a mais");
 
   for (const t of listed.tools) {
     assert.ok(t.description && t.description.length > 40, `${t.name} precisa de description util`);
@@ -268,7 +273,7 @@ test("P11: cliente oficial conecta por HTTP real e cumpre o lifecycle 2025", asy
     assert.equal(emitted[0], "initialize", "initialize e' a PRIMEIRA mensagem do lifecycle");
 
     const listed = await client.listTools();
-    assert.equal(listed.tools.length, 9, "exatamente nove tools");
+    assert.equal(listed.tools.length, 14, "exatamente quatorze tools");
     assert.deepEqual(
       listed.tools.map((t) => t.name).sort(),
       EXPECTED_TOOLS,

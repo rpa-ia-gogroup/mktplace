@@ -19,6 +19,9 @@ import {
   montarPedidosMotivo,
   montarStatusMarcas,
   janelaCxDoPeriodo,
+  JANELAS_CX,
+  JANELAS_DIAS,
+  nomeDoCsvPedidos,
   simbolosMeta,
   textoSemComparacao,
   marcaUnica,
@@ -43,6 +46,7 @@ import {
   type ChatShopee,
   type PedidosMotivoResponse,
 } from "../src/lib/cx.ts";
+import { textoJanela } from "../src/lib/performance-contas-atendimento.ts";
 import { CX_NAV, getRouteTitle, navSections } from "../src/components/shell/nav-config.ts";
 
 const MARCAS = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
@@ -393,8 +397,9 @@ test("pedidos do motivo: linhas, resumo com teto e avisos", () => {
 test("pedidos do motivo: CSV com ; , valor com virgula e sem formula", () => {
   const csv = csvPedidosMotivo(pedidosResp(), "Produto vazou");
   const [cab, l1, l2] = csv.replace("﻿", "").split("\n");
-  assert.equal(cab, "pedido;devolucao;marca;dia;situacao;valor_reembolsado;motivo");
-  assert.equal(l1, "251102ABC;R9;lescent;2026-11-02;Reembolsada;59,9;Produto vazou");
+  assert.equal(cab, "pedido;devolucao;marca;canal;dia;situacao;valor_reembolsado;motivo");
+  assert.equal(l1, "251102ABC;R9;lescent;Shopee;2026-11-02;Reembolsada;59,9;Produto vazou");
+  assert.equal(csvPedidosMotivo(pedidosResp(), "x", "ml").split("\n")[1].split(";")[3], "Mercado Livre");
   assert.ok(l2.startsWith("'=CMD()"), "celula que comeca com = nao vira formula");
   assert.ok(csv.startsWith("﻿"));
 });
@@ -1008,4 +1013,43 @@ test("pareto: % reembolsada = reembolsado ÷ faturamento, so' com as duas pontas
   assert.equal(v.total.reembolsadoPctFat, "1,0%");
   assert.equal(v.linhas.find((l) => l.chave === apice.marca)?.reembolsadoPctFat, "1,0%");
   assert.equal(v.linhas.find((l) => l.chave === rit.marca)?.reembolsadoPctFat ?? null, null);
+});
+
+// ---------------------------------------------------------------------------
+// Hoje (dias=0): o dia corrente ate' agora, so' na aba CX
+// ---------------------------------------------------------------------------
+test("hoje: dias=0 na URL vale; vazio e invalido voltam ao padrao; rotulos dizem Hoje", () => {
+  assert.deepEqual(lerFiltrosCx({ dias: "0" }, MARCAS), { marca: null, dias: 0 });
+  assert.equal(lerFiltrosCx({ dias: "" }, MARCAS).dias, 30, "dias= vazio nao vira Hoje");
+  assert.equal(lerFiltrosCx({ dias: "-1" }, MARCAS).dias, 30);
+  assert.equal(hrefCx({ marca: null, dias: 0 }), "/cx?dias=0");
+  assert.equal(urlCxShopee("http://api", { marca: null, dias: 0 }), "http://api/api/v1/cx/shopee?dias=0");
+  assert.equal(resumoFiltrosCx({ marca: null, dias: 0 }, rotulo), "Shopee · Todas as marcas · Hoje");
+  assert.equal(nomeDoCsvPedidos("cancelamento", "x", { marca: null, dias: 0 }, new Date("2026-11-24T12:00:00Z")), "cx-cancelamento-x-hoje-2026-11-24.csv");
+  assert.equal(textoJanela({ inicio: "2026-11-24", fim: "2026-11-24", dias: 0 }), "hoje até agora · 24/11");
+  // o seletor da CX tem Hoje no topo; a lista compartilhada com outras telas nao muda
+  assert.deepEqual([...JANELAS_CX], [0, 7, 30, 90]);
+  assert.deepEqual([...JANELAS_DIAS], [7, 30, 90]);
+});
+
+test("hoje: sem taxa de resposta oficial, sem contact rate, sem seta; fila e cancelamento seguem", () => {
+  const p = { ...comConversas(0), janela: { inicio: "2026-11-04", fim: "2026-11-04", dias: 0 } };
+  const v = montarAtendimentoCx(p, rotulo);
+  const apice = v.linhas.find((l) => l.chave === "apice")!;
+  assert.equal(v.rotuloConversas, "Conversas");
+  assert.deepEqual([apice.conversas, apice.contactRate, apice.respondido], ["—", "—", null], "sem dado, nunca 0");
+  assert.equal(apice.aguardando, "3", "a fila e' de agora");
+  assert.ok(v.notas.some((n) => /fotografia diária/.test(n)));
+
+  const r = resumoCxGerencial(p as never, rotulo);
+  assert.equal(r.resposta, "—");
+  assert.equal(r.contactRate, "—");
+  assert.equal(r.cancelamento, "1,8%", "(20+3) / (1000+300)");
+  assert.equal(r.comparacao.cancelamento, null, "sem pilula nem serie no Hoje");
+  assert.match(r.todas.find((m) => m.chave === "apice")!.motivos.resposta ?? "", /fotografia diária/);
+  assert.match(r.todas.find((m) => m.chave === "apice")!.motivos.contactRate ?? "", /7 e 30 dias/);
+  // o ⓘ dos cartoes (tsx, fora do node --test): o Hoje tem as notas proprias
+  const tile = readFileSync(new URL("../src/components/gerencial/CxResumo.tsx", import.meta.url), "utf8");
+  assert.match(tile, /if \(dias === DIAS_HOJE\) return notasDoTileHoje\(i\)/);
+  assert.match(tile, /Hoje é parcial \(até agora\)/);
 });

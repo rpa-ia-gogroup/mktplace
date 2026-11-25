@@ -554,6 +554,9 @@ export function itensAtencaoMl(d: CxMlResponse, rotuloMarca: (m: string) => stri
 // ---------------------------------------------------------------------------
 // Textos do ⓘ (a metodologia mora aqui, nao na tela)
 // ---------------------------------------------------------------------------
+/** Hoje (dias=0): parcial ate' agora, nunca comparado com um periodo fechado. */
+const SEM_SETA_HOJE = "Hoje é parcial (até agora): sem seta de comparação com um período fechado.";
+
 export const AJUDA_ML = {
   resposta:
     "Perguntas de pré-venda do período que já têm resposta ÷ perguntas do período, somando as marcas. O tempo de resposta é o valor OFICIAL do Mercado Livre (média de 14 dias, uma foto por dia), ponderado pelas perguntas de cada marca. As que aguardam resposta são as de agora, não do período. As de mais de 24 h contam desde o dia da pergunta.",
@@ -579,8 +582,8 @@ export const AJUDA_ML = {
   mensagens: "Mensagens pós-venda não lidas, só a contagem (foto do dia). Nunca lemos o conteúdo.",
   primeiraResposta:
     "Mediana do tempo entre a abertura da reclamação e a primeira ação nossa (mensagem, devolução liberada…). É PARCIAL: o histórico de ações só foi lido para as cerca de 300 reclamações mais recentes de cada conta; reclamações sem ação nossa (resolvidas pelo Mercado Livre) não entram na mediana.",
-  comparacao: (dias: number) => `A seta compara com os ${dias} dias anteriores, em pontos percentuais; subir é pior.`,
-  comparacaoAlta: (dias: number) => `A seta compara com os ${dias} dias anteriores, em pontos percentuais; cair é pior.`,
+  comparacao: (dias: number) => (dias === 0 ? SEM_SETA_HOJE : `A seta compara com os ${dias} dias anteriores, em pontos percentuais; subir é pior.`),
+  comparacaoAlta: (dias: number) => (dias === 0 ? SEM_SETA_HOJE : `A seta compara com os ${dias} dias anteriores, em pontos percentuais; cair é pior.`),
 } as const;
 
 // ---------------------------------------------------------------------------
