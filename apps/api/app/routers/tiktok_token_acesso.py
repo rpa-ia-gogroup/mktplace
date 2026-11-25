@@ -135,7 +135,7 @@ def assinar_chamada(
         raise HTTPException(503, "TikTok indisponível para achar a loja da marca.") from None
     params = {k: str(v) for k, v in pedido.params.items() if k not in ("app_key", "timestamp", "sign", "access_token")}
     params.update({"app_key": settings.tiktok_app_key, "timestamp": str(int(time.time()))})
-    if cli.cipher:
+    if cli.cipher and not pedido.path.startswith("/authorization/"):  # rotas do app recusam shop_cipher
         params.setdefault("shop_cipher", cli.cipher)
     corpo_texto = json.dumps(pedido.corpo, separators=(",", ":"), ensure_ascii=False) if pedido.corpo is not None else ""
     params["sign"] = tiktok_client.assinar(pedido.path, params, corpo_texto, settings.tiktok_app_secret.get_secret_value())

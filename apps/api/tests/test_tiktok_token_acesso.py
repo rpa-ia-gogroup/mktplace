@@ -100,3 +100,12 @@ def test_assinar_recusa_path_estranho(cliente):
     r = cliente.post("/api/v1/tiktok/token/kokeshi/assinar", headers={"Authorization": "Bearer torre_pat_ok"},
                      json={"path": "https://evil.com/x"})
     assert r.status_code == 422
+
+
+def test_assinar_rota_do_app_vai_sem_shop_cipher(cliente, monkeypatch):
+    monkeypatch.setattr(settings.tiktok_app_secret, "get_secret_value", lambda: "S")
+    import app.services.cx_tiktok_service as cx
+    monkeypatch.setattr(cx, "_cliente_da_marca", lambda conta, tok, criar: SimpleNamespace(cipher="CIPHER-K"))
+    r = cliente.post("/api/v1/tiktok/token/kokeshi/assinar", headers={"Authorization": "Bearer torre_pat_ok"},
+                     json={"path": "/authorization/202309/shops"})
+    assert r.status_code == 200 and "shop_cipher" not in r.json()["params"]
