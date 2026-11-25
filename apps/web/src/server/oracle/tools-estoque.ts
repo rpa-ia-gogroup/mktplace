@@ -25,7 +25,7 @@
  * Filtros por enum, mais `busca` (texto curto em sku/titulo/produto). Sem busca a
  * tool devolve os itens de maior risco; com busca, os itens que casam (ate' `limite`),
  * saudaveis ou nao. Shopee: a API filtra. ML: a rota nao tem `busca`, entao o adapter
- * le' o inventario inteiro (ate' 1000) e filtra por texto — so' selecao de linhas.
+ * le' o inventario inteiro (ate' 1000) e filtra por texto â€” so' selecao de linhas.
  */
 import { z } from "zod";
 
