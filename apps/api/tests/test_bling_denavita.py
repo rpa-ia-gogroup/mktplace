@@ -350,3 +350,46 @@ def test_rota_so_cria_o_cliente_da_denavita_com_token_gravado(db, monkeypatch):
     assert rota_mm.cliente_bling_denavita(db) is not None
     monkeypatch.setattr(settings, "bling_denavita_client_id", "")
     assert rota_mm.cliente_bling_denavita(db) is None  # app da Denavita sem credencial no Render
+
+
+# --- por que o Bling da Denavita nao entrou: visivel na resposta, e saida por variavel --------
+
+class SemEscopoDeSituacoes(FakeBlingDenavita):
+    """App da Denavita so' com 'Pedidos de Venda': /situacoes responde 403 (o cliente real vira BlingIndisponivel)."""
+
+    def get(self, caminho, params=None):
+        if caminho.startswith("/situacoes"):
+            raise bling_token.BlingIndisponivel(f"Bling respondeu 403 em {caminho}.")
+        return super().get(caminho, params)
+
+
+def test_erro_do_bling_da_denavita_aparece_no_motivo():
+    d = _den(svc.get_marcas_menores(FakeBling(RIT), OUT_INI, OUT_FIM, HOJE, consultar_dm=dm, cli_denavita=SemEscopoDeSituacoes(DEN)))
+    assert d["status"] == svc.STATUS_FONTE_PROVISORIA
+    assert d["motivo"] == "Bling da Denavita: Bling respondeu 403 em /situacoes/modulos."
+
+
+def test_id_de_cancelado_pela_variavel_dispensa_situacoes(monkeypatch):
+    monkeypatch.setattr(settings, "bling_denavita_situacao_cancelado_id", CANCELADO_DEN)
+    d = _den(svc.get_marcas_menores(FakeBling(RIT), OUT_INI, OUT_FIM, HOJE, consultar_dm=dm, cli_denavita=SemEscopoDeSituacoes(DEN)))
+    assert d["status"] == "ok" and d["total"] == 300.0 and d["motivo"] is None
+
+
+def test_sem_cliente_o_motivo_da_rota_vai_para_a_resposta(db, monkeypatch):
+    assert rota_mm.bling_denavita(db) == (None, "Bling da Denavita: conta ainda sem autorização (sem token gravado).")
+    monkeypatch.setattr(settings, "bling_denavita_client_secret", SecretStr(""))
+    assert "sem credencial" in rota_mm.bling_denavita(db)[1]
+    d = _den(svc.get_marcas_menores(FakeBling(RIT), OUT_INI, OUT_FIM, HOJE, consultar_dm=dm, motivo_sem_bling_denavita="Bling da Denavita: x."))
+    assert d["motivo"] == "Bling da Denavita: x."
+
+
+def test_cliente_bling_diz_qual_chamada_falhou_sem_token():
+    from app.services.bling_client import BlingCliente
+
+    class R:
+        status_code, headers = 403, {}
+
+    cli = BlingCliente(token=lambda: "tok-secreto", get=lambda *a, **k: R(), dormir=lambda s: None)
+    with pytest.raises(bling_token.BlingIndisponivel) as e:
+        cli.get("/canais-venda", {"pagina": 1})
+    assert str(e.value) == "Bling respondeu 403 em /canais-venda." and "tok-secreto" not in str(e.value)

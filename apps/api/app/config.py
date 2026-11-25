@@ -289,6 +289,8 @@ class Settings(BaseSettings):
     bling_denavita_client_secret: SecretStr = SecretStr("")
     #: Lojas (canais) da Denavita no Bling, "id:MELI,id:SHOPEE". Vazio = descobre por /canais-venda.
     bling_denavita_lojas: str = ""
+    #: Id da situacao "Cancelado" no Bling da Denavita. 0 = descobrir por /situacoes (exige o escopo de situacoes no app).
+    bling_denavita_situacao_cancelado_id: int = 0
     #: Rotina em segundo plano que mantem o cache do Bling aquecido (a cada `bling_warm_intervalo_s`).
     bling_warm_enabled: bool = True
     bling_warm_intervalo_s: int = 900
