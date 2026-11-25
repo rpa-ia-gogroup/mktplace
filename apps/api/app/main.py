@@ -22,6 +22,7 @@ from app.routers import (
     top_produtos,
     chaves_pessoais,
     marcas_menores,
+    tiktok_token_acesso,
 )
 
 app = FastAPI(
@@ -67,6 +68,7 @@ app.include_router(auth_permitido.router)
 app.include_router(top_produtos.router)
 app.include_router(marcas_menores.router)
 app.include_router(chaves_pessoais.router)
+app.include_router(tiktok_token_acesso.router)
 
 
 @app.on_event("startup")
