@@ -81,6 +81,8 @@ def interpretar(valores: list[list[str]]) -> list[dict]:
         if not l:
             continue
         rot = _norm(l[0])
+        if rot in ("total", "hora"):  # fim do bloco: a aba tem outros blocos "Hora" abaixo (base do 11/11)
+            break
         hora = re.fullmatch(r"(\d{1,2})h", rot)
         if rot == "meta do dia":
             for c in linhas:
