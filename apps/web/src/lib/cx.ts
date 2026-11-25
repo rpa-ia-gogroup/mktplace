@@ -490,7 +490,8 @@ export function montarAtendimentoCx(
     marca: rotuloMarca(m),
     conversas: conv == null ? "—" : `${n?.conversas_truncado ? "≥ " : ""}${inteiro(conv)}`,
     // conversas truncadas sao piso, entao o % e' teto
-    aguardandoPct: conv && n?.aguardando_resposta != null ? `${n.conversas_truncado ? "≤ " : ""}${pct((n.aguardando_resposta / conv) * 100)}` : "—",
+    // Hoje: sem conversas do dia nao ha' %; a fila e' de agora, entao vai a contagem (a mesma do card)
+    aguardandoPct: hoje ? inteiro(n?.aguardando_resposta) : conv && n?.aguardando_resposta != null ? `${n.conversas_truncado ? "≤ " : ""}${pct((n.aguardando_resposta / conv) * 100)}` : "—",
     aguardando: inteiro(n?.aguardando_resposta),
     naoLidas: inteiro(n?.valor),
     // Hoje: a taxa de resposta da Saude da Conta e' fotografia diaria, nao "de hoje"
@@ -550,7 +551,7 @@ export function montarAtendimentoCx(
         return t !== "—" && brutas.some((b) => b.conv != null && b.n?.conversas_truncado) ? `≥ ${t}` : t;
       })(),
       aguardando: inteiro(somar(brutas.map((b) => b.n?.aguardando_resposta))),
-      aguardandoPct: (() => {
+      aguardandoPct: hoje ? inteiro(somar(brutas.map((b) => b.n?.aguardando_resposta))) : (() => {
         const v = razaoPct(brutas.map((b) => [b.n?.aguardando_resposta, b.conv]));
         return v != null && brutas.some((b) => b.n?.conversas_truncado) ? `≤ ${pct(v)}` : pct(v);
       })(),
