@@ -283,6 +283,12 @@ class Settings(BaseSettings):
     bling_token_url: str = "https://www.bling.com.br/Api/v3/oauth/token"
     #: 0 = descobrir o id da situacao "Cancelado" pela API; informado, vale este.
     bling_situacao_cancelado_id: int = 0
+    # Denavita: OUTRA conta Bling (app privado "Torre de Controle" no Bling dela), autorizada pelo
+    # OAuth da Torre (/api/v1/bling/oauth/link -> /callback). Token na mesma tabela, conta='denavita'.
+    bling_denavita_client_id: str = ""
+    bling_denavita_client_secret: SecretStr = SecretStr("")
+    #: Lojas (canais) da Denavita no Bling, "id:MELI,id:SHOPEE". Vazio = descobre por /canais-venda.
+    bling_denavita_lojas: str = ""
     #: Rotina em segundo plano que mantem o cache do Bling aquecido (a cada `bling_warm_intervalo_s`).
     bling_warm_enabled: bool = True
     bling_warm_intervalo_s: int = 900

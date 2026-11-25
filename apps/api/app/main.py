@@ -9,6 +9,7 @@ from app.routers import (
     alertas,
     auth_permitido,
     b2b_revenda,
+    bling_oauth,
     cx_atendimento,
     cx_site,
     dre,
@@ -68,6 +69,8 @@ app.include_router(auth_permitido.router)
 app.include_router(top_produtos.router)
 app.include_router(marcas_menores.router)
 app.include_router(chaves_pessoais.router)
+# OAuth do Bling para contas novas (Denavita): link (admin) e callback (publico, state assinado).
+app.include_router(bling_oauth.router)
 app.include_router(tiktok_token_acesso.router)
 
 

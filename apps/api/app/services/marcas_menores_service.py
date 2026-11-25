@@ -1,8 +1,11 @@
 """Marcas menores (Yenzah, Aua, By Samia) pela API do Bling v3 (conta da Rituaria).
 
 A marca sai do CANAL do pedido (`loja.id`). So' Shopee e TikTok; nenhuma das tres
-tem ML. A Denavita esta' em outra conta Bling, ainda nao autorizada. Fonte PROVISORIA
-dela (T-0119): o TikTok vem da gold do Data Mart (`gold.tiktok_brand_daily`,
+tem ML. A Denavita esta' em OUTRA conta Bling (conta 'denavita', autorizada pelo OAuth
+da Torre): com token, ML e Shopee dela vem desse Bling (lojas mapeadas por `/canais-venda`
+ou por BLING_DENAVITA_LOJAS), lidos ao vivo com o cache em memoria de 15 min (a rotina de
+aquecimento segue so' na conta da Rituaria). Sem token (ou Bling dela fora), segue a fonte
+PROVISORIA (T-0119): o TikTok vem da gold do Data Mart (`gold.tiktok_brand_daily`,
 `brand = 'denavita'`), com status `parcial_fonte_provisoria` e aviso; a Shopee dela segue
 sem fonte (ausente, nunca 0) e o consolidado declara `parcial`. O `gmv` dessa gold tem
 definicao propria (1,4% a 3,9% acima do mart da Torre): nao e' o mesmo numero do Bling
@@ -26,7 +29,7 @@ from typing import Callable, Iterable, Optional
 from app.config import settings
 from app.services.bling_cache import CacheBling
 from app.services.bling_client import BlingCliente
-from app.services.bling_token import BlingIndisponivel
+from app.services.bling_token import CONTA_DENAVITA, CONTA_PADRAO, BlingIndisponivel
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,15 @@ AVISO_DENAVITA = (
 )
 MOTIVO_DM_INDISPONIVEL = "Data Mart indisponível: sem o TikTok da Denavita agora (Shopee pendente: conta do Bling sem autorização)."
 MOTIVO_ITENS_DENAVITA = "Itens só pelo Bling; a conta da Denavita segue sem autorização (a gold por marca não tem itens)."
+#: Denavita com o Bling dela (ML e Shopee): com e sem o TikTok do Data Mart.
+DENAVITA_BLING = "bling"
+DENAVITA_BLING_SEM_DM = "bling_sem_data_mart"
+AVISO_DENAVITA_BLING = (
+    "ML e Shopee pelo Bling da Denavita; TikTok via Data Mart (gold.tiktok_brand_daily), "
+    "com GMV de definição própria (1,4% a 3,9% acima do mart da Torre)."
+)
+AVISO_DENAVITA_BLING_SEM_DM = "ML e Shopee pelo Bling da Denavita; o TikTok dela está fora agora (Data Mart indisponível)."
+AVISO_PARCIAL_DENAVITA_SEM_TIKTOK = "Parcial: sem o TikTok da Denavita (Data Mart indisponível)."
 AVISO_PARCIAL_DENAVITA = "Parcial: a Denavita entra só pelo TikTok (Data Mart, fonte provisória); a Shopee dela está pendente."
 AVISO_PARCIAL_DENAVITA_FORA = "Parcial: sem a Denavita (Data Mart indisponível; a Shopee dela também está pendente)."
 #: Grao da gold: marca x dia. Soma por dia por seguranca; valores SEMPRE por parametro.
@@ -87,35 +99,40 @@ def _agora_dt() -> datetime:
 
 _lista_cache: dict[tuple, tuple[float, list[dict]]] = {}
 _detalhe_cache: dict[int, list[dict]] = {}
-_cancelado: list[Optional[int]] = [None]
+#: conta Bling -> id da situacao "Cancelado" (cada conta tem os seus ids)
+_cancelado: dict[str, int] = {}
+_lojas_denavita: dict[int, str] = {}
 
 
 def limpar_cache() -> None:
     _lista_cache.clear()
     _detalhe_cache.clear()
-    _cancelado[0] = None
+    _cancelado.clear()
+    _lojas_denavita.clear()
 
 
-def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None) -> int:
-    """Id da situacao 'Cancelado' (modulo de vendas). Sem achar, falha: nunca chuta."""
-    if settings.bling_situacao_cancelado_id:
+def id_cancelado(cli: BlingCliente, cache: Optional[CacheBling] = None, conta: str = CONTA_PADRAO) -> int:
+    """Id da situacao 'Cancelado' (modulo de vendas). Sem achar, falha: nunca chuta.
+    O id fixo das settings e o cache do banco valem so' para a conta da Rituaria."""
+    propria = conta == CONTA_PADRAO
+    if propria and settings.bling_situacao_cancelado_id:
         return settings.bling_situacao_cancelado_id
-    if _cancelado[0] is not None:
-        return _cancelado[0]
-    guardado = cache.ler_sync("cancelado_id") if cache else None
+    if conta in _cancelado:
+        return _cancelado[conta]
+    guardado = cache.ler_sync("cancelado_id") if cache and propria else None
     if guardado and guardado[0]:
-        _cancelado[0] = int(guardado[0])
-        return _cancelado[0]
+        _cancelado[conta] = int(guardado[0])
+        return _cancelado[conta]
     modulos = cli.get("/situacoes/modulos").get("data") or []
     mod = next((m for m in modulos if "venda" in str(m.get("nome", "")).casefold()), None)
     if mod:
         situacoes = cli.get(f"/situacoes/modulos/{mod['id']}").get("data") or []
         sit = next((s for s in situacoes if str(s.get("nome", "")).strip().casefold() == "cancelado"), None)
         if sit:
-            _cancelado[0] = int(sit["id"])
-            if cache:
-                cache.marcar_sync("cancelado_id", str(_cancelado[0]))
-            return _cancelado[0]
+            _cancelado[conta] = int(sit["id"])
+            if cache and propria:
+                cache.marcar_sync("cancelado_id", str(_cancelado[conta]))
+            return _cancelado[conta]
     raise BlingIndisponivel("Situação 'Cancelado' não encontrada no Bling.")
 
 
@@ -202,6 +219,46 @@ def pedidos(
     return saida
 
 
+def _plataforma_do_canal(canal: dict) -> Optional[str]:
+    nome = f"{canal.get('tipo', '')} {canal.get('descricao', '')}".casefold().replace(" ", "")
+    if "mercadolivre" in nome or "meli" in nome:
+        return "MELI"
+    if "shopee" in nome:
+        return "SHOPEE"
+    return None  # TikTok da Denavita vem do Data Mart; outros canais ficam fora
+
+
+def lojas_denavita(cli: BlingCliente) -> dict[int, str]:
+    """id da loja (canal) no Bling da Denavita -> plataforma (so' MELI e SHOPEE).
+    BLING_DENAVITA_LOJAS ("id:MELI,id:SHOPEE") vence; senao, descobre por /canais-venda."""
+    if settings.bling_denavita_lojas.strip():
+        mapa = {}
+        for par in settings.bling_denavita_lojas.split(","):
+            id_, _, plat = par.strip().partition(":")
+            if id_.strip().isdigit() and plat.strip().upper() in ("MELI", "SHOPEE"):
+                mapa[int(id_)] = plat.strip().upper()
+        if mapa:
+            return mapa
+    if not _lojas_denavita:
+        for c in cli.get("/canais-venda").get("data") or []:
+            plat = _plataforma_do_canal(c)
+            if plat and str(c.get("id", "")).isdigit():
+                _lojas_denavita[int(c["id"])] = plat
+    if not _lojas_denavita:
+        raise BlingIndisponivel("Lojas de ML e Shopee da Denavita não encontradas no Bling.")
+    return dict(_lojas_denavita)
+
+
+def pedidos_denavita_bling(cli: BlingCliente, inicio: date, fim: date, agora: Callable[[], float] = time.monotonic) -> list[dict]:
+    """Pedidos nao cancelados de ML e Shopee no Bling da Denavita (mesma regra das outras marcas). Falha sobe."""
+    cancelado = id_cancelado(cli, conta=CONTA_DENAVITA)
+    saida = []
+    for loja, plat in lojas_denavita(cli).items():
+        for p in _pedidos_da_loja(cli, loja, inicio, fim, cancelado, agora):
+            saida.append({**p, "marca": DENAVITA, "plataforma": plat})
+    return saida
+
+
 def consultar_datamart(sql: str, params: dict) -> list[dict]:
     """Direto no Data Mart (`datamart_engine`); a reserva pelo Metabase so' nos casos de
     `datamart_leitura` (permissao, conexao ou sem engine, com chave configurada)."""
@@ -279,7 +336,10 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date, status
             por_plat[p] = por_plat.get(p, 0.0) + v
         status = "ok" if conectada else "aguardando_autorizacao"
         aviso = motivo = None
-        if id_ == DENAVITA and status_denavita is not None:
+        if id_ == DENAVITA and status_denavita in (DENAVITA_BLING, DENAVITA_BLING_SEM_DM):
+            status = "ok"
+            aviso = AVISO_DENAVITA_BLING if status_denavita == DENAVITA_BLING else AVISO_DENAVITA_BLING_SEM_DM
+        elif id_ == DENAVITA and status_denavita is not None:
             status, aviso = status_denavita, AVISO_DENAVITA
             motivo = MOTIVO_DM_INDISPONIVEL if status_denavita == STATUS_FONTE_INDISPONIVEL else None
         marcas.append({
@@ -303,9 +363,11 @@ def _montar(linhas: list[dict], ant: list[dict], inicio: date, fim: date, status
             ],
         })
     # Parcial: alguma marca fora do Bling conectado (Denavita provisoria, indisponivel ou aguardando).
-    parcial = any(m["status"] != "ok" for m in marcas)
+    parcial = any(m["status"] != "ok" for m in marcas) or status_denavita == DENAVITA_BLING_SEM_DM
     aviso_total = None
-    if status_denavita == STATUS_FONTE_PROVISORIA:
+    if status_denavita == DENAVITA_BLING_SEM_DM:
+        aviso_total = AVISO_PARCIAL_DENAVITA_SEM_TIKTOK
+    elif status_denavita == STATUS_FONTE_PROVISORIA:
         aviso_total = AVISO_PARCIAL_DENAVITA
     elif status_denavita == STATUS_FONTE_INDISPONIVEL:
         aviso_total = AVISO_PARCIAL_DENAVITA_FORA
@@ -337,10 +399,13 @@ def get_marcas_menores(
     cache: Optional[CacheBling] = None,
     ao_faltar_cache: Optional[Callable[[], None]] = None,
     consultar_dm: Optional[Callable[[str, dict], list[dict]]] = None,
+    cli_denavita: Optional[BlingCliente] = None,
 ) -> dict:
     """`consultar_dm`: leitura do Data Mart para o TikTok da Denavita. A rota passa
     `consultar_datamart`; sem ela (rotina, chamadas diretas) a Denavita fica indisponivel e
-    nada toca o Data Mart. O cache/aquecimento do Bling nao depende disto."""
+    nada toca o Data Mart. O cache/aquecimento do Bling nao depende disto.
+    `cli_denavita`: cliente do Bling da Denavita (so' quando a conta tem token). Sem ele, ou com o
+    Bling dela fora, a Denavita segue como antes (TikTok provisorio, aviso, nunca 0)."""
     fim = min(date_to, hoje)  # o Bling e' quase em tempo real: hoje conta
     inicio = min(date_from, fim)
     try:
@@ -354,15 +419,28 @@ def get_marcas_menores(
     except BlingIndisponivel:
         ant = []  # sem base: a variacao some, nunca vira 0
     ant_ini = ant_fim - timedelta(days=dias - 1)
-    status_denavita = STATUS_FONTE_INDISPONIVEL
+    com_bling = False
+    if cli_denavita is not None:
+        try:
+            den = pedidos_denavita_bling(cli_denavita, ant_ini, fim, agora)  # atual + anterior numa leitura so'
+            linhas = linhas + [l for l in den if l["data"] >= inicio]
+            ant = ant + [l for l in den if l["data"] <= ant_fim]
+            com_bling = True
+        except BlingIndisponivel as exc:  # motivo ja' sanitizado; a Denavita volta ao caminho provisorio
+            logger.warning("marcas_menores: Bling da Denavita indisponivel (%s)", exc)
+    com_dm = False
     if consultar_dm is not None:
         try:
             dm = pedidos_denavita_tiktok(consultar_dm, ant_ini, fim)  # atual + anterior numa consulta so'
             linhas = linhas + [l for l in dm if l["data"] >= inicio]
             ant = ant + [l for l in dm if l["data"] <= ant_fim]
-            status_denavita = STATUS_FONTE_PROVISORIA
+            com_dm = True
         except Exception as exc:  # noqa: BLE001 - motivo fixo; o texto da excecao (pode ter DSN) nunca sai
             logger.warning("marcas_menores: Data Mart da Denavita falhou (%s)", type(exc).__name__)
+    if com_bling:
+        status_denavita = DENAVITA_BLING if com_dm else DENAVITA_BLING_SEM_DM
+    else:
+        status_denavita = STATUS_FONTE_PROVISORIA if com_dm else STATUS_FONTE_INDISPONIVEL
     return _montar(linhas, ant, inicio, fim, status_denavita)
 
 

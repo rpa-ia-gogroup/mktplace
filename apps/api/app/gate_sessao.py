@@ -29,7 +29,8 @@ from app.sessao import SEGREDO_MINIMO, SESSION_COOKIE, dominios_permitidos, emai
 logger = logging.getLogger(__name__)
 
 #: Igualdade para os que nao terminam em "/", prefixo para os que terminam.
-CAMINHOS_PUBLICOS = ("/health", "/ready", "/api/v1/alertas/", "/api/v1/b2b-revenda/")
+#: O callback do Bling chega sem cookie; a protecao dele e' o `state` assinado (app/routers/bling_oauth.py).
+CAMINHOS_PUBLICOS = ("/health", "/ready", "/api/v1/alertas/", "/api/v1/b2b-revenda/", "/api/v1/bling/oauth/callback")
 SERVICE_KEY_HEADER = "x-torre-service-key"
 ATOR_SERVICO = "servico:oraculo-mcp"
 HEADER_AUTH_NEGADA = "X-Torre-Auth"

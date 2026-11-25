@@ -71,20 +71,21 @@ class BlingCliente:
         raise BlingIndisponivel("Bling limitou as consultas; tente de novo em instantes.")
 
 
-def cliente_com_sessao(db) -> BlingCliente:
+def cliente_com_sessao(db, conta: Optional[str] = None) -> BlingCliente:
     """Cliente do Bling com o token da conta (tabela do banco), lido UMA vez por uso: nao uma por chamada."""
     from app.services import bling_token
 
+    conta = conta or bling_token.CONTA_PADRAO
     armazem = bling_token.ArmazemPg(db)
     atual: list[Optional[str]] = [None]
 
     def token() -> str:
         if atual[0] is None:
-            atual[0] = bling_token.obter_access_token(armazem)
+            atual[0] = bling_token.obter_access_token(armazem, conta)
         return atual[0]
 
     def invalidar() -> None:
         atual[0] = None
-        bling_token.invalidar(armazem)
+        bling_token.invalidar(armazem, conta)
 
     return BlingCliente(token=token, invalidar=invalidar)
