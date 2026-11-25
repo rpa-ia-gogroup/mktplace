@@ -20,10 +20,12 @@ import {
   Users,
   Wallet,
   Warehouse,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { expedicaoHabilitado } from "@/lib/expedicao-contract";
 import { habilitado as performanceContasHabilitado } from "@/lib/performance-contas";
+import { naSemanaDaBlack } from "@/lib/black-hora";
 
 import { isNavItemActive, navSections } from "./nav-config";
 
@@ -36,6 +38,7 @@ import { isNavItemActive, navSections } from "./nav-config";
  * cai num marcador neutro em vez de quebrar o menu.
  */
 export const ICONE_DA_ROTA: Record<string, LucideIcon> = {
+  "/black": Zap,
   "/": LayoutDashboard,
   "/canais": Store,
   "/produtos": Package,
@@ -104,6 +107,8 @@ export default function NavList({ pathname, hrefFor, alvoAmplo = false, recolhid
         expedicao: expedicaoHabilitado(process.env.NEXT_PUBLIC_EXPEDICAO_ENABLED),
         cx: true,
         performanceContas: performanceContasHabilitado(),
+        // Black Friday: no menu so' na semana dela (24 a 30/11).
+        black: naSemanaDaBlack(),
       }).map((section, idx) => (
         <div key={section.label} className="flex flex-col gap-0.5">
           {recolhido ? (

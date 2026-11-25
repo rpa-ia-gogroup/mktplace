@@ -118,10 +118,18 @@ export const PERFORMANCE_CONTAS_NAV: NavPage = {
  */
 export const CX_NAV: NavPage = { href: "/cx", label: "CX" };
 
+/**
+ * BLACK-HORA — Black Friday hora a hora (27/11/2026). No menu so' na semana da
+ * Black (`naSemanaDaBlack`); a rota continua acessivel pela URL depois.
+ */
+export const BLACK_NAV: NavPage = { href: "/black", label: "Black Friday" };
+
 export interface NavFlags {
   expedicao?: boolean;
   cx?: boolean;
   performanceContas?: boolean;
+  /** Semana da Black: item logo depois da Gerencial. */
+  black?: boolean;
 }
 
 export function navSections(flags: NavFlags | boolean = {}): NavSection[] {
@@ -132,9 +140,11 @@ export function navSections(flags: NavFlags | boolean = {}): NavSection[] {
   if (f.expedicao) extras.push(EXPEDICAO_NAV);
   if (f.cx) extras.push(CX_NAV);
   if (f.performanceContas) extras.push(PERFORMANCE_CONTAS_NAV);
-  if (!extras.length) return NAV_SECTIONS;
+  if (!extras.length && !f.black) return NAV_SECTIONS;
   return NAV_SECTIONS.map((s) =>
-    s.label === "Operação" ? { ...s, pages: [...s.pages, ...extras] } : s,
+    s.label === "Operação" ? { ...s, pages: [...s.pages, ...extras] }
+      : s.label === "Visão" && f.black ? { ...s, pages: [s.pages[0], BLACK_NAV, ...s.pages.slice(1)] }
+        : s,
   );
 }
 
@@ -167,6 +177,7 @@ export function getRouteTitle(pathname: string): string {
   // T-0014: idem -- quem esta' na rota passou pelo guard da pagina.
   if (pathname.startsWith(PERFORMANCE_CONTAS_NAV.href)) return PERFORMANCE_CONTAS_NAV.label;
   if (pathname.startsWith(CX_NAV.href)) return CX_NAV.label;
+  if (pathname.startsWith(BLACK_NAV.href)) return BLACK_NAV.label;
   for (const section of navSections({ expedicao: true })) {
     for (const page of section.pages) {
       if (page.disabled) continue;
