@@ -1022,7 +1022,7 @@ export function PedidosDoMotivo({ item, filtros, fechar, canal = "shopee" }: { i
           {v && v.linhas.length > 0 && r?.ok && (
             <button
               type="button"
-              onClick={() => baixarCsv(csvPedidosMotivo(r.dados, item.rotulo), nomeDoCsvPedidos(tipo, item.codigo, filtros, new Date()))}
+              onClick={() => baixarCsv(csvPedidosMotivo(r.dados, item.rotulo, canal), nomeDoCsvPedidos(tipo, item.codigo, filtros, new Date()))}
               className="min-h-11 rounded-md border border-line-strong px-3 text-xs font-semibold text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               Baixar CSV

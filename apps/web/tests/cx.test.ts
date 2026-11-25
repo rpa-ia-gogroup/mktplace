@@ -397,8 +397,9 @@ test("pedidos do motivo: linhas, resumo com teto e avisos", () => {
 test("pedidos do motivo: CSV com ; , valor com virgula e sem formula", () => {
   const csv = csvPedidosMotivo(pedidosResp(), "Produto vazou");
   const [cab, l1, l2] = csv.replace("﻿", "").split("\n");
-  assert.equal(cab, "pedido;devolucao;marca;dia;situacao;valor_reembolsado;motivo");
-  assert.equal(l1, "251102ABC;R9;lescent;2026-11-02;Reembolsada;59,9;Produto vazou");
+  assert.equal(cab, "pedido;devolucao;marca;canal;dia;situacao;valor_reembolsado;motivo");
+  assert.equal(l1, "251102ABC;R9;lescent;Shopee;2026-11-02;Reembolsada;59,9;Produto vazou");
+  assert.equal(csvPedidosMotivo(pedidosResp(), "x", "ml").split("\n")[1].split(";")[3], "Mercado Livre");
   assert.ok(l2.startsWith("'=CMD()"), "celula que comeca com = nao vira formula");
   assert.ok(csv.startsWith("﻿"));
 });
