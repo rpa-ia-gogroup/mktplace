@@ -30,8 +30,8 @@ test("Shopee: media acima de 1 dia fica fora do SLA e vem primeiro", () => {
   assert.equal(b.tempoFora, true);
   assert.equal(a.tempoFora, false);
   assert.equal(a.tempo, "1 h 00");
-  assert.equal(a.tempoDetalhe, "mediana 10 min · 2 de 40 respostas acima de 1 dia");
-  assert.equal(a.filaDetalhe, "mais antiga há 2 h 00");
+  assert.deepEqual(a.tempoDetalhe, ["mediana 10 min", "2 de 40 acima de 1 dia"]);
+  assert.deepEqual(a.filaDetalhe, ["mais antiga há 2 h 00"]);
   assert.match(v.semFonte, /CSAT.*TMA/);
 });
 
@@ -40,7 +40,7 @@ test("Shopee: loja sem medida fica com traco e motivo, nunca zero", () => {
   assert.equal(l.tempo, "—");
   assert.equal(l.fila, "—");
   assert.equal(l.tempoFora, false);
-  assert.ok(l.tempoDetalhe);
+  assert.equal(l.tempoDetalhe.length, 1);
 });
 
 test("Shopee: Kokeshi usa a media do Seller Centre; fila parada ha' mais de 1 dia fica fora", () => {
@@ -50,7 +50,7 @@ test("Shopee: Kokeshi usa a media do Seller Centre; fila parada ha' mais de 1 di
   ).linhas;
   assert.equal(l.tempo, "30 min");
   assert.equal(l.filaFora, true);
-  assert.equal(l.tempoDetalhe, "média do Seller Centre");
+  assert.deepEqual(l.tempoDetalhe, ["média do Seller Centre"]);
 });
 
 test("ML: tempo oficial em minutos, pergunta com mais de 24 h deixa a fila fora", () => {
@@ -68,8 +68,9 @@ test("ML: tempo oficial em minutos, pergunta com mais de 24 h deixa a fila fora"
   const r = v.linhas.find((l) => l.chave === "rituaria")!;
   assert.equal(r.tempo, "1 h 30");
   assert.equal(r.filaFora, true);
-  assert.equal(r.filaDetalhe, "mais antiga há 2 d");
-  assert.match(r.tempoDetalhe!, /reclamações: 1ª ação em 5 h 00/);
+  assert.deepEqual(r.filaDetalhe, ["mais antiga há 2 d"]);
+  // reclamacao fica fora da celula de perguntas (Revisor UX)
+  assert.deepEqual(r.tempoDetalhe, []);
   const b = v.linhas.find((l) => l.chave === "barbours")!;
   assert.equal(b.tempo, "—");
   assert.equal(b.fila, "—");

@@ -10,12 +10,14 @@ import type { QualidadeResposta as Dados } from "@/lib/cx-qualidade";
 const TH = "px-2 py-1.5 text-left text-xs font-medium text-ink-muted";
 const TD = "px-2 py-2 align-top tabular-nums";
 
-function Valor({ texto, fora, detalhe }: { texto: string; fora: boolean; detalhe: string | null }) {
+function Valor({ texto, fora, detalhe }: { texto: string; fora: boolean; detalhe: string[] }) {
   return (
     <div className="flex flex-col gap-0.5">
       <span className={fora ? "font-semibold text-crit-ink" : "font-semibold text-ink"}>{texto}</span>
       {fora && <span className="text-xs font-medium text-crit-ink">fora do SLA</span>}
-      {detalhe && <span className="text-xs text-ink-faint">{detalhe}</span>}
+      {detalhe.map((d) => (
+        <span key={d} className="text-xs text-ink-faint">{d}</span>
+      ))}
     </div>
   );
 }

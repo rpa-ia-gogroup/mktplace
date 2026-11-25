@@ -15,11 +15,12 @@ export interface LinhaQualidade {
   /** Tempo ate' a 1a resposta ("—" sem medida) e se passa do SLA. */
   tempo: string;
   tempoFora: boolean;
-  tempoDetalhe: string | null;
+  /** Uma ideia por linha. */
+  tempoDetalhe: string[];
   /** Fila de agora: quantas aguardam e a mais antiga. */
   fila: string;
   filaFora: boolean;
-  filaDetalhe: string | null;
+  filaDetalhe: string[];
 }
 
 export interface QualidadeResposta {
@@ -38,18 +39,18 @@ export function qualidadeShopee(dados: Pick<CxShopeeResponse, "chat">, rotulo: (
     const media = n.tempo_resposta_fonte === "media_seller_centre" ? n.tempo_resposta_s : n.tempo_resposta_media_s;
     const detalhe = [
       n.tempo_resposta_fonte === "mediana" && n.tempo_resposta_s != null ? `mediana ${duracao(n.tempo_resposta_s)}` : null,
-      n.respostas != null && n.respostas_mais_1d != null ? `${inteiro(n.respostas_mais_1d)} de ${inteiro(n.respostas)} respostas acima de 1 dia` : null,
+      n.respostas != null && n.respostas_mais_1d != null ? `${inteiro(n.respostas_mais_1d)} de ${inteiro(n.respostas)} acima de 1 dia` : null,
       n.tempo_resposta_fonte === "media_seller_centre" ? "média do Seller Centre" : null,
-    ].filter(Boolean);
+    ].filter((x): x is string => x != null);
     return {
       chave: n.marca,
       marca: rotulo(n.marca),
       tempo: duracao(media),
       tempoFora: fora(media),
-      tempoDetalhe: media == null ? "Sem respostas medidas no período." : detalhe.join(" · ") || null,
+      tempoDetalhe: media == null ? ["Sem respostas medidas no período."] : detalhe,
       fila: n.aguardando_resposta == null ? "—" : `${inteiro(n.aguardando_resposta)} conversas`,
       filaFora: fora(n.espera_max_s),
-      filaDetalhe: n.aguardando_resposta == null ? "Sem leitura da fila." : n.espera_max_s != null && n.aguardando_resposta > 0 ? `mais antiga há ${duracao(n.espera_max_s)}` : null,
+      filaDetalhe: n.aguardando_resposta == null ? ["Sem leitura da fila."] : n.espera_max_s != null && n.aguardando_resposta > 0 ? [`mais antiga há ${duracao(n.espera_max_s)}`] : [],
     };
   });
   return {
@@ -68,15 +69,11 @@ export function qualidadeMl(dados: Pick<CxMlResponse, "marcas">, rotulo: (m: str
       marca: rotulo(m.marca),
       tempo: duracao(tempo),
       tempoFora: fora(tempo),
-      tempoDetalhe:
-        tempo == null
-          ? "Sem a medida oficial do ML no período."
-          : m.resposta_mediana_h != null
-            ? `reclamações: 1ª ação em ${duracao(m.resposta_mediana_h * 3600)} (mediana)`
-            : null,
+      // reclamacao (1a acao) tem lugar proprio na aba: aqui so' perguntas (Revisor UX, #537)
+      tempoDetalhe: tempo == null ? ["Sem a medida oficial do ML no período."] : [],
       fila: semResposta == null ? "—" : `${inteiro(semResposta)} perguntas`,
       filaFora: (m.perguntas_sem_resposta_24h ?? 0) > 0 || fora(antiga),
-      filaDetalhe: semResposta == null ? "Sem leitura das perguntas." : semResposta > 0 && antiga != null ? `mais antiga há ${duracao(antiga)}` : null,
+      filaDetalhe: semResposta == null ? ["Sem leitura das perguntas."] : semResposta > 0 && antiga != null ? [`mais antiga há ${duracao(antiga)}`] : [],
     };
   });
   return {

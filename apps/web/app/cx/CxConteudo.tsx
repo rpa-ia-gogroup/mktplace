@@ -401,10 +401,12 @@ function Corpo({ dados, filtros, avaliacoes }: { dados: CxShopeeResponse; filtro
             geradoEm={dados.gerado_em}
             periodo={janela}
             dias={filtros.dias}
+            depoisDasMarcas={
+              dialogo.indicador === "resposta" ? (
+                <QualidadeResposta v={qualidadeShopee(dados, brandLabel)} ajuda="Tempo da pergunta do comprador até a resposta da loja no chat, sem as automáticas." />
+              ) : undefined
+            }
           />
-        )}
-        {dialogo && "indicador" in dialogo && dialogo.indicador === "resposta" && (
-          <QualidadeResposta v={qualidadeShopee(dados, brandLabel)} ajuda="Tempo da pergunta do comprador até a resposta da loja no chat, sem as automáticas." />
         )}
         {dialogo && "marca" in dialogo && (
           <DetalheMarca s={marcaAberta} fila={v.fila.find((f) => f.chave === dialogo.marca) ?? null} />
