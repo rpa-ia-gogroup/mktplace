@@ -47,7 +47,7 @@ class MarcasMenoresComFonte(MarcasMenoresResponse):
 
 
 class ProdutosDaMarcaComMotivo(ProdutosDaMarca):
-    #: Por que a marca nao tem itens (Denavita: itens so' pelo Bling, conta sem autorizacao).
+    #: Por que a marca nao tem itens (ou so' parte): Denavita sem token do Bling, ou TikTok sem itens.
     motivo: Optional[str] = None
 
 
@@ -113,7 +113,9 @@ def marcas_menores_produtos(
     p = resolve_period(date_from=date_from, date_to=date_to, default_days=30, today=hoje)
     plataformas = [_PLATAFORMA[c] for c in canais.split(",") if c in _PLATAFORMA] if canais else None
     ids = [m for m in marcas.split(",") if m] if marcas else None
+    cli_den, motivo_den = bling_denavita(db)
     return svc.get_produtos(
         cliente_bling(db), p.start, p.end, hoje, plataformas=plataformas, marcas=ids,
         cache=cache_bling(db), ao_faltar_cache=bling_warm.disparar_em_segundo_plano,
+        cli_denavita=cli_den, motivo_sem_bling_denavita=motivo_den,
     )
