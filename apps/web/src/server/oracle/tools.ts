@@ -42,6 +42,7 @@ import { cxTool } from "./tools-cx.ts";
 import { hojeTool } from "./tools-hoje.ts";
 import { metasTool } from "./tools-metas.ts";
 import { performanceContasTool } from "./tools-performance-contas.ts";
+import { produtosGapTool } from "./tools-produtos-gap.ts";
 import { slowMovingTool } from "./tools-slow-moving.ts";
 import {
   brandsContract, canaisContract, healthContract, monthBoundsOf, overviewContract,
@@ -1061,4 +1062,5 @@ export const ORACLE_TOOLS: readonly OracleTool[] = [
   performanceContasTool,
   cxTool,
   slowMovingTool,
+  produtosGapTool,
 ];

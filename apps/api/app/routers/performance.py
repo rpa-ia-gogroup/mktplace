@@ -39,6 +39,7 @@ from app.services import avoe_snapshot_service as avoe_svc
 from app.services import executive_summary_service
 from app.services import gold_service as svc
 from app.services import hoje_por_hora_service as hph_svc
+from app.services import produtos_gap_service as gap_svc
 from app.services import black_hora_service as black_svc
 from app.services import monitoramento_preco_service as mp_svc
 from app.services import performance_service as perf_svc
@@ -581,6 +582,27 @@ def hoje_por_hora(
     ontem e a semana passada ate' a mesma hora. O periodo do filtro e' ignorado:
     a resposta e' sempre do dia corrente (BRT)."""
     return hph_svc.get_hoje_por_hora(_require_db(db), filters.mkt_ids, filters.brands, base=base)
+
+
+@router.get("/produtos-gap")
+def produtos_gap(
+    brand: str = Query(..., description="Marca (apice, barbours, kokeshi, lescent, rituaria)."),
+    canal: Optional[Literal["ml", "shopee", "tiktok"]] = Query(None, description="Padrao: todos os canais."),
+    comparar: Literal["ontem", "semana_passada"] = Query("ontem"),
+    limite: int = Query(10, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """Quais SKUs da marca estao abaixo (e acima) do dia comparado, no MESMO corte de hora de cada canal."""
+    if brand not in svc.BRANDS_IN_SCOPE:
+        raise HTTPException(422, "Marca invalida.")
+    try:
+        return gap_svc.get_produtos_gap(
+            _require_db(db), datamart_leitura.consultar, brand, [canal] if canal else None, comparar, limite)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
+        logger.exception("produtos-gap falhou")
+        raise HTTPException(503, "Vendas por produto indisponiveis.") from exc
 
 
 @router.get("/black-hora")

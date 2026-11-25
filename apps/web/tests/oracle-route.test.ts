@@ -388,12 +388,13 @@ test("2025: tools/list apos o lifecycle expoe exatamente as quatorze tools", asy
     "torre_metas",
     "torre_monitoramento_precos",
     "torre_performance_contas",
+    "torre_produtos_gap",
     "torre_produtos_prioritarios",
     "torre_qualidade_dados",
     "torre_regioes_vendas",
     "torre_slow_moving",
   ]);
-  assert.equal(names.length, 14, "nenhuma decima quinta tool");
+  assert.equal(names.length, 15, "nenhuma decima sexta tool");
   for (const t of msg.result.tools) assert.ok(t.inputSchema, `${t.name} precisa de inputSchema`);
   assert.equal(spy.calls.length, 0, "o lifecycle inteiro nao toca o backend");
 });

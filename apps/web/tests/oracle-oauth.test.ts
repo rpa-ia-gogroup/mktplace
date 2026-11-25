@@ -905,9 +905,9 @@ test("nenhum Client ID/Secret e' lido do ambiente", async () => {
   }
 });
 
-test("as quatorze tools continuam read-only e sem escrita", async () => {
+test("as quinze tools continuam read-only e sem escrita", async () => {
   const { ORACLE_TOOLS } = await import("../src/server/oracle/tools.ts");
-  assert.equal(ORACLE_TOOLS.length, 14);
+  assert.equal(ORACLE_TOOLS.length, 15);
   const serialized = JSON.stringify(ORACLE_TOOLS.map((t) => ({ n: t.name, d: t.config.title })));
   for (const forbidden of ["create", "update", "delete", "write", "insert"]) {
     assert.ok(!serialized.toLowerCase().includes(forbidden), `sem verbo ${forbidden}`);

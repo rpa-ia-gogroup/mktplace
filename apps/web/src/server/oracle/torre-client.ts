@@ -56,6 +56,7 @@ export const ENDPOINTS = {
   cxMercadoLivre: "/api/v1/cx/mercadolivre",
   cxTiktok: "/api/v1/cx/tiktok",
   fullSlowMoving: "/api/v1/performance/full-slow-moving",
+  produtosGap: "/api/v1/performance/produtos-gap",
 } as const;
 
 export type EndpointKey = keyof typeof ENDPOINTS;
@@ -115,6 +116,7 @@ const OPERATIONAL_PARAMS: Partial<Record<EndpointKey, ReadonlySet<string>>> = {
   cxMercadoLivre: new Set(["brands", "dias"]),
   cxTiktok: new Set(["brands", "dias"]),
   fullSlowMoving: new Set([]),
+  produtosGap: new Set(["brand", "canal", "comparar", "limite"]),
 };
 
 /** Endpoints cujos parametros sao CSV: lista repetida seria lida pela METADE. */
