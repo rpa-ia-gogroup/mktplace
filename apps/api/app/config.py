@@ -270,6 +270,9 @@ class Settings(BaseSettings):
     #: audit.tiktok_oauth_token (migration 050); aqui so' a chave e o segredo do app.
     tiktok_app_key: str = ""
     tiktok_app_secret: SecretStr = SecretStr("")
+    #: Quem pode pegar o access_token vivo por marca (rota /api/v1/tiktok/token/{marca}):
+    #: "email:marca|marca;email2:*". Vazia = ninguem.
+    tiktok_token_acesso: str = ""
     # Marcas menores (Yenzah, Aua, By Samia): API do Bling v3, conta da Rituaria.
     # O refresh_token ROTACIONA a cada uso: o vivo fica na tabela
     # audit.bling_oauth_token; o inicial so' semeia a tabela vazia.
