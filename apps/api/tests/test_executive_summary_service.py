@@ -23,6 +23,13 @@ from app.schemas.executive_summary import ExecutiveSummaryResponse
 from app.services import executive_summary_service as svc
 from app.services.performance_service import ML_ID, SHOPEE_ID, TIKTOK_ID
 
+
+@pytest.fixture(autouse=True)
+def _avisos_regionais_ligados(monkeypatch, request):
+    """A logica regional segue testada com a chave ligada; `sem_regional` usa a chave real (desligada)."""
+    if "sem_regional" not in request.keywords:
+        monkeypatch.setattr(svc, "AVISOS_REGIONAIS_NA_GERENCIAL", True)
+
 NOW = datetime(2026, 7, 13, 12, 0, tzinfo=timezone.utc)
 
 
@@ -793,3 +800,13 @@ def test_get_executive_summary_frescor_independe_do_periodo_visualizado():
     assert any(r["source"] == "fact_marketplace_region_daily" for r in stale)
     # ML e TikTok, frescos na tabela inteira, nunca aparecem como stale
     assert not any(r["marketplace"] in ("ml", "tiktok") for r in stale)
+
+
+@pytest.mark.sem_regional
+def test_gerencial_sem_avisos_regionais_enquanto_a_chave_esta_desligada():
+    """25/11/2026: regional parada de proposito; a Gerencial nao mostra os avisos dela."""
+    assert svc.AVISOS_REGIONAIS_NA_GERENCIAL is False
+    result = _compose(regional_max_date=date(2026, 6, 1))
+    assert not any(r.get("source") == "fact_marketplace_region_daily" for r in result["risks"])
+    assert not any(r["type"] == "low_regional_coverage" for r in result["risks"])
+    assert result.get("data_warnings", []) == []

@@ -181,6 +181,12 @@ def _fetch_brand_freshness(db: Session, mkt_ids: list[int], brand_keys: list[str
     ]
 
 
+#: Avisos da visao regional (frescor, cobertura de UF, TikTok sem UF) na "Confianca no dado" da
+#: Gerencial. Desligados em 25/11/2026 a pedido do usuario: a regional esta' parada de proposito
+#: (regional_chain pausada; Shopee sem fonte). A aba Regioes segue mostrando a propria cobertura.
+AVISOS_REGIONAIS_NA_GERENCIAL = False
+
+
 def _fetch_regional_freshness(db: Session, mkt_ids: list[int]) -> date | None:
     sql = text("""
         SELECT MAX(date) AS max_date
@@ -213,12 +219,12 @@ def _compose_executive_summary(
     risks = _build_risks(quality, canais, regioes_summary, no_data)
     risks.extend(_build_daily_performance_freshness_risks(daily_freshness, now))
     risks.extend(_build_brand_freshness_risks(brand_freshness or [], daily_freshness, now))
-    regional_risk = _build_regional_freshness_risk(regional_max_date, now)
+    regional_risk = _build_regional_freshness_risk(regional_max_date, now) if AVISOS_REGIONAIS_NA_GERENCIAL else None
     if regional_risk is not None:
         risks.append(regional_risk)
 
     changes = _build_changes(brands)
-    data_warnings = _build_data_warnings(regioes_summary, mkt_ids)
+    data_warnings = _build_data_warnings(regioes_summary, mkt_ids) if AVISOS_REGIONAIS_NA_GERENCIAL else []
 
     # Saude COMERCIAL (Gate G1): so' riscos comerciais/operacionais validos
     # entram (high_cancel_rate, high_cost apos o guardrail). Frescor/cobertura/
@@ -413,7 +419,7 @@ def _build_risks(quality: dict, canais: dict, regioes_summary: dict, no_data: bo
         })
 
     level = regioes_summary.get("coverage_level")
-    if level in ("low", "partial"):
+    if AVISOS_REGIONAIS_NA_GERENCIAL and level in ("low", "partial"):
         uf_fill_pct = regioes_summary.get("uf_fill_pct")
         risks.append({
             "type": "low_regional_coverage",
