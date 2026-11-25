@@ -46,6 +46,7 @@ const TINTA = { ok: "text-ok-ink", warn: "text-warn-ink", crit: "text-crit-ink" 
 const FUNDO = { ok: "bg-ok-soft", warn: "bg-warn-soft", crit: "bg-crit-soft" } as const;
 const SELO: Record<"ok" | "warn" | "crit", TomSelo> = { ok: "ok", warn: "atencao", crit: "critico" };
 const PILULA: Record<"ok" | "warn" | "crit", TomPilula> = { ok: "ok", warn: "warn", crit: "crit" };
+const PONTO: Record<CanalBlack, string> = { shopee: "bg-canal-shopee", ml: "bg-canal-ml" };
 const MARCAS_BLACK = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
 const DICA_META =
   "Meta da planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black' (definida pela Nath; sem TikTok). " +
@@ -85,7 +86,7 @@ export default function BlackClient() {
 
   const filtros = (
     <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-      <BrandFilter variante="menu" opcoes={MARCAS_BLACK.map((m) => ({ value: m, label: brandLabel(m) }))} value={marcas} onChange={setMarcas} />
+      <BrandFilter variante="menu" rotulo="Marca" opcoes={MARCAS_BLACK.map((m) => ({ value: m, label: brandLabel(m) }))} value={marcas} onChange={setMarcas} />
       <label className="flex items-center gap-2 text-sm text-ink-muted">
         Dia
         <input
@@ -153,6 +154,28 @@ export default function BlackClient() {
             valor={fmtBrlCurto(r.realizado)}
             tom={tom === "ok" ? "bom" : tom === "warn" ? "atencao" : tom === "crit" ? "critico" : "neutro"}
             contexto={r.metaAteAgora !== null ? <>{pct(r.pct)} da meta acumulada ({reais(r.metaAteAgora)})</> : "sem meta para comparar"}
+            // Um canal por linha: cada um contra a meta até a SUA última hora fechada.
+            meio={
+              <ul className="flex flex-col gap-1.5 text-sm">
+                {canais.map((c) => {
+                  const rc = resumoBlack(linhas.filter((l) => l.canal === c));
+                  const tc = tomDesvio(rc.pct);
+                  return (
+                    <li key={c} className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <span className="inline-flex items-center gap-1.5 text-ink-muted">
+                        <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />
+                        {NOME_CANAL_BLACK[c]}{rc.ultimaHora >= 0 && <span className="text-xs text-ink-faint"> até {rotuloHora(rc.ultimaHora + 1)}</span>}
+                      </span>
+                      <span className="tabular-nums">
+                        <span className="font-semibold text-ink">{fmtBrlCurto(rc.realizado)}</span>
+                        <span className="text-ink-muted"> de {reais(rc.metaAteAgora)}</span>
+                        {rc.pct !== null && <span className={`ml-1.5 font-semibold ${tc ? TINTA[tc] : ""}`}>{pct(rc.pct)}</span>}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            }
             selo={tom ? { texto: tom === "ok" ? "No ritmo" : tom === "warn" ? "Perto da meta" : "Abaixo da meta", tom: SELO[tom] } : undefined}
           />
           <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4">
@@ -207,11 +230,11 @@ export default function BlackClient() {
                   <th scope="col" className="px-3 py-2 text-left sm:px-4">Hora</th>
                   <th scope="col" className="px-2 py-2 text-right">Meta</th>
                   <th scope="col" className="px-2 py-2 text-right">Realizado</th>
-                  <th scope="col" className="px-2 py-2 text-right">Diferença</th>
+                  <th scope="col" className="hidden px-2 py-2 text-right sm:table-cell">Diferença</th>
                   <th scope="col" className="px-3 py-2 text-right sm:px-4">% acum.</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-line tabular-nums">
+              <tbody className="divide-y divide-line whitespace-nowrap tabular-nums">
                 {horas.map((h) => {
                   const t = tomDesvio(h.pctAcum);
                   return (
@@ -219,7 +242,7 @@ export default function BlackClient() {
                       <th scope="row" className="px-3 py-1.5 text-left font-medium sm:px-4">{rotuloHora(h.hora)}</th>
                       <td className="px-2 py-1.5 text-right">{reais(h.meta)}</td>
                       <td className="px-2 py-1.5 text-right font-semibold text-ink">{h.realizado === null ? <span className="font-normal text-ink-faint" title="hora ainda não fechada">—</span> : fmtBrlCurto(h.realizado)}</td>
-                      <td className={`px-2 py-1.5 text-right ${h.diferenca === null ? "" : h.diferenca >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
+                      <td className={`hidden px-2 py-1.5 text-right sm:table-cell ${h.diferenca === null ? "" : h.diferenca >= 0 ? "text-ok-ink" : "text-crit-ink"}`}>
                         {h.diferenca === null ? "—" : `${h.diferenca >= 0 ? "+" : "−"}${fmtBrlCurto(Math.abs(h.diferenca))}`}
                       </td>
                       <td className="px-3 py-1 text-right sm:px-4">
