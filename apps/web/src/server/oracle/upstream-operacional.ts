@@ -177,6 +177,66 @@ export const expedicaoTiktokContract = z.object({
 });
 
 // ---------------------------------------------------------------------------
+// Expedicao — LDR 7d do Mercado Livre e da Shopee (lead de coleta no prazo)
+// ---------------------------------------------------------------------------
+
+const ldrDia = z.object({
+  due_date: id,
+  base: count,
+  late: count,
+  rate: optNum,
+  is_mature: z.boolean(),
+});
+
+/** `GET /expedicao/ml/ldr`. Sem `official`: e' calculo Torre. Sem total: soma por marca. */
+export const expedicaoMlLdrContract = z.object({
+  availability: z.enum(["available", "unavailable"]),
+  unavailable_reason: z.string().nullish(),
+  from: id,
+  to: id,
+  requested_days: count,
+  series_start: z.string().nullish(),
+  mature_days: count,
+  brands: z.array(z.object({ brand: id, base: count, late: count, rate: optNum })).nullish(),
+  daily: z.array(ldrDia).nullish(),
+});
+
+/** `GET /expedicao/shopee/ldr` (ShopeeLdrResponse). `official` e `disclaimer` sao obrigatorios. */
+export const expedicaoShopeeLdrContract = z.object({
+  availability: z.enum(["available", "unavailable"]),
+  unavailable_reason: z.string().nullish(),
+  official: z.boolean(),
+  disclaimer: z.string(),
+  snapshot: z.object({ age_hours: optNum, stale: z.boolean() }).nullish(),
+  ldr: z
+    .object({
+      from: id,
+      to: id,
+      days: count,
+      rate: optNum,
+      rate_hidden_reason: z.string().nullish(),
+      base: count,
+      late: count,
+      pending_overdue: count,
+      pending_at_risk: count,
+      mature_due_days: count,
+      partial_due_days: count,
+      daily: z.array(ldrDia),
+    })
+    .nullish(),
+  coverage: z
+    .object({ state: z.enum(["completa", "aviso", "insuficiente", "sem_base"]), missing_share: optNum })
+    .nullish(),
+  brands: z.array(
+    z.object({
+      brand: id, base: count, late: count, rate: optNum,
+      coverage_state: z.enum(["completa", "aviso", "insuficiente", "sem_base"]),
+    }),
+  ),
+  alerts: z.array(z.object({ severity: z.enum(["critical", "warning", "info"]), code: id, message: z.string() })),
+});
+
+// ---------------------------------------------------------------------------
 // Full Mercado Livre — modalidade logistica (NAO e' estoque)
 // ---------------------------------------------------------------------------
 

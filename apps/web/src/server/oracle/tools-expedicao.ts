@@ -17,6 +17,12 @@
  *    saem nulos.
  * 3. A LDR do TikTok traz `deadline_is_reconstructed`: enquanto for `true`, e'
  *    medicao INTERNA, nao a oficial de penalizacao da plataforma.
+ * 4. LDR de ML/Shopee (`ldr` de cada canal): ML e' sempre calculo Torre; Shopee
+ *    traz `official=false` + `disclaimer`. A falha da LDR NAO derruba a fila (sai
+ *    indisponivel com motivo). O ML nao devolve total: a taxa do canal e' a soma
+ *    de atrasados/base das marcas (`taxa_origem`), nunca media de taxas.
+ * "Vencem hoje" por etapa NAO existe na API allowlisted: `em_risco_24h` e
+ * `ldr.vencem_hoje_ou_amanha` (Shopee) sao os proxies; nada e' inventado.
  */
 import { z } from "zod";
 
@@ -32,7 +38,8 @@ import {
 import { numOrNull } from "./torre-client.ts";
 import { parseUpstream } from "./upstream.ts";
 import {
-  expedicaoContract, expedicaoTiktokContract, expedicaoTrendContract,
+  expedicaoContract, expedicaoMlLdrContract, expedicaoShopeeLdrContract, expedicaoTiktokContract,
+  expedicaoTrendContract,
 } from "./upstream-operacional.ts";
 
 export const EXP_CANAIS = ["shopee", "ml", "tiktok"] as const;
@@ -46,6 +53,22 @@ type ExpCanal = (typeof EXP_CANAIS)[number];
 export const EXP_TREND_MAX_HOURS = 96;
 /** Janela da LDR. 90 dias = teto do backend. */
 export const EXP_TIKTOK_MAX_DAYS = 90;
+/** Janela da LDR de ML/Shopee (teto do ML: 30; a Shopee aceitaria 35). */
+export const EXP_LDR_MAX_DAYS = 30;
+
+const EXP_LDR_INTERNA: Limitation = {
+  topic: "ldr_ml_shopee_interna",
+  scope: "Expedicao — LDR Mercado Livre/Shopee",
+  description:
+    "A LDR de ML e Shopee desta resposta e' calculo INTERNO da Torre (coleta x prazo), nao a taxa oficial de penalizacao/reputacao da plataforma: pode divergir do painel delas. Sem taxa (null) = sem base ou cobertura insuficiente, nunca 0%.",
+};
+
+const EXP_VENCEM_HOJE: Limitation = {
+  topic: "expedicao_vencem_hoje",
+  scope: "Expedicao — vencem hoje",
+  description:
+    "'Vencem hoje' por etapa e 'coleta perdida' do TikTok nao sao servidos por este conector. O proxy e' em_risco_24h (fila) e, na Shopee, ldr.vencem_hoje_ou_amanha. Nao estime vencimentos do dia a partir de outros numeros.",
+};
 
 export const expedicaoInput = z
   .object({
@@ -54,6 +77,7 @@ export const expedicaoInput = z
     tendencia_horas: z.number().int().min(1).max(EXP_TREND_MAX_HOURS).default(72),
     tiktok_evento: z.enum(["coleta", "despacho"]).default("coleta"),
     tiktok_dias: z.number().int().min(1).max(EXP_TIKTOK_MAX_DAYS).default(7),
+    ldr_dias: z.number().int().min(1).max(EXP_LDR_MAX_DAYS).default(7),
   })
   .strict();
 
@@ -77,6 +101,42 @@ const contagens = {
 };
 
 const prazoEstado = z.enum(["medido", "parcial", "nao_publicado_pelo_canal", "sem_backlog"]);
+
+const ldrBlock = z.object({
+  disponibilidade: z.enum(["available", "unavailable"]),
+  motivo_indisponivel: z.string().nullable(),
+  /** interna_nao_oficial = calculo Torre; NAO e' a taxa de penalizacao da plataforma. */
+  medicao: z.enum(["interna_nao_oficial", "oficial_marketplace"]),
+  aviso_medicao: z.string().nullable(),
+  janela: z
+    .object({ inicio: z.string(), fim: z.string(), dias_pedidos: z.number(), dias_fechados: z.number() })
+    .nullable(),
+  /** null = sem base (ou cobertura insuficiente). Nunca 0% fabricado. */
+  taxa: z.number().nullable(),
+  /** api = taxa entregue pela API; soma_das_marcas = atrasados/base somados das marcas (ML). */
+  taxa_origem: z.enum(["api", "soma_das_marcas"]).nullable(),
+  taxa_oculta_motivo: z.string().nullable(),
+  base: z.number().nullable(),
+  atrasados: z.number().nullable(),
+  /** Shopee: passaram do prazo e nao foram coletados. null = o canal nao entrega. */
+  pendentes_vencidos: z.number().nullable(),
+  /** Shopee: vencem hoje ou amanha e ainda podem ser coletados (proxy de 'vencem hoje'). */
+  vencem_hoje_ou_amanha: z.number().nullable(),
+  cobertura: z.string().nullable(),
+  fonte_vencida: z.boolean().nullable(),
+  idade_horas: z.number().nullable(),
+  por_marca: z.array(
+    z.object({ brand: z.string(), base: z.number(), atrasados: z.number(), taxa: z.number().nullable(), cobertura: z.string().nullable() }),
+  ),
+  /** Marcas pedidas sem linha de LDR no canal. Ausencia, nao LDR zero. */
+  marcas_sem_base: z.array(z.string()),
+  por_vencimento: z.array(
+    z.object({ data_vencimento: z.string(), base: z.number(), atrasados: z.number(), taxa: z.number().nullable(), maduro: z.boolean() }),
+  ),
+  alertas: z.array(z.object({ severidade: z.string(), codigo: z.string(), mensagem: z.string() })),
+});
+
+type LdrBlock = z.infer<typeof ldrBlock>;
 
 const filaBlock = z.object({
   canal: z.enum(["shopee", "ml"]),
@@ -124,6 +184,8 @@ const filaBlock = z.object({
     ),
   }),
   notas_da_fonte: z.array(z.string()),
+  /** LDR de despacho/coleta no prazo (ML: calculo Torre; Shopee: official=false). */
+  ldr: ldrBlock,
 });
 
 const tiktokBlock = z.object({
@@ -240,17 +302,79 @@ function contar(m: Medidas) {
   };
 }
 
+function ldrIndisponivel(motivo: string, medicao: LdrBlock["medicao"] = "interna_nao_oficial"): LdrBlock {
+  return {
+    disponibilidade: "unavailable", motivo_indisponivel: motivo, medicao, aviso_medicao: null, janela: null,
+    taxa: null, taxa_origem: null, taxa_oculta_motivo: null, base: null, atrasados: null,
+    pendentes_vencidos: null, vencem_hoje_ou_amanha: null, cobertura: null, fonte_vencida: null,
+    idade_horas: null, por_marca: [], marcas_sem_base: [], por_vencimento: [], alertas: [],
+  };
+}
+
+function porVencimento(daily: { due_date: string; base: number; late: number; rate?: number | null; is_mature: boolean }[]) {
+  return daily.map((d) => ({
+    data_vencimento: d.due_date, base: d.base, atrasados: d.late, taxa: numOrNull(d.rate), maduro: d.is_mature,
+  }));
+}
+
+function ldrMl(p: z.infer<typeof expedicaoMlLdrContract>, marcas: readonly string[] | undefined): LdrBlock {
+  const aviso = "Calculo interno da Torre (SLA de despacho do ML x coleta), nao a metrica oficial de reputacao do Mercado Livre.";
+  if (p.availability === "unavailable") {
+    return { ...ldrIndisponivel(safeText(p.unavailable_reason) ?? "sem_motivo_informado"), aviso_medicao: aviso };
+  }
+  const brands = p.brands ?? [];
+  // O ML nao entrega total: soma de contagens das marcas (nunca media de taxas).
+  const base = brands.reduce((a, b) => a + b.base, 0);
+  const late = brands.reduce((a, b) => a + b.late, 0);
+  return {
+    ...ldrIndisponivel(""), disponibilidade: "available", motivo_indisponivel: null, aviso_medicao: aviso,
+    janela: { inicio: p.from, fim: p.to, dias_pedidos: p.requested_days, dias_fechados: p.mature_days },
+    taxa: base > 0 ? late / base : null, taxa_origem: base > 0 ? "soma_das_marcas" : null,
+    base, atrasados: late,
+    por_marca: brands.map((b) => ({ brand: b.brand, base: b.base, atrasados: b.late, taxa: numOrNull(b.rate), cobertura: null })),
+    marcas_sem_base: (marcas ?? []).filter((m) => !brands.some((b) => b.brand === m)),
+    por_vencimento: porVencimento(p.daily ?? []),
+  };
+}
+
+function ldrShopee(p: z.infer<typeof expedicaoShopeeLdrContract>, marcas: readonly string[] | undefined): LdrBlock {
+  const medicao = p.official ? "oficial_marketplace" : "interna_nao_oficial";
+  const aviso = p.official ? null : (safeText(p.disclaimer) ?? "Indicador interno, nao a taxa oficial de penalizacao da Shopee.");
+  const l = p.ldr;
+  if (p.availability === "unavailable" || !l) {
+    return { ...ldrIndisponivel(safeText(p.unavailable_reason) ?? "sem_motivo_informado", medicao), aviso_medicao: aviso };
+  }
+  const taxa = numOrNull(l.rate);
+  return {
+    ...ldrIndisponivel("", medicao), disponibilidade: "available", motivo_indisponivel: null, aviso_medicao: aviso,
+    janela: { inicio: l.from, fim: l.to, dias_pedidos: l.days, dias_fechados: l.mature_due_days },
+    taxa, taxa_origem: taxa === null ? null : "api", taxa_oculta_motivo: safeText(l.rate_hidden_reason),
+    base: l.base, atrasados: l.late, pendentes_vencidos: l.pending_overdue, vencem_hoje_ou_amanha: l.pending_at_risk,
+    cobertura: p.coverage?.state ?? null,
+    fonte_vencida: p.snapshot?.stale ?? null,
+    idade_horas: numOrNull(p.snapshot?.age_hours),
+    por_marca: p.brands.map((b) => ({ brand: b.brand, base: b.base, atrasados: b.late, taxa: numOrNull(b.rate), cobertura: b.coverage_state })),
+    marcas_sem_base: (marcas ?? []).filter((m) => !p.brands.some((b) => b.brand === m)),
+    por_vencimento: porVencimento(l.daily),
+    alertas: p.alerts.map((a) => ({ severidade: a.severity, codigo: safeText(a.code) ?? "", mensagem: safeText(a.message) ?? "" })),
+  };
+}
+
 async function fila(
   canal: "shopee" | "ml",
   marcas: readonly string[] | undefined,
   horas: number,
+  ldrDias: number,
   deps: ToolDeps,
 ): Promise<FilaBlock> {
   const channel = API_CHANNEL[canal];
   // `brands` NAO vai ao resumo: o backend o ignora la' (regra 1). Na
   // tendencia ele filtra de verdade e reduz o payload — por isso vai.
   const brandsCsv = marcas && marcas.length > 0 ? [...marcas].sort().join(",") : undefined;
-  const [resumoRaw, trend] = await Promise.all([
+  // CSV nas duas: a Shopee le `brands` como string (lista repetida seria lida pela
+  // metade) e o ML aceita CSV tambem.
+  const ldrParams = { days: ldrDias, brands: brandsCsv };
+  const [resumoRaw, trend, ldr] = await Promise.all([
     deps.client.get("expedicao", { channel, include_queue: "false" }),
     // Falha da TENDENCIA (ex.: payload acima do teto) nao derruba o resumo
     // nem os outros canais: a tendencia sai indisponivel, sem numero.
@@ -258,6 +382,12 @@ async function fila(
       .get("expedicaoTrend", { channel, window_hours: horas, brands: brandsCsv })
       .then((raw) => parseUpstream(expedicaoTrendContract, raw))
       .catch(() => null),
+    // A LDR tambem nao derruba a fila: flag desligada (404), contrato quebrado ou
+    // timeout viram bloco indisponivel com motivo, nunca LDR zero.
+    (canal === "ml"
+      ? deps.client.get("expedicaoMlLdr", ldrParams).then((raw) => ldrMl(parseUpstream(expedicaoMlLdrContract, raw), marcas))
+      : deps.client.get("expedicaoShopeeLdr", ldrParams).then((raw) => ldrShopee(parseUpstream(expedicaoShopeeLdrContract, raw), marcas))
+    ).catch(() => ldrIndisponivel("falha_ao_ler_ldr")),
   ]);
   const p = parseUpstream(expedicaoContract, resumoRaw);
   const t = trend ?? { availability: "unavailable" as const, unavailable_reason: "falha_ao_ler_tendencia", window_hours: 0, truncated: false, points: [] };
@@ -349,6 +479,7 @@ async function fila(
       pontos,
     },
     notas_da_fonte: safeTexts(p.limitations?.notes),
+    ldr,
   };
 }
 
@@ -434,8 +565,10 @@ export const expedicaoTool: OracleTool = {
   config: {
     title: "Expedicao operacional por canal",
     description: [
-      "Use para 'quanto esta parado na expedicao', 'quantos pedidos vencidos ou em risco', 'o que esta travado', 'como evoluiu o backlog' e 'como esta a LDR do TikTok'.",
-      "Cobre Shopee e Mercado Livre (fotografia atual por conta, com tendencia horaria) e TikTok Shop (LDR por vencimento na janela, por loja).",
+      "Use para 'quanto esta parado na expedicao', 'quantos pedidos vencidos ou em risco', 'o que esta travado', 'como evoluiu o backlog' e 'como esta a LDR do TikTok', 'LDR 7d do Mercado Livre ou da Shopee por marca' e 'o que vence hoje / esta em risco'.",
+      "Cobre Shopee e Mercado Livre (fotografia atual por conta, com tendencia horaria, mais o bloco 'ldr': LDR de despacho/coleta no prazo dos ultimos ldr_dias, por marca e por vencimento) e TikTok Shop (LDR por vencimento na janela, por loja).",
+      "LDR de Shopee e ML e' medicao INTERNA da Torre, NAO a taxa oficial de penalizacao/reputacao da plataforma (ldr.medicao e ldr.aviso_medicao) — diga isso ao usuario. ldr.taxa null = sem base ou cobertura insuficiente (nunca 0%); no ML a taxa do canal e' a soma de atrasados/base das marcas (ldr.taxa_origem). Se ldr vier indisponivel, a fila continua valendo.",
+      "NAO ha 'vencem hoje' por etapa nem coleta perdida do TikTok aqui: use em_risco_24h (e ldr.vencem_hoje_ou_amanha na Shopee) como proxy e diga que e' proxy.",
       "Somente AGREGADOS por canal, conta/loja e data — nunca pedido individual, cliente ou endereco.",
       "Prazo nao publicado nao e' zero: quando o canal nao publica prazo (Mercado Livre sem o SLA de despacho na fotografia), vencidos/em_risco_24h/no_prazo vem nulos e prazo='nao_publicado_pelo_canal'.",
       "No TikTok, leia 'medicao': 'interna_reconstruida' significa prazo reconstruido pela Torre, NAO a medicao oficial de penalizacao da plataforma — diga isso ao usuario.",
@@ -450,8 +583,8 @@ export const expedicaoTool: OracleTool = {
     const pede = (c: ExpCanal) => canais.includes(c);
 
     const [shopee, ml, tk] = await Promise.all([
-      pede("shopee") ? fila("shopee", input.marcas, input.tendencia_horas, deps) : null,
-      pede("ml") ? fila("ml", input.marcas, input.tendencia_horas, deps) : null,
+      pede("shopee") ? fila("shopee", input.marcas, input.tendencia_horas, input.ldr_dias, deps) : null,
+      pede("ml") ? fila("ml", input.marcas, input.tendencia_horas, input.ldr_dias, deps) : null,
       pede("tiktok") ? tiktok(input.marcas, input.tiktok_evento, input.tiktok_dias, deps) : null,
     ]);
 
@@ -465,6 +598,10 @@ export const expedicaoTool: OracleTool = {
       limitations.push(EXP_DEADLINE_NOT_PUBLISHED);
     }
     if (input.marcas && filas.length > 0) limitations.push(EXP_BRAND_FILTER_LOCAL);
+    if (filas.some((b) => b.ldr.disponibilidade === "available" && b.ldr.medicao === "interna_nao_oficial")) {
+      limitations.push(EXP_LDR_INTERNA);
+    }
+    if (filas.length > 0 || tk) limitations.push(EXP_VENCEM_HOJE);
     if (tk && tk.disponibilidade === "available") {
       limitations.push(tk.medicao === "interna_reconstruida" ? EXP_TIKTOK_RECONSTRUCTED : EXP_TIKTOK_OFFICIAL);
     }
@@ -482,6 +619,24 @@ export const expedicaoTool: OracleTool = {
       const velhas = b.frescor_por_marca.filter((f) => f.freshness !== "fresh");
       if (velhas.length > 0) {
         warnings.push(`${nome}: fonte nao fresca para ${velhas.map((f) => `${f.brand} (${f.freshness})`).join(", ")}.`);
+      }
+      const l = b.ldr;
+      if (l.disponibilidade === "unavailable") {
+        warnings.push(`${nome}: LDR ${input.ldr_dias}d indisponivel (${l.motivo_indisponivel ?? "sem motivo informado"}) — sem taxa, nao trate como LDR zero.`);
+      } else {
+        if (l.medicao === "interna_nao_oficial") {
+          warnings.push(`${nome}: LDR e' medicao INTERNA da Torre, nao a taxa oficial de penalizacao da plataforma.`);
+        }
+        if (l.janela && l.janela.dias_fechados < l.janela.dias_pedidos && b.canal === "ml") {
+          warnings.push(`${nome}: janela parcial da LDR (${l.janela.dias_fechados} de ${l.janela.dias_pedidos} dias fechados — a serie so' comeca em 03/11/2026).`);
+        }
+        if (l.taxa === null && l.base !== null && l.base > 0) {
+          warnings.push(`${nome}: LDR com base ${l.base} mas taxa oculta (${l.taxa_oculta_motivo ?? "cobertura insuficiente"}) — nao calcule a taxa por fora.`);
+        }
+        if (l.fonte_vencida) warnings.push(`${nome}: fonte da LDR vencida — numeros nao sao atuais.`);
+        if (l.marcas_sem_base.length > 0) {
+          warnings.push(`${nome}: sem base de LDR para ${l.marcas_sem_base.join(", ")} — ausencia, nao LDR zero.`);
+        }
       }
       if (b.tendencia.disponibilidade === "unavailable") {
         warnings.push(`${nome}: tendencia indisponivel — sem serie, nao trate como backlog estavel.`);
@@ -511,10 +666,11 @@ export const expedicaoTool: OracleTool = {
         tendencia_horas: input.tendencia_horas,
         tiktok_evento: input.tiktok_evento,
         tiktok_dias: input.tiktok_dias,
+        ldr_dias: input.ldr_dias,
         include_queue: false,
       },
       metricDefinition:
-        "Shopee/ML: contagens da fotografia atual por conta (backlog, vencidos, em risco <24h, acima de 48h, travados = lentos UNIAO zumbis). TikTok: LDR = atrasados / base dos pedidos com vencimento na janela.",
+        "Shopee/ML: contagens da fotografia atual por conta (backlog, vencidos, em risco <24h, acima de 48h, travados = lentos UNIAO zumbis). TikTok: LDR = atrasados / base dos pedidos com vencimento na janela. ML/Shopee `ldr`: atrasados / base dos pedidos com prazo de despacho/coleta vencendo nos ultimos dias fechados (medicao interna; no ML a taxa do canal e' a soma de atrasados e base das marcas).",
       refreshedAt: stamps[0] ?? null,
       coverage: "agregados por canal e conta/loja; nenhuma linha por pedido",
       returnedCount: [shopee, ml, tk].filter((b) => b !== null).length,
@@ -531,6 +687,14 @@ export const expedicaoTool: OracleTool = {
       }
       const venc = b.totais.vencidos === null ? "vencidos nao medidos (sem prazo publicado)" : `${b.totais.vencidos} vencidos`;
       partes.push(`${nome}: backlog ${b.totais.backlog}, ${venc}, ${b.totais.travados} travados`);
+    }
+    for (const b of filas) {
+      const nome = b.canal === "ml" ? "Mercado Livre" : "Shopee";
+      partes.push(
+        b.ldr.disponibilidade === "available"
+          ? `${nome} LDR ${input.ldr_dias}d: ${pct(b.ldr.taxa)} (base ${b.ldr.base}, ${b.ldr.atrasados} atrasados) — medicao INTERNA`
+          : `${nome} LDR: indisponivel`,
+      );
     }
     if (tk) {
       partes.push(

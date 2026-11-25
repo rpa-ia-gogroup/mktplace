@@ -38,6 +38,11 @@ import { dreTool } from "./dre-contract.ts";
 import { estoqueTool } from "./tools-estoque.ts";
 import { expedicaoTool } from "./tools-expedicao.ts";
 import { precosTool } from "./tools-precos.ts";
+import { cxTool } from "./tools-cx.ts";
+import { hojeTool } from "./tools-hoje.ts";
+import { metasTool } from "./tools-metas.ts";
+import { performanceContasTool } from "./tools-performance-contas.ts";
+import { slowMovingTool } from "./tools-slow-moving.ts";
 import {
   brandsContract, canaisContract, healthContract, monthBoundsOf, overviewContract,
   overviewFreshnessContract, parseUpstream, productKey, produtosMlContract,
@@ -1038,7 +1043,7 @@ export const regioesTool: OracleTool = {
 };
 
 /**
- * As nove tools registradas: cinco do MVP + tres operacionais (MCP-COVERAGE-2)
+ * As quatorze tools registradas: cinco do MVP + tres operacionais (MCP-COVERAGE-2)
  * + a DRE (`dre-contract.ts`, ativada na T-0080 P2 em 11/11/2026).
  */
 export const ORACLE_TOOLS: readonly OracleTool[] = [
@@ -1051,4 +1056,9 @@ export const ORACLE_TOOLS: readonly OracleTool[] = [
   estoqueTool,
   precosTool,
   dreTool,
+  hojeTool,
+  metasTool,
+  performanceContasTool,
+  cxTool,
+  slowMovingTool,
 ];
