@@ -216,7 +216,7 @@ def test_moeda_restrita_a_brl():
 
 def test_dominio_de_listing_status():
     bloco = _bloco(LISTING)
-    for estado in ("active", "paused", "under_review", "inactive"):
+    for estado in ("active", "paused", "under_review", "inactive", "closed"):
         assert f"'{estado}'" in bloco, estado
 
 

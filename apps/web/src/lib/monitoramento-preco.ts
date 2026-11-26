@@ -316,6 +316,7 @@ export const LISTING_STATUS_LABELS: Record<string, string> = {
   paused: "Pausado",
   under_review: "Em revisão",
   inactive: "Inativo",
+  closed: "Encerrado",
 };
 
 export function listingStatusLabel(status: string | null): string {

@@ -158,7 +158,7 @@ CREATE TABLE marts.fact_marketplace_listing_price_daily (
 
     -- Dominio observado na fonte: active, paused, under_review, inactive.
     CONSTRAINT ck_fmlpd_listing_status
-        CHECK (listing_status IN ('active', 'paused', 'under_review', 'inactive')),
+        CHECK (listing_status IN ('active', 'paused', 'under_review', 'inactive', 'closed')),
 
     -- Marcas com catalogo ML proprio comprovado (PMA-0): as 4 medidas na fonte.
     -- `apice` e `yenzah` NAO entram: nao possuem catalogo ML na Torre, e por isso
