@@ -38,9 +38,11 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chave cobre o recorte
   }, [chave]);
 
+  // 5o cartao: entre 480 e 1279px (2 colunas) ocupa a linha inteira em vez de ficar sozinho pela metade.
+  const W = "last:min-[480px]:col-span-2 xl:col-span-1";
   if (estado?.chave !== chave) {
     return (
-      <div className="h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4" role="status" aria-busy="true">
+      <div className={`${W} h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4`} role="status" aria-busy="true">
         <span className="sr-only">Carregando CMV…</span>
         <div className="h-3 w-24 rounded bg-raised" />
         <div className="mt-3 h-8 w-36 rounded bg-raised" />
@@ -49,6 +51,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
   }
   const c = estado.resp ? cartaoCmv(estado.resp, mes) : null;
   return (
+    <div className={W}>
     <CartaoIndicador
       rotulo="CMV / receita"
       icone={Boxes}
@@ -64,5 +67,6 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       ajuda={<InfoDica emControle texto={c?.dica ?? "CMV ÷ receita da DRE, o mesmo número da aba DRE."} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
     />
+    </div>
   );
 }

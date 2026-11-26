@@ -60,6 +60,8 @@ test("cartao usa a chamada da DRE, sem rota nova, e entra na faixa da Gerencial"
   assert.ok(card.includes('from "@/lib/dre-api"') && card.includes("fetchDre("));
   assert.ok(card.includes('cor="rgb(var(--tc-kpi-cmv))"'));
   assert.ok(!/\b0%/.test(card), "nenhum 0 fabricado");
+  assert.ok(card.includes('rotulo="CMV / receita"'), "rotulo sai em caixa alta: CMV / RECEITA");
+  assert.ok(card.includes('"last:min-[480px]:col-span-2 xl:col-span-1"'), "5o cartao nao fica sozinho pela metade em 2 colunas");
   assert.ok(ler("app/page.tsx").includes("extra={<CmvCard channels={filters.channels} brands={filters.brands}"));
   assert.ok((ler("app/globals.css").match(/--tc-kpi-cmv:/g) ?? []).length >= 2, "token claro e escuro");
 });
