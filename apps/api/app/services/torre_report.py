@@ -74,6 +74,11 @@ def brl(v: float) -> str:
     return "R$ " + f"{v:.0f}"
 
 
+def nome_marca(marca: str) -> str:
+    """'KOKESHI' -> 'Kokeshi', 'ÁPICE' -> 'Ápice' (Title Case no report)."""
+    return " ".join(p.capitalize() for p in ta.rotulo_marca(marca).split())
+
+
 def pct0(f: float) -> str:
     return f"{f * 100:.0f}%"
 
@@ -133,6 +138,19 @@ class LinhaMarca:
         return self.gmv / self.gmv_semana_passada - 1
 
 
+CRIT = ":red_circle:"
+ATEN = ":warning:"
+
+
+@dataclass
+class Achado:
+    """Um avanco ou problema. `marca` None = geral; `nivel` CRIT/ATEN nos problemas, vazio nos avancos.
+    O texto nao repete a marca: o report agrupa por ela."""
+    marca: Optional[str]
+    texto: str
+    nivel: str = ""
+
+
 @dataclass
 class Report:
     ontem: date
@@ -140,8 +158,8 @@ class Report:
     total: LinhaMarca
     #: (realizado do mes com meta, meta acumulada ate' ontem, meta do mes)
     mes: Optional[tuple[float, float, float]]
-    avancos: list[str] = field(default_factory=list)
-    problemas: list[str] = field(default_factory=list)
+    avancos: list[Achado] = field(default_factory=list)
+    problemas: list[Achado] = field(default_factory=list)
     notas: list[str] = field(default_factory=list)
     #: OPORTUNIDADES-1: as 3 de maior ganho (R$ em 30 dias) com a acao; vazio = secao some.
     oportunidades: list[str] = field(default_factory=list)
@@ -149,12 +167,8 @@ class Report:
 
 def linhas_oportunidades(itens: list[dict]) -> list[str]:
     """'1. *Acao* · Produto (Marca) · R$ 99,1 mil em 30 dias' para o report."""
-    return [f"{n}. *{o['acao']}* · {o['titulo']} ({ta.rotulo_marca(o['marca'])}) · {brl(o['valor_30d'])} em 30 dias"
+    return [f"{n}. *{o['acao']}* · {o['titulo']} ({nome_marca(o['marca'])}) · {brl(o['valor_30d'])} em 30 dias"
             for n, o in enumerate(itens, 1)]
-
-
-CRIT = ":red_circle:"
-ATEN = ":warning:"
 
 
 def compor_report(d: Dados) -> Report:
@@ -200,60 +214,59 @@ def compor_report(d: Dados) -> Report:
         mes = (real_mes, esperado, meta_mes)
 
     rep = Report(ontem, linhas, total, mes)
-    nome = ta.rotulo_marca
+    dia_sem = DIAS_SEMANA[semana.weekday()]
 
     # --- GMV e metas
     for x in linhas:
         if x.pct_meta_dia is not None:
             if x.pct_meta_dia >= 1:
-                rep.avancos.append(f"{nome(x.marca)} bateu a meta do dia ({pct0(x.pct_meta_dia)}).")
+                rep.avancos.append(Achado(x.marca, f"meta do dia {pct0(x.pct_meta_dia)}"))
             elif x.pct_meta_dia < META_DIA_CRITICO:
-                rep.problemas.append(f"{CRIT} {nome(x.marca)} fez {pct0(x.pct_meta_dia)} da meta do dia.")
+                rep.problemas.append(Achado(x.marca, f"Meta do dia {pct0(x.pct_meta_dia)}", CRIT))
             elif x.pct_meta_dia < META_DIA_ATENCAO:
-                rep.problemas.append(f"{ATEN} {nome(x.marca)} fez {pct0(x.pct_meta_dia)} da meta do dia.")
+                rep.problemas.append(Achado(x.marca, f"Meta do dia {pct0(x.pct_meta_dia)}", ATEN))
         v = x.var_semana
         if v is not None and v > ALTA_AVANCO:
-            rep.avancos.append(f"{nome(x.marca)} cresceu {variacao(v)} contra a "
-                               f"{DIAS_SEMANA[semana.weekday()]} passada.")
+            rep.avancos.append(Achado(x.marca, f"{variacao(v)} vs {dia_sem} passada"))
         elif v is not None and v < QUEDA_ATENCAO:
-            rep.problemas.append(f"{ATEN} {nome(x.marca)} caiu {variacao(v)} contra a "
-                                 f"{DIAS_SEMANA[semana.weekday()]} passada ({brl(x.gmv)} × "
-                                 f"{brl(x.gmv_semana_passada)}).")
+            rep.problemas.append(Achado(
+                x.marca, f"Queda {variacao(v)} vs {dia_sem} passada ({brl(x.gmv)} × {brl(x.gmv_semana_passada)})",
+                ATEN))
     if mes and mes[1] > 0:
         ritmo = mes[0] / mes[1]
         if ritmo >= 1:
-            rep.avancos.append(f"Mês no ritmo da meta ({pct0(ritmo)} do esperado até ontem).")
+            rep.avancos.append(Achado(None, f"Mês no ritmo da meta ({pct0(ritmo)} do esperado até ontem)"))
         elif ritmo < RITMO_ATENCAO:
-            rep.problemas.append(f"{ATEN} Mês abaixo do ritmo da meta ({pct0(ritmo)} do esperado até ontem).")
+            rep.problemas.append(Achado(
+                None, f"Mês abaixo do ritmo da meta ({pct0(ritmo)} do esperado até ontem)", ATEN))
 
     # --- carga atrasada: canal sem GMV ontem que vendia na semana passada
     for canal in canais:
         if soma(None, canal, [ontem]) <= 0 < soma(None, canal, [semana]):
-            rep.problemas.append(f"{ATEN} {ROTULO_CANAL_META[canal]} sem GMV ontem: "
-                                 "a carga pode estar atrasada.")
+            rep.problemas.append(Achado(
+                None, f"{ROTULO_CANAL_META[canal]} sem GMV ontem: a carga pode estar atrasada", ATEN))
 
     # --- LDR
     validas = [c for c in d.ldr.celulas if c.base >= ta.BASE_MINIMA]
-    for c in validas:
-        if c.faixa == ta.CRITICO:
-            rep.problemas.append(f"{CRIT} {ta.texto_celula(c)}")
-    for c in validas:
-        if c.faixa == ta.ATENCAO:
-            rep.problemas.append(f"{ATEN} {ta.texto_celula(c)}")
+    for faixa, nivel in ((ta.CRITICO, CRIT), (ta.ATENCAO, ATEN)):
+        for c in validas:
+            if c.faixa == faixa:
+                rep.problemas.append(Achado(c.marca, f"{ta.ROTULO_CANAL[c.canal]} · {ta.detalhe_celula(c)}", nivel))
     na_meta = sum(1 for c in validas if c.faixa == ta.DENTRO)
     if validas and na_meta:
-        rep.avancos.append(f"LDR na meta em {na_meta} de {len(validas)} contas.")
+        rep.avancos.append(Achado(None, f"LDR na meta em {na_meta} de {len(validas)} contas"))
     if d.ldr.indisponiveis:
         rep.notas.append("Sem LDR agora de: " + ", ".join(d.ldr.indisponiveis) + ".")
 
     # --- Kokeshi (performance oficial)
     for s in d.saude.sinais:
-        rep.problemas.append(f"{CRIT if s.nivel == ta.CRITICO else ATEN} {s.texto}")
+        rep.problemas.append(Achado(s.marca, f"{ta.ROTULO_CANAL[s.canal]} · {s.detalhe.rstrip('.')}",
+                                    CRIT if s.nivel == ta.CRITICO else ATEN))
     for canal in ta.CANAIS_SAUDE:
         ok = [m for m, c in d.saude.em_ordem if c == canal]
         if ok:
-            rep.avancos.append(f"Performance oficial em ordem {ta.NO_CANAL[canal]}: "
-                               + ", ".join(nome(m) for m in ok) + ".")
+            rep.avancos.append(Achado(None, f"Performance oficial em ordem {ta.NO_CANAL[canal]}: "
+                                      + ", ".join(nome_marca(m) for m in ok)))
     if d.saude.indisponiveis:
         rep.notas.append("Performance oficial indisponível agora: "
                          + ", ".join(d.saude.indisponiveis) + ".")
@@ -265,6 +278,69 @@ def compor_report(d: Dados) -> Report:
 def divisao(x: LinhaMarca) -> str:
     """'Shopee R$ 200,0 mil + Meli R$ 100,0 mil'."""
     return " + ".join(f"{ROTULO_CURTO[c]} {brl(x.por_canal.get(c, 0.0))}" for c in ROTULO_CURTO)
+
+
+#: Folga sob os 3000 da section para o cabecalho "Problemas (n)".
+LIMITE_GRUPO = sb.MAX_SECAO - 200
+
+
+def _linhas_avancos(rep: Report) -> list[str]:
+    """Uma linha por marca juntando o que avancou; as gerais (ritmo, LDR, performance) por ultimo."""
+    ordem = {x.marca: i for i, x in enumerate(rep.linhas)}
+    por_marca: dict[str, list[str]] = {}
+    for a in rep.avancos:
+        if a.marca:
+            por_marca.setdefault(a.marca, []).append(a.texto)
+    linhas = [f"• *{nome_marca(m)}*: " + " · ".join(t) for m, t in sorted(por_marca.items(), key=lambda kv: ordem.get(kv[0], 99))]
+    return linhas + [f"• {a.texto}" for a in rep.avancos if not a.marca]
+
+
+def _grupos_problemas(rep: Report) -> list[str]:
+    """Um texto por marca: '*Marca*' e uma linha por problema, 🔴 antes de ⚠️. Mais 🔴 primeiro; gerais por ultimo."""
+    ordem = {x.marca: i for i, x in enumerate(rep.linhas)}
+    grupos: dict[Optional[str], list[Achado]] = {}
+    for a in rep.problemas:
+        grupos.setdefault(a.marca, []).append(a)
+
+    def chave(m: Optional[str]) -> tuple:
+        itens = grupos[m]
+        return (m is None, -sum(a.nivel == CRIT for a in itens), -len(itens), ordem.get(m, 99))
+
+    pedacos: list[str] = []
+    for m in sorted(grupos, key=chave):
+        cab = f"*{nome_marca(m) if m else 'Geral'}*"
+        atual = [cab]
+        for a in sorted(grupos[m], key=lambda a: a.nivel != CRIT):
+            linha = f"{a.nivel} {a.texto}"
+            if len(atual) > 1 and len("\n".join(atual + [linha])) > LIMITE_GRUPO:  # marca gigante: continua na section seguinte
+                pedacos.append("\n".join(atual))
+                atual = [f"{cab} (cont.)"]
+            atual.append(linha)
+        pedacos.append("\n".join(atual))
+    return pedacos
+
+
+def _secoes(cabecalho: str, grupos: list[str], sep: str = "\n\n") -> list[dict]:
+    """Cabecalho + grupos em sections de ate' 3000 caracteres; um grupo nunca e' partido."""
+    secoes: list[dict] = []
+    atual, tam = [cabecalho], len(cabecalho)
+    for g in grupos:
+        if atual and tam + len(sep) + len(g) > sb.MAX_SECAO:
+            secoes.append(sb.secao(sep.join(atual)))
+            atual, tam = [], 0
+        atual.append(g)
+        tam += len(sep) + len(g)
+    secoes.append(sb.secao(sep.join(atual)))
+    return secoes
+
+
+def _contagem(rep: Report) -> str:
+    """'9 avanços · 18 problemas · 5 marcas' (marcas citadas nos dois)."""
+    marcas = {a.marca for a in rep.avancos + rep.problemas if a.marca}
+    partes = [_plural(len(rep.avancos), "avanço", "avanços"), _plural(len(rep.problemas), "problema", "problemas")]
+    if marcas:
+        partes.append(_plural(len(marcas), "marca", "marcas"))
+    return " · ".join(partes)
 
 
 def montar_mensagem(rep: Report) -> str:
@@ -290,7 +366,7 @@ def montar_mensagem(rep: Report) -> str:
 
     linhas.append("")
     linhas.append("*GMV de ontem por marca*")
-    linhas += [f"• {ta.rotulo_marca(x.marca)}: {detalhe(x)}" for x in rep.linhas]
+    linhas += [f"• {nome_marca(x.marca)}: {detalhe(x)}" for x in rep.linhas]
     linhas.append(f"• *Total: {detalhe(s)}*")
     if rep.mes:
         real, esperado, meta = rep.mes
@@ -307,9 +383,10 @@ def montar_mensagem(rep: Report) -> str:
         linhas += rep.oportunidades
     linhas.append("")
     linhas.append(f"*:white_check_mark: Avanços ({len(rep.avancos)})*")
-    linhas += [f"• {a}" for a in rep.avancos] or ["• Nenhum destaque ontem."]
+    linhas += _linhas_avancos(rep) or ["• Nenhum destaque ontem."]
+    linhas.append("")
     linhas.append(f"*:warning: Problemas ({len(rep.problemas)})*")
-    linhas += [f"• {p}" for p in rep.problemas] or ["• Nenhum problema. :tada:"]
+    linhas += ["\n\n".join(_grupos_problemas(rep)) or "• Nenhum problema. :tada:"]
     if rep.notas:
         linhas.append("_" + " ".join(rep.notas) + "_")
     linhas.append(f"<{URL_DA_TORRE}|Abrir a Torre>")
@@ -352,7 +429,7 @@ def montar_blocos(rep: Report) -> sb.Mensagem:
 
     blocos: list[dict] = [
         sb.titulo(f":sunrise: Bom dia! Resumo de ontem · {dia_sem}, {o:%d/%m}"),
-        sb.nota(f"*{resumo}*"),
+        sb.nota(f"*{_contagem(rep)}*"),
         sb.campos(*numeros),
     ]
     evento = metas_curva.evento_do_dia(o)
@@ -365,7 +442,7 @@ def montar_blocos(rep: Report) -> sb.Mensagem:
     blocos.append(sb.divisor())
     linhas = ["*GMV por marca*"]
     for x in rep.linhas:
-        partes = [f"*{ta.rotulo_marca(x.marca)}*  {brl(x.gmv)} ({divisao(x)})"]
+        partes = [f"*{nome_marca(x.marca)}*  {brl(x.gmv)} ({divisao(x)})"]
         if x.pct_meta_dia is not None:
             partes.append(f"{pct0(x.pct_meta_dia)} da meta")
         if x.var_semana is not None:
@@ -378,10 +455,11 @@ def montar_blocos(rep: Report) -> sb.Mensagem:
         blocos.append(sb.secao(":bulb: *Maiores oportunidades (R$ em 30 dias)*\n" + "\n".join(rep.oportunidades),
                                sb.botao("Ver na Torre", URL_DA_TORRE)))
     blocos.append(sb.divisor())
-    blocos.append(sb.secao(f":white_check_mark: *Avanços ({len(rep.avancos)})*\n"
-                           + ("\n".join(f"• {a}" for a in rep.avancos) or "• Nenhum destaque ontem.")))
-    blocos.append(sb.secao(f":warning: *Problemas ({len(rep.problemas)})*\n"
-                           + ("\n".join(rep.problemas) or ":tada: Nenhum problema.")))
+    blocos += _secoes(f":white_check_mark: *Avanços ({len(rep.avancos)})*",
+                      _linhas_avancos(rep) or ["• Nenhum destaque ontem."], "\n")
+    blocos.append(sb.divisor())
+    blocos += _secoes(f":warning: *Problemas ({len(rep.problemas)})*",
+                      _grupos_problemas(rep) or [":tada: Nenhum problema."])
     if rep.notas:
         blocos.append(sb.nota(" ".join(rep.notas)))
     blocos.append(sb.divisor())

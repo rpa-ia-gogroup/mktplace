@@ -199,11 +199,16 @@ def ler_ldr(db, agora: datetime) -> LeituraLdr:
     return leitura
 
 
-def texto_celula(c: CelulaLdr) -> str:
+def detalhe_celula(c: CelulaLdr) -> str:
+    """'LDR 11,0% (9 de 82 pedidos; meta 3,0%, teto 6,0%)', sem marca nem canal."""
     meta, teto = META_TETO[c.canal]
     extra = f"; {c.parcial}" if c.parcial else ""
-    return (f"{rotulo_marca(c.marca)} {NO_CANAL[c.canal]}: LDR {pct(c.taxa)} "
+    return (f"LDR {pct(c.taxa)} "
             f"({inteiro(c.atrasados)} de {inteiro(c.base)} pedidos; meta {pct(meta)}, teto {pct(teto)}{extra})")
+
+
+def texto_celula(c: CelulaLdr) -> str:
+    return f"{rotulo_marca(c.marca)} {NO_CANAL[c.canal]}: {detalhe_celula(c)}"
 
 
 def itens_ldr_criticos(leitura: LeituraLdr, dia: date) -> list[Item]:
@@ -225,6 +230,11 @@ class SinalSaude:
     codigo: str
     texto: str
     dia: Optional[date]
+
+    @property
+    def detalhe(self) -> str:
+        """O texto sem o 'Marca no Canal: ' do comeco (o report agrupa por marca)."""
+        return self.texto.removeprefix(f"{rotulo_marca(self.marca)} {NO_CANAL[self.canal]}: ")
 
     @property
     def chave(self) -> str:
