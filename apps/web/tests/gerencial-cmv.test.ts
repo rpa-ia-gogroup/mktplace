@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, mesPorExtenso, NOTA_ESTIMATIVA, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
+import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, mesPorExtenso, LEGENDA_CMV, NOTA_BLACK, NOTA_METODO, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
 import type { DreResponse } from "../src/lib/dre.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -112,15 +112,20 @@ test("periodo curto do filtro", () => {
 test("notas: valor da API, periodo do filtro, 'inclui estimativa (X%)' e p.p. contra o anterior", () => {
   const c = cartaoCmvNotas(nf(), null, "2026-11-26");
   assert.equal(c.valor, "27,4%");
-  assert.equal(c.legenda, "Pelas notas · 13,4% estimado");
-  assert.ok(c.dica.includes(NOTA_ESTIMATIVA) && c.dica.includes("ML 26,5%"));
-  assert.ok(NOTA_ESTIMATIVA.includes("estimativa = CMV % das notas dos últimos 3 dias × vendas de hoje; em dia de desconto forte (Black) tende a ficar abaixo do real"));
+  // Sob o numero, so' "CMV estimado"; % estimado, metodo e aviso de Black no ⓘ.
+  assert.equal(c.legenda, "CMV estimado");
+  assert.equal(LEGENDA_CMV, "CMV estimado");
+  assert.ok(c.dica.startsWith("13,4% do período estimado."));
+  assert.ok(c.dica.includes(NOTA_METODO) && c.dica.includes(NOTA_BLACK) && c.dica.includes("ML 26,5%"));
+  assert.equal(NOTA_METODO, "Método: notas fiscais; dias sem nota completa estimados pelo CMV % das notas dos últimos 3 dias × vendas.");
+  assert.ok(NOTA_BLACK.includes("Black"));
   assert.ok(!c.dica.includes("notas de hoje"));
   assert.ok(Math.abs(c.deltaPp! - 2.18) < 1e-9);
   assert.equal(c.selo, null);
   // sem estimativa: so' o periodo; sem anterior: sem comparacao (nunca 0)
   const fechado = cartaoCmvNotas(nf({ estimado_pct: null, anterior_cmv_pct: null }), null, "2026-11-26");
-  assert.equal(fechado.legenda, "Pelas notas");
+  assert.equal(fechado.legenda, "CMV estimado");
+  assert.ok(fechado.dica.startsWith("Período todo pelas notas, sem estimativa."));
   assert.equal(fechado.deltaPp, null);
 });
 
@@ -135,15 +140,20 @@ test("notas: Parcial abaixo de 98%; 'ate' = hoje avisa que a nota de hoje ainda 
 test("notas: sem CMV, o motivo real; nunca 0", () => {
   const s = cartaoCmvNotas(nf({ cmv_pct: null, receita: null, cobertura: null, estimado_pct: null, por_canal: [] }), null, "2026-11-26");
   assert.equal(s.valor, null);
-  assert.equal(s.legenda, "Pelas notas · sem notas no recorte");
+  assert.equal(s.legenda, "Sem notas no recorte");
   const semCusto = cartaoCmvNotas(nf({ cmv_pct: null, cobertura: 0, por_canal: [] }), null, "2026-11-26");
-  assert.equal(semCusto.legenda, "Pelas notas · sem notas com custo");
+  assert.equal(semCusto.legenda, "Sem notas com custo");
 });
 
-test("o mes fechado da DRE: 2a linha visivel e ⓘ", () => {
+test("o mes fechado da DRE vai so' para o ⓘ (a 2a linha visivel saiu)", () => {
   const t = textoDre(resp({ ...EXTRAP, cobertura: 0.9978 }), "2026-10");
   assert.equal(t, "Mês fechado na DRE (Outubro/2026): 25,3%. Mês ainda aberto na DRE: fecha em 31/12/2026; o valor pode mudar com devoluções.");
-  assert.ok(cartaoCmvNotas(nf(), t, "2026-11-26").dica.endsWith(t!));
+  const linha = linhaDre(resp({ ...EXTRAP, cobertura: 0.9978 }), "2026-10");
+  const d = cartaoCmvNotas(nf(), linha, "2026-11-26");
+  assert.ok(d.dica.includes("Outubro fechado (DRE): 25,3%.") && d.legenda === "CMV estimado");
+  const card = ler("src/components/gerencial/CmvCard.tsx");
+  assert.ok(!card.includes('{fechado && <span className="block">{fechado}</span>}'), "a 2a linha da DRE saiu do cartao");
+  assert.ok(card.includes("cartaoCmvNotas(estado.nf, fechado, hoje)"));
   assert.equal(textoDre(null, "2026-10"), null);
   assert.equal(linhaDre(resp({ ...EXTRAP, cobertura: 0.9978 }), "2026-10"), "Outubro fechado (DRE): 25,3%");
   assert.equal(linhaDre(null, "2026-10"), null);
