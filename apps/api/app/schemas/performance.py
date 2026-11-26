@@ -1201,6 +1201,8 @@ class CmvNotasBloco(BaseModel):
     cobertura: Optional[float] = None
     #: cobertura abaixo de `cobertura_minima`.
     parcial: bool = False
+    #: Parte da receita (0..1) que veio de GMV estimado (dias sem nota completa). None = nada estimado.
+    estimado_pct: Optional[float] = None
 
 
 class CmvNotasCanal(CmvNotasBloco):
@@ -1208,11 +1210,15 @@ class CmvNotasCanal(CmvNotasBloco):
 
 
 class CmvNotasResponse(CmvNotasBloco):
-    #: Mes lido, YYYY-MM.
-    mes: str
-    #: Ultima data de NF na base (YYYY-MM-DD). None = sem linha no recorte.
-    ate: Optional[str] = None
-    #: Ultima carga da base (BRT, YYYY-MM-DDTHH:MM).
-    carregado_em: Optional[str] = None
+    date_from: str
+    date_to: str
+    #: Ultima data de NF com receita no intervalo lido (YYYY-MM-DD).
+    ultima_nf: Optional[str] = None
     cobertura_minima: float
+    #: Dias do periodo com alguma marca x canal estimada.
+    dias_estimados: list[str] = []
     por_canal: list[CmvNotasCanal]
+    #: CMV % do periodo anterior (so' com compare). None = sem comparacao, nunca 0.
+    anterior_cmv_pct: Optional[float] = None
+    compare_date_from: Optional[str] = None
+    compare_date_to: Optional[str] = None

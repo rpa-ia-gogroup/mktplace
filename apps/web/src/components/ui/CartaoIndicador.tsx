@@ -50,7 +50,7 @@ export default function CartaoIndicador({
   /** Valor ja' formatado (texto anima na troca; um no' entra como esta'); `null` = indisponivel (a legenda diz o motivo). */
   valor: ReactNode | null;
   /** Indicador que NUNCA se soma (ACOS por canal): um numero por canal no lugar do numero unico. */
-  valores?: { rotulo: string; valor: string | null }[] | null;
+  valores?: { rotulo: string; valor: string | null; delta?: { texto: string; tom: TomPilula } | null }[] | null;
   pilula?: { texto: ReactNode; tom: TomPilula } | null;
   /** 0..1 (passa de 1 quando supera a meta; a barra enche e para). */
   progresso?: number | null;
@@ -95,6 +95,12 @@ export default function CartaoIndicador({
               <span className={`text-[22px] font-bold leading-tight tracking-tight ${v.valor ? "text-ink" : "text-ink-faint"}`}>
                 {v.valor ? <NumeroAnimado texto={v.valor} /> : "—"}
               </span>
+              {v.delta && (
+                <span className={`self-center whitespace-nowrap rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${PILULA[v.delta.tom]}`}>
+                  {v.delta.texto}
+                  <span className="sr-only"> vs anterior</span>
+                </span>
+              )}
             </span>
           ))}
         </span>

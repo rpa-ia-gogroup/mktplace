@@ -93,6 +93,14 @@ def _aquecer_cx_tiktok() -> None:
     cx_tiktok_service.iniciar_rotina()
 
 
+@app.on_event("startup")
+def _aquecer_cmv_notas() -> None:
+    """Mantem o CMV pelas notas do periodo padrao da Gerencial quente (Metabase em fila)."""
+    from app.services import cmv_notas_service
+
+    cmv_notas_service.iniciar_rotina()
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     """LIVENESS: o processo esta de pe. NAO diz nada sobre o banco.

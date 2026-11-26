@@ -511,25 +511,27 @@ def produtos_shopee_anuncios_summary(
 
 @router.get("/cmv-notas", response_model=CmvNotasResponse)
 def cmv_notas(
-    channels: str = Query("all", description="Canal(is): 'all', isolado ou lista separada por virgula."),
-    brands: Optional[str] = Query(None, description="Marca(s) do filtro da Gerencial, separadas por virgula. Omitido = todas."),
-    date_to: Optional[date] = Query(None, description="Fim do periodo da Gerencial; o mes dele e' o lido. Omitido = mes corrente."),
+    filters: ResolvedFilters = Depends(filters_query),
+    base: BaseVendas = Query("pagos", description=BASE_QUERY_DESCRIPTION),
+    db: Session = Depends(get_db),
 ):
-    """CMV do mes ate ontem pelas notas fiscais (silver.fct_gobeaute_custo_produto_diario)."""
-    try:
-        canonical = perf_svc.normalize_marketplace_param(channels)
-    except ValueError as exc:
-        raise HTTPException(422, str(exc))
-    canais = [{1: "tiktok", 2: "ml", 3: "shopee"}[i] for i in perf_svc.parse_marketplace_param(canonical) if i in (1, 2, 3)]
-    marcas = [b.strip() for b in (brands or "").split(",") if b.strip()]
-    invalidas = [b for b in marcas if b not in cmv_notas_svc.MARCAS]
-    if invalidas:
-        raise HTTPException(422, f"Marca(s) invalida(s): {', '.join(invalidas)}.")
+    """CMV / receita pelas notas fiscais no periodo do filtro (gold.fct_nf_vendas_unificada),
+    com estimativa dos dias sem nota completa (GMV do dia x CMV % das NFs dos ultimos 3 dias fechados).
+    Regra completa em `cmv_notas_service`."""
+    canais = [{1: "tiktok", 2: "ml", 3: "shopee"}[i] for i in filters.mkt_ids if i in (1, 2, 3)]
+    sessao = _require_db(db)
+    comp = (filters.compare_period.start, filters.compare_period.end) if filters.compare_period else None
 
     def consultar(sql, params):
-        return datamart_leitura.consultar(sql, params, ttl_s=cmv_notas_svc.TTL_S)
+        return datamart_leitura.consultar(sql, params, timeout_metabase=cmv_notas_svc.TIMEOUT_METABASE_S,
+                                          ttl_s=cmv_notas_svc.TTL_S)
+
+    def ler_gmv(de, ate):
+        return perf_svc.gmv_dia_marca_canal(sessao, de, ate, [cmv_notas_svc.MKT_ID[c] for c in canais],
+                                            filters.brands, base)
     try:
-        return cmv_notas_svc.get_cmv_notas(consultar, canais, marcas, today_brt(), date_to)
+        return cmv_notas_svc.get_cmv_notas(consultar, ler_gmv, canais, filters.brands, filters.period.start,
+                                           filters.period.end, today_brt(), comp)
     except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
         logger.exception("cmv-notas falhou")
         raise HTTPException(503, "Base de custo das notas indisponivel.") from exc

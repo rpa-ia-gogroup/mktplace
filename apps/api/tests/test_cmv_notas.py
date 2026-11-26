@@ -1,11 +1,13 @@
-"""CMV do mes ate ontem pelas notas (card CMV / RECEITA da Gerencial).
+"""CMV / RECEITA pelas notas no periodo do filtro, com estimativa dos dias sem nota.
 
-CMV % = CMV / receita COM custo; receita sem custo vira cobertura; < 98% = parcial;
-sem dado = None, nunca 0. Uma consulta so', no Data Mart.
+Regra em `cmv_notas_service`: CMV % = CMV / receita com custo; cobertura < 98% =
+parcial; dia incompleto (>= hoje - 2, ou NF < 70% do GMV) usa GMV x razao das
+NFs dos 30 dias fechados; sem razao = receita sem custo; sem dado = None.
+UMA consulta ao Data Mart cobrindo periodo, comparativo e janela da razao.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi.testclient import TestClient
 
@@ -13,81 +15,145 @@ from app.main import app
 from app.routers import performance as perf_router
 from app.services import cmv_notas_service as svc
 from app.services import datamart_leitura
+from app.services import performance_service as perf_svc
 
 HOJE = date(2026, 11, 26)
 
 
-def _l(plat, cmv, rcc, rec, ate="2026-11-25"):
-    return {"plataforma": plat, "cmv": cmv, "receita_com_custo": rcc, "receita": rec,
-            "ate": ate, "carregado": "2026-11-26T10:01"}
+def _nf(dia, plat, marca, cmv, rcc, rec):
+    return {"dia": dia, "plataforma": plat, "marca": marca, "cmv": cmv, "receita_com_custo": rcc, "receita": rec}
 
 
-LINHAS = [
-    _l("shopee", 2_241_039.86, 8_215_180.27, 8_220_370.27),
-    _l("mercadolivre", 1_389_375.20, 5_457_123.81, 6_049_435.82),
-    _l("tiktokshop", 4_788_979.34, 13_688_922.51, 13_692_856.67, ate="2026-11-24"),
-]
+def _dias(de, ate):
+    d = de
+    while d <= ate:
+        yield d.isoformat()
+        d += timedelta(days=1)
 
 
-def test_cmv_sobre_receita_com_custo_cobertura_e_parcial():
+#: Historico na janela da razao (25/10..19/11): kokeshi ML com CMV 25% da receita com custo.
+RAZAO = [_nf(d, "mercadolivre", "kokeshi", 250.0, 1000.0, 1000.0) for d in _dias(date(2026, 10, 25), date(2026, 11, 19))]
+
+
+def test_janela_da_razao_e_intervalo_unico():
+    assert svc.janela_razao(HOJE) == (date(2026, 10, 25), date(2026, 11, 23))  # 30 dias, ate hoje - 3
+    # periodo 01-25/11, comparativo 07-31/10: a leitura cobre tudo numa consulta so'
+    assert svc.intervalo_leitura([(date(2026, 11, 1), date(2026, 11, 25)), (date(2026, 10, 7), date(2026, 10, 31))], HOJE) == (
+        date(2026, 10, 7), date(2026, 11, 25))
+
+
+def test_dias_fechados_usam_a_nota_e_recentes_a_estimativa():
+    nf = [
+        _nf("2026-11-20", "mercadolivre", "kokeshi", 300.0, 1000.0, 1000.0),   # fechado e completo: nota
+        _nf("2026-11-21", "mercadolivre", "kokeshi", 100.0, 400.0, 400.0),     # fechado, NF 40% do GMV: estima
+        _nf("2026-11-25", "mercadolivre", "kokeshi", 50.0, 100.0, 100.0),      # 2 ultimos dias: estima
+    ] + RAZAO
+    gmv = {("2026-11-20", "ml", "kokeshi"): 1000.0, ("2026-11-21", "ml", "kokeshi"): 1000.0,
+           ("2026-11-25", "ml", "kokeshi"): 2000.0}
     chamadas = []
-    r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or LINHAS, ["tiktok", "ml", "shopee"], None, HOJE)
-    assert len(chamadas) == 1
-    p = chamadas[0]
-    assert p["mes"] == date(2026, 11, 1) and p["plataformas"] == ["tiktokshop", "mercadolivre", "shopee"]
-    assert "by_samia" in p["marcas"] and "denavita" not in p["marcas"]  # mesmo escopo do filtro da Gerencial
-    por = {c["canal"]: c for c in r["por_canal"]}
-    assert por["shopee"]["cmv_pct"] == 27.28 and por["shopee"]["parcial"] is False
-    assert por["tiktok"]["cmv_pct"] == 34.98
-    # ML: 25,46% sobre a receita COM custo (22,97% seria sobre a receita toda); 90,2% de cobertura = parcial
-    assert por["ml"]["cmv_pct"] == 25.46 and por["ml"]["cobertura"] == 0.9021 and por["ml"]["parcial"] is True
-    assert r["cmv_pct"] == 30.77 and r["cobertura"] == 0.9785 and r["parcial"] is True
-    assert r["mes"] == "2026-11" and r["ate"] == "2026-11-25" and r["carregado_em"] == "2026-11-26T10:01"
+    r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or nf, lambda de, ate: gmv, ["ml"], None,
+                          date(2026, 11, 20), date(2026, 11, 25), HOJE)
+    assert len(chamadas) == 1 and chamadas[0]["plataformas"] == ["mercadolivre"]
+    assert "by_samia" in chamadas[0]["marcas"] and "denavita" not in chamadas[0]["marcas"]
+    # razao = ultimos 3 dias FECHADOS: 21/11 fica fora (NF 40% do GMV); entram 20, 19 e 18/11
+    razao = (300 + 250 + 250) / 3000
+    # 20/11 nota (300/1000) + 21/11 estimado (1000 x razao) + 25/11 estimado (2000 x razao)
+    assert abs(r["cmv"] - (300 + 3000 * razao)) < 0.01 and r["receita_com_custo"] == 4000
+    assert r["cmv_pct"] == round((300 + 3000 * razao) / 4000 * 100, 2)
+    assert r["estimado_pct"] == 0.75 and r["dias_estimados"] == ["2026-11-21", "2026-11-25"]
+    assert r["parcial"] is False and r["ultima_nf"] == "2026-11-25"
 
 
-def test_recorte_de_marca_canal_e_mes():
+def test_razao_dos_3_dias_fechados_e_reserva_de_30_dias():
+    nf = [_nf("2026-11-23", "shopee", "kokeshi", 40.0, 100.0, 100.0),   # 3 ultimos fechados: 40%
+          _nf("2026-11-22", "shopee", "kokeshi", 40.0, 100.0, 100.0),
+          _nf("2026-11-21", "shopee", "kokeshi", 40.0, 100.0, 100.0),
+          _nf("2026-11-01", "shopee", "kokeshi", 10.0, 100.0, 100.0),   # mais antigo: fora da razao de 3 dias
+          # apice: so' dias incompletos (NF < 70% do GMV) na janela -> reserva = 30 dias inteiros
+          _nf("2026-11-10", "shopee", "apice", 30.0, 100.0, 100.0),
+          _nf("2026-11-11", "shopee", "apice", 10.0, 100.0, 100.0)]
+    gmv = {("2026-11-10", "shopee", "apice"): 1000.0, ("2026-11-11", "shopee", "apice"): 1000.0}
+    r = svc.razoes(svc.indexar_nf(nf), gmv, HOJE)
+    assert r[("shopee", "kokeshi")] == 0.4
+    assert r[("shopee", "apice")] == 0.2
+    assert ("ml", "kokeshi") not in r      # sem nota: sem razao (nunca 0)
+
+
+def test_sem_razao_vira_receita_sem_custo_nunca_zero_e_parcial():
+    # kokeshi ML tem historico (25%); apice ML nao tem nota em 30 dias
+    gmv = {("2026-11-24", "ml", "kokeshi"): 1000.0, ("2026-11-24", "ml", "apice"): 100.0}
+    r = svc.get_cmv_notas(lambda q, p: RAZAO, lambda de, ate: gmv, ["ml"], None,
+                          date(2026, 11, 24), date(2026, 11, 25), HOJE)
+    # apice sem razao: o GMV entra so' na receita (cobertura 1000/1100), nunca como custo zero
+    assert r["cmv_pct"] == 25.0 and r["cobertura"] == 0.9091 and r["parcial"] is True
+    # sem nada: sem dado
+    vazio = svc.get_cmv_notas(lambda q, p: [], lambda de, ate: {}, ["shopee"], None,
+                              date(2026, 11, 20), date(2026, 11, 25), HOJE)
+    assert vazio["cmv_pct"] is None and vazio["receita"] is None and vazio["por_canal"] == []
+
+
+def test_sem_gmv_na_torre_fica_a_nota_e_comparativo_na_mesma_leitura():
+    nf = [_nf("2026-11-25", "tiktokshop", "yenzah", 30.0, 100.0, 100.0),
+          _nf("2026-10-10", "tiktokshop", "yenzah", 20.0, 100.0, 100.0)]
     chamadas = []
-    r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or [LINHAS[0]], ["shopee"], ["kokeshi", "by-samia"],
-                          HOJE, date(2026, 10, 31))
-    assert chamadas[0]["marcas"] == ["kokeshi", "by_samia"] and chamadas[0]["plataformas"] == ["shopee"]
-    assert chamadas[0]["mes"] == date(2026, 10, 1) and r["mes"] == "2026-10"
-    assert [c["canal"] for c in r["por_canal"]] == ["shopee"]
-
-
-def test_sem_dado_nunca_zero():
-    r = svc.get_cmv_notas(lambda q, p: [], ["ml"], None, HOJE)
-    assert r["cmv_pct"] is None and r["cobertura"] is None and r["parcial"] is False and r["ate"] is None
-    # receita sem nenhum custo: sem CMV %, cobertura 0
-    r = svc.get_cmv_notas(lambda q, p: [_l("mercadolivre", None, None, 500.0)], ["ml"], None, HOJE)
-    assert r["cmv_pct"] is None and r["cobertura"] is None
-    # so' TikTok... fora do mapa nao consulta
-    chamadas = []
-    svc.get_cmv_notas(lambda q, p: chamadas.append(p) or [], [], None, HOJE)
-    assert chamadas == []
+    r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or nf, lambda de, ate: {}, ["tiktok"], ["yenzah"],
+                          date(2026, 11, 24), date(2026, 11, 25), HOJE, (date(2026, 10, 1), date(2026, 10, 15)))
+    assert len(chamadas) == 1 and chamadas[0]["inicio"] == date(2026, 10, 1) and chamadas[0]["fim_exclusivo"] == date(2026, 11, 26) and chamadas[0]["marcas"] == ["yenzah"]
+    assert r["cmv_pct"] == 30.0 and r["estimado_pct"] is None   # marca menor: nota, sem estimativa
+    assert r["anterior_cmv_pct"] == 20.0 and r["compare_date_from"] == "2026-10-01"
 
 
 client = TestClient(app)
 ROTA = "/api/v1/performance/cmv-notas"
 
 
-def test_rota_valida_e_503_sem_vazar(monkeypatch):
+def test_rota_segue_o_filtro_e_503_sem_vazar(monkeypatch):
     chamadas = []
 
     def consultar(sql, params, **kw):
         chamadas.append((params, kw))
-        return LINHAS
+        return RAZAO
     monkeypatch.setattr(datamart_leitura, "consultar", consultar)
     monkeypatch.setattr(perf_router, "today_brt", lambda: HOJE)
-    r = client.get(ROTA, params={"channels": "ml,shopee", "brands": "kokeshi,by-samia"})
+    monkeypatch.setattr(perf_router, "_require_db", lambda db: object())
+    monkeypatch.setattr(perf_svc, "gmv_dia_marca_canal", lambda *a, **k: {})
+    r = client.get(ROTA, params={"channels": "ml", "date_from": "2026-11-01", "date_to": "2026-11-23", "compare": "true"})
     assert r.status_code == 200, r.text
-    assert chamadas[-1][0]["plataformas"] == ["mercadolivre", "shopee"]
-    assert chamadas[-1][1]["ttl_s"] == svc.TTL_S
-    assert [c["canal"] for c in r.json()["por_canal"]] == ["ml", "shopee"]
-    assert client.get(ROTA, params={"brands": "gocase"}).status_code == 422
-    assert client.get(ROTA, params={"channels": "amazonx"}).status_code == 422
+    body = r.json()
+    assert body["date_from"] == "2026-11-01" and body["cmv_pct"] == 25.0
+    # comparativo 01-23/10 sem nota: sem comparacao, nunca 0
+    assert body["compare_date_from"] == "2026-10-01" and body["anterior_cmv_pct"] is None
+    assert chamadas[-1][1] == {"timeout_metabase": svc.TIMEOUT_METABASE_S, "ttl_s": svc.TTL_S}
 
     def quebra(sql, params, **kw):
         raise RuntimeError("senha=xyz")
     monkeypatch.setattr(datamart_leitura, "consultar", quebra)
-    r = client.get(ROTA)
+    r = client.get(ROTA, params={"channels": "ml", "date_from": "2026-11-01", "date_to": "2026-11-23"})
     assert r.status_code == 503 and "xyz" not in r.text
+
+
+def test_aquecimento_le_a_mesma_chave_que_a_rota_no_periodo_padrao(monkeypatch):
+    """A rotina aquece exatamente o que a Gerencial pede ao abrir ("Mes atual" + comparativo)."""
+    assert svc.periodo_padrao(HOJE) == (date(2026, 11, 1), date(2026, 11, 25))
+    assert svc.periodo_padrao(date(2026, 12, 1)) == (date(2026, 11, 1), date(2026, 11, 30))
+    p = svc.params_padrao(HOJE)
+    # comparativo 01-25/10 + janela da razao: uma leitura de 01/10 a 25/11
+    assert p == {"inicio": date(2026, 10, 1), "fim_exclusivo": date(2026, 11, 26),
+                 "plataformas": ["tiktokshop", "mercadolivre", "shopee"], "marcas": list(svc.MARCAS.values())}
+    chamadas = []
+    monkeypatch.setattr(perf_router, "today_brt", lambda: HOJE)
+    monkeypatch.setattr(perf_router, "_require_db", lambda db: object())
+    monkeypatch.setattr(perf_svc, "gmv_dia_marca_canal", lambda *a, **k: {})
+    monkeypatch.setattr(datamart_leitura, "consultar", lambda sql, params, **kw: chamadas.append(params) or [])
+    client.get(ROTA, params={"channels": "all", "date_from": "2026-11-01", "date_to": "2026-11-25", "compare": "true"})
+    assert chamadas == [p]
+
+
+def test_aquecer_grava_no_cache_mesmo_com_entrada_valida(monkeypatch):
+    datamart_leitura.limpar_cache()
+    leituras = iter([[{"x": 1}], [{"x": 2}]])
+    monkeypatch.setattr(datamart_leitura, "_consultar_sem_cache", lambda sql, params, t=None: next(leituras))
+    assert datamart_leitura.consultar("SQL", {"a": 1}) == [{"x": 1}]
+    datamart_leitura.aquecer("SQL", {"a": 1})
+    assert datamart_leitura.consultar("SQL", {"a": 1}) == [{"x": 2}]
+    datamart_leitura.limpar_cache()

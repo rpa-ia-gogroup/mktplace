@@ -169,12 +169,22 @@ def limpar_cache() -> None:
     _cache.clear()
 
 
+def _chave(sql: str, params: dict) -> str:
+    return sql + "" + repr(sorted(params.items(), key=lambda kv: kv[0]))
+
+
+def aquecer(sql: str, params: dict, timeout_metabase: Optional[float] = None) -> None:
+    """Le de novo e grava no cache, mesmo com entrada valida: rotina de aquecimento em
+    segundo plano, para a tela nunca pagar a fila do Metabase (ex.: CMV pelas notas)."""
+    _cache[_chave(sql, params)] = (_agora(), _consultar_sem_cache(sql, params, timeout_metabase))
+
+
 def consultar(sql: str, params: dict, timeout_metabase: Optional[float] = None,
               ttl_s: float = CACHE_TTL_S) -> list[dict]:
     """`timeout_metabase`: espera maior para UMA consulta sabidamente pesada,
     so' na reserva pelo Metabase. `None` = o padrao do cliente. `ttl_s`: dado
     de dia fechado pode ficar mais tempo guardado."""
-    chave = sql + "" + repr(sorted(params.items(), key=lambda kv: kv[0]))
+    chave = _chave(sql, params)
     guardado = _cache.get(chave)
     if guardado and _agora() - guardado[0] < ttl_s:
         return [dict(linha) for linha in guardado[1]]

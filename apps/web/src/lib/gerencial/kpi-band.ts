@@ -75,6 +75,19 @@ export interface ChannelValue {
   previous?: string | null;
   /** Sentido da variacao contra o anterior; null sem comparacao. */
   direction?: "up" | "down" | "flat" | null;
+  /** TACOS: diferenca em pontos percentuais contra o anterior (atual - anterior); null sem comparacao. */
+  deltaPp?: number | null;
+}
+
+/**
+ * Pilula de p.p. do TACOS: menor e' melhor (▼ verde, ▲ vermelho), com seta e
+ * sinal alem da cor. Anterior sem dado: null (sem comparacao, nunca 0).
+ */
+export function pilulaPp(pp: number | null | undefined): { texto: string; tom: "ok" | "crit" | "neutro" } | null {
+  if (pp == null || !Number.isFinite(pp)) return null;
+  const abs = Math.abs(pp).toFixed(1).replace(".", ",");
+  if (abs === "0,0") return { texto: "= 0,0 p.p.", tom: "neutro" };
+  return pp < 0 ? { texto: `▼ ${abs} p.p.`, tom: "ok" } : { texto: `▲ ${abs} p.p.`, tom: "crit" };
 }
 
 /** Como colorir a variacao: subir e' bom, descer e' bom (ACOS) ou sem juizo (neutro). */
@@ -307,6 +320,7 @@ export function buildKpiBand(
       unavailableReason: raw != null ? undefined : "Sem TACOS para o período e filtros selecionados.",
       previous: pct != null ? fmtPctSimples(anterior!) : null,
       direction: direcao(pct),
+      deltaPp: compare && raw != null && anterior != null ? raw - anterior : null,
     });
   }
   // Regra do Planejamento: TikTok nao aparece no TACOS (nem como "—").
