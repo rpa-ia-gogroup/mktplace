@@ -22,7 +22,8 @@ import { fmtBrlCurto } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
-import { cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import { cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, periodoCurto, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import { pilulaPp } from "@/lib/gerencial/kpi-band";
 import { toISODate } from "@/lib/filters/presets";
 import { torreFetch } from "@/lib/torre-fetch";
@@ -115,8 +116,18 @@ export default function CmvCard(props: Props) {
       onAbrir={() => (estado.nf ? setAberto(true) : router.push(`/dre?${dreUrlQuery(filtros)}`))}
     />
     {estado.nf && (
-      <KpiDrilldownDialog open={aberto} onClose={() => setAberto(false)} title="CMV / receita por marca" icone={Boxes}>
+      <KpiDrilldownDialog open={aberto} onClose={() => setAberto(false)} title="CMV / receita por marca" icone={Boxes} identidade="cmv">
         <div className="flex flex-col gap-4 text-sm">
+          {/* Topo no padrao do TACOS: o total e o contexto (periodo e ate quando ha nota), sempre visiveis. */}
+          <div className="flex flex-col gap-2">
+            <NumeroAnimado texto={c?.valor ?? "Sem dado"} className={`text-[32px] font-bold leading-none tracking-tight tabular-nums ${c?.valor ? "text-ink" : "text-ink-faint"}`} />
+            <p className="flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+              <span className="rounded-full border border-line bg-raised px-2 py-0.5 tabular-nums">{periodoCurto(estado.nf.date_from, estado.nf.date_to)}</span>
+              <span className="rounded-full border border-line px-2 py-0.5 tabular-nums">
+                {estado.nf.ultima_nf ? `Notas até ${periodoCurto(estado.nf.ultima_nf, estado.nf.ultima_nf)}` : "Sem notas no recorte"}
+              </span>
+            </p>
+          </div>
           <DrilldownSecao titulo="Por marca" acao="por receita">
             {linhasPorMarca(estado.nf, compare).length ? (
               <ul className="flex flex-col">
@@ -126,7 +137,7 @@ export default function CmvCard(props: Props) {
                     label={brandLabel(l.marca)}
                     value={l.valor ?? "Sem dado"}
                     tone={l.valor ? "value" : "muted"}
-                    delta={l.deltaPp != null ? { pct: l.deltaPp, menorMelhor: true, unidade: "pp" } : null}
+                    delta={l.deltaPp != null ? { pct: l.deltaPp, menorMelhor: true, unidade: "pp", apagado: l.basePequena } : null}
                     reference={[
                       l.receita != null ? `Receita ${fmtBrlCurto(l.receita)}` : null,
                       l.estimado ? `${l.estimado} estimado` : null,

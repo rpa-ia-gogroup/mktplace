@@ -209,7 +209,12 @@ export interface LinhaCmvMarca {
   /** "13,4%" da receita estimada; null = nada estimado. */
   estimado: string | null;
   parcial: boolean;
+  /** Receita < R$ 50 mil: a variacao em p.p. e' ruido de base pequena; a pilula sai apagada. */
+  basePequena: boolean;
 }
+
+/** Abaixo disto a pilula de p.p. da marca sai apagada (Revisor UX). */
+export const RECEITA_MINIMA_DESTAQUE = 50_000;
 
 /** Linhas do detalhe, na ordem da API (receita). `compare` desligado: sem delta. */
 export function linhasPorMarca(nf: CmvNotas, compare: boolean): LinhaCmvMarca[] {
@@ -220,5 +225,6 @@ export function linhasPorMarca(nf: CmvNotas, compare: boolean): LinhaCmvMarca[] 
     receita: b.receita,
     estimado: b.estimado_pct != null && b.estimado_pct > 0 ? pct1(b.estimado_pct * 100) : null,
     parcial: b.parcial,
+    basePequena: (b.receita ?? 0) < RECEITA_MINIMA_DESTAQUE,
   }));
 }

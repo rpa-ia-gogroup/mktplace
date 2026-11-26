@@ -175,6 +175,8 @@ test("detalhe por marca: ordem da API, p.p. vs anterior (sem anterior = sem pilu
   assert.equal(l[1].deltaPp, null);
   assert.equal(l[1].parcial, true);
   assert.equal(l[2].valor, null, "sem CMV: sem dado, nunca 0");
+  // receita < R$ 50 mil: pilula apagada
+  assert.deepEqual(l.map((x) => x.basePequena), [false, true, true]);
   assert.ok(linhasPorMarca(base, false).every((x) => x.deltaPp == null), "comparar desligado: sem pilula");
   assert.deepEqual(linhasPorMarca(nf(), true), [], "API anterior sem por_marca");
 });
@@ -183,7 +185,12 @@ test("clique abre o detalhe por marca (padrao KpiDrilldownDialog) com 'Ver DRE' 
   const card = ler("src/components/gerencial/CmvCard.tsx");
   assert.ok(card.includes("<KpiDrilldownDialog") && card.includes('title="CMV / receita por marca"'));
   assert.ok(card.includes("setAberto(true)") && card.includes("Ver DRE →"));
-  assert.ok(card.includes('unidade: "pp"') && card.includes("menorMelhor: true"));
+  assert.ok(card.includes('unidade: "pp"') && card.includes("menorMelhor: true") && card.includes("apagado: l.basePequena"));
+  // topo no padrao do TACOS: total + chip do periodo + "Notas até DD/MM"; identidade no titulo
+  assert.ok(card.includes("<NumeroAnimado texto={c?.valor") && card.includes("Notas até ${periodoCurto(estado.nf.ultima_nf"));
+  assert.ok(card.includes('identidade="cmv"'));
+  assert.ok(ler("src/components/ui/KpiTile.tsx").includes('cmv: { tinta: "text-kpi-cmv", borda: "border-kpi-cmv/30", ladrilho: "bg-kpi-cmv/10" }'));
+  assert.ok(ler("tailwind.config.ts").includes('cmv: token("kpi-cmv")'));
   const linha = ler("src/components/drilldown/EvidenceRow.tsx");
-  assert.ok(linha.includes('unidade === "pp" ? " p.p." : "%"'));
+  assert.ok(linha.includes('unidade === "pp" ? " p.p." : "%"') && linha.includes('"bg-raised text-ink-faint"'));
 });

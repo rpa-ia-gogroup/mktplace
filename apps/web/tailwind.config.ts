@@ -66,6 +66,7 @@ const config: Config = {
           roas: token("kpi-roas"),
           prazo: token("kpi-prazo"),
           atendimento: token("kpi-atendimento"),
+          cmv: token("kpi-cmv"),
         },
         canal: {
           tiktok: token("canal-tiktok"),

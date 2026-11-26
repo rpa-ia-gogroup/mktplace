@@ -37,7 +37,8 @@ interface Props {
   /** Variacao % contra o periodo anterior. `neutro` = sem cor de juizo. */
   /** `menorMelhor`: cair e' bom (ACOS) — so' a cor inverte, o numero nao. */
   /** `unidade: "pp"`: diferenca em pontos percentuais (CMV %, TACOS), nao variacao %. */
-  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean; unidade?: "pct" | "pp" } | null;
+  /** `apagado`: base pequena (ex.: marca com receita < R$ 50 mil) — a pilula sai em tinta apagada, sem cor de juizo. */
+  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean; unidade?: "pct" | "pp"; apagado?: boolean } | null;
   /** Conteudo extra sob a linha (ex.: barras Full / Sem Full), no lugar da barra de participacao. */
   children?: ReactNode;
 }
@@ -62,7 +63,13 @@ export default function EvidenceRow({
   const sobe = delta != null && delta.pct >= 0;
   const Seta = sobe ? ArrowUpRight : ArrowDownRight;
   const bom = sobe !== Boolean(delta?.menorMelhor);
-  const peleDelta = delta?.neutro ? "bg-raised text-ink-muted" : bom ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink";
+  const peleDelta = delta?.apagado
+    ? "bg-raised text-ink-faint"
+    : delta?.neutro
+      ? "bg-raised text-ink-muted"
+      : bom
+        ? "bg-ok-soft text-ok-ink"
+        : "bg-crit-soft text-crit-ink";
   return (
     <li className="flex flex-col gap-1 py-1">
       <div className="flex items-center justify-between gap-3 text-sm">
