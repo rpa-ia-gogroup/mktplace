@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, mesPorExtenso, LEGENDA_CMV, NOTA_BLACK, NOTA_METODO, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
+import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, mesPorExtenso, LEGENDA_CMV, LEGENDA_NOTAS, NOTA_BLACK, NOTA_METODO, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
 import type { DreResponse } from "../src/lib/dre.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -124,8 +124,11 @@ test("notas: valor da API, periodo do filtro, 'inclui estimativa (X%)' e p.p. co
   assert.equal(c.selo, null);
   // sem estimativa: so' o periodo; sem anterior: sem comparacao (nunca 0)
   const fechado = cartaoCmvNotas(nf({ estimado_pct: null, anterior_cmv_pct: null }), null, "2026-11-26");
-  assert.equal(fechado.legenda, "CMV estimado");
+  // sem dia estimado: "Pelas notas fiscais" e sem o aviso de Black
+  assert.equal(fechado.legenda, "Pelas notas fiscais");
+  assert.equal(LEGENDA_NOTAS, "Pelas notas fiscais");
   assert.ok(fechado.dica.startsWith("Período todo pelas notas, sem estimativa."));
+  assert.ok(!fechado.dica.includes(NOTA_BLACK));
   assert.equal(fechado.deltaPp, null);
 });
 

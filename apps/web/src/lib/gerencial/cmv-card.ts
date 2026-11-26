@@ -150,8 +150,9 @@ export function linhaDre(resp: DreResponse | null, mes: string): string | null {
 export const NOTA_METODO =
   "Método: notas fiscais; dias sem nota completa estimados pelo CMV % das notas dos últimos 3 dias × vendas.";
 export const NOTA_BLACK = "Em dia de desconto forte (Black) a estimativa tende a ficar abaixo do real.";
-/** Texto unico sob o numero e a pilula (pedido do usuario, 26/11). */
+/** Texto unico sob o numero e a pilula (pedido do usuario, 26/11): com dia estimado, "CMV estimado"; sem, "Pelas notas fiscais". */
 export const LEGENDA_CMV = "CMV estimado";
+export const LEGENDA_NOTAS = "Pelas notas fiscais";
 
 export interface CartaoCmvPeriodo extends CartaoCmv {
   /** Diferenca em p.p. contra o periodo anterior (atual - anterior); null sem comparacao. */
@@ -186,7 +187,7 @@ export function cartaoCmvNotas(nf: CmvNotas, fechado: string | null, hojeIso: st
     fechado ? `${fechado}.` : null,
     NOTA_METODO,
     base,
-    NOTA_BLACK,
+    estimado ? NOTA_BLACK : null,   // o aviso e' sobre a estimativa: sem ela, nao se aplica
     nf.date_to >= hojeIso ? "As notas de hoje ainda estão entrando." : null,
     semCusto ? `Receita sem custo: ${semCusto} (fica fora da conta, não vira custo zero).` : null,
     canais ? `${canais}.` : null,
@@ -195,7 +196,7 @@ export function cartaoCmvNotas(nf: CmvNotas, fechado: string | null, hojeIso: st
     .join(" ");
   return {
     valor,
-    legenda: LEGENDA_CMV,
+    legenda: estimado ? LEGENDA_CMV : LEGENDA_NOTAS,
     selo: nf.parcial ? { rotulo: "Parcial", tom: "atencao" } : null,
     dica,
     deltaPp: nf.anterior_cmv_pct != null && nf.cmv_pct != null ? nf.cmv_pct - nf.anterior_cmv_pct : null,
