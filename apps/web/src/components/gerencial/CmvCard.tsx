@@ -4,8 +4,9 @@
  * Cartao CMV / RECEITA da Gerencial: CMV pelas notas fiscais NO PERIODO DO
  * FILTRO (de/ate, comparativo e base, os mesmos dos outros cartoes), com
  * estimativa dos dias sem nota completa. Tudo calculado na API
- * (`GET /api/v1/performance/cmv-notas`). O mes fechado da DRE (`fetchDre`)
- * vira a 2a linha e o ⓘ. Clique abre o CMV POR MARCA (detalhe no padrao dos
+ * (`GET /api/v1/performance/cmv-notas`). Sob o numero, so' "CMV estimado" (e o
+ * selo Parcial); % estimado, metodo e o mes fechado da DRE (`fetchDre`) ficam no ⓘ.
+ * Clique abre o CMV POR MARCA (detalhe no padrao dos
  * outros cartoes, `KpiDrilldownDialog`), com "Ver DRE" no rodape. Sem CMV =
  * "Sem dado", nunca 0.
  */
@@ -22,7 +23,7 @@ import { fmtBrlCurto } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
-import { cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, periodoCurto, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import { cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, NOTA_METODO, periodoCurto, type CmvNotas } from "@/lib/gerencial/cmv-card";
 import NumeroAnimado from "@/components/ui/NumeroAnimado";
 import { pilulaPp } from "@/lib/gerencial/kpi-band";
 import { toISODate } from "@/lib/filters/presets";
@@ -89,9 +90,9 @@ export default function CmvCard(props: Props) {
       </div>
     );
   }
-  const dre = textoDre(estado.dre, mesDre);
-  const c = estado.nf ? cartaoCmvNotas(estado.nf, dre, hoje) : null;
+  // O mes fechado da DRE ("Outubro fechado (DRE): 25,3%") vai so' para o ⓘ.
   const fechado = linhaDre(estado.dre, mesDre);
+  const c = estado.nf ? cartaoCmvNotas(estado.nf, fechado, hoje) : null;
   // CMV %: menor e' melhor, como o TACOS (▼ verde, ▲ vermelho). Sem anterior: sem pilula.
   const delta = compare && c?.valor ? pilulaPp(c.deltaPp) : null;
   return (
@@ -104,15 +105,12 @@ export default function CmvCard(props: Props) {
       ausente={!c?.valor}
       pilula={delta ? { texto: `${delta.texto} vs anterior`, tom: delta.tom as TomPilula } : null}
       legenda={
-        <>
-          <span className="block text-balance">
-            {c?.parcial && <span className="mr-1.5 rounded-full bg-warn-soft px-2 py-0.5 font-semibold text-warn-ink">Parcial</span>}
-            {c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}
-          </span>
-          {fechado && <span className="block">{fechado}</span>}
-        </>
+        <span className="block text-balance">
+          {c?.parcial && <span className="mr-1.5 rounded-full bg-warn-soft px-2 py-0.5 font-semibold text-warn-ink">Parcial</span>}
+          {c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}
+        </span>
       }
-      ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do período = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
+      ajuda={<InfoDica emControle texto={c?.dica ?? [fechado ? `${fechado}.` : null, NOTA_METODO].filter(Boolean).join(" ")} />}
       onAbrir={() => (estado.nf ? setAberto(true) : router.push(`/dre?${dreUrlQuery(filtros)}`))}
     />
     {estado.nf && (

@@ -146,9 +146,13 @@ export function linhaDre(resp: DreResponse | null, mes: string): string | null {
   return `${mesPorExtenso(resp.periodo.meses[0] ?? mes).split("/")[0]} fechado (DRE): ${valor}`;
 }
 
-export const NOTA_ESTIMATIVA =
-  "Dias sem nota completa (hoje, os 2 últimos dias ou nota abaixo de 70% do GMV do dia) são estimados: " +
-  "estimativa = CMV % das notas dos últimos 3 dias × vendas de hoje; em dia de desconto forte (Black) tende a ficar abaixo do real.";
+/** Metodo, no ⓘ (o cartao so' diz "CMV estimado"). */
+export const NOTA_METODO =
+  "Método: notas fiscais; dias sem nota completa estimados pelo CMV % das notas dos últimos 3 dias × vendas.";
+export const NOTA_BLACK = "Em dia de desconto forte (Black) a estimativa tende a ficar abaixo do real.";
+/** Texto unico sob o numero e a pilula (pedido do usuario, 26/11): com dia estimado, "CMV estimado"; sem, "Pelas notas fiscais". */
+export const LEGENDA_CMV = "CMV estimado";
+export const LEGENDA_NOTAS = "Pelas notas fiscais";
 
 export interface CartaoCmvPeriodo extends CartaoCmv {
   /** Diferenca em p.p. contra o periodo anterior (atual - anterior); null sem comparacao. */
@@ -162,12 +166,16 @@ export interface CartaoCmvPeriodo extends CartaoCmv {
  * anterior vem prontos da API; aqui so' texto. `hojeIso` so' decide o aviso de
  * nota de hoje ainda entrando.
  */
-export function cartaoCmvNotas(nf: CmvNotas, dre: string | null, hojeIso: string): CartaoCmvPeriodo {
+/**
+ * `fechado`: a linha do mes fechado da DRE ("Outubro fechado (DRE): 25,3%", de
+ * `linhaDre`); vai so' para o ⓘ. Sob o numero fica so' "CMV estimado".
+ */
+export function cartaoCmvNotas(nf: CmvNotas, fechado: string | null, hojeIso: string): CartaoCmvPeriodo {
   const valor = pct1(nf.cmv_pct);
-  const base = "CMV pelas notas fiscais do período = CMV ÷ receita com custo (só as linhas com custo).";
+  const base = "CMV ÷ receita com custo (só as linhas com custo).";
   if (valor == null) {
-    const motivo = nf.receita ? "sem notas com custo" : "sem notas no recorte";
-    return { valor: null, legenda: `Pelas notas · ${motivo}`, selo: null, dica: [base, dre].filter(Boolean).join(" "), deltaPp: null, parcial: false };
+    const motivo = nf.receita ? "Sem notas com custo" : "Sem notas no recorte";
+    return { valor: null, legenda: motivo, selo: null, dica: [base, fechado ? `${fechado}.` : null, NOTA_METODO].filter(Boolean).join(" "), deltaPp: null, parcial: false };
   }
   const estimado = nf.estimado_pct != null && nf.estimado_pct > 0 ? pct1(nf.estimado_pct * 100) : null;
   const semCusto = nf.cobertura != null && nf.cobertura < 1 ? pct1((1 - nf.cobertura) * 100) : null;
@@ -175,19 +183,20 @@ export function cartaoCmvNotas(nf: CmvNotas, dre: string | null, hojeIso: string
     ? nf.por_canal.map((c) => `${CANAL_CURTO[c.canal] ?? c.canal} ${pct1(c.cmv_pct) ?? "sem dado"}`).join(" · ")
     : null;
   const dica = [
+    estimado ? `${estimado} do período estimado.` : "Período todo pelas notas, sem estimativa.",
+    fechado ? `${fechado}.` : null,
+    NOTA_METODO,
     base,
-    estimado ? NOTA_ESTIMATIVA : null,
+    estimado ? NOTA_BLACK : null,   // o aviso e' sobre a estimativa: sem ela, nao se aplica
     nf.date_to >= hojeIso ? "As notas de hoje ainda estão entrando." : null,
     semCusto ? `Receita sem custo: ${semCusto} (fica fora da conta, não vira custo zero).` : null,
     canais ? `${canais}.` : null,
-    dre,
   ]
     .filter(Boolean)
     .join(" ");
   return {
     valor,
-    // O periodo ja' esta' no filtro, logo acima: a legenda so' diz a fonte e quanto e' estimado (Revisor UX).
-    legenda: estimado ? `Pelas notas · ${estimado} estimado` : "Pelas notas",
+    legenda: estimado ? LEGENDA_CMV : LEGENDA_NOTAS,
     selo: nf.parcial ? { rotulo: "Parcial", tom: "atencao" } : null,
     dica,
     deltaPp: nf.anterior_cmv_pct != null && nf.cmv_pct != null ? nf.cmv_pct - nf.anterior_cmv_pct : null,
