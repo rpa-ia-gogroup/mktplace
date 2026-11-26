@@ -1003,3 +1003,24 @@ def test_cobertura_declarada_e_advertised_only():
     for coluna in ("shipping_amount", "seller_coupon_amount",
                    "platform_subsidy_amount", "checkout_price"):
         assert coluna not in s.BUSINESS_COLUMNS, coluna
+
+
+def test_validate_rows_aceita_anuncio_encerrado_e_recusa_estado_desconhecido():
+    # 26/11/2026: `closed` derrubou o pma_ml da cadeia diaria
+    s.validate_rows([{**_row(), "listing_status": "closed"}], date(2026, 9, 1), date(2026, 9, 3))
+    erro = None
+    try:
+        s.validate_rows([{**_row(), "listing_status": "deleted"}], date(2026, 9, 1), date(2026, 9, 3))
+    except s.SyncError as exc:
+        erro = str(exc)
+    assert erro is not None and "fora do dominio" in erro
+
+
+def test_migration_052_espelha_o_dominio_do_sync():
+    from pathlib import Path
+
+    # texto, nao import: o ambiente dos pipelines nao tem alembic
+    fonte = (Path(__file__).resolve().parents[2]
+             / "apps/api/alembic/versions/052_ml_listing_status_closed.py").read_text(encoding="utf-8")
+    upgrade = fonte.split("UPGRADE_SQL = ")[1].splitlines()[0]
+    assert all(f"'{e}'" in upgrade for e in s.ALLOWED_LISTING_STATUS)

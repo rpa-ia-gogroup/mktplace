@@ -92,7 +92,8 @@ SOURCE_MIN_DATE = date(2026, 6, 20)
 ALLOWED_BRANDS = ("barbours", "kokeshi", "lescent", "rituaria")
 
 #: Dominio de status observado na fonte.
-ALLOWED_LISTING_STATUS = ("active", "paused", "under_review", "inactive")
+# "closed" = anuncio encerrado no ML (visto em 26/11/2026); o CHECK do destino acompanha (migration 052)
+ALLOWED_LISTING_STATUS = ("active", "paused", "under_review", "inactive", "closed")
 
 #: Comprimentos de EAN de CONSUMIDOR aceitos no destino.  (Gate PMA-2R)
 #: Espelha `pipelines/pma/reference_contract.CONSUMER_EAN_LENGTHS` — um teste de
