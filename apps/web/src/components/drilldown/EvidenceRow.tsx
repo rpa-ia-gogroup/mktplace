@@ -36,13 +36,14 @@ interface Props {
   barra?: string;
   /** Variacao % contra o periodo anterior. `neutro` = sem cor de juizo. */
   /** `menorMelhor`: cair e' bom (ACOS) — so' a cor inverte, o numero nao. */
-  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean } | null;
+  /** `unidade: "pp"`: diferenca em pontos percentuais (CMV %, TACOS), nao variacao %. */
+  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean; unidade?: "pct" | "pp" } | null;
   /** Conteudo extra sob a linha (ex.: barras Full / Sem Full), no lugar da barra de participacao. */
   children?: ReactNode;
 }
 
-function fmtDelta(v: number): string {
-  return `${v >= 0 ? "+" : ""}${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+function fmtDelta(v: number, unidade: "pct" | "pp" = "pct"): string {
+  return `${v >= 0 ? "+" : ""}${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${unidade === "pp" ? " p.p." : "%"}`;
 }
 
 export default function EvidenceRow({
@@ -73,7 +74,7 @@ export default function EvidenceRow({
           {delta != null && (
             <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold ${peleDelta}`}>
               <Seta aria-hidden="true" className="h-3 w-3" strokeWidth={2.25} />
-              {fmtDelta(delta.pct)}
+              {fmtDelta(delta.pct, delta.unidade)}
             </span>
           )}
           <span className={TONE_CLASS[tone]} title={title}>{value}</span>

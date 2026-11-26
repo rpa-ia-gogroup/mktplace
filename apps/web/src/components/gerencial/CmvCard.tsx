@@ -5,16 +5,24 @@
  * FILTRO (de/ate, comparativo e base, os mesmos dos outros cartoes), com
  * estimativa dos dias sem nota completa. Tudo calculado na API
  * (`GET /api/v1/performance/cmv-notas`). O mes fechado da DRE (`fetchDre`)
- * vira a 2a linha e o ⓘ. Clique abre a DRE. Sem CMV = "Sem dado", nunca 0.
+ * vira a 2a linha e o ⓘ. Clique abre o CMV POR MARCA (detalhe no padrao dos
+ * outros cartoes, `KpiDrilldownDialog`), com "Ver DRE" no rodape. Sem CMV =
+ * "Sem dado", nunca 0.
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Boxes } from "lucide-react";
 import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
+import KpiDrilldownDialog from "@/components/KpiDrilldownDialog";
+import DrilldownSecao from "@/components/drilldown/DrilldownSecao";
+import DrilldownCta from "@/components/drilldown/DrilldownCta";
+import EvidenceRow from "@/components/drilldown/EvidenceRow";
+import { brandLabel } from "@/lib/filters/brands";
+import { fmtBrlCurto } from "@/lib/formatters";
 import InfoDica from "@/components/ui/InfoDica";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
-import { cartaoCmvNotas, linhaDre, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import { cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
 import { pilulaPp } from "@/lib/gerencial/kpi-band";
 import { toISODate } from "@/lib/filters/presets";
 import { torreFetch } from "@/lib/torre-fetch";
@@ -50,6 +58,9 @@ export default function CmvCard(props: Props) {
   const filtros = { mes: mesDre, canais: channels, marcas: brands };
   const chave = `${dateFrom}|${dateTo}|${compare}|${base}|${channels.join(",")}|${brands.join(",")}`;
   const [estado, setEstado] = useState<{ chave: string; nf: CmvNotas | null; dre: DreResponse | null } | null>(null);
+  const [aberto, setAberto] = useState(false);
+  // Outro recorte: o detalhe aberto era do anterior.
+  useEffect(() => setAberto(false), [chave]);
 
   useEffect(() => {
     const ctl = new AbortController();
@@ -101,8 +112,37 @@ export default function CmvCard(props: Props) {
         </>
       }
       ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do período = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
-      onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
+      onAbrir={() => (estado.nf ? setAberto(true) : router.push(`/dre?${dreUrlQuery(filtros)}`))}
     />
+    {estado.nf && (
+      <KpiDrilldownDialog open={aberto} onClose={() => setAberto(false)} title="CMV / receita por marca" icone={Boxes}>
+        <div className="flex flex-col gap-4 text-sm">
+          <DrilldownSecao titulo="Por marca" acao="por receita">
+            {linhasPorMarca(estado.nf, compare).length ? (
+              <ul className="flex flex-col">
+                {linhasPorMarca(estado.nf, compare).map((l) => (
+                  <EvidenceRow
+                    key={l.marca}
+                    label={brandLabel(l.marca)}
+                    value={l.valor ?? "Sem dado"}
+                    tone={l.valor ? "value" : "muted"}
+                    delta={l.deltaPp != null ? { pct: l.deltaPp, menorMelhor: true, unidade: "pp" } : null}
+                    reference={[
+                      l.receita != null ? `Receita ${fmtBrlCurto(l.receita)}` : null,
+                      l.estimado ? `${l.estimado} estimado` : null,
+                      l.parcial ? "Parcial" : null,
+                    ].filter(Boolean).join(" · ")}
+                  />
+                ))}
+              </ul>
+            ) : (
+              <p className="text-ink-faint">Sem notas no recorte.</p>
+            )}
+          </DrilldownSecao>
+          <DrilldownCta href={`/dre?${dreUrlQuery(filtros)}`}>Ver DRE →</DrilldownCta>
+        </div>
+      </KpiDrilldownDialog>
+    )}
     </div>
   );
 }

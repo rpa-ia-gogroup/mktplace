@@ -98,6 +98,11 @@ export interface CmvNotasBloco {
   estimado_pct: number | null;
 }
 
+export interface CmvNotasMarca extends CmvNotasBloco {
+  marca: string;
+  anterior_cmv_pct: number | null;
+}
+
 export interface CmvNotas extends CmvNotasBloco {
   date_from: string;
   date_to: string;
@@ -105,6 +110,8 @@ export interface CmvNotas extends CmvNotasBloco {
   cobertura_minima: number;
   dias_estimados: string[];
   por_canal: (CmvNotasBloco & { canal: string })[];
+  /** Detalhe do card, ordenado por receita. Opcional: API anterior nao envia. */
+  por_marca?: CmvNotasMarca[];
   anterior_cmv_pct: number | null;
 }
 
@@ -186,4 +193,32 @@ export function cartaoCmvNotas(nf: CmvNotas, dre: string | null, hojeIso: string
     deltaPp: nf.anterior_cmv_pct != null && nf.cmv_pct != null ? nf.cmv_pct - nf.anterior_cmv_pct : null,
     parcial: nf.parcial,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Detalhe do card: CMV por marca (o `por_marca` da mesma resposta)
+// ---------------------------------------------------------------------------
+
+export interface LinhaCmvMarca {
+  marca: string;
+  /** "27,5%" ou null = sem dado (nunca 0). */
+  valor: string | null;
+  /** Diferenca em p.p. contra o anterior (menor e' melhor); null = sem comparacao. */
+  deltaPp: number | null;
+  receita: number | null;
+  /** "13,4%" da receita estimada; null = nada estimado. */
+  estimado: string | null;
+  parcial: boolean;
+}
+
+/** Linhas do detalhe, na ordem da API (receita). `compare` desligado: sem delta. */
+export function linhasPorMarca(nf: CmvNotas, compare: boolean): LinhaCmvMarca[] {
+  return (nf.por_marca ?? []).map((b) => ({
+    marca: b.marca,
+    valor: pct1(b.cmv_pct),
+    deltaPp: compare && b.cmv_pct != null && b.anterior_cmv_pct != null ? b.cmv_pct - b.anterior_cmv_pct : null,
+    receita: b.receita,
+    estimado: b.estimado_pct != null && b.estimado_pct > 0 ? pct1(b.estimado_pct * 100) : null,
+    parcial: b.parcial,
+  }));
 }

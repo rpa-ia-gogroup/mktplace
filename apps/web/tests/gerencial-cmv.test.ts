@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, mesDoCmv, mesPorExtenso, NOTA_ESTIMATIVA, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
+import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, linhasPorMarca, mesDoCmv, mesPorExtenso, NOTA_ESTIMATIVA, periodoCurto, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
 import type { DreResponse } from "../src/lib/dre.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -155,4 +155,35 @@ test("cartao segue o filtro (de/ate, comparativo, base) e nao faz conta", () => 
   assert.ok(card.includes("/api/v1/performance/cmv-notas") && card.includes("Promise.allSettled"));
   for (const k of ['date_from: p.dateFrom', 'date_to: p.dateTo', 'q.set("compare", "true")', 'q.set("base", "realizados")']) assert.ok(card.includes(k), k);
   assert.ok(!card.includes("toFixed") && !card.includes("cmv / "), "nenhuma conta no front");
+});
+
+// ---- Detalhe do card: CMV por marca ----
+
+test("detalhe por marca: ordem da API, p.p. vs anterior (sem anterior = sem pilula), estimado e Parcial", () => {
+  const base = nf({
+    por_marca: [
+      { marca: "kokeshi", cmv: 1, receita_com_custo: 1, receita: 1_500_000, cmv_pct: 26.67, cobertura: 1, parcial: false, estimado_pct: 0.134, anterior_cmv_pct: 25.0 },
+      { marca: "by-samia", cmv: 1, receita_com_custo: 1, receita: 100, cmv_pct: 33.33, cobertura: 0.9, parcial: true, estimado_pct: null, anterior_cmv_pct: null },
+      { marca: "aua", cmv: null, receita_com_custo: null, receita: 50, cmv_pct: null, cobertura: 0, parcial: false, estimado_pct: null, anterior_cmv_pct: null },
+    ],
+  });
+  const l = linhasPorMarca(base, true);
+  assert.deepEqual(l.map((x) => x.marca), ["kokeshi", "by-samia", "aua"]);
+  assert.equal(l[0].valor, "26,7%");
+  assert.ok(Math.abs(l[0].deltaPp! - 1.67) < 1e-9);
+  assert.equal(l[0].estimado, "13,4%");
+  assert.equal(l[1].deltaPp, null);
+  assert.equal(l[1].parcial, true);
+  assert.equal(l[2].valor, null, "sem CMV: sem dado, nunca 0");
+  assert.ok(linhasPorMarca(base, false).every((x) => x.deltaPp == null), "comparar desligado: sem pilula");
+  assert.deepEqual(linhasPorMarca(nf(), true), [], "API anterior sem por_marca");
+});
+
+test("clique abre o detalhe por marca (padrao KpiDrilldownDialog) com 'Ver DRE' no rodape", () => {
+  const card = ler("src/components/gerencial/CmvCard.tsx");
+  assert.ok(card.includes("<KpiDrilldownDialog") && card.includes('title="CMV / receita por marca"'));
+  assert.ok(card.includes("setAberto(true)") && card.includes("Ver DRE →"));
+  assert.ok(card.includes('unidade: "pp"') && card.includes("menorMelhor: true"));
+  const linha = ler("src/components/drilldown/EvidenceRow.tsx");
+  assert.ok(linha.includes('unidade === "pp" ? " p.p." : "%"'));
 });
