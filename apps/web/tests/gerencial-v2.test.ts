@@ -291,13 +291,11 @@ test("8b. sem periodo anterior no contrato, so' o GMV tem delta; os demais decla
   assert.equal(byKey.avg_ticket.comparisonNote, "Comparação indisponível");
 });
 
-test("9. ROAS nunca agrega: sem valor unico, uma linha por canal, TikTok N/D", () => {
+test("9. TACOS nunca agrega: sem valor unico, uma linha por canal, TikTok fora do card", () => {
   const band = buildKpiBand(makeOverview(), ALL);
   const roas = band.find((k) => k.key === "roas")!;
-  assert.equal(roas.value, null, "não existe valor consolidado de ROAS");
-  const tiktok = roas.channelValues!.find((c) => c.channel === "tiktok")!;
-  assert.equal(tiktok.value, null);
-  assert.match(tiktok.unavailableReason ?? "", /Não disponível nesta fonte/);
+  assert.equal(roas.value, null, "não existe valor consolidado de TACOS");
+  assert.deepEqual(roas.channelValues!.map((c) => c.channel), ["ml", "shopee"]);
   const ml = roas.channelValues!.find((c) => c.channel === "ml")!;
   // UI-DENSIDADE-1: pt-BR (virgula decimal).
   assert.equal(ml.value, "25,0%"); // TACOS como veio da API (ml_tacos_pct)

@@ -63,8 +63,7 @@ test("ROAS compara por canal, nunca agregado", () => {
   assert.deepEqual([ml.direction, ml.previous, ml.value], ["up", "7,9%", "8,3%"]);
   assert.deepEqual([sh.direction, sh.previous], ["down", "7,3%"]);
   assert.equal(roas.deltaTone, "lower_is_better");
-  const tk = roas.channelValues!.find((c) => c.channel === "tiktok")!;
-  assert.equal(tk.direction ?? null, null);
+  assert.equal(roas.channelValues!.find((c) => c.channel === "tiktok"), undefined); // TikTok fora do TACOS
 });
 
 test("comparar desligado: nenhum delta alem do GMV, e sem nota de indisponivel", () => {

@@ -29,7 +29,7 @@ test("TACOS por canal: valor da API, nao o ACOS derivado do ROAS", () => {
   const k = tacos(ov());
   assert.equal(k.label, "TACOS por canal");
   const v = Object.fromEntries(k.channelValues!.map((c) => [c.channel, c.value]));
-  assert.deepEqual(v, { ml: "4,9%", shopee: "6,5%", tiktok: null });
+  assert.deepEqual(v, { ml: "4,9%", shopee: "6,5%" }); // TikTok nao aparece (regra do Planejamento)
   assert.ok(k.coverageNote?.startsWith(NOTA_TACOS));
 });
 
@@ -52,5 +52,6 @@ test("o rodape e o detalhe falam TACOS; o ACOS da analise por produto nao muda",
   assert.ok(ler("src/components/gerencial/KpiBand.tsx").includes("<span>TACOS {CANAL_CURTO"));
   const det = ler("src/components/KpiDrilldownContent.tsx");
   assert.ok(det.includes("overview.ml_tacos_pct") && !det.includes("acosDoRoas"));
+  assert.ok(det.includes('kind !== "roas" && ('), "detalhe do TACOS sem numero grande '—'");
   assert.ok(ler("src/components/MercadoLivreProductTable.tsx").includes("ACOS"));
 });

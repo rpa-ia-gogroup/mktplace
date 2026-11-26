@@ -309,14 +309,7 @@ export function buildKpiBand(
       direction: direcao(pct),
     });
   }
-  if (isMarketplaceSelected(channels, "tiktok")) {
-    roasChannels.push({
-      channel: "tiktok",
-      label: CHANNEL_LABEL.tiktok,
-      value: null,
-      unavailableReason: "Não disponível nesta fonte",
-    });
-  }
+  // Regra do Planejamento: TikTok nao aparece no TACOS (nem como "—").
   const compatibleWithValue = roasChannels.filter((c) => c.channel !== "tiktok" && c.value != null);
   const roas: KpiDescriptor = {
     key: "roas",

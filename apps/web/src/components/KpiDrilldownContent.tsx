@@ -135,7 +135,10 @@ export default function KpiDrilldownContent({
     <div className="flex flex-col gap-4 text-sm">
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-end gap-x-3 gap-y-1.5">
-          <NumeroAnimado texto={value} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
+          {/* TACOS nao tem valor consolidado: sem numero grande, so' a lista por canal. */}
+          {kind !== "roas" && (
+            <NumeroAnimado texto={value} className="text-[32px] font-bold leading-none tracking-tight text-ink tabular-nums" />
+          )}
           <KpiReference kind={kind} overview={overview} comparacao={comparacao} />
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -458,9 +461,6 @@ function RoasBreakdown({ overview, brands, channels }: { overview: OverviewData;
               value={r.shopee != null ? x(r.shopee) : "Sem dado"}
               tone={r.shopee != null ? "value" : "muted"}
             />
-          )}
-          {isMarketplaceSelected(channels, "tiktok") && (
-            <EvidenceRow label="TikTok Shop" ponto={CHANNEL_DOT.tiktok} value="Não reporta" tone="muted" />
           )}
         </ul>
       </DrilldownSecao>
