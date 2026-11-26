@@ -260,7 +260,7 @@ function makeOverview(patch: Partial<OverviewData> = {}): OverviewData {
   return {
     gmv: 1000, tiktok_gmv: 400, ml_gmv: 400, shopee_gmv: 200,
     orders: 50, avg_ticket: 20, ad_spend: 100,
-    ml_roas: 4, ml_cancel_rate_pct: 5, shopee_roas: 3,
+    ml_roas: 4, ml_cancel_rate_pct: 5, shopee_roas: 3, ml_tacos_pct: 25, shopee_tacos_pct: 12,
     tiktok_customers: 10, ml_unique_buyers: 10, shopee_unique_buyers: 5,
     gmv_mom_pct: 8, prev_gmv: 900,
     ...patch,
@@ -291,16 +291,14 @@ test("8b. sem periodo anterior no contrato, so' o GMV tem delta; os demais decla
   assert.equal(byKey.avg_ticket.comparisonNote, "Comparação indisponível");
 });
 
-test("9. ROAS nunca agrega: sem valor unico, uma linha por canal, TikTok N/D", () => {
+test("9. TACOS nunca agrega: sem valor unico, uma linha por canal, TikTok fora do card", () => {
   const band = buildKpiBand(makeOverview(), ALL);
   const roas = band.find((k) => k.key === "roas")!;
-  assert.equal(roas.value, null, "não existe valor consolidado de ROAS");
-  const tiktok = roas.channelValues!.find((c) => c.channel === "tiktok")!;
-  assert.equal(tiktok.value, null);
-  assert.match(tiktok.unavailableReason ?? "", /Não disponível nesta fonte/);
+  assert.equal(roas.value, null, "não existe valor consolidado de TACOS");
+  assert.deepEqual(roas.channelValues!.map((c) => c.channel), ["ml", "shopee"]);
   const ml = roas.channelValues!.find((c) => c.channel === "ml")!;
   // UI-DENSIDADE-1: pt-BR (virgula decimal).
-  assert.equal(ml.value, "25,0%"); // ACOS = 100 / ROAS 4
+  assert.equal(ml.value, "25,0%"); // TACOS como veio da API (ml_tacos_pct)
 });
 
 test("9b. com um unico canal compativel selecionado, esse canal e' destacado", () => {

@@ -21,6 +21,7 @@ function overview(patch: Partial<OverviewData> = {}): OverviewData {
     shopee_roas: 14.66, tiktok_customers: null, ml_unique_buyers: null, shopee_unique_buyers: null,
     gmv_mom_pct: -4.3, prev_gmv: 20_488_241,
     prev_orders: 333_588, prev_avg_ticket: 61.42, prev_ad_spend: 367_816, prev_ml_roas: 12.6, prev_shopee_roas: 13.64,
+    ml_tacos_pct: 8.3, prev_ml_tacos_pct: 7.94, shopee_tacos_pct: 6.82, prev_shopee_tacos_pct: 7.33,
     ...patch,
   };
 }
@@ -58,12 +59,11 @@ test("ROAS compara por canal, nunca agregado", () => {
   assert.equal(roas.value, null);
   const ml = roas.channelValues!.find((c) => c.channel === "ml")!;
   const sh = roas.channelValues!.find((c) => c.channel === "shopee")!;
-  // ACOS = 100 / ROAS: ROAS do ML caiu (12,6 -> 11,98), entao o ACOS subiu.
+  // TACOS vem da API: o do ML subiu (7,94 -> 8,3), o da Shopee caiu.
   assert.deepEqual([ml.direction, ml.previous, ml.value], ["up", "7,9%", "8,3%"]);
   assert.deepEqual([sh.direction, sh.previous], ["down", "7,3%"]);
   assert.equal(roas.deltaTone, "lower_is_better");
-  const tk = roas.channelValues!.find((c) => c.channel === "tiktok")!;
-  assert.equal(tk.direction ?? null, null);
+  assert.equal(roas.channelValues!.find((c) => c.channel === "tiktok"), undefined); // TikTok fora do TACOS
 });
 
 test("comparar desligado: nenhum delta alem do GMV, e sem nota de indisponivel", () => {

@@ -39,7 +39,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
   }, [chave]);
 
   // 5o cartao: entre 480 e 1279px (2 colunas) ocupa a linha inteira em vez de ficar sozinho pela metade.
-  const W = "last:min-[480px]:col-span-2 xl:col-span-1";
+  const W = "last:min-[480px]:max-xl:col-span-2";
   if (estado?.chave !== chave) {
     return (
       <div className={`${W} h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4`} role="status" aria-busy="true">

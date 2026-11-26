@@ -91,10 +91,15 @@ export type DeltaTone = "higher_is_better" | "lower_is_better" | "neutral";
  */
 export function notaAdsShopeeParcial(
   c: { status: string; marcas_com_dado: number; marcas_total: number } | null | undefined,
+  canal = "Shopee",
 ): string | null {
   if (!c || c.status !== "parcial") return null;
-  return `Ads Shopee parcial (${c.marcas_com_dado} de ${c.marcas_total} ${c.marcas_total === 1 ? "marca" : "marcas"})`;
+  return `Ads ${canal} parcial (${c.marcas_com_dado} de ${c.marcas_total} ${c.marcas_total === 1 ? "marca" : "marcas"})`;
 }
+
+/** Metodologia do TACOS (vai no ⓘ do cartao). */
+export const NOTA_TACOS =
+  "TACOS = Ads ÷ GMV total do canal (todas as vendas, não só as atribuídas), só das marcas com Ads no recorte.";
 
 export function acosDoRoas(roas: number | null | undefined): number | null {
   return roas != null && roas > 0 ? 100 / roas : null;
@@ -291,44 +296,43 @@ export function buildKpiBand(
   const roasChannels: ChannelValue[] = [];
   for (const channel of ["ml", "shopee"] as const) {
     if (!isMarketplaceSelected(channels, channel)) continue;
-    const raw = acosDoRoas(channel === "ml" ? overview?.ml_roas : overview?.shopee_roas);
-    const anterior = acosDoRoas(channel === "ml" ? overview?.prev_ml_roas : overview?.prev_shopee_roas);
+    // TACOS vem pronto da API (Ads / GMV total das marcas com Ads); o front nao calcula.
+    const raw = (channel === "ml" ? overview?.ml_tacos_pct : overview?.shopee_tacos_pct) ?? null;
+    const anterior = (channel === "ml" ? overview?.prev_ml_tacos_pct : overview?.prev_shopee_tacos_pct) ?? null;
     const pct = compare && raw != null ? deltaPct(raw, anterior) : null;
     roasChannels.push({
       channel,
       label: CHANNEL_LABEL[channel],
       value: raw != null ? fmtPctSimples(raw) : null,
-      unavailableReason: raw != null ? undefined : "Sem ACOS para o período e filtros selecionados.",
+      unavailableReason: raw != null ? undefined : "Sem TACOS para o período e filtros selecionados.",
       previous: pct != null ? fmtPctSimples(anterior!) : null,
       direction: direcao(pct),
     });
   }
-  if (isMarketplaceSelected(channels, "tiktok")) {
-    roasChannels.push({
-      channel: "tiktok",
-      label: CHANNEL_LABEL.tiktok,
-      value: null,
-      unavailableReason: "Não disponível nesta fonte",
-    });
-  }
+  // Regra do Planejamento: TikTok nao aparece no TACOS (nem como "—").
   const compatibleWithValue = roasChannels.filter((c) => c.channel !== "tiktok" && c.value != null);
   const roas: KpiDescriptor = {
     key: "roas",
-    label: "ACOS por canal",
+    label: "TACOS por canal",
     // NUNCA um valor unico agregado: o card renderiza a lista por canal.
     value: null,
     exactValue: null,
     unavailableReason: anyAdsChannel
       ? compatibleWithValue.length === 0
-        ? "Sem ACOS disponível nos canais selecionados."
+        ? "Sem TACOS disponível nos canais selecionados."
         : null
-      : "Nenhum canal com ACOS selecionado.",
+      : "Nenhum canal com TACOS selecionado.",
     subvalue: null,
     deltaPct: null,
     deltaTone: "lower_is_better",
     reference: null,
     comparisonNote: null,
-    coverageNote: notaSoPagos(overview),
+    coverageNote: [
+      anyAdsChannel ? NOTA_TACOS : null,
+      isMarketplaceSelected(channels, "ml") ? notaAdsShopeeParcial(overview?.ml_ads_cobertura, "ML") : null,
+      adsShopeeParcial,
+      notaSoPagos(overview),
+    ].filter(Boolean).join(" · ") || null,
     channelValues: roasChannels.length ? roasChannels : null,
     highlightChannel: compatibleWithValue.length === 1 ? compatibleWithValue[0].channel : null,
     accent: compatibleWithValue.length ? "bg-chart-3" : "bg-line",

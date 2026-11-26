@@ -40,6 +40,11 @@ class KpiSummary(BaseModel):
     #: T-0115: marcas Shopee com GMV que tem Ads no recorte. So' no `current`;
     #: `None` = Shopee fora do filtro ou sem GMV. Opcional e aditivo.
     shopee_ads_cobertura: Optional["CoberturaMarcas"] = None
+    #: TACOS (%) = Ads / GMV total do canal, so' das marcas com Ads no recorte. None = sem Ads.
+    ml_tacos_pct: Optional[float] = None
+    shopee_tacos_pct: Optional[float] = None
+    #: Marcas ML com GMV que tem Ads no recorte. So' no `current`.
+    ml_ads_cobertura: Optional["CoberturaMarcas"] = None
 
 
 class OverviewResponse(BaseModel):
@@ -96,6 +101,8 @@ class BrandPerformance(BaseModel):
     cos_pct: Optional[float] = None
     gpm: Optional[float] = None
     ml_roas: Optional[float] = None
+    ml_tacos_pct: Optional[float] = None
+    shopee_tacos_pct: Optional[float] = None
     ml_cancel_rate_pct: Optional[float] = None
     ad_spend: Optional[float] = None  # Ads ML + Shopee da marca
     ad_spend_prev: Optional[float] = None  # idem, periodo anterior (so' com compare)
