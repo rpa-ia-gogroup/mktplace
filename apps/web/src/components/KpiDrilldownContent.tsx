@@ -160,7 +160,8 @@ export default function KpiDrilldownContent({
       {kind === "ad_spend" && <AdSpendBreakdown overview={overview} brands={brands} channels={channels} />}
       {kind === "roas" && <RoasBreakdown overview={overview} brands={brands} channels={channels} />}
 
-      <DrilldownCta href={buildHref(meta.nextHref)}>{meta.nextLabel} →</DrilldownCta>
+      {/* TACOS: so' o icone de seta do botao (Revisor UX); os demais seguem com o "→" no texto. */}
+      <DrilldownCta href={buildHref(meta.nextHref)}>{kind === "roas" ? meta.nextLabel : `${meta.nextLabel} →`}</DrilldownCta>
     </div>
   );
 }

@@ -72,7 +72,7 @@ import { Produtos as ProdutosMenores } from "@/components/marcas-menores/Blocos"
 import { useProdutosMarcasMenores } from "@/hooks/useProdutosMarcasMenores";
 import { fmtCompacto } from "@/lib/metas";
 import { fetchMarcasMenores, type BrandRow } from "@/lib/api-client";
-import { KPI_META, type KpiKind } from "@/lib/kpi-drilldown";
+import { KPI_META, tituloDoDetalhe, type KpiKind } from "@/lib/kpi-drilldown";
 import { IDENTIDADE_DO_KPI } from "@/lib/gerencial/kpi-identidade";
 
 import GlobalFilterControls from "@/components/layout/GlobalFilterControls";
@@ -682,7 +682,7 @@ function GerencialComGrandes() {
     if (!dialog) return "";
     switch (dialog.kind) {
       case "kpi":
-        return KPI_META[dialog.key].label;
+        return tituloDoDetalhe(dialog.key, filters.channels);
       case "confidence":
         return "Confiança no dado";
       case "bucket": {

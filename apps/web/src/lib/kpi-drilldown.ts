@@ -181,3 +181,15 @@ export interface RoasBreakdown {
 export function roasBreakdown(overview: OverviewData): RoasBreakdown {
   return { ml: overview.ml_roas, shopee: overview.shopee_roas, tiktokAvailable: false };
 }
+
+/**
+ * Titulo do detalhe de um KPI. TACOS com um canal de Ads so' no filtro (ML ou
+ * Shopee): "TACOS · Shopee"; senao, o rotulo do KPI.
+ */
+export function tituloDoDetalhe(key: KpiKind, channels: readonly string[]): string {
+  if (key === "roas") {
+    const ads = (["ml", "shopee"] as const).filter((c) => channels.includes(c));
+    if (ads.length === 1) return `TACOS · ${ads[0] === "ml" ? "ML" : "Shopee"}`;
+  }
+  return KPI_META[key].label;
+}
