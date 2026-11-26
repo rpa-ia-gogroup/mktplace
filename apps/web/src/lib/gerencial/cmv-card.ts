@@ -119,6 +119,14 @@ export function textoDre(resp: DreResponse | null, mes: string): string | null {
   return [`Mês fechado na DRE (${nome}): ${c.valor ?? "sem dado"}.`, aberto].filter(Boolean).join(" ");
 }
 
+/** 2a linha visivel do cartao: "Outubro fechado (DRE): 25,3%". Sem DRE ou sem valor, `null` (a linha some). */
+export function linhaDre(resp: DreResponse | null, mes: string): string | null {
+  if (!resp) return null;
+  const valor = cartaoCmv(resp, mes).valor;
+  if (!valor) return null;
+  return `${mesPorExtenso(resp.periodo.meses[0] ?? mes).split("/")[0]} fechado (DRE): ${valor}`;
+}
+
 /**
  * Cartao pelas notas. O numero vem pronto da API (CMV ÷ receita com custo);
  * aqui so' texto: subtitulo "Novembro até 25/11 (pelas notas)", selo "Parcial"
@@ -129,7 +137,9 @@ export function cartaoCmvNotas(nf: CmvNotas, dre: string | null): CartaoCmv {
   const valor = pct1(nf.cmv_pct);
   const base = "CMV pelas notas fiscais do mês = CMV ÷ receita com custo (só as linhas com custo).";
   if (valor == null || !nf.ate) {
-    return { valor: null, legenda: `${nomeMes} · sem dado`, selo: null, dica: [base, dre].filter(Boolean).join(" ") };
+    // O motivo real: nenhuma nota no recorte, ou notas sem custo cadastrado.
+    const motivo = !nf.ate || !nf.receita ? "sem notas no recorte" : "sem notas com custo";
+    return { valor: null, legenda: `${nomeMes} · ${motivo}`, selo: null, dica: [base, dre].filter(Boolean).join(" ") };
   }
   const [, m, d] = nf.ate.split("-");
   const semCusto = nf.cobertura != null ? pct1((1 - nf.cobertura) * 100) : null;

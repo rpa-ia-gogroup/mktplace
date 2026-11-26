@@ -14,7 +14,7 @@ import InfoDica from "@/components/ui/InfoDica";
 import type { Tom } from "@/components/ui/tone";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
-import { cartaoCmvNotas, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import { cartaoCmvNotas, linhaDre, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
 import { toISODate } from "@/lib/filters/presets";
 import { torreFetch } from "@/lib/torre-fetch";
 import { serializeMarketplaceSelection } from "@/lib/marketplace-filter";
@@ -67,6 +67,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
   }
   const dre = textoDre(estado.dre, mesDre);
   const c = estado.nf ? cartaoCmvNotas(estado.nf, dre) : null;
+  const fechado = linhaDre(estado.dre, mesDre);
   return (
     <div className={W}>
     <CartaoIndicador
@@ -76,7 +77,12 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       valor={c?.valor ?? (estado.nf ? "Sem dado" : "—")}
       ausente={!c?.valor}
       pilula={c?.selo ? { texto: c.selo.rotulo, tom: TOM[c.selo.tom] } : null}
-      legenda={<span className="text-balance">{c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}</span>}
+      legenda={
+        <>
+          <span className="block text-balance">{c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}</span>
+          {fechado && <span className="block">{fechado}</span>}
+        </>
+      }
       ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do mês = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
     />

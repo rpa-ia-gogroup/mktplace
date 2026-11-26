@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, mesDoCmv, mesPorExtenso, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
+import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, linhaDre, mesDoCmv, mesPorExtenso, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
 import type { DreResponse } from "../src/lib/dre.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -78,7 +78,7 @@ test("sem CMV (insumo nao publicado ou recorte vazio) = sem dado, nunca 0", () =
 test("cartao usa a chamada da DRE, sem rota nova, e entra na faixa da Gerencial", () => {
   const card = ler("src/components/gerencial/CmvCard.tsx");
   assert.ok(card.includes('from "@/lib/dre-api"') && card.includes("fetchDre("));
-  assert.ok(card.includes('<span className="text-balance">'), "legenda equilibrada quando quebra em 2 linhas");
+  assert.ok(card.includes('<span className="block text-balance">'), "legenda equilibrada quando quebra em 2 linhas");
   assert.ok(card.includes('cor="rgb(var(--tc-kpi-cmv))"'));
   assert.ok(!/\b0%/.test(card), "nenhum 0 fabricado");
   assert.ok(card.includes('rotulo="CMV / receita"'), "rotulo sai em caixa alta: CMV / RECEITA");
@@ -113,9 +113,12 @@ test("notas: valor da API, subtitulo 'Novembro até 25/11 (pelas notas)', selo P
 });
 
 test("notas: sem dado = 'sem dado', nunca 0; canal unico sem lista por canal", () => {
-  const s = cartaoCmvNotas(nf({ cmv_pct: null, cobertura: null, parcial: false, ate: null, por_canal: [] }), null);
+  const s = cartaoCmvNotas(nf({ cmv_pct: null, cobertura: null, parcial: false, ate: null, receita: null, por_canal: [] }), null);
   assert.equal(s.valor, null);
-  assert.equal(s.legenda, "Novembro · sem dado");
+  assert.equal(s.legenda, "Novembro · sem notas no recorte");
+  // ha' nota, mas nenhuma com custo: o motivo diz isso
+  const semCusto = cartaoCmvNotas(nf({ cmv_pct: null, cmv: null, receita_com_custo: null, cobertura: 0, parcial: false, por_canal: [] }), null);
+  assert.equal(semCusto.legenda, "Novembro · sem notas com custo");
   const um = cartaoCmvNotas(nf({ por_canal: [nf().por_canal[2]] }), null);
   assert.ok(!um.dica.includes("Shopee 27,3%"));
 });
@@ -125,6 +128,10 @@ test("o mes fechado da DRE vai para o ⓘ, com a data de fechamento", () => {
   assert.equal(t, "Mês fechado na DRE (Outubro/2026): 25,3%. Mês ainda aberto na DRE: fecha em 31/12/2026; o valor pode mudar com devoluções.");
   assert.ok(cartaoCmvNotas(nf(), t).dica.endsWith(t!));
   assert.equal(textoDre(null, "2026-10"), null);
+  // 2a linha visivel: mes e valor da DRE; sem DRE ou sem valor, some
+  assert.equal(linhaDre(resp({ ...EXTRAP, cobertura: 0.9978 }), "2026-10"), "Outubro fechado (DRE): 25,3%");
+  assert.equal(linhaDre(null, "2026-10"), null);
+  assert.equal(linhaDre(resp({ status: "snapshot_ausente" }), "2026-10"), null);
 });
 
 test("cartao le a rota das notas e a DRE so' para o ⓘ", () => {
