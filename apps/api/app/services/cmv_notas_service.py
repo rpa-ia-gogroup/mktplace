@@ -1,7 +1,7 @@
 """CMV / RECEITA da Gerencial pelas notas fiscais, no periodo do filtro, com estimativa.
 
 FONTE (Data Mart, so' leitura, UMA consulta via `datamart_leitura`):
-`gold.fct_nf_vendas_unificada` (item de NF). A consulta agrega por dia x
+`gold.nf_vendas_unificada_v2` (item de NF; mesma tabela e filtros da DRE). A consulta agrega por dia x
 plataforma x marca o intervalo que cobre o periodo, o comparativo e a janela da
 razao; todo o resto e' feito aqui, sem nova ida ao Data Mart (ou ao Metabase,
 que em producao responde em fila: 20 a 75 s medidos em 26/11/2026; por isso o
@@ -55,15 +55,21 @@ DIAS_RECENTES = 2      # os 2 ultimos dias (alem de hoje) sempre estimados
 JANELA_RAZAO = 30     # onde se procuram os dias fechados (e a reserva)
 DIAS_RAZAO = 3        # dias fechados que formam a razao
 
+#: Mesmos filtros da `SQL_CMV` da DRE (pipelines/dre/insumo_publisher.py), feitos
+#: para o planner usar o indice (marca, canal, data_emissao): tabela v2, canal
+#: fixo, data em intervalo meio-aberto e `intercompany IS NOT TRUE` (sem coalesce).
+#: Custo oficial = a coluna `custo` da gold, a mesma da DRE (decisao da Operacao, 26/11).
 SQL_NF = """
 SELECT data_emissao::text AS dia, plataforma, marca,
-       SUM(custo)                                          AS cmv,
+       SUM(custo)                                            AS cmv,
        SUM(receita_produto) FILTER (WHERE custo IS NOT NULL) AS receita_com_custo,
-       SUM(receita_produto)                                AS receita
-  FROM gold.fct_nf_vendas_unificada
- WHERE data_emissao BETWEEN :de AND :ate
-   AND plataforma = ANY(:plataformas) AND marca = ANY(:marcas)
-   AND NOT coalesce(intercompany, false)
+       SUM(receita_produto)                                  AS receita
+  FROM gold.nf_vendas_unificada_v2
+ WHERE data_emissao >= :inicio AND data_emissao < :fim_exclusivo
+   AND canal = 'marketplace'
+   AND plataforma = ANY(:plataformas)
+   AND marca = ANY(:marcas)
+   AND intercompany IS NOT TRUE
  GROUP BY 1, 2, 3
 """
 
@@ -81,6 +87,13 @@ def intervalo_leitura(periodos: list[tuple[date, date]], hoje: date) -> tuple[da
     """O intervalo unico da consulta: periodo, comparativo e a janela da razao."""
     r0, r1 = janela_razao(hoje)
     return min([r0] + [p[0] for p in periodos]), max([r1] + [min(p[1], hoje) for p in periodos])
+
+
+def params_leitura(canais: list[str], chaves: list[str], periodos: list[tuple[date, date]], hoje: date) -> dict:
+    """Parametros da UNICA consulta (tambem a chave do cache: a rota e o aquecimento usam esta funcao)."""
+    i0, i1 = intervalo_leitura(periodos, hoje)
+    return {"inicio": i0, "fim_exclusivo": i1 + timedelta(days=1),
+            "plataformas": [PLATAFORMA[c] for c in canais], "marcas": [MARCAS[m] for m in chaves]}
 
 
 def indexar_nf(linhas: list[dict]) -> dict:
@@ -181,8 +194,8 @@ def get_cmv_notas(consultar: Consultar, ler_gmv: Callable[[date, date], dict], c
     chaves = [m for m in (marcas or []) if m in MARCAS] or list(MARCAS)
     canais = [c for c in canais if c in PLATAFORMA]
     periodos = [(de, ate)] + ([comp] if comp else [])
-    i0, i1 = intervalo_leitura(periodos, hoje)
-    params = {"de": i0, "ate": i1, "plataformas": [PLATAFORMA[c] for c in canais], "marcas": [MARCAS[m] for m in chaves]}
+    params = params_leitura(canais, chaves, periodos, hoje)
+    i0, i1 = params["inicio"], params["fim_exclusivo"] - timedelta(days=1)
     nf = indexar_nf(consultar(SQL_NF, params)) if canais else {}
     # GMV sem cache (a estimativa de hoje acompanha a Torre); cobre a janela da razao tambem.
     gmv = ler_gmv(i0, min(i1, hoje)) if canais else {}
@@ -199,3 +212,55 @@ def get_cmv_notas(consultar: Consultar, ler_gmv: Callable[[date, date], dict], c
         "compare_date_from": comp[0].isoformat() if comp else None,
         "compare_date_to": comp[1].isoformat() if comp else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Aquecimento: a consulta passa de 10 s no Metabase (2 a 36 s medidos em 26/11
+# com a v2), entao o periodo padrao da Gerencial ("Mes atual" ate ontem, com o
+# comparativo e a janela da razao) e' relido a cada 14 min em segundo plano,
+# antes do cache de 15 min vencer. Outros periodos pagam a leitura na hora.
+# ---------------------------------------------------------------------------
+
+INTERVALO_AQUECIMENTO_S = 14 * 60
+
+
+def periodo_padrao(hoje: date) -> tuple[date, date]:
+    """O "Mes atual" da Gerencial: do dia 1 ate ontem (no dia 1, o mes anterior inteiro)."""
+    ate = hoje - timedelta(days=1)
+    return ate.replace(day=1), ate
+
+
+def params_padrao(hoje: date) -> dict:
+    from app.deps.period import resolve_compare_period, resolve_period
+
+    de, ate = periodo_padrao(hoje)
+    periodo = resolve_period(ref_month=None, date_from=de, date_to=ate, default_mode="previous_month", today=hoje)
+    comp = resolve_compare_period(periodo, compare=True)
+    periodos = [(periodo.start, periodo.end)] + ([(comp.start, comp.end)] if comp else [])
+    return params_leitura(list(PLATAFORMA), list(MARCAS), periodos, hoje)
+
+
+def iniciar_rotina(intervalo_s: int = INTERVALO_AQUECIMENTO_S) -> None:
+    """Startup da API: thread em segundo plano (nao segura o startup). Sem Data Mart configurado, nada."""
+    import logging
+    import threading
+    import time
+
+    from app.config import settings
+    from app.deps.period import today_brt
+    from app.services import datamart_leitura
+
+    if not (settings.metabase_api_key or settings.datamart_database_url):
+        return
+    log = logging.getLogger(__name__)
+
+    def laco() -> None:
+        time.sleep(30)
+        while True:
+            try:
+                datamart_leitura.aquecer(SQL_NF, params_padrao(today_brt()), TIMEOUT_METABASE_S)
+            except Exception:  # noqa: BLE001 — a rotina nunca derruba a API; a tela le na hora
+                log.warning("cmv-notas: aquecimento falhou", exc_info=True)
+            time.sleep(intervalo_s)
+
+    threading.Thread(target=laco, name="cmv-notas-aquecimento", daemon=True).start()

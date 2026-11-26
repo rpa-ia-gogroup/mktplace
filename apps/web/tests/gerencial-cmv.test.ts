@@ -112,7 +112,7 @@ test("periodo curto do filtro", () => {
 test("notas: valor da API, periodo do filtro, 'inclui estimativa (X%)' e p.p. contra o anterior", () => {
   const c = cartaoCmvNotas(nf(), null, "2026-11-26");
   assert.equal(c.valor, "27,4%");
-  assert.equal(c.legenda, "01–25/11 (pelas notas) · inclui estimativa (13,4% do período)");
+  assert.equal(c.legenda, "Pelas notas · 13,4% estimado");
   assert.ok(c.dica.includes(NOTA_ESTIMATIVA) && c.dica.includes("ML 26,5%"));
   assert.ok(NOTA_ESTIMATIVA.includes("estimativa = CMV % das notas dos últimos 3 dias × vendas de hoje; em dia de desconto forte (Black) tende a ficar abaixo do real"));
   assert.ok(!c.dica.includes("notas de hoje"));
@@ -120,7 +120,7 @@ test("notas: valor da API, periodo do filtro, 'inclui estimativa (X%)' e p.p. co
   assert.equal(c.selo, null);
   // sem estimativa: so' o periodo; sem anterior: sem comparacao (nunca 0)
   const fechado = cartaoCmvNotas(nf({ estimado_pct: null, anterior_cmv_pct: null }), null, "2026-11-26");
-  assert.equal(fechado.legenda, "01–25/11 (pelas notas)");
+  assert.equal(fechado.legenda, "Pelas notas");
   assert.equal(fechado.deltaPp, null);
 });
 
@@ -135,9 +135,9 @@ test("notas: Parcial abaixo de 98%; 'ate' = hoje avisa que a nota de hoje ainda 
 test("notas: sem CMV, o motivo real; nunca 0", () => {
   const s = cartaoCmvNotas(nf({ cmv_pct: null, receita: null, cobertura: null, estimado_pct: null, por_canal: [] }), null, "2026-11-26");
   assert.equal(s.valor, null);
-  assert.equal(s.legenda, "01–25/11 · sem notas no recorte");
+  assert.equal(s.legenda, "Pelas notas · sem notas no recorte");
   const semCusto = cartaoCmvNotas(nf({ cmv_pct: null, cobertura: 0, por_canal: [] }), null, "2026-11-26");
-  assert.equal(semCusto.legenda, "01–25/11 · sem notas com custo");
+  assert.equal(semCusto.legenda, "Pelas notas · sem notas com custo");
 });
 
 test("o mes fechado da DRE: 2a linha visivel e ⓘ", () => {

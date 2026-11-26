@@ -156,12 +156,11 @@ export interface CartaoCmvPeriodo extends CartaoCmv {
  * nota de hoje ainda entrando.
  */
 export function cartaoCmvNotas(nf: CmvNotas, dre: string | null, hojeIso: string): CartaoCmvPeriodo {
-  const periodo = `${periodoCurto(nf.date_from, nf.date_to)} (pelas notas)`;
   const valor = pct1(nf.cmv_pct);
   const base = "CMV pelas notas fiscais do período = CMV ÷ receita com custo (só as linhas com custo).";
   if (valor == null) {
     const motivo = nf.receita ? "sem notas com custo" : "sem notas no recorte";
-    return { valor: null, legenda: `${periodoCurto(nf.date_from, nf.date_to)} · ${motivo}`, selo: null, dica: [base, dre].filter(Boolean).join(" "), deltaPp: null, parcial: false };
+    return { valor: null, legenda: `Pelas notas · ${motivo}`, selo: null, dica: [base, dre].filter(Boolean).join(" "), deltaPp: null, parcial: false };
   }
   const estimado = nf.estimado_pct != null && nf.estimado_pct > 0 ? pct1(nf.estimado_pct * 100) : null;
   const semCusto = nf.cobertura != null && nf.cobertura < 1 ? pct1((1 - nf.cobertura) * 100) : null;
@@ -180,7 +179,8 @@ export function cartaoCmvNotas(nf: CmvNotas, dre: string | null, hojeIso: string
     .join(" ");
   return {
     valor,
-    legenda: estimado ? `${periodo} · inclui estimativa (${estimado} do período)` : periodo,
+    // O periodo ja' esta' no filtro, logo acima: a legenda so' diz a fonte e quanto e' estimado (Revisor UX).
+    legenda: estimado ? `Pelas notas · ${estimado} estimado` : "Pelas notas",
     selo: nf.parcial ? { rotulo: "Parcial", tom: "atencao" } : null,
     dica,
     deltaPp: nf.anterior_cmv_pct != null && nf.cmv_pct != null ? nf.cmv_pct - nf.anterior_cmv_pct : null,

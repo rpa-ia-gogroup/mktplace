@@ -98,7 +98,7 @@ def test_sem_gmv_na_torre_fica_a_nota_e_comparativo_na_mesma_leitura():
     chamadas = []
     r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or nf, lambda de, ate: {}, ["tiktok"], ["yenzah"],
                           date(2026, 11, 24), date(2026, 11, 25), HOJE, (date(2026, 10, 1), date(2026, 10, 15)))
-    assert len(chamadas) == 1 and chamadas[0]["de"] == date(2026, 10, 1) and chamadas[0]["marcas"] == ["yenzah"]
+    assert len(chamadas) == 1 and chamadas[0]["inicio"] == date(2026, 10, 1) and chamadas[0]["fim_exclusivo"] == date(2026, 11, 26) and chamadas[0]["marcas"] == ["yenzah"]
     assert r["cmv_pct"] == 30.0 and r["estimado_pct"] is None   # marca menor: nota, sem estimativa
     assert r["anterior_cmv_pct"] == 20.0 and r["compare_date_from"] == "2026-10-01"
 
@@ -130,3 +130,30 @@ def test_rota_segue_o_filtro_e_503_sem_vazar(monkeypatch):
     monkeypatch.setattr(datamart_leitura, "consultar", quebra)
     r = client.get(ROTA, params={"channels": "ml", "date_from": "2026-11-01", "date_to": "2026-11-23"})
     assert r.status_code == 503 and "xyz" not in r.text
+
+
+def test_aquecimento_le_a_mesma_chave_que_a_rota_no_periodo_padrao(monkeypatch):
+    """A rotina aquece exatamente o que a Gerencial pede ao abrir ("Mes atual" + comparativo)."""
+    assert svc.periodo_padrao(HOJE) == (date(2026, 11, 1), date(2026, 11, 25))
+    assert svc.periodo_padrao(date(2026, 12, 1)) == (date(2026, 11, 1), date(2026, 11, 30))
+    p = svc.params_padrao(HOJE)
+    # comparativo 01-25/10 + janela da razao: uma leitura de 01/10 a 25/11
+    assert p == {"inicio": date(2026, 10, 1), "fim_exclusivo": date(2026, 11, 26),
+                 "plataformas": ["tiktokshop", "mercadolivre", "shopee"], "marcas": list(svc.MARCAS.values())}
+    chamadas = []
+    monkeypatch.setattr(perf_router, "today_brt", lambda: HOJE)
+    monkeypatch.setattr(perf_router, "_require_db", lambda db: object())
+    monkeypatch.setattr(perf_svc, "gmv_dia_marca_canal", lambda *a, **k: {})
+    monkeypatch.setattr(datamart_leitura, "consultar", lambda sql, params, **kw: chamadas.append(params) or [])
+    client.get(ROTA, params={"channels": "all", "date_from": "2026-11-01", "date_to": "2026-11-25", "compare": "true"})
+    assert chamadas == [p]
+
+
+def test_aquecer_grava_no_cache_mesmo_com_entrada_valida(monkeypatch):
+    datamart_leitura.limpar_cache()
+    leituras = iter([[{"x": 1}], [{"x": 2}]])
+    monkeypatch.setattr(datamart_leitura, "_consultar_sem_cache", lambda sql, params, t=None: next(leituras))
+    assert datamart_leitura.consultar("SQL", {"a": 1}) == [{"x": 1}]
+    datamart_leitura.aquecer("SQL", {"a": 1})
+    assert datamart_leitura.consultar("SQL", {"a": 1}) == [{"x": 2}]
+    datamart_leitura.limpar_cache()
