@@ -5,12 +5,21 @@
  * `GET /api/v1/dre` (CMV / receita da DRE), no mesmo recorte de canal e marca.
  * Nada e' recalculado aqui. CMV e' mensal: o cartao le um mes e diz qual.
  */
-import { ORIGEM_CHIP, STATUS_CHIP, fmtPctDre, rotuloMes, textoPrevia, type DreResponse } from "../dre.ts";
+import { ORIGEM_CHIP, STATUS_CHIP, ehPrevia, fmtInstanteBrt, fmtPctDre, type DreResponse } from "../dre.ts";
 import type { Tom } from "../../components/ui/tone";
 
 /** Mesmo texto de `dre_service.AVISO_CMV_EXTRAPOLADO` (sem o espaco inicial). */
 export const AVISO_CMV_EXTRAPOLADO =
   "O CMV foi estendido proporcionalmente à receita onde a NF ou o custo não cobre o mês inteiro.";
+
+const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+
+/** "2026-10" -> "Outubro/2026". Fora do formato, devolve como veio. */
+export function mesPorExtenso(mes: string): string {
+  const m = /^(\d{4})-(\d{2})$/.exec(mes);
+  const nome = m ? MESES[Number(m[2]) - 1] : undefined;
+  return m && nome ? `${nome}/${m[1]}` : mes;
+}
 
 /**
  * Mes do CMV para o periodo da Gerencial: o mes do fim do periodo; se ele
@@ -28,39 +37,46 @@ export function mesDoCmv(dateTo: string, hojeIso: string): string {
 export interface CartaoCmv {
   /** "25,3%" ou `null` = sem dado (nunca 0). */
   valor: string | null;
-  /** "Competência 10/2026". */
-  competencia: string;
+  /** Subtitulo: "Outubro/2026 · último mês com custo", "Setembro/2026" ou "Novembro/2026 · Insumo não publicado". */
+  legenda: string;
   /** Selo da DRE (origem extrapolado/parcial ou status), com o tom da DRE. */
   selo: { rotulo: string; tom: Tom } | null;
-  /** "Prévia · fecha em 31/12/2026" quando o mes ainda nao fechou. */
-  previa: string | null;
-  /** Motivo da ausencia ("Insumo não publicado"); so' sem valor. */
-  semDado: string | null;
   /** Texto do ⓘ. */
   dica: string;
 }
 
-export function cartaoCmv(resp: DreResponse, mes: string): CartaoCmv {
+/**
+ * `ultimoComCusto`: o mes nao e' o do filtro (o periodo esta' num mes aberto e o
+ * cartao caiu no ultimo mes fechado). So' entao o subtitulo diz "último mês com custo".
+ */
+export function cartaoCmv(resp: DreResponse, mes: string, ultimoComCusto = false): CartaoCmv {
   const t = resp.total;
-  const competencia = `Competência ${rotuloMes(resp.periodo.meses[0] ?? mes)}`;
+  const nomeMes = mesPorExtenso(resp.periodo.meses[0] ?? mes);
   const base = "CMV ÷ receita da DRE, o mesmo número da aba DRE, no recorte de canal e marca do filtro.";
-  if (!t) return { valor: null, competencia, selo: null, previa: null, semDado: "sem receita no recorte", dica: base };
+  if (!t) return { valor: null, legenda: `${nomeMes} · sem receita no recorte`, selo: null, dica: base };
   const cmv = t.componentes.cmv;
   const valor = cmv.valor == null ? null : fmtPctDre(cmv.pct_receita);
-  const previa = textoPrevia(t);
+  // Mes imaturo: a data de fechamento vem da DRE; sem ela, a frase sai sem data (nada inventado).
+  const aberto = ehPrevia(t)
+    ? `Mês ainda aberto na DRE${t.fecha_em ? `: fecha em ${fmtInstanteBrt(t.fecha_em)}` : ""}; o valor pode mudar com devoluções.`
+    : null;
   if (valor == null) {
     const motivo = STATUS_CHIP[cmv.status]?.rotulo ?? "Sem dado";
-    return { valor: null, competencia, selo: null, previa, semDado: motivo, dica: [base, previa].filter(Boolean).join(" ") };
+    return { valor: null, legenda: `${nomeMes} · ${motivo}`, selo: null, dica: [base, aberto].filter(Boolean).join(" ") };
   }
-  const origem = cmv.origem && cmv.origem !== "realizado" ? ORIGEM_CHIP[cmv.origem] : null;
-  const selo = origem ?? STATUS_CHIP[cmv.status];
+  // "Extrapolado" so' com cobertura abaixo do minimo da API (regras.cmv_cobertura_minima).
+  // Cobertura ou minimo ausentes: o selo fica (nao ha' como afirmar que cobre).
+  const minimo = typeof resp.regras?.cmv_cobertura_minima === "number" ? resp.regras.cmv_cobertura_minima : null;
+  const cobre = cmv.cobertura != null && minimo != null && cmv.cobertura >= minimo;
+  let selo = cmv.origem && cmv.origem !== "realizado" ? ORIGEM_CHIP[cmv.origem] : STATUS_CHIP[cmv.status];
+  if (cmv.origem === "extrapolado" && cobre) selo = null;
   const dica = [
     base,
-    previa ? `${previa}.` : null,
+    aberto,
     cmv.cobertura_rotulo ? `Cobertura: ${cmv.cobertura_rotulo}.` : null,
     cmv.origem === "extrapolado" ? AVISO_CMV_EXTRAPOLADO : null,
   ]
     .filter(Boolean)
     .join(" ");
-  return { valor, competencia, selo, previa, semDado: null, dica };
+  return { valor, legenda: ultimoComCusto ? `${nomeMes} · último mês com custo` : nomeMes, selo, dica };
 }

@@ -49,7 +49,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       </div>
     );
   }
-  const c = estado.resp ? cartaoCmv(estado.resp, mes) : null;
+  const c = estado.resp ? cartaoCmv(estado.resp, mes, mes !== dateTo.slice(0, 7)) : null;
   return (
     <div className={W}>
     <CartaoIndicador
@@ -62,7 +62,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       legenda={
         estado.erro
           ? "A DRE não respondeu nesta carga."
-          : [c?.competencia, c?.previa ? "prévia" : null, c?.semDado].filter(Boolean).join(" · ")
+          : c?.legenda ?? "Sem dado"
       }
       ajuda={<InfoDica emControle texto={c?.dica ?? "CMV ÷ receita da DRE, o mesmo número da aba DRE."} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
