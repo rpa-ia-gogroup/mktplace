@@ -1191,3 +1191,28 @@ class BrandDetailResponse(BaseModel):
     top_produtos: list[BrandDetailProduto]
 
 
+class CmvNotasBloco(BaseModel):
+    """CMV pelas notas fiscais. `cmv_pct` = CMV / receita COM custo; None = sem dado (nunca 0)."""
+    cmv: Optional[float] = None
+    receita_com_custo: Optional[float] = None
+    receita: Optional[float] = None
+    cmv_pct: Optional[float] = None
+    #: receita com custo / receita (0..1). None = sem receita.
+    cobertura: Optional[float] = None
+    #: cobertura abaixo de `cobertura_minima`.
+    parcial: bool = False
+
+
+class CmvNotasCanal(CmvNotasBloco):
+    canal: str
+
+
+class CmvNotasResponse(CmvNotasBloco):
+    #: Mes lido, YYYY-MM.
+    mes: str
+    #: Ultima data de NF na base (YYYY-MM-DD). None = sem linha no recorte.
+    ate: Optional[str] = None
+    #: Ultima carga da base (BRT, YYYY-MM-DDTHH:MM).
+    carregado_em: Optional[str] = None
+    cobertura_minima: float
+    por_canal: list[CmvNotasCanal]
