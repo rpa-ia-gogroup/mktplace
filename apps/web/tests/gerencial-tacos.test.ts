@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildKpiBand, NOTA_TACOS } from "../src/lib/gerencial/kpi-band.ts";
+import { buildKpiBand, NOTA_TACOS, pilulaPp } from "../src/lib/gerencial/kpi-band.ts";
 import type { OverviewData } from "../src/lib/api-client.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -54,4 +54,21 @@ test("o rodape e o detalhe falam TACOS; o ACOS da analise por produto nao muda",
   assert.ok(det.includes("overview.ml_tacos_pct") && !det.includes("acosDoRoas"));
   assert.ok(det.includes('kind !== "roas" && ('), "detalhe do TACOS sem numero grande '—'");
   assert.ok(ler("src/components/MercadoLivreProductTable.tsx").includes("ACOS"));
+});
+
+test("TACOS compara com o anterior em p.p.: menor e' melhor, seta e sinal alem da cor", () => {
+  const k = buildKpiBand(ov({ prev_ml_tacos_pct: 5.5, prev_shopee_tacos_pct: 6.0 }), ["ml", "shopee"], true).find((x) => x.key === "roas")!;
+  const ml = k.channelValues!.find((c) => c.channel === "ml")!;
+  const sh = k.channelValues!.find((c) => c.channel === "shopee")!;
+  assert.ok(Math.abs(ml.deltaPp! - -0.62) < 1e-9 && Math.abs(sh.deltaPp! - 0.48) < 1e-9);
+  assert.deepEqual(pilulaPp(ml.deltaPp), { texto: "▼ 0,6 p.p.", tom: "ok" });
+  assert.deepEqual(pilulaPp(sh.deltaPp), { texto: "▲ 0,5 p.p.", tom: "crit" });
+  assert.deepEqual(pilulaPp(0.01), { texto: "= 0,0 p.p.", tom: "neutro" });
+  // anterior sem dado ou comparar desligado: sem comparacao, nunca 0
+  const sem = buildKpiBand(ov({ prev_ml_tacos_pct: null }), ["ml"], true).find((x) => x.key === "roas")!;
+  assert.equal(sem.channelValues![0].deltaPp, null);
+  assert.equal(pilulaPp(null), null);
+  const off = buildKpiBand(ov({ prev_ml_tacos_pct: 5.5 }), ["ml"], false).find((x) => x.key === "roas")!;
+  assert.equal(off.channelValues![0].deltaPp, null);
+  assert.ok(ler("src/components/gerencial/KpiBand.tsx").includes("delta: c.value ? pilulaPp(c.deltaPp) : null"));
 });

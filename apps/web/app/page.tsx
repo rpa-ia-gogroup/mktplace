@@ -845,7 +845,7 @@ function GerencialComGrandes() {
         onRetry={sources.retry}
         acosProprio
         tendencias={tendencias}
-        extra={<CmvCard channels={filters.channels} brands={filters.brands} dateTo={filters.dateTo} />}
+        extra={<CmvCard channels={filters.channels} brands={filters.brands} dateFrom={filters.dateFrom} dateTo={filters.dateTo} compare={comparar} base={base} />}
       />
         </>
       }

@@ -1,49 +1,61 @@
 "use client";
 
 /**
- * Cartao CMV / RECEITA da Gerencial: CMV do mes ate ontem pelas notas fiscais
- * (`GET /api/v1/performance/cmv-notas`, calculado na API), no recorte de canal
- * e marca do filtro. O mes fechado da DRE (`fetchDre`) vai so' para o ⓘ. Clique
- * abre a DRE. Sem CMV = "Sem dado", nunca 0.
+ * Cartao CMV / RECEITA da Gerencial: CMV pelas notas fiscais NO PERIODO DO
+ * FILTRO (de/ate, comparativo e base, os mesmos dos outros cartoes), com
+ * estimativa dos dias sem nota completa. Tudo calculado na API
+ * (`GET /api/v1/performance/cmv-notas`). O mes fechado da DRE (`fetchDre`)
+ * vira a 2a linha e o ⓘ. Clique abre a DRE. Sem CMV = "Sem dado", nunca 0.
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Boxes } from "lucide-react";
 import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
 import InfoDica from "@/components/ui/InfoDica";
-import type { Tom } from "@/components/ui/tone";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
 import { cartaoCmvNotas, linhaDre, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
+import { pilulaPp } from "@/lib/gerencial/kpi-band";
 import { toISODate } from "@/lib/filters/presets";
 import { torreFetch } from "@/lib/torre-fetch";
 import { serializeMarketplaceSelection } from "@/lib/marketplace-filter";
 import type { Marketplace } from "@/lib/mock-data";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-const TOM: Record<Tom, TomPilula> = { bom: "ok", atencao: "warn", critico: "crit", neutro: "neutro", ausente: "neutro" };
 
-async function fetchCmvNotas(channels: Marketplace[], brands: string[], dateTo: string, signal: AbortSignal): Promise<CmvNotas> {
-  const q = new URLSearchParams({ channels: serializeMarketplaceSelection(channels), date_to: dateTo });
-  if (brands.length) q.set("brands", brands.join(","));
+interface Props {
+  channels: Marketplace[];
+  brands: string[];
+  dateFrom: string;
+  dateTo: string;
+  compare: boolean;
+  base: string;
+}
+
+async function fetchCmvNotas(p: Props, signal: AbortSignal): Promise<CmvNotas> {
+  const q = new URLSearchParams({ channels: serializeMarketplaceSelection(p.channels), date_from: p.dateFrom, date_to: p.dateTo });
+  if (p.brands.length) q.set("brands", [...p.brands].sort().join(","));
+  if (p.compare) q.set("compare", "true");
+  if (p.base === "realizados") q.set("base", "realizados");
   const res = await torreFetch(`${API_URL}/api/v1/performance/cmv-notas?${q}`, { signal });
   if (!res.ok) throw new Error(`cmv-notas ${res.status}`);
   return (await res.json()) as CmvNotas;
 }
 
-export default function CmvCard({ channels, brands, dateTo }: { channels: Marketplace[]; brands: string[]; dateTo: string }) {
+export default function CmvCard(props: Props) {
+  const { channels, brands, dateFrom, dateTo, compare, base } = props;
   const router = useRouter();
-  const mesDre = mesDoCmv(dateTo, toISODate(new Date()));
+  const hoje = toISODate(new Date());
+  const mesDre = mesDoCmv(dateTo, hoje);
   const filtros = { mes: mesDre, canais: channels, marcas: brands };
-  const chave = `${dateTo}|${channels.join(",")}|${brands.join(",")}`;
+  const chave = `${dateFrom}|${dateTo}|${compare}|${base}|${channels.join(",")}|${brands.join(",")}`;
   const [estado, setEstado] = useState<{ chave: string; nf: CmvNotas | null; dre: DreResponse | null } | null>(null);
 
   useEffect(() => {
     const ctl = new AbortController();
-    const abortou = () => ctl.signal.aborted;
-    // A DRE e' so' o ⓘ: se ela falhar, o cartao segue com as notas.
-    Promise.allSettled([fetchCmvNotas(channels, brands, dateTo, ctl.signal), fetchDre(filtros, ctl.signal)]).then(([nf, dre]) => {
-      if (abortou()) return;
+    // A DRE e' so' a 2a linha e o ⓘ: se ela falhar, o cartao segue com as notas.
+    Promise.allSettled([fetchCmvNotas(props, ctl.signal), fetchDre(filtros, ctl.signal)]).then(([nf, dre]) => {
+      if (ctl.signal.aborted) return;
       setEstado({
         chave,
         nf: nf.status === "fulfilled" ? nf.value : null,
@@ -66,8 +78,10 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
     );
   }
   const dre = textoDre(estado.dre, mesDre);
-  const c = estado.nf ? cartaoCmvNotas(estado.nf, dre) : null;
+  const c = estado.nf ? cartaoCmvNotas(estado.nf, dre, hoje) : null;
   const fechado = linhaDre(estado.dre, mesDre);
+  // CMV %: menor e' melhor, como o TACOS (▼ verde, ▲ vermelho). Sem anterior: sem pilula.
+  const delta = compare && c?.valor ? pilulaPp(c.deltaPp) : null;
   return (
     <div className={W}>
     <CartaoIndicador
@@ -76,14 +90,17 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       cor="rgb(var(--tc-kpi-cmv))"
       valor={c?.valor ?? (estado.nf ? "Sem dado" : "—")}
       ausente={!c?.valor}
-      pilula={c?.selo ? { texto: c.selo.rotulo, tom: TOM[c.selo.tom] } : null}
+      pilula={delta ? { texto: `${delta.texto} vs anterior`, tom: delta.tom as TomPilula } : null}
       legenda={
         <>
-          <span className="block text-balance">{c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}</span>
+          <span className="block text-balance">
+            {c?.parcial && <span className="mr-1.5 rounded-full bg-warn-soft px-2 py-0.5 font-semibold text-warn-ink">Parcial</span>}
+            {c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}
+          </span>
           {fechado && <span className="block">{fechado}</span>}
         </>
       }
-      ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do mês = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
+      ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do período = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
     />
     </div>

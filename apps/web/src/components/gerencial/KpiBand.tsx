@@ -11,7 +11,7 @@
  */
 import type { ReactNode } from "react";
 import { CircleDollarSign, Gauge, Megaphone, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
-import type { KpiDescriptor, KpiKey } from "@/lib/gerencial/kpi-band";
+import { pilulaPp, type KpiDescriptor, type KpiKey } from "@/lib/gerencial/kpi-band";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
 import { fmtPctBr } from "@/lib/formatters";
 import CartaoIndicador, { type TomPilula } from "@/components/ui/CartaoIndicador";
@@ -144,7 +144,7 @@ export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen
                   icone={CARTAO[k].icone}
                   cor={CARTAO[k].cor}
                   valor={valor}
-                  valores={eAcos ? acos.map((c) => ({ rotulo: CANAL_CURTO[c.channel] ?? c.label, valor: c.value })) : null}
+                  valores={eAcos ? acos.map((c) => ({ rotulo: CANAL_CURTO[c.channel] ?? c.label, valor: c.value, delta: c.value ? pilulaPp(c.deltaPp) : null })) : null}
                   pilula={p && { ...p, texto: `${p.texto} ${eGmv && gmv ? gmv.referencia ?? "vs anterior" : ref}` }}
                   rodape={
                     k === "ad_spend" && acos.length && !acosProprio ? (

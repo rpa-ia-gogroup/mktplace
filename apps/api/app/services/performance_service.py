@@ -653,6 +653,32 @@ def _brand_mkt_rows(
     return result
 
 
+def gmv_dia_marca_canal(
+    db: Session, start: date, end: date, mkt_ids: list[int], brand_keys: list[str] | None = None,
+    base: str = "pagos",
+) -> dict[tuple[str, str, str], float]:
+    """GMV da Gerencial por (dia ISO, canal, brand_key), na mesma fato e base.
+    Insumo da estimativa do CMV pelas notas (`cmv_notas_service`)."""
+    params: dict = {"start": start, "end": end, "mkt_ids": mkt_ids}
+    brand_filter = _brand_filter_sql(brand_keys, params)
+    nao_pago = " + COALESCE(SUM(f.unpaid_gmv), 0)" if base == "realizados" else ""
+    sql = text(f"""
+        SELECT f.date AS dia, f.marketplace_id, l.brand_key, COALESCE(SUM(f.gmv), 0){nao_pago} AS gmv
+        FROM marts.fact_marketplace_daily_performance f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date BETWEEN :start AND :end
+          AND f.marketplace_id = ANY(:mkt_ids)
+          {brand_filter}
+        GROUP BY f.date, f.marketplace_id, l.brand_key
+    """)
+    canal = {TIKTOK_ID: "tiktok", ML_ID: "ml", SHOPEE_ID: "shopee"}
+    return {
+        (str(r["dia"])[:10], canal[r["marketplace_id"]], r["brand_key"]): _f(r["gmv"])
+        for r in db.execute(sql, params).mappings().all()
+        if r["marketplace_id"] in canal and r["brand_key"]
+    }
+
+
 def _shopee_ads_cobertura(
     db: Session, start: date, end: date, brand_keys: list[str] | None = None,
 ) -> dict | None:
