@@ -103,6 +103,12 @@ class BrandPerformance(BaseModel):
     ml_roas: Optional[float] = None
     ml_tacos_pct: Optional[float] = None
     shopee_tacos_pct: Optional[float] = None
+    #: TACOS da marca no periodo anterior (so' com compare). None = sem comparacao, nunca 0.
+    ml_tacos_pct_prev: Optional[float] = None
+    shopee_tacos_pct_prev: Optional[float] = None
+    #: Ads da marca por canal. None = sem Ads no recorte (nunca 0).
+    ml_ad_spend: Optional[float] = None
+    shopee_ad_spend: Optional[float] = None
     ml_cancel_rate_pct: Optional[float] = None
     ad_spend: Optional[float] = None  # Ads ML + Shopee da marca
     ad_spend_prev: Optional[float] = None  # idem, periodo anterior (so' com compare)

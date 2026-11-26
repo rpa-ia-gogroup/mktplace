@@ -7,8 +7,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildKpiBand, NOTA_TACOS, pilulaPp } from "../src/lib/gerencial/kpi-band.ts";
+import { buildKpiBand, NOTA_TACOS, pilulaPp, tacosPorMarca } from "../src/lib/gerencial/kpi-band.ts";
 import type { OverviewData } from "../src/lib/api-client.ts";
+import { tituloDoDetalhe } from "../src/lib/kpi-drilldown.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
 
@@ -71,4 +72,41 @@ test("TACOS compara com o anterior em p.p.: menor e' melhor, seta e sinal alem d
   const off = buildKpiBand(ov({ prev_ml_tacos_pct: 5.5 }), ["ml"], false).find((x) => x.key === "roas")!;
   assert.equal(off.channelValues![0].deltaPp, null);
   assert.ok(ler("src/components/gerencial/KpiBand.tsx").includes("delta: c.value ? pilulaPp(c.deltaPp) : null"));
+});
+
+test("detalhe do TACOS por marca: da API, ordenado por GMV, p.p. vs anterior, 'sem Ads' nunca 0", () => {
+  const brands = [
+    { brand: "lescent", label: "LESCENT", ml_gmv: null, shopee_gmv: 500, shopee_tacos_pct: null, shopee_ad_spend: null },
+    { brand: "kokeshi", label: "KOKESHI", ml_gmv: 1000, shopee_gmv: 2000, ml_tacos_pct: 5, ml_tacos_pct_prev: 4.4,
+      shopee_tacos_pct: 6, shopee_tacos_pct_prev: null, ml_ad_spend: 50, shopee_ad_spend: 120 },
+    { brand: "apice", label: "ÁPICE", ml_gmv: null, shopee_gmv: 3000, shopee_tacos_pct: 7.5, shopee_tacos_pct_prev: 7.0, shopee_ad_spend: 225 },
+  ];
+  const sh = tacosPorMarca(brands, "shopee");
+  assert.deepEqual(sh.map((l) => l.brand), ["apice", "kokeshi", "lescent"]);   // por GMV
+  assert.ok(Math.abs(sh[0].deltaPp! - 0.5) < 1e-9);
+  assert.equal(sh[1].deltaPp, null, "sem anterior: sem pilula");
+  assert.equal(sh[2].tacos, null, "sem Ads: o front escreve 'sem Ads', nunca 0");
+  assert.equal(sh[2].adSpend, null);
+  const ml = tacosPorMarca(brands, "ml");
+  assert.deepEqual(ml.map((l) => l.brand), ["kokeshi"], "so' marcas com GMV no canal");
+  assert.ok(Math.abs(ml[0].deltaPp! - 0.6) < 1e-9);
+});
+
+test("detalhe do TACOS: p.p. (nao variacao relativa) no canal e na marca; um canal so' = so' a lista por marca", () => {
+  const det = ler("src/components/KpiDrilldownContent.tsx");
+  const i = det.indexOf("function RoasBreakdown(");
+  const bloco = det.slice(i, det.indexOf("\n}\n", i));
+  assert.ok(!bloco.includes("variacao("), "variacao relativa (%) saiu do TACOS");
+  assert.equal((bloco.match(/unidade: "pp"/g) ?? []).length, 2);
+  assert.ok(bloco.includes("canais.length > 1 && (") && bloco.includes("tacosPorMarca(brands, c)"));
+  assert.ok(bloco.includes('"sem Ads"'));
+});
+
+test("titulo do detalhe: 'TACOS · Shopee' com um canal de Ads so'; CTA do TACOS sem '→' no texto", () => {
+  assert.equal(tituloDoDetalhe("roas", ["shopee"]), "TACOS · Shopee");
+  assert.equal(tituloDoDetalhe("roas", ["tiktok", "ml"]), "TACOS · ML");
+  assert.equal(tituloDoDetalhe("roas", ["tiktok", "ml", "shopee"]), "TACOS por canal");
+  assert.equal(tituloDoDetalhe("orders", ["shopee"]), "Pedidos");
+  assert.ok(ler("app/page.tsx").includes("return tituloDoDetalhe(dialog.key, filters.channels);"));
+  assert.ok(ler("src/components/KpiDrilldownContent.tsx").includes('{kind === "roas" ? meta.nextLabel : `${meta.nextLabel} →`}'));
 });

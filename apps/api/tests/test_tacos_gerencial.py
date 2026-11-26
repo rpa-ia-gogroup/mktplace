@@ -70,3 +70,34 @@ def test_sql_tacos_exclui_marca_sem_ads_do_denominador():
     finally:
         db.rollback()
         db.close()
+
+
+def test_brands_tacos_por_marca_com_anterior_da_mesma_leitura_e_sem_ads(monkeypatch):
+    """Detalhe do TACOS por marca: Ads / GMV da marca no canal, o anterior da leitura do
+    comparativo (sem consulta nova) e marca sem Ads = None (o front escreve 'sem Ads')."""
+    from app.deps.period import EffectivePeriod
+
+    def linha(gmv, spend):
+        return {"gmv": gmv, "orders": 10, "canceled_orders": 0, "ad_spend": spend, "ad_revenue": 0, "total_fees": 0}
+
+    leituras = {
+        date(2026, 11, 1): {"kokeshi": {ML: linha(1000.0, 50.0), SHOPEE: linha(2000.0, 120.0)},
+                            "lescent": {SHOPEE: linha(500.0, 0.0)}},
+        date(2026, 10, 1): {"kokeshi": {ML: linha(800.0, 32.0), SHOPEE: linha(1000.0, 0.0)}},
+    }
+    chamadas = []
+
+    def fake(db, start, end, mkt_ids, extra_cols="", brand_keys=None, base="pagos"):
+        chamadas.append(start)
+        return leituras.get(start, {})
+    monkeypatch.setattr(ps, "_brand_mkt_rows", fake)
+    monkeypatch.setattr(ps, "_max_refreshed_at", lambda *a, **k: None)
+    r = ps.get_brands(None, "all", 2026, 11,
+                      period=EffectivePeriod(date(2026, 11, 1), date(2026, 11, 25), None),
+                      compare_period=EffectivePeriod(date(2026, 10, 1), date(2026, 10, 25), None))
+    assert chamadas == [date(2026, 11, 1), date(2026, 10, 1)]   # as 2 leituras de sempre, nenhuma nova
+    por = {b["brand"]: b for b in r["brands"]}
+    k, l = por["kokeshi"], por["lescent"]
+    assert k["ml_tacos_pct"] == 5.0 and k["ml_tacos_pct_prev"] == 4.0 and k["ml_ad_spend"] == 50.0
+    assert k["shopee_tacos_pct"] == 6.0 and k["shopee_tacos_pct_prev"] is None   # sem Ads no anterior: sem comparacao
+    assert l["shopee_tacos_pct"] is None and l["shopee_ad_spend"] is None         # sem Ads: nunca 0
