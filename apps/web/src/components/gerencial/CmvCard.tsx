@@ -1,9 +1,10 @@
 "use client";
 
 /**
- * Cartao de CMV % da Gerencial. Le a MESMA chamada da aba DRE (`fetchDre`) no
- * recorte de canal e marca do filtro; o mes vem de `mesDoCmv`. Clique abre a
- * DRE no mesmo recorte. Sem CMV = "Sem dado", nunca 0.
+ * Cartao CMV / RECEITA da Gerencial: CMV do mes ate ontem pelas notas fiscais
+ * (`GET /api/v1/performance/cmv-notas`, calculado na API), no recorte de canal
+ * e marca do filtro. O mes fechado da DRE (`fetchDre`) vai so' para o ⓘ. Clique
+ * abre a DRE. Sem CMV = "Sem dado", nunca 0.
  */
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -13,27 +14,42 @@ import InfoDica from "@/components/ui/InfoDica";
 import type { Tom } from "@/components/ui/tone";
 import { fetchDre } from "@/lib/dre-api";
 import { dreUrlQuery, type DreResponse } from "@/lib/dre";
-import { cartaoCmv, mesDoCmv } from "@/lib/gerencial/cmv-card";
+import { cartaoCmvNotas, mesDoCmv, textoDre, type CmvNotas } from "@/lib/gerencial/cmv-card";
 import { toISODate } from "@/lib/filters/presets";
+import { torreFetch } from "@/lib/torre-fetch";
+import { serializeMarketplaceSelection } from "@/lib/marketplace-filter";
 import type { Marketplace } from "@/lib/mock-data";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const TOM: Record<Tom, TomPilula> = { bom: "ok", atencao: "warn", critico: "crit", neutro: "neutro", ausente: "neutro" };
+
+async function fetchCmvNotas(channels: Marketplace[], brands: string[], dateTo: string, signal: AbortSignal): Promise<CmvNotas> {
+  const q = new URLSearchParams({ channels: serializeMarketplaceSelection(channels), date_to: dateTo });
+  if (brands.length) q.set("brands", brands.join(","));
+  const res = await torreFetch(`${API_URL}/api/v1/performance/cmv-notas?${q}`, { signal });
+  if (!res.ok) throw new Error(`cmv-notas ${res.status}`);
+  return (await res.json()) as CmvNotas;
+}
 
 export default function CmvCard({ channels, brands, dateTo }: { channels: Marketplace[]; brands: string[]; dateTo: string }) {
   const router = useRouter();
-  const mes = mesDoCmv(dateTo, toISODate(new Date()));
-  const filtros = { mes, canais: channels, marcas: brands };
-  const chave = `${mes}|${channels.join(",")}|${brands.join(",")}`;
-  const [estado, setEstado] = useState<{ chave: string; resp: DreResponse | null; erro: boolean } | null>(null);
+  const mesDre = mesDoCmv(dateTo, toISODate(new Date()));
+  const filtros = { mes: mesDre, canais: channels, marcas: brands };
+  const chave = `${dateTo}|${channels.join(",")}|${brands.join(",")}`;
+  const [estado, setEstado] = useState<{ chave: string; nf: CmvNotas | null; dre: DreResponse | null } | null>(null);
 
   useEffect(() => {
     const ctl = new AbortController();
-    fetchDre(filtros, ctl.signal).then(
-      (resp) => setEstado({ chave, resp, erro: false }),
-      (err) => {
-        if (!(err instanceof DOMException && err.name === "AbortError")) setEstado({ chave, resp: null, erro: true });
-      },
-    );
+    const abortou = () => ctl.signal.aborted;
+    // A DRE e' so' o ⓘ: se ela falhar, o cartao segue com as notas.
+    Promise.allSettled([fetchCmvNotas(channels, brands, dateTo, ctl.signal), fetchDre(filtros, ctl.signal)]).then(([nf, dre]) => {
+      if (abortou()) return;
+      setEstado({
+        chave,
+        nf: nf.status === "fulfilled" ? nf.value : null,
+        dre: dre.status === "fulfilled" ? dre.value : null,
+      });
+    });
     return () => ctl.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chave cobre o recorte
   }, [chave]);
@@ -49,18 +65,19 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       </div>
     );
   }
-  const c = estado.resp ? cartaoCmv(estado.resp, mes, mes !== dateTo.slice(0, 7)) : null;
+  const dre = textoDre(estado.dre, mesDre);
+  const c = estado.nf ? cartaoCmvNotas(estado.nf, dre) : null;
   return (
     <div className={W}>
     <CartaoIndicador
       rotulo="CMV / receita"
       icone={Boxes}
       cor="rgb(var(--tc-kpi-cmv))"
-      valor={c?.valor ?? (estado.erro ? "—" : "Sem dado")}
+      valor={c?.valor ?? (estado.nf ? "Sem dado" : "—")}
       ausente={!c?.valor}
       pilula={c?.selo ? { texto: c.selo.rotulo, tom: TOM[c.selo.tom] } : null}
-      legenda={<span className="text-balance">{estado.erro ? "A DRE não respondeu nesta carga." : c?.legenda ?? "Sem dado"}</span>}
-      ajuda={<InfoDica emControle texto={c?.dica ?? "CMV ÷ receita da DRE, o mesmo número da aba DRE."} />}
+      legenda={<span className="text-balance">{c ? c.legenda : "A base de custo das notas não respondeu nesta carga."}</span>}
+      ajuda={<InfoDica emControle texto={c?.dica ?? ["CMV pelas notas fiscais do mês = CMV ÷ receita com custo.", dre].filter(Boolean).join(" ")} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
     />
     </div>

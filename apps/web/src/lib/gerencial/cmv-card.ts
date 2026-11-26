@@ -82,3 +82,74 @@ export function cartaoCmv(resp: DreResponse, mes: string, ultimoComCusto = false
     .join(" ");
   return { valor, legenda: ultimoComCusto ? `${nomeMes} · último mês com custo` : nomeMes, selo, dica };
 }
+
+// ---------------------------------------------------------------------------
+// CMV do mes ate ontem pelas notas (GET /api/v1/performance/cmv-notas)
+// ---------------------------------------------------------------------------
+
+export interface CmvNotasBloco {
+  cmv: number | null;
+  receita_com_custo: number | null;
+  receita: number | null;
+  cmv_pct: number | null;
+  cobertura: number | null;
+  parcial: boolean;
+}
+
+export interface CmvNotas extends CmvNotasBloco {
+  mes: string;
+  ate: string | null;
+  carregado_em: string | null;
+  cobertura_minima: number;
+  por_canal: (CmvNotasBloco & { canal: string })[];
+}
+
+const CANAL_CURTO: Record<string, string> = { tiktok: "TikTok", ml: "ML", shopee: "Shopee" };
+const pct1 = (v: number | null) => fmtPctDre(v, 1);
+
+/** O mes fechado da DRE, para o ⓘ: "DRE (Outubro/2026): 25,3%. Mês ainda aberto na DRE: fecha em …". */
+export function textoDre(resp: DreResponse | null, mes: string): string | null {
+  if (!resp) return null;
+  const c = cartaoCmv(resp, mes);
+  const t = resp.total;
+  const aberto = t && ehPrevia(t)
+    ? `Mês ainda aberto na DRE${t.fecha_em ? `: fecha em ${fmtInstanteBrt(t.fecha_em)}` : ""}; o valor pode mudar com devoluções.`
+    : null;
+  const nome = mesPorExtenso(resp.periodo.meses[0] ?? mes);
+  return [`Mês fechado na DRE (${nome}): ${c.valor ?? "sem dado"}.`, aberto].filter(Boolean).join(" ");
+}
+
+/**
+ * Cartao pelas notas. O numero vem pronto da API (CMV ÷ receita com custo);
+ * aqui so' texto: subtitulo "Novembro até 25/11 (pelas notas)", selo "Parcial"
+ * quando a API marca cobertura abaixo do minimo, cobertura e DRE no ⓘ.
+ */
+export function cartaoCmvNotas(nf: CmvNotas, dre: string | null): CartaoCmv {
+  const nomeMes = mesPorExtenso(nf.mes).split("/")[0];
+  const valor = pct1(nf.cmv_pct);
+  const base = "CMV pelas notas fiscais do mês = CMV ÷ receita com custo (só as linhas com custo).";
+  if (valor == null || !nf.ate) {
+    return { valor: null, legenda: `${nomeMes} · sem dado`, selo: null, dica: [base, dre].filter(Boolean).join(" ") };
+  }
+  const [, m, d] = nf.ate.split("-");
+  const semCusto = nf.cobertura != null ? pct1((1 - nf.cobertura) * 100) : null;
+  const canais = nf.por_canal.length > 1
+    ? nf.por_canal
+        .map((c) => `${CANAL_CURTO[c.canal] ?? c.canal} ${pct1(c.cmv_pct) ?? "sem dado"}${c.parcial && c.cobertura != null ? ` (sem custo ${pct1((1 - c.cobertura) * 100)})` : ""}`)
+        .join(" · ")
+    : null;
+  const dica = [
+    base,
+    semCusto ? `Receita sem custo: ${semCusto} (fica fora da conta, não vira custo zero).` : null,
+    canais ? `${canais}.` : null,
+    dre,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return {
+    valor,
+    legenda: `${nomeMes} até ${d}/${m} (pelas notas)`,
+    selo: nf.parcial ? { rotulo: "Parcial", tom: "atencao" } : null,
+    dica,
+  };
+}

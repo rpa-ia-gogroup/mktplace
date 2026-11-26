@@ -34,6 +34,7 @@ from app.schemas.performance import (
     ProdutosMLSummaryResponse, ProdutosTikTokResponse, ProdutosTikTokSummaryResponse,
     ProdutosShopeeResponse, ProdutosShopeeSummaryResponse,
     QualityResponse, TempoRealResponse, TrendResponse,
+    CmvNotasResponse,
 )
 from app.services import avoe_snapshot_service as avoe_svc
 from app.services import executive_summary_service
@@ -46,6 +47,7 @@ from app.services import performance_service as perf_svc
 from app.services import datamart_leitura
 from app.services import produtos_ml_mes_service as ml_mes_svc
 from app.services import produtos_shopee_periodo_service as sh_periodo_svc
+from app.services import cmv_notas_service as cmv_notas_svc
 from app.services import pma_match
 from app.services.affiliate_costs_service import safe_affiliate_costs_block
 from app.services.tiktok_order_discounts_service import (
@@ -505,6 +507,32 @@ def produtos_shopee_anuncios_summary(
     return _sh_periodo(lambda: sh_periodo_svc.get_resumo(
         datamart_leitura.consultar, per.start, per.end, brand, action_signal, per.ref_month,
     ))
+
+
+@router.get("/cmv-notas", response_model=CmvNotasResponse)
+def cmv_notas(
+    channels: str = Query("all", description="Canal(is): 'all', isolado ou lista separada por virgula."),
+    brands: Optional[str] = Query(None, description="Marca(s) do filtro da Gerencial, separadas por virgula. Omitido = todas."),
+    date_to: Optional[date] = Query(None, description="Fim do periodo da Gerencial; o mes dele e' o lido. Omitido = mes corrente."),
+):
+    """CMV do mes ate ontem pelas notas fiscais (silver.fct_gobeaute_custo_produto_diario)."""
+    try:
+        canonical = perf_svc.normalize_marketplace_param(channels)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    canais = [{1: "tiktok", 2: "ml", 3: "shopee"}[i] for i in perf_svc.parse_marketplace_param(canonical) if i in (1, 2, 3)]
+    marcas = [b.strip() for b in (brands or "").split(",") if b.strip()]
+    invalidas = [b for b in marcas if b not in cmv_notas_svc.MARCAS]
+    if invalidas:
+        raise HTTPException(422, f"Marca(s) invalida(s): {', '.join(invalidas)}.")
+
+    def consultar(sql, params):
+        return datamart_leitura.consultar(sql, params, ttl_s=cmv_notas_svc.TTL_S)
+    try:
+        return cmv_notas_svc.get_cmv_notas(consultar, canais, marcas, today_brt(), date_to)
+    except Exception as exc:  # noqa: BLE001 — texto do banco nunca sai
+        logger.exception("cmv-notas falhou")
+        raise HTTPException(503, "Base de custo das notas indisponivel.") from exc
 
 
 @router.get("/canais", response_model=CanaisResponse)

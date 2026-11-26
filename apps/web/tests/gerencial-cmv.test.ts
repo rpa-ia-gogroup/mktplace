@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, mesDoCmv, mesPorExtenso } from "../src/lib/gerencial/cmv-card.ts";
+import { AVISO_CMV_EXTRAPOLADO, cartaoCmv, cartaoCmvNotas, mesDoCmv, mesPorExtenso, textoDre, type CmvNotas } from "../src/lib/gerencial/cmv-card.ts";
 import type { DreResponse } from "../src/lib/dre.ts";
 
 const ler = (rel: string) => readFileSync(new URL(`../${rel}`, import.meta.url), "utf-8").replace(/\r\n/g, "\n");
@@ -85,4 +85,50 @@ test("cartao usa a chamada da DRE, sem rota nova, e entra na faixa da Gerencial"
   assert.ok(card.includes('"last:min-[480px]:max-xl:col-span-2"'), "5o cartao: linha inteira so' em 2 colunas; em xl, 5 numa linha");
   assert.ok(ler("app/page.tsx").includes("extra={<CmvCard channels={filters.channels} brands={filters.brands}"));
   assert.ok((ler("app/globals.css").match(/--tc-kpi-cmv:/g) ?? []).length >= 2, "token claro e escuro");
+});
+
+// ---- CMV do mes ate ontem pelas notas (API /cmv-notas) ----
+
+function nf(patch: Partial<CmvNotas> = {}): CmvNotas {
+  return {
+    mes: "2026-11", ate: "2026-11-25", carregado_em: "2026-11-26T10:01", cobertura_minima: 0.98,
+    cmv: 8419394.4, receita_com_custo: 27361226.59, receita: 27962662.76, cmv_pct: 30.77, cobertura: 0.9785, parcial: true,
+    por_canal: [
+      { canal: "tiktok", cmv: 1, receita_com_custo: 1, receita: 1, cmv_pct: 34.98, cobertura: 0.9997, parcial: false },
+      { canal: "ml", cmv: 1, receita_com_custo: 1, receita: 1, cmv_pct: 25.46, cobertura: 0.9021, parcial: true },
+      { canal: "shopee", cmv: 1, receita_com_custo: 1, receita: 1, cmv_pct: 27.28, cobertura: 0.9994, parcial: false },
+    ],
+    ...patch,
+  };
+}
+
+test("notas: valor da API, subtitulo 'Novembro até 25/11 (pelas notas)', selo Parcial pela cobertura", () => {
+  const c = cartaoCmvNotas(nf(), null);
+  assert.equal(c.valor, "30,8%");
+  assert.equal(c.legenda, "Novembro até 25/11 (pelas notas)");
+  assert.deepEqual(c.selo, { rotulo: "Parcial", tom: "atencao" });
+  assert.ok(c.dica.includes("Receita sem custo: 2,1%"));
+  assert.ok(c.dica.includes("ML 25,5% (sem custo 9,8%)") && c.dica.includes("Shopee 27,3%") && c.dica.includes("TikTok 35,0%"));
+  assert.equal(cartaoCmvNotas(nf({ parcial: false, cobertura: 0.99 }), null).selo, null);
+});
+
+test("notas: sem dado = 'sem dado', nunca 0; canal unico sem lista por canal", () => {
+  const s = cartaoCmvNotas(nf({ cmv_pct: null, cobertura: null, parcial: false, ate: null, por_canal: [] }), null);
+  assert.equal(s.valor, null);
+  assert.equal(s.legenda, "Novembro · sem dado");
+  const um = cartaoCmvNotas(nf({ por_canal: [nf().por_canal[2]] }), null);
+  assert.ok(!um.dica.includes("Shopee 27,3%"));
+});
+
+test("o mes fechado da DRE vai para o ⓘ, com a data de fechamento", () => {
+  const t = textoDre(resp({ ...EXTRAP, cobertura: 0.9978 }), "2026-10");
+  assert.equal(t, "Mês fechado na DRE (Outubro/2026): 25,3%. Mês ainda aberto na DRE: fecha em 31/12/2026; o valor pode mudar com devoluções.");
+  assert.ok(cartaoCmvNotas(nf(), t).dica.endsWith(t!));
+  assert.equal(textoDre(null, "2026-10"), null);
+});
+
+test("cartao le a rota das notas e a DRE so' para o ⓘ", () => {
+  const card = ler("src/components/gerencial/CmvCard.tsx");
+  assert.ok(card.includes("/api/v1/performance/cmv-notas") && card.includes("Promise.allSettled"));
+  assert.ok(!card.includes("toFixed") && !card.includes("cmv / "), "nenhuma conta no front");
 });
