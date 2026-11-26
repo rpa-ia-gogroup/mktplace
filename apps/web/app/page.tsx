@@ -86,6 +86,7 @@ import SeloAtualizado from "@/components/ui/SeloAtualizado";
 import AtencaoLinha from "@/components/gerencial/AtencaoLinha";
 import ConfidenceStrip from "@/components/gerencial/ConfidenceStrip";
 import KpiBand from "@/components/gerencial/KpiBand";
+import CmvCard from "@/components/gerencial/CmvCard";
 import EvolutionCard from "@/components/gerencial/EvolutionCard";
 import VolumeHealthCard from "@/components/gerencial/VolumeHealthCard";
 import BrandChannelMatrix, { cellKey, type SignalsState } from "@/components/gerencial/BrandChannelMatrix";
@@ -844,6 +845,7 @@ function GerencialComGrandes() {
         onRetry={sources.retry}
         acosProprio
         tendencias={tendencias}
+        extra={<CmvCard channels={filters.channels} brands={filters.brands} dateTo={filters.dateTo} />}
       />
         </>
       }

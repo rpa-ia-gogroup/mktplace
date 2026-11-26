@@ -75,6 +75,7 @@
     --tc-kpi-ticket: 79 70 229;
     --tc-kpi-ads: 192 38 211;
     --tc-kpi-roas: 5 150 105;
+    --tc-kpi-cmv: 190 18 60;
     /* IDENTIDADE-GERENCIAL — prazo (azul) e atendimento (verde-azulado). */
     --tc-kpi-prazo: 37 99 235;
     --tc-kpi-atendimento: 15 118 110;
@@ -164,6 +165,7 @@
     --tc-kpi-ticket: 129 140 248;
     --tc-kpi-ads: 232 121 249;
     --tc-kpi-roas: 52 211 153;
+    --tc-kpi-cmv: 251 113 133;
     --tc-kpi-prazo: 96 165 250;
     --tc-kpi-atendimento: 45 212 191;
 
