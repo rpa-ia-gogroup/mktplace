@@ -13,6 +13,7 @@ import {
   type KpiKind,
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
+import { tacosPorMarca } from "@/lib/gerencial/kpi-band";
 import { notaBase } from "@/lib/base-vendas";
 import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
@@ -427,58 +428,52 @@ function AdSpendBreakdown({ overview, brands, channels }: { overview: OverviewDa
  * Mercado Livre por marca — a pergunta seguinte de quem abre o detalhe.
  */
 function RoasBreakdown({ overview, brands, channels }: { overview: OverviewData; brands: BrandRow[]; channels: Marketplace[] }) {
-  // TACOS (Ads / GMV total do canal, das marcas com Ads) vem pronto da API.
-  const r = { ml: overview.ml_tacos_pct ?? null, shopee: overview.shopee_tacos_pct ?? null };
-  const mlSel = isMarketplaceSelected(channels, "ml");
-  const porMarca = mlSel
-    ? brands
-        .map((b) => ({ ...b, acos: b.ml_tacos_pct ?? null }))
-        .filter((b) => b.acos != null)
-        .sort((a, b) => a.acos! - b.acos!)
-    : [];
-  const maior = Math.max(0, ...porMarca.map((b) => b.acos!));
+  // TACOS (Ads / GMV total do canal, das marcas com Ads) vem pronto da API; a variacao e' em p.p., como no cartao.
   const x = fmtPctSimples;
-  const dMl = variacao(r.ml, overview.prev_ml_tacos_pct ?? null);
-  const dShopee = variacao(r.shopee, overview.prev_shopee_tacos_pct ?? null);
+  const canais = (["ml", "shopee"] as const).filter((c) => isMarketplaceSelected(channels, c));
+  const tacos = { ml: overview.ml_tacos_pct ?? null, shopee: overview.shopee_tacos_pct ?? null };
+  const prev = { ml: overview.prev_ml_tacos_pct ?? null, shopee: overview.prev_shopee_tacos_pct ?? null };
+  const nome = { ml: "Mercado Livre", shopee: "Shopee" } as const;
   return (
     <>
-      <DrilldownSecao titulo="Por canal">
-        <ul className="flex flex-col">
-          {mlSel && (
-            <EvidenceRow
-              label="Mercado Livre"
-              ponto={CHANNEL_DOT.ml}
-              delta={dMl != null ? { pct: dMl, menorMelhor: true } : null}
-              value={r.ml != null ? x(r.ml) : "Sem dado"}
-              tone={r.ml != null ? "value" : "muted"}
-            />
-          )}
-          {isMarketplaceSelected(channels, "shopee") && (
-            <EvidenceRow
-              label="Shopee"
-              ponto={CHANNEL_DOT.shopee}
-              delta={dShopee != null ? { pct: dShopee, menorMelhor: true } : null}
-              value={r.shopee != null ? x(r.shopee) : "Sem dado"}
-              tone={r.shopee != null ? "value" : "muted"}
-            />
-          )}
-        </ul>
-      </DrilldownSecao>
-      {porMarca.length > 1 && (
-        <DrilldownSecao titulo="Mercado Livre por marca">
+      {/* Com um canal so', a linha do canal repetiria o numero do topo: fica so' a lista por marca. */}
+      {canais.length > 1 && (
+        <DrilldownSecao titulo="Por canal">
           <ul className="flex flex-col">
-            {porMarca.map((b) => (
+            {canais.map((c) => (
               <EvidenceRow
-                key={b.brand}
-                label={b.label}
-                pct={maior > 0 ? (b.acos! / maior) * 100 : null}
-                barra={CHANNEL_DOT.ml}
-                value={x(b.acos!)}
+                key={c}
+                label={nome[c]}
+                ponto={CHANNEL_DOT[c]}
+                delta={tacos[c] != null && prev[c] != null ? { pct: tacos[c]! - prev[c]!, menorMelhor: true, unidade: "pp" } : null}
+                value={tacos[c] != null ? x(tacos[c]!) : "Sem dado"}
+                tone={tacos[c] != null ? "value" : "muted"}
               />
             ))}
           </ul>
         </DrilldownSecao>
       )}
+      {canais.map((c) => {
+        const linhas = tacosPorMarca(brands, c);
+        if (!linhas.length) return null;
+        return (
+          <DrilldownSecao key={c} titulo={canais.length > 1 ? `${nome[c]} por marca` : `${nome[c]} · ${tacos[c] != null ? x(tacos[c]!) : "sem dado"} · por marca`} acao="por GMV">
+            <ul className="flex flex-col">
+              {linhas.map((l) => (
+                <EvidenceRow
+                  key={l.brand}
+                  label={l.label}
+                  ponto={CHANNEL_DOT[c]}
+                  value={l.tacos != null ? x(l.tacos) : "sem Ads"}
+                  tone={l.tacos != null ? "value" : "muted"}
+                  delta={l.deltaPp != null ? { pct: l.deltaPp, menorMelhor: true, unidade: "pp" } : null}
+                  reference={[l.adSpend != null ? `Ads ${fmtBrlCurto(l.adSpend)}` : null, `GMV ${fmtBrlCurto(l.gmv)}`].filter(Boolean).join(" · ")}
+                />
+              ))}
+            </ul>
+          </DrilldownSecao>
+        );
+      })}
     </>
   );
 }

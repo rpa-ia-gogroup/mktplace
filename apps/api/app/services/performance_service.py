@@ -933,6 +933,8 @@ def get_brands(
         ml_revenue = _f(ml_c.get("ad_revenue"))
         sh_spend = _f(sh_c.get("ad_spend"))
         spend_prev = _f(ml_p.get("ad_spend")) + _f(sh_p.get("ad_spend"))
+        # TACOS da marca no periodo anterior: a MESMA leitura do comparativo (`prev`), sem consulta nova.
+        ml_spend_p, sh_spend_p = _f(ml_p.get("ad_spend")), _f(sh_p.get("ad_spend"))
 
         tk_fees = abs(_f(tk_c.get("total_fees")))
 
@@ -957,6 +959,11 @@ def get_brands(
             # TACOS da marca no canal: Ads / GMV total da marca no canal; sem Ads, None.
             "ml_tacos_pct": round(ml_spend / ml_gmv * 100, 2) if ml_spend > 0 and ml_gmv > 0 else None,
             "shopee_tacos_pct": round(sh_spend / sh_gmv * 100, 2) if sh_spend > 0 and sh_gmv > 0 else None,
+            "ml_tacos_pct_prev": round(ml_spend_p / ml_prev_gmv * 100, 2) if ml_spend_p > 0 and ml_prev_gmv > 0 else None,
+            "shopee_tacos_pct_prev": round(sh_spend_p / sh_prev_gmv * 100, 2) if sh_spend_p > 0 and sh_prev_gmv > 0 else None,
+            # Investimento em Ads da marca por canal (o detalhe do TACOS); sem Ads = None, nunca 0.
+            "ml_ad_spend": ml_spend or None,
+            "shopee_ad_spend": sh_spend or None,
             "ml_cancel_rate_pct": round(ml_canceled / ml_total * 100, 1) if ml_total > 0 else None,
             # Mesma soma do `ad_spend` de /overview (ML + Shopee), aberta por marca.
             "ad_spend": (ml_spend + sh_spend) or None,

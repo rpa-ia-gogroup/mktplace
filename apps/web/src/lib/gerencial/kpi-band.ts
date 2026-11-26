@@ -354,3 +354,46 @@ export function buildKpiBand(
 
   return [gmv, orders, avgTicket, adSpend, roas];
 }
+
+/** Linha do detalhe do TACOS por marca (um canal). */
+export interface LinhaTacosMarca {
+  brand: string;
+  label: string;
+  /** TACOS % da API; null = marca sem Ads no recorte ("sem Ads", nunca 0). */
+  tacos: number | null;
+  /** Diferenca em p.p. contra o anterior (menor e' melhor); null = sem comparacao. */
+  deltaPp: number | null;
+  adSpend: number | null;
+  gmv: number;
+}
+
+/**
+ * TACOS por marca de um canal, pronto da API (`/brands`): so' marcas com GMV no
+ * canal, ordenadas por GMV. A conta (Ads / GMV das marcas com Ads) e' da API.
+ */
+export function tacosPorMarca(
+  brands: readonly {
+    brand: string; label: string; ml_gmv: number | null; shopee_gmv: number | null;
+    ml_tacos_pct?: number | null; shopee_tacos_pct?: number | null;
+    ml_tacos_pct_prev?: number | null; shopee_tacos_pct_prev?: number | null;
+    ml_ad_spend?: number | null; shopee_ad_spend?: number | null;
+  }[],
+  canal: "ml" | "shopee",
+): LinhaTacosMarca[] {
+  return brands
+    .map((b) => {
+      const gmv = (canal === "ml" ? b.ml_gmv : b.shopee_gmv) ?? 0;
+      const tacos = (canal === "ml" ? b.ml_tacos_pct : b.shopee_tacos_pct) ?? null;
+      const prev = (canal === "ml" ? b.ml_tacos_pct_prev : b.shopee_tacos_pct_prev) ?? null;
+      return {
+        brand: b.brand,
+        label: b.label,
+        tacos,
+        deltaPp: tacos != null && prev != null ? tacos - prev : null,
+        adSpend: (canal === "ml" ? b.ml_ad_spend : b.shopee_ad_spend) ?? null,
+        gmv,
+      };
+    })
+    .filter((l) => l.gmv > 0)
+    .sort((a, b) => b.gmv - a.gmv);
+}

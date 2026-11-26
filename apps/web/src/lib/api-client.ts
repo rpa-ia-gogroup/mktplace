@@ -95,6 +95,11 @@ export interface BrandRow {
   /** TACOS da marca no canal (Ads / GMV total da marca no canal). Opcional: API antiga nao envia. */
   ml_tacos_pct?: number | null;
   shopee_tacos_pct?: number | null;
+  /** TACOS da marca no anterior (so' com compare); Ads da marca por canal. Opcionais: API anterior nao envia. */
+  ml_tacos_pct_prev?: number | null;
+  shopee_tacos_pct_prev?: number | null;
+  ml_ad_spend?: number | null;
+  shopee_ad_spend?: number | null;
   ml_cancel_rate_pct: number | null;
   /** Ads ML + Shopee da marca (mesma soma do `ad_spend` do overview). */
   ad_spend?: number | null;
