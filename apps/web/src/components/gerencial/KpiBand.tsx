@@ -9,6 +9,7 @@
  * ACOS por canal, Pedidos, Ticket medio e Investimento em ads. A logica de disponibilidade e
  * comparacao continua em `lib/gerencial/kpi-band.ts`; aqui so' apresentacao.
  */
+import type { ReactNode } from "react";
 import { CircleDollarSign, Gauge, Megaphone, Receipt, ShoppingBag, type LucideIcon } from "lucide-react";
 import type { KpiDescriptor, KpiKey } from "@/lib/gerencial/kpi-band";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
@@ -47,6 +48,8 @@ interface Props {
   onRetry: () => void;
   /** Tendencia dentro do periodo, so' para quem tem serie. */
   tendencias?: Partial<Record<KpiKey, TendenciaKpi | null>>;
+  /** Cartao a mais no fim da faixa, com fonte propria (CMV da DRE). */
+  extra?: ReactNode;
 }
 
 const CARTAO: Record<KpiKey, { icone: LucideIcon; cor: string }> = {
@@ -66,7 +69,7 @@ function pilulaDe(pct: number | null, tom: KpiDescriptor["deltaTone"]): { texto:
   return { texto: fmtPctBr(pct), tom: tom === "neutral" ? "neutro" : (pct >= 0) !== (tom === "lower_is_better") ? "ok" : "crit" };
 }
 
-export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen, onRetry, tendencias }: Props) {
+export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen, onRetry, tendencias, extra }: Props) {
   if (error) {
     return (
       <section aria-label="Indicadores do período" className="bg-raised border border-line rounded-xl p-4 flex items-center justify-between gap-3 flex-wrap">
@@ -90,7 +93,7 @@ export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen
   return (
     <section aria-label="Indicadores do período">
       <h2 className="sr-only">Indicadores do período</h2>
-      <div className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-4" aria-busy={loading}>
+      <div className={`grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 ${extra ? "xl:grid-cols-5" : "xl:grid-cols-4"}`} aria-busy={loading}>
         {loading
           ? ORDEM.filter((k) => gmv || k !== "gmv").map((k) => (
               <div key={k} className="h-[150px] animate-pulse rounded-2xl border border-line bg-surface p-4" role="status" aria-busy="true">
@@ -164,6 +167,7 @@ export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen
                 />
               );
             })}
+        {extra}
       </div>
     </section>
   );
