@@ -52,7 +52,7 @@ test("sem CMV (insumo nao publicado ou recorte vazio) = sem dado, nunca 0", () =
   assert.equal(a.semDado, "Insumo não publicado");
   const b = cartaoCmv(resp(null), "2026-11");
   assert.equal(b.valor, null);
-  assert.equal(b.semDado, "Sem dado");
+  assert.equal(b.semDado, "sem receita no recorte");
 });
 
 test("cartao usa a chamada da DRE, sem rota nova, e entra na faixa da Gerencial", () => {

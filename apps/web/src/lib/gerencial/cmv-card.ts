@@ -44,7 +44,7 @@ export function cartaoCmv(resp: DreResponse, mes: string): CartaoCmv {
   const t = resp.total;
   const competencia = `Competência ${rotuloMes(resp.periodo.meses[0] ?? mes)}`;
   const base = "CMV ÷ receita da DRE, o mesmo número da aba DRE, no recorte de canal e marca do filtro.";
-  if (!t) return { valor: null, competencia, selo: null, previa: null, semDado: "Sem dado", dica: base };
+  if (!t) return { valor: null, competencia, selo: null, previa: null, semDado: "sem receita no recorte", dica: base };
   const cmv = t.componentes.cmv;
   const valor = cmv.valor == null ? null : fmtPctDre(cmv.pct_receita);
   const previa = textoPrevia(t);

@@ -50,7 +50,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
   const c = estado.resp ? cartaoCmv(estado.resp, mes) : null;
   return (
     <CartaoIndicador
-      rotulo="CMV"
+      rotulo="CMV / receita"
       icone={Boxes}
       cor="rgb(var(--tc-kpi-cmv))"
       valor={c?.valor ?? (estado.erro ? "—" : "Sem dado")}
