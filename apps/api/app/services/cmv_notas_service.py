@@ -47,6 +47,7 @@ MKT_ID = {"tiktok": 1, "ml": 2, "shopee": 3}
 #: Marcas do filtro da Gerencial (grandes e menores; a Denavita fica fora, como no filtro).
 MARCAS = {"apice": "apice", "barbours": "barbours", "kokeshi": "kokeshi", "lescent": "lescent",
           "rituaria": "rituaria", "yenzah": "yenzah", "aua": "aua", "by-samia": "by_samia"}
+MARCA_DA_FONTE = {v: k for k, v in MARCAS.items()}
 TTL_S = 15 * 60.0
 #: Metabase em fila: a consulta passa dos 60 s padrao do cliente (medido de 20 a 183 s em 26/11).
 TIMEOUT_METABASE_S = 240.0
@@ -148,8 +149,9 @@ def _bloco(cmv: float, rcc: float, rec: float, est: float) -> dict:
 
 
 def calcular(nf: dict, gmv: dict, razao: dict, de: date, ate: date, hoje: date, canais: list[str]) -> dict:
-    """Bloco total + por canal de um periodo. `gmv`: (dia, canal, marca) -> GMV da Torre."""
+    """Bloco total, por canal e por marca de um periodo. `gmv`: (dia, canal, marca) -> GMV da Torre."""
     por: dict = {c: [0.0, 0.0, 0.0, 0.0] for c in canais}  # cmv, rcc, receita, estimado
+    pm: dict = defaultdict(lambda: [0.0, 0.0, 0.0, 0.0])    # o mesmo, por marca (detalhe do card)
     dias_estimados: set[str] = set()
     d = de
     fim = min(ate, hoje)
@@ -160,25 +162,28 @@ def calcular(nf: dict, gmv: dict, razao: dict, de: date, ate: date, hoje: date, 
             for marca in marcas:
                 n = nf.get((dia, canal, marca))
                 g = gmv.get((dia, canal, marca)) or 0.0
-                acc = por[canal]
                 if incompleto(dia, n, g, hoje) and g > 0:
                     r = razao.get((canal, marca))
-                    if r is not None:
-                        acc[0] += g * r
-                        acc[1] += g
-                    acc[2] += g
-                    acc[3] += g
+                    soma = (g * r, g, g, g) if r is not None else (0.0, 0.0, g, g)
                     dias_estimados.add(dia)
                 elif n is not None:
-                    acc[0] += n[0]
-                    acc[1] += n[1]
-                    acc[2] += n[2]
+                    soma = (n[0], n[1], n[2], 0.0)
+                else:
+                    continue
+                for acc in (por[canal], pm[marca]):
+                    for i in range(4):
+                        acc[i] += soma[i]
         d += timedelta(days=1)
     total = [sum(v[i] for v in por.values()) for i in range(4)]
     return {
         **_bloco(*total),
         "dias_estimados": sorted(dias_estimados),
         "por_canal": [{"canal": c, **_bloco(*por[c])} for c in canais if por[c][2] > 0],
+        # Ordenado por receita (maior primeiro); chave da Torre ("by-samia").
+        "por_marca": sorted(
+            ({"marca": MARCA_DA_FONTE.get(m, m), **_bloco(*v)} for m, v in pm.items() if v[2] > 0),
+            key=lambda b: -(b["receita"] or 0),
+        ),
     }
 
 
@@ -202,6 +207,10 @@ def get_cmv_notas(consultar: Consultar, ler_gmv: Callable[[date, date], dict], c
     razao = razoes(nf, gmv, hoje)
     atual = calcular(nf, gmv, razao, de, ate, hoje, canais)
     anterior = calcular(nf, gmv, razao, comp[0], comp[1], hoje, canais) if comp else None
+    # Detalhe por marca: o CMV % do anterior da MESMA marca (sem anterior = None, nunca 0).
+    ant_marca = {b["marca"]: b["cmv_pct"] for b in anterior["por_marca"]} if anterior else {}
+    for b in atual["por_marca"]:
+        b["anterior_cmv_pct"] = ant_marca.get(b["marca"])
     return {
         "date_from": de.isoformat(),
         "date_to": ate.isoformat(),

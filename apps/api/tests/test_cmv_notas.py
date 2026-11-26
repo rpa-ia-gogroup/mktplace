@@ -157,3 +157,27 @@ def test_aquecer_grava_no_cache_mesmo_com_entrada_valida(monkeypatch):
     datamart_leitura.aquecer("SQL", {"a": 1})
     assert datamart_leitura.consultar("SQL", {"a": 1}) == [{"x": 2}]
     datamart_leitura.limpar_cache()
+
+
+def test_por_marca_mesma_leitura_ordenado_por_receita_com_anterior_e_parcial():
+    """Detalhe do card: por marca, da MESMA consulta; sem anterior = None; Parcial < 98%."""
+    nf = [
+        _nf("2026-11-10", "shopee", "kokeshi", 300.0, 1000.0, 1000.0),
+        _nf("2026-11-10", "mercadolivre", "kokeshi", 100.0, 500.0, 500.0),
+        _nf("2026-11-10", "shopee", "by_samia", 30.0, 90.0, 100.0),     # cobertura 90%: Parcial
+        _nf("2026-10-10", "shopee", "kokeshi", 200.0, 1000.0, 1000.0),  # anterior so' da kokeshi
+    ]
+    chamadas = []
+    r = svc.get_cmv_notas(lambda q, p: chamadas.append(p) or nf, lambda de, ate: {}, ["ml", "shopee"], None,
+                          date(2026, 11, 1), date(2026, 11, 20), HOJE, (date(2026, 10, 1), date(2026, 10, 20)))
+    assert len(chamadas) == 1
+    pm = r["por_marca"]
+    assert [b["marca"] for b in pm] == ["kokeshi", "by-samia"]          # por receita; chave da Torre
+    k, s = pm
+    assert k["cmv_pct"] == round(400 / 1500 * 100, 2) and k["receita"] == 1500 and k["parcial"] is False
+    assert k["anterior_cmv_pct"] == 20.0 and k["estimado_pct"] is None
+    assert s["cmv_pct"] == round(30 / 90 * 100, 2) and s["cobertura"] == 0.9 and s["parcial"] is True
+    assert s["anterior_cmv_pct"] is None                                 # sem anterior: sem comparacao
+    # sem compare: nenhuma marca tem anterior
+    r2 = svc.get_cmv_notas(lambda q, p: nf, lambda de, ate: {}, ["shopee"], None, date(2026, 11, 1), date(2026, 11, 20), HOJE)
+    assert all(b["anterior_cmv_pct"] is None for b in r2["por_marca"])

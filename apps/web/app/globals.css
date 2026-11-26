@@ -717,6 +717,7 @@ html:not(.dark) .tc-fundo .tc-tema-claro {
 [class*="border-kpi-roas"] { --kpi-cor: var(--tc-kpi-roas); }
 [class*="border-kpi-prazo"] { --kpi-cor: var(--tc-kpi-prazo); }
 [class*="border-kpi-atendimento"] { --kpi-cor: var(--tc-kpi-atendimento); }
+[class*="border-kpi-cmv"] { --kpi-cor: var(--tc-kpi-cmv); }
 .rounded-xl.border.bg-surface[class*="border-kpi-"] {
   background-image: radial-gradient(
     16rem 11rem at 100% 100%,

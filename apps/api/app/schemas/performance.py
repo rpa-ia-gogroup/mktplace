@@ -1209,6 +1209,12 @@ class CmvNotasCanal(CmvNotasBloco):
     canal: str
 
 
+class CmvNotasMarca(CmvNotasBloco):
+    marca: str
+    #: CMV % da marca no periodo anterior (so' com compare). None = sem comparacao, nunca 0.
+    anterior_cmv_pct: Optional[float] = None
+
+
 class CmvNotasResponse(CmvNotasBloco):
     date_from: str
     date_to: str
@@ -1218,6 +1224,8 @@ class CmvNotasResponse(CmvNotasBloco):
     #: Dias do periodo com alguma marca x canal estimada.
     dias_estimados: list[str] = []
     por_canal: list[CmvNotasCanal]
+    #: Detalhe do card: por marca, ordenado por receita.
+    por_marca: list[CmvNotasMarca] = []
     #: CMV % do periodo anterior (so' com compare). None = sem comparacao, nunca 0.
     anterior_cmv_pct: Optional[float] = None
     compare_date_from: Optional[str] = None

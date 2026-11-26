@@ -36,13 +36,15 @@ interface Props {
   barra?: string;
   /** Variacao % contra o periodo anterior. `neutro` = sem cor de juizo. */
   /** `menorMelhor`: cair e' bom (ACOS) — so' a cor inverte, o numero nao. */
-  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean } | null;
+  /** `unidade: "pp"`: diferenca em pontos percentuais (CMV %, TACOS), nao variacao %. */
+  /** `apagado`: base pequena (ex.: marca com receita < R$ 50 mil) — a pilula sai em tinta apagada, sem cor de juizo. */
+  delta?: { pct: number; neutro?: boolean; menorMelhor?: boolean; unidade?: "pct" | "pp"; apagado?: boolean } | null;
   /** Conteudo extra sob a linha (ex.: barras Full / Sem Full), no lugar da barra de participacao. */
   children?: ReactNode;
 }
 
-function fmtDelta(v: number): string {
-  return `${v >= 0 ? "+" : ""}${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
+function fmtDelta(v: number, unidade: "pct" | "pp" = "pct"): string {
+  return `${v >= 0 ? "+" : ""}${v.toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${unidade === "pp" ? " p.p." : "%"}`;
 }
 
 export default function EvidenceRow({
@@ -61,7 +63,13 @@ export default function EvidenceRow({
   const sobe = delta != null && delta.pct >= 0;
   const Seta = sobe ? ArrowUpRight : ArrowDownRight;
   const bom = sobe !== Boolean(delta?.menorMelhor);
-  const peleDelta = delta?.neutro ? "bg-raised text-ink-muted" : bom ? "bg-ok-soft text-ok-ink" : "bg-crit-soft text-crit-ink";
+  const peleDelta = delta?.apagado
+    ? "bg-raised text-ink-faint"
+    : delta?.neutro
+      ? "bg-raised text-ink-muted"
+      : bom
+        ? "bg-ok-soft text-ok-ink"
+        : "bg-crit-soft text-crit-ink";
   return (
     <li className="flex flex-col gap-1 py-1">
       <div className="flex items-center justify-between gap-3 text-sm">
@@ -73,7 +81,7 @@ export default function EvidenceRow({
           {delta != null && (
             <span className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-xs font-semibold ${peleDelta}`}>
               <Seta aria-hidden="true" className="h-3 w-3" strokeWidth={2.25} />
-              {fmtDelta(delta.pct)}
+              {fmtDelta(delta.pct, delta.unidade)}
             </span>
           )}
           <span className={TONE_CLASS[tone]} title={title}>{value}</span>

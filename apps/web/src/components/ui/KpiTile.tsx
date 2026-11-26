@@ -12,7 +12,7 @@ import { TOM_PONTO, TOM_SUPERFICIE, TOM_TINTA, type Tom } from "./tone";
  * mini grafico. Nao e' cor de estado: o bom/ruim fica no DeltaBadge e na
  * tinta do valor. Classes literais para o Tailwind enxergar.
  */
-export type IdentidadeKpi = "gmv" | "pedidos" | "ticket" | "ads" | "roas" | "prazo" | "atendimento";
+export type IdentidadeKpi = "gmv" | "pedidos" | "ticket" | "ads" | "roas" | "prazo" | "atendimento" | "cmv";
 
 export const IDENTIDADE: Record<IdentidadeKpi, { tinta: string; borda: string; ladrilho: string }> = {
   gmv: { tinta: "text-kpi-gmv", borda: "border-kpi-gmv/30", ladrilho: "bg-kpi-gmv/10" },
@@ -22,6 +22,7 @@ export const IDENTIDADE: Record<IdentidadeKpi, { tinta: string; borda: string; l
   roas: { tinta: "text-kpi-roas", borda: "border-kpi-roas/35", ladrilho: "bg-kpi-roas/10" },
   prazo: { tinta: "text-kpi-prazo", borda: "border-kpi-prazo/30", ladrilho: "bg-kpi-prazo/10" },
   atendimento: { tinta: "text-kpi-atendimento", borda: "border-kpi-atendimento/35", ladrilho: "bg-kpi-atendimento/10" },
+  cmv: { tinta: "text-kpi-cmv", borda: "border-kpi-cmv/30", ladrilho: "bg-kpi-cmv/10" },
 };
 
 /**
