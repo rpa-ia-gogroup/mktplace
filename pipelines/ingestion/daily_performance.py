@@ -321,6 +321,24 @@ PATCH_SHOP_STATS_SEM_GMV_SQL = text("""
 """)
 
 
+COLUNAS_ADS = ("ad_spend", "ad_revenue", "ad_impressions", "ad_clicks", "roas", "acos_pct", "ctr_pct", "cpc")
+
+#: ADS-SHOPEE-API-1. Nas lojas com API a familia de Ads e' de `pipelines.sync_shopee_ads_api`
+#: (raw.shopee_ads_daily, total da loja). O relatorio exportado vira RESERVA: so' preenche o que
+#: a fato ainda nao tem (COALESCE por coluna), nunca sobrescreve o dia que a API publicou.
+PATCH_ADS_RESERVA_SQL = text(f"""
+    INSERT INTO marts.fact_marketplace_daily_performance (
+        date, loja_id, marketplace_id, empresa_id, {', '.join(COLUNAS_ADS)}, source_updated_at
+    ) VALUES (
+        :date, :loja_id, :marketplace_id, :empresa_id, {', '.join(':' + c for c in COLUNAS_ADS)}, NOW()
+    )
+    ON CONFLICT (date, loja_id, marketplace_id) DO UPDATE SET
+        {', '.join(f'{c} = COALESCE(marts.fact_marketplace_daily_performance.{c}, EXCLUDED.{c})' for c in COLUNAS_ADS)},
+        source_updated_at = NOW(),
+        ingested_at    = NOW()
+""")
+
+
 def colunas_da_api_por_loja(source: str, rows: list[dict], upsert_sql) -> list[tuple]:
     """(sql, linha) a executar, respeitando o dono de coluna por loja.
 
@@ -328,13 +346,17 @@ def colunas_da_api_por_loja(source: str, rows: list[dict], upsert_sql) -> list[t
     sao de `pipelines.sync_shopee_daily_api`; os arquivos NAO os escrevem:
       * `shopee` (pedidos do export): linhas dessas lojas sao DESCARTADAS;
       * `shopee-stats`: funil sim, `gmv` nao (`PATCH_SHOP_STATS_SEM_GMV_SQL`);
-      * `shopee-ads` e os outros marketplaces: inalterados.
+      * `shopee-ads`: reserva — so' preenche Ads onde a fato esta' vazia (`PATCH_ADS_RESERVA_SQL`),
+        porque o dono dessas colunas e' `pipelines.sync_shopee_ads_api`;
+      * os outros marketplaces: inalterados.
     """
     api = shopee_transform.LOJAS_COM_API
     if source == "shopee":
         return [(upsert_sql, r) for r in rows if r["loja_id"] not in api]
     if source == "shopee-stats":
         return [(PATCH_SHOP_STATS_SEM_GMV_SQL if r["loja_id"] in api else upsert_sql, r) for r in rows]
+    if source == "shopee-ads":
+        return [(PATCH_ADS_RESERVA_SQL if r["loja_id"] in api else upsert_sql, r) for r in rows]
     return [(upsert_sql, r) for r in rows]
 
 
