@@ -69,7 +69,7 @@ test("demais selos da DRE seguem iguais; realizado nao tem selo", () => {
 test("sem CMV (insumo nao publicado ou recorte vazio) = sem dado, nunca 0", () => {
   const a = cartaoCmv(resp({ status: "snapshot_ausente" }), "2026-11", true);
   assert.equal(a.valor, null);
-  assert.equal(a.legenda, "Outubro/2026 · Insumo não publicado");
+  assert.equal(a.legenda, "Outubro/2026 · insumo não publicado"); // minuscula depois do "·"
   const b = cartaoCmv(resp(null), "2026-11");
   assert.equal(b.valor, null);
   assert.equal(b.legenda, "Outubro/2026 · sem receita no recorte");
@@ -78,6 +78,7 @@ test("sem CMV (insumo nao publicado ou recorte vazio) = sem dado, nunca 0", () =
 test("cartao usa a chamada da DRE, sem rota nova, e entra na faixa da Gerencial", () => {
   const card = ler("src/components/gerencial/CmvCard.tsx");
   assert.ok(card.includes('from "@/lib/dre-api"') && card.includes("fetchDre("));
+  assert.ok(card.includes('<span className="text-balance">'), "legenda equilibrada quando quebra em 2 linhas");
   assert.ok(card.includes('cor="rgb(var(--tc-kpi-cmv))"'));
   assert.ok(!/\b0%/.test(card), "nenhum 0 fabricado");
   assert.ok(card.includes('rotulo="CMV / receita"'), "rotulo sai em caixa alta: CMV / RECEITA");

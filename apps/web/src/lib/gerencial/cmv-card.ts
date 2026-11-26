@@ -61,7 +61,9 @@ export function cartaoCmv(resp: DreResponse, mes: string, ultimoComCusto = false
     ? `Mês ainda aberto na DRE${t.fecha_em ? `: fecha em ${fmtInstanteBrt(t.fecha_em)}` : ""}; o valor pode mudar com devoluções.`
     : null;
   if (valor == null) {
-    const motivo = STATUS_CHIP[cmv.status]?.rotulo ?? "Sem dado";
+    // Depois do "·" vai em minuscula: "Novembro/2026 · insumo não publicado".
+    const rotulo = STATUS_CHIP[cmv.status]?.rotulo ?? "Sem dado";
+    const motivo = rotulo.charAt(0).toLowerCase() + rotulo.slice(1);
     return { valor: null, legenda: `${nomeMes} · ${motivo}`, selo: null, dica: [base, aberto].filter(Boolean).join(" ") };
   }
   // "Extrapolado" so' com cobertura abaixo do minimo da API (regras.cmv_cobertura_minima).

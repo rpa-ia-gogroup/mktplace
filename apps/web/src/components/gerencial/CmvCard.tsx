@@ -59,11 +59,7 @@ export default function CmvCard({ channels, brands, dateTo }: { channels: Market
       valor={c?.valor ?? (estado.erro ? "—" : "Sem dado")}
       ausente={!c?.valor}
       pilula={c?.selo ? { texto: c.selo.rotulo, tom: TOM[c.selo.tom] } : null}
-      legenda={
-        estado.erro
-          ? "A DRE não respondeu nesta carga."
-          : c?.legenda ?? "Sem dado"
-      }
+      legenda={<span className="text-balance">{estado.erro ? "A DRE não respondeu nesta carga." : c?.legenda ?? "Sem dado"}</span>}
       ajuda={<InfoDica emControle texto={c?.dica ?? "CMV ÷ receita da DRE, o mesmo número da aba DRE."} />}
       onAbrir={() => router.push(`/dre?${dreUrlQuery(filtros)}`)}
     />
