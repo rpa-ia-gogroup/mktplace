@@ -580,20 +580,37 @@ def _mkt_kpis(
     filtro opcional de marca(s)."""
     params: dict = {"start": start, "end": end, "mkt_ids": mkt_ids}
     brand_filter = _brand_filter_sql(brand_keys, params)
+    realizados = base == "realizados"
+    # TACOS: soma por marca primeiro, para o GMV do denominador ser so' o das
+    # marcas com Ads no recorte (`tacos_gmv`) e a cobertura sair da mesma leitura.
     sql = text(f"""
+        WITH b AS (
+            SELECT
+                l.brand_key,
+                f.marketplace_id,
+                COALESCE(SUM(f.gmv), 0)              AS gmv,
+                COALESCE(SUM(f.orders), 0)           AS orders,
+                COALESCE(SUM(f.canceled_orders), 0)  AS canceled_orders,
+                COALESCE(SUM(f.unique_buyers), 0)    AS unique_buyers,
+                COALESCE(SUM(f.ad_spend), 0)         AS ad_spend,
+                COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue{_nao_pagos_cols(base)}
+            FROM marts.fact_marketplace_daily_performance f
+            JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+            WHERE f.date BETWEEN :start AND :end
+              AND f.marketplace_id = ANY(:mkt_ids)
+              {brand_filter}
+            GROUP BY l.brand_key, f.marketplace_id
+        )
         SELECT
             f.marketplace_id,
-            COALESCE(SUM(f.gmv), 0)              AS gmv,
-            COALESCE(SUM(f.orders), 0)           AS orders,
-            COALESCE(SUM(f.canceled_orders), 0)  AS canceled_orders,
-            COALESCE(SUM(f.unique_buyers), 0)    AS unique_buyers,
-            COALESCE(SUM(f.ad_spend), 0)         AS ad_spend,
-            COALESCE(SUM(f.ad_revenue), 0)       AS ad_revenue{_nao_pagos_cols(base)}
-        FROM marts.fact_marketplace_daily_performance f
-        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
-        WHERE f.date BETWEEN :start AND :end
-          AND f.marketplace_id = ANY(:mkt_ids)
-          {brand_filter}
+            SUM(gmv) AS gmv, SUM(orders) AS orders, SUM(canceled_orders) AS canceled_orders,
+            SUM(unique_buyers) AS unique_buyers, SUM(ad_spend) AS ad_spend, SUM(ad_revenue) AS ad_revenue,
+            {"SUM(unpaid_orders) AS unpaid_orders, SUM(unpaid_gmv) AS unpaid_gmv," if realizados else ""}
+            COALESCE(SUM({"gmv + unpaid_gmv" if realizados else "gmv"}) FILTER (WHERE ad_spend > 0), 0) AS tacos_gmv,
+            COUNT(*) FILTER (WHERE gmv > 0)      AS ads_marcas_total,
+            array_remove(array_agg(CASE WHEN gmv > 0 AND ad_spend <= 0 THEN brand_key END ORDER BY brand_key), NULL)
+                                                 AS ads_marcas_sem
+        FROM b f
         GROUP BY f.marketplace_id
     """)
     rows = db.execute(sql, params).mappings().all()
@@ -672,6 +689,27 @@ def _shopee_ads_cobertura(
 # Overview
 # ---------------------------------------------------------------------------
 
+def _tacos(row: dict) -> float | None:
+    """TACOS (%) = Ads / GMV TOTAL do canal, so' das marcas com Ads no recorte.
+
+    Marca sem Ads fica fora do numerador E do denominador: com o GMV dela o
+    TACOS sairia subestimado. Canal sem Ads: None, nunca 0.
+    """
+    spend, gmv = _f(row.get("ad_spend")), _f(row.get("tacos_gmv"))
+    return round(spend / gmv * 100, 2) if spend > 0 and gmv > 0 else None
+
+
+def _ads_cobertura_da_leitura(row: dict | None) -> dict | None:
+    """Cobertura de Ads do canal (contrato de `_cobertura_marcas`), da mesma leitura de `_mkt_kpis`."""
+    total = int(_f((row or {}).get("ads_marcas_total")))
+    if not total:
+        return None
+    sem = sorted(row.get("ads_marcas_sem") or [])
+    com = total - len(sem)
+    status = "completa" if not sem else ("parcial" if com else "sem_dado")
+    return {"status": status, "marcas_com_dado": com, "marcas_total": total, "marcas_sem_dado": sem}
+
+
 def get_overview(
     db: Session, marketplace: str, year: int, month: int, *,
     brand_keys: list[str] | None = None,
@@ -744,12 +782,15 @@ def get_overview(
             "ml_roas": round(ml_revenue / ml_spend, 2) if ml_spend > 0 else None,
             "ml_cancel_rate_pct": ml_cancel_rate,
             "shopee_roas": round(sh_revenue / sh_spend, 2) if sh_spend > 0 else None,
+            "ml_tacos_pct": _tacos(ml),
+            "shopee_tacos_pct": _tacos(sh),
             "tiktok_customers": int(_f(tk.get("unique_buyers"))) or None,
             "ml_unique_buyers": int(_f(ml.get("unique_buyers"))) or None,
             "shopee_unique_buyers": int(_f(sh.get("unique_buyers"))) or None,
         }
 
-    cur = _assemble(_mkt_kpis(db, start, end, mkt_ids, brand_keys, base))
+    cur_raw = _mkt_kpis(db, start, end, mkt_ids, brand_keys, base)
+    cur = _assemble(cur_raw)
     if pstart is not None:
         prev = _assemble(_mkt_kpis(db, pstart, pend, mkt_ids, brand_keys, base))
         # Base None (sem linha) ou 0 -> delta None; atual None -> delta None.
@@ -767,6 +808,7 @@ def get_overview(
     cur["shopee_ads_cobertura"] = (
         _shopee_ads_cobertura(db, start, end, brand_keys) if SHOPEE_ID in mkt_ids else None
     )
+    cur["ml_ads_cobertura"] = _ads_cobertura_da_leitura(cur_raw.get(ML_ID))
 
     ref_month_label = period.ref_month if period is not None else f"{year:04d}-{month:02d}"
     refreshed_at = _max_refreshed_at(db, start, end, mkt_ids, brand_keys) if period is not None else None
@@ -886,6 +928,9 @@ def get_brands(
             "cos_pct": round(tk_fees / _f(tk_c.get("gmv")) * 100, 2) if _f(tk_c.get("gmv")) > 0 else None,
             "gpm": None,  # requer total_views, não disponível no mart
             "ml_roas": round(ml_revenue / ml_spend, 2) if ml_spend > 0 else None,
+            # TACOS da marca no canal: Ads / GMV total da marca no canal; sem Ads, None.
+            "ml_tacos_pct": round(ml_spend / ml_gmv * 100, 2) if ml_spend > 0 and ml_gmv > 0 else None,
+            "shopee_tacos_pct": round(sh_spend / sh_gmv * 100, 2) if sh_spend > 0 and sh_gmv > 0 else None,
             "ml_cancel_rate_pct": round(ml_canceled / ml_total * 100, 1) if ml_total > 0 else None,
             # Mesma soma do `ad_spend` de /overview (ML + Shopee), aberta por marca.
             "ad_spend": (ml_spend + sh_spend) or None,

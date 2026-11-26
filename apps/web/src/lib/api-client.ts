@@ -46,6 +46,13 @@ export interface OverviewData extends EcoBase {
   shopee_unique_buyers: number | null;
   /** T-0115: marcas Shopee com Ads no recorte. Opcional: API antiga nao envia. */
   shopee_ads_cobertura?: CoberturaMarcas | null;
+  /** TACOS (%) = Ads / GMV total do canal, so' das marcas com Ads (calculado na API). `null` = sem Ads. */
+  ml_tacos_pct?: number | null;
+  shopee_tacos_pct?: number | null;
+  prev_ml_tacos_pct?: number | null;
+  prev_shopee_tacos_pct?: number | null;
+  /** Marcas ML com Ads no recorte. Opcional: API antiga nao envia. */
+  ml_ads_cobertura?: CoberturaMarcas | null;
   gmv_mom_pct: number | null;
   /** `null` = periodo anterior sem linha (ou comparacao nao pedida). */
   prev_gmv: number | null;
@@ -85,6 +92,9 @@ export interface BrandRow {
   cos_pct: number | null;
   gpm: number | null;
   ml_roas: number | null;
+  /** TACOS da marca no canal (Ads / GMV total da marca no canal). Opcional: API antiga nao envia. */
+  ml_tacos_pct?: number | null;
+  shopee_tacos_pct?: number | null;
   ml_cancel_rate_pct: number | null;
   /** Ads ML + Shopee da marca (mesma soma do `ad_spend` do overview). */
   ad_spend?: number | null;
@@ -358,6 +368,9 @@ export function fetchOverview(
       ml_unique_buyers?: number | null;
       shopee_unique_buyers?: number | null;
       shopee_ads_cobertura?: CoberturaMarcas | null;
+      ml_tacos_pct?: number | null;
+      shopee_tacos_pct?: number | null;
+      ml_ads_cobertura?: CoberturaMarcas | null;
     };
     /** T-0111: `null` inteiro quando `compare` nao foi pedido. */
     previous: {
@@ -367,6 +380,8 @@ export function fetchOverview(
       ad_spend?: number | null;
       ml_roas?: number | null;
       shopee_roas?: number | null;
+      ml_tacos_pct?: number | null;
+      shopee_tacos_pct?: number | null;
       tiktok_gmv?: number | null;
       ml_gmv?: number | null;
       shopee_gmv?: number | null;
@@ -405,6 +420,9 @@ export function fetchOverview(
           ml_unique_buyers: raw.current.ml_unique_buyers ?? null,
           shopee_unique_buyers: raw.current.shopee_unique_buyers ?? null,
           shopee_ads_cobertura: raw.current.shopee_ads_cobertura ?? null,
+          ml_tacos_pct: raw.current.ml_tacos_pct ?? null,
+          shopee_tacos_pct: raw.current.shopee_tacos_pct ?? null,
+          ml_ads_cobertura: raw.current.ml_ads_cobertura ?? null,
           gmv_mom_pct: t.gmv_mom_pct,
           prev_gmv: t.prev_gmv,
           prev_orders: t.prev_orders,
@@ -413,6 +431,8 @@ export function fetchOverview(
           prev_ad_spend: raw.previous?.ad_spend ?? null,
           prev_ml_roas: raw.previous?.ml_roas ?? null,
           prev_shopee_roas: raw.previous?.shopee_roas ?? null,
+          prev_ml_tacos_pct: raw.previous?.ml_tacos_pct ?? null,
+          prev_shopee_tacos_pct: raw.previous?.shopee_tacos_pct ?? null,
           prev_tiktok_gmv: raw.previous?.tiktok_gmv ?? null,
           prev_ml_gmv: raw.previous?.ml_gmv ?? null,
           prev_shopee_gmv: raw.previous?.shopee_gmv ?? null,

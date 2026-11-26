@@ -151,7 +151,7 @@ export default function KpiBand({ kpis, gmv, acosProprio, loading, error, onOpen
                       <span className="grid gap-0.5 tabular-nums">
                         {acos.map((c) => (
                           <span key={c.channel} className="flex items-baseline justify-between gap-3">
-                            <span>ACOS {CANAL_CURTO[c.channel] ?? c.label}</span>
+                            <span>TACOS {CANAL_CURTO[c.channel] ?? c.label}</span>
                             <b className={c.value ? "font-semibold text-ink" : "font-normal text-ink-faint"}>{c.value ?? "—"}</b>
                           </span>
                         ))}

@@ -62,12 +62,12 @@ export const KPI_META: Record<KpiKind, KpiMeta> = {
     nextHref: "/financeiro",
   },
   roas: {
-    label: "ACOS por canal",
+    label: "TACOS por canal",
     definition:
-      "Percentual investido em anúncios sobre a receita atribuída aos anúncios, apurado por canal — disponível hoje para Mercado Livre e Shopee. Quanto menor, melhor.",
-    formula: "ACOS = investimento em anúncios / receita atribuída a anúncios × 100",
+      "Percentual investido em anúncios sobre o GMV total do canal (todas as vendas, não só as atribuídas a anúncios), apurado por canal — disponível hoje para Mercado Livre e Shopee. Quanto menor, melhor.",
+    formula: "TACOS = investimento em anúncios / GMV total do canal × 100, só das marcas com Ads no recorte",
     caveat:
-      "Cada canal tem seu próprio ACOS e nenhum valor consolidado é exibido: somar ou tirar média de ACOS entre canais produziria um número sem significado. TikTok Shop não tem ACOS no contrato atual.",
+      "Marca sem Ads no recorte fica fora da conta (senão o GMV dela diluiria o TACOS) e o cartão avisa a cobertura parcial. Cada canal tem seu próprio TACOS e nenhum valor consolidado é exibido: somar ou tirar média entre canais produziria um número sem significado. TikTok Shop não tem TACOS nesta fonte.",
     nextLabel: "Ver detalhamento de mídia em Financeiro",
     nextHref: "/financeiro",
   },

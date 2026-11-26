@@ -10,11 +10,9 @@ import {
   gmvBrandBreakdown,
   gmvChannelBreakdown,
   ordersBrandBreakdown,
-  roasBreakdown,
   type KpiKind,
 } from "@/lib/kpi-drilldown";
 import { CHANNEL_DOT } from "@/lib/gerencial/channel-colors";
-import { acosDoRoas } from "@/lib/gerencial/kpi-band";
 import { notaBase } from "@/lib/base-vendas";
 import { fullDaMarca, fullPedidosDaMarca, type FullDaMarca, type FullDoDetalhe } from "@/lib/gerencial/divisao-full";
 import { suavizar, type TendenciaKpi } from "@/lib/gerencial/kpi-trend";
@@ -426,20 +424,19 @@ function AdSpendBreakdown({ overview, brands, channels }: { overview: OverviewDa
  * Mercado Livre por marca — a pergunta seguinte de quem abre o detalhe.
  */
 function RoasBreakdown({ overview, brands, channels }: { overview: OverviewData; brands: BrandRow[]; channels: Marketplace[] }) {
-  const roas = roasBreakdown(overview);
-  // ACOS (menor = melhor) substituiu o ROAS na tela; a fonte segue sendo o ROAS.
-  const r = { ml: acosDoRoas(roas.ml), shopee: acosDoRoas(roas.shopee) };
+  // TACOS (Ads / GMV total do canal, das marcas com Ads) vem pronto da API.
+  const r = { ml: overview.ml_tacos_pct ?? null, shopee: overview.shopee_tacos_pct ?? null };
   const mlSel = isMarketplaceSelected(channels, "ml");
   const porMarca = mlSel
     ? brands
-        .map((b) => ({ ...b, acos: acosDoRoas(b.ml_roas) }))
+        .map((b) => ({ ...b, acos: b.ml_tacos_pct ?? null }))
         .filter((b) => b.acos != null)
         .sort((a, b) => a.acos! - b.acos!)
     : [];
   const maior = Math.max(0, ...porMarca.map((b) => b.acos!));
   const x = fmtPctSimples;
-  const dMl = variacao(r.ml, acosDoRoas(overview.prev_ml_roas));
-  const dShopee = variacao(r.shopee, acosDoRoas(overview.prev_shopee_roas));
+  const dMl = variacao(r.ml, overview.prev_ml_tacos_pct ?? null);
+  const dShopee = variacao(r.shopee, overview.prev_shopee_tacos_pct ?? null);
   return (
     <>
       <DrilldownSecao titulo="Por canal">
