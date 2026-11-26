@@ -199,10 +199,19 @@ def test_precedencia_shop_stats_escreve_funil_mas_nao_gmv_nas_lojas_com_api():
     assert "gmv" not in sem_gmv and "visitors" in sem_gmv
 
 
-def test_precedencia_nao_afeta_ads_nem_outros_marketplaces():
+def test_precedencia_nao_afeta_outros_marketplaces():
     linhas = [_linha_arquivo(l) for l in (1, 3)]
-    for source, sql in (("shopee-ads", DP.PATCH_ADS_SQL), ("ml", DP.UPSERT_SQL), ("tiktok", DP.UPSERT_SQL)):
+    for source, sql in (("ml", DP.UPSERT_SQL), ("tiktok", DP.UPSERT_SQL)):
         assert DP.colunas_da_api_por_loja(source, linhas, sql) == [(sql, r) for r in linhas]
+
+
+def test_ads_do_relatorio_viram_reserva_nas_lojas_com_api():
+    # ADS-SHOPEE-API-1: o dono da familia de Ads nas lojas com API e' sync_shopee_ads_api
+    escritas = DP.colunas_da_api_por_loja("shopee-ads", [_linha_arquivo(l) for l in (3, 9)], DP.PATCH_ADS_SQL)
+    por_loja = {r["loja_id"]: sql for sql, r in escritas}
+    assert por_loja[9] is DP.PATCH_ADS_SQL and por_loja[3] is DP.PATCH_ADS_RESERVA_SQL
+    reserva = str(DP.PATCH_ADS_RESERVA_SQL)
+    assert all(f"COALESCE(marts.fact_marketplace_daily_performance.{c}, EXCLUDED.{c})" in reserva for c in DP.COLUNAS_ADS)
 
 
 # ---------------------------------------------------------------------------
