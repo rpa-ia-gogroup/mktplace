@@ -5,12 +5,12 @@ import { escopoDeMarcas, FILTER_BRAND_KEYS, semMarcasMenores, urlSemMarcasMenore
 import { parseFiltersFromSearchParams } from "../src/lib/filters/url-state.ts";
 
 test("o filtro lista as grandes e depois as menores", () => {
-  assert.deepEqual(FILTER_BRAND_KEYS.slice(-3), ["yenzah", "aua", "by-samia"]);
-  assert.equal(FILTER_BRAND_KEYS.length, 8);
+  assert.deepEqual(FILTER_BRAND_KEYS.slice(-4), ["denavita", "yenzah", "aua", "by-samia"]);
+  assert.equal(FILTER_BRAND_KEYS.length, 9);
 });
 
 test("escopo: Todas = grandes e menores; so' grandes = sem menores; so' menores = sem grandes; mistura soma os dois", () => {
-  assert.deepEqual(escopoDeMarcas([]), { grandes: [], temGrandes: true, menores: ["yenzah", "aua", "by-samia"], temMenores: true, soMenores: false });
+  assert.deepEqual(escopoDeMarcas([]), { grandes: [], temGrandes: true, menores: ["denavita", "yenzah", "aua", "by-samia"], temMenores: true, soMenores: false });
   assert.deepEqual(escopoDeMarcas(["apice"]), { grandes: ["apice"], temGrandes: true, menores: [], temMenores: false, soMenores: false });
   assert.deepEqual(escopoDeMarcas(["yenzah", "aua"]), { grandes: [], temGrandes: false, menores: ["yenzah", "aua"], temMenores: true, soMenores: true });
   const mix = escopoDeMarcas(["barbours", "yenzah"]);

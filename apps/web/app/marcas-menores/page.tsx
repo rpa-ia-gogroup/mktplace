@@ -52,7 +52,7 @@ export default function MarcasMenoresPage() {
   const vista = useMemo(() => {
     if (!dados?.disponivel || !recortado) return dados;
     const ids = marcasSel.length ? marcasSel : dados.marcas.map((m) => m.id);
-    return filtrarMarcasMenores(dados, ids, canal === "todos" ? ["shopee", "tiktok"] : [canal], { comProvisoria: true });
+    return filtrarMarcasMenores(dados, ids, canal === "todos" ? ["ml", "shopee", "tiktok"] : [canal], { comProvisoria: true });
   }, [dados, marcasSel, canal, recortado]);
   // Os produtos pedem JUNTO com as marcas (a API recorta o futuro) e falham sozinhos: nada espera nada.
   const { produtos, desistiu, tentar } = useProdutosMarcasMenores(filters.dateFrom, filters.dateTo, true, {

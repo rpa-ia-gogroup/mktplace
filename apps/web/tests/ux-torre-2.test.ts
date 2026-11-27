@@ -43,8 +43,8 @@ test("resumo: canais parciais na ordem canonica, nunca na ordem do clique", () =
 
 test("resumo: marca vazia e' TODAS (sem filtro), nunca 'nenhuma'", () => {
   assert.equal(resumoMarcas([]), "Todas as marcas");
-  // as oito marcadas uma a uma (cinco grandes + tres menores) tambem e' todas, para quem le
-  assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent", "yenzah", "aua", "by-samia"]), "Todas as marcas");
+  // as nove marcadas uma a uma (cinco grandes + quatro menores) tambem e' todas, para quem le
+  assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent", "denavita", "yenzah", "aua", "by-samia"]), "Todas as marcas");
   // so' as cinco grandes NAO e' todas: as menores ficam de fora
   assert.equal(resumoMarcas(["rituaria", "apice", "barbours", "kokeshi", "lescent"]), "ÁPICE, BARBOURS, KOKESHI, LESCENT, RITUÁRIA");
   assert.equal(resumoMarcas(["yenzah", "apice"]), "ÁPICE, YENZAH");

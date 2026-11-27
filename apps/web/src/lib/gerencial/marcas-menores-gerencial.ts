@@ -5,9 +5,10 @@
  * hora do pedido). Ausência nunca vira 0: marca sem pedido não entra, e um total
  * com menores nunca é comparado com um anterior sem elas.
  *
- * Denavita (T-0119): o pedido dela vem do TikTok via Data Mart (fonte provisória,
- * GMV com outra definição) e a Shopee e os itens seguem pendentes (Bling sem
- * autorização). Ela fica FORA da soma da Gerencial (como antes) e a nota diz isso.
+ * Denavita (T-0119): com o Bling dela (status "ok") soma como as outras, ML
+ * incluso; o TikTok dela vem do Data Mart (fonte provisória) e a Shopee parou no
+ * Bling dela: os dois viram aviso visível, nunca 0 silencioso. Sem o Bling dela
+ * (fonte provisória pura), fica FORA da soma e a nota diz isso.
  */
 import type { Marketplace } from "../mock-data.ts";
 import type { OverviewData } from "../api-client.ts";
@@ -25,7 +26,31 @@ import {
   type MarcasMenores,
 } from "../marcas-menores.ts";
 
-const CANAL: Record<string, Marketplace> = { SHOPEE: "shopee", TIKTOK: "tiktok" };
+const CANAL: Record<string, Marketplace> = { MELI: "ml", SHOPEE: "shopee", TIKTOK: "tiktok" };
+
+export const DENAVITA = "denavita";
+/** Avisos da Denavita: `curto` vai na linha visível sob o GMV; `longo`, no ⓘ. */
+export interface AvisoMenores {
+  curto: string;
+  longo: string;
+}
+export const AVISO_TIKTOK_DENAVITA: AvisoMenores = {
+  curto: "TikTok da Denavita: fonte provisória",
+  longo: "Denavita no TikTok: fonte provisória (gold.tiktok_brand_daily do Data Mart, GMV com definição própria, 1,4% a 3,9% acima do mart da Torre).",
+};
+export const AVISO_SHOPEE_DENAVITA: AvisoMenores = {
+  curto: "Shopee da Denavita sem pedidos",
+  longo: "Denavita na Shopee: sem pedidos no período, a integração parou no Bling dela desde 22/10 (não é a Torre).",
+};
+
+/** Avisos da Denavita no recorte (canais do filtro); [] quando ela não está nele ou está fora da soma. */
+function avisosDaDenavita(m: MarcaMenor, canais: readonly Marketplace[]): AvisoMenores[] {
+  const v = (p: string) => m.por_plataforma.find((x) => x.plataforma === p)?.faturamento ?? 0;
+  const avisos: AvisoMenores[] = [];
+  if (canais.includes("tiktok") && v("TIKTOK") > 0) avisos.push(AVISO_TIKTOK_DENAVITA);
+  if (canais.includes("shopee") && v("SHOPEE") <= 0) avisos.push(AVISO_SHOPEE_DENAVITA);
+  return avisos;
+}
 
 export interface MarcaMenorGerencial {
   brand: string;
@@ -56,6 +81,8 @@ export interface MenoresOk {
   aguardando: string[];
   /** Marcas com fonte provisória (Denavita: TikTok via Data Mart): fora da soma, citadas na nota. */
   provisorias: string[];
+  /** Denavita na soma: TikTok provisório e Shopee parada (linha visível + ⓘ). */
+  avisos: AvisoMenores[];
   /** Canal com receita agora e sem receita no anterior; null = nada a avisar. */
   motivo: string | null;
 }
@@ -96,6 +123,7 @@ export function menoresNaGerencial(
   const marcas: MarcaMenorGerencial[] = [];
   const aguardando: string[] = [];
   const provisorias: string[] = [];
+  const avisos: AvisoMenores[] = [];
   const anteriores: PorCanal[] = [];
   const semBase: string[] = [];
   const pedidosDasMarcas: (number | null)[] = [];
@@ -111,6 +139,7 @@ export function menoresNaGerencial(
       if (!selecionadas || selecionadas.includes(m.id)) aguardando.push(m.label);
       continue;
     }
+    if (m.id === DENAVITA) avisos.push(...avisosDaDenavita(m, canais));
     const porCanal = somaCanais(Object.fromEntries(m.por_plataforma.map((p) => [p.plataforma, p.faturamento])), canais);
     const total = soma(porCanal);
     if (m.total == null || total <= 0) continue; // sem pedido nos canais do filtro: sem dado, fora
@@ -157,6 +186,7 @@ export function menoresNaGerencial(
     marcas,
     aguardando,
     provisorias,
+    avisos,
     motivo,
   };
 }
@@ -266,12 +296,20 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
   const prov = provisorias.length
     ? ` ${provisorias.join(", ")}: fora desta soma; o pedido vem só do TikTok via Data Mart (fonte provisória), e a Shopee e os itens seguem pendentes (conta do Bling sem autorização).`
     : "";
+  const den = (m.avisos ?? []).map((a) => ` ${a.longo}`).join("");
   const variacao = hoje
     ? "A variação de hoje não as inclui (o Bling não traz a hora do pedido)."
     : variacaoInclui
       ? "A variação as inclui nos dois períodos."
       : `A variação não as inclui (${m.motivo ?? "sem base no período anterior"}).`;
-  return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag}${prov} ${variacao}`;
+  return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag}${prov}${den} ${variacao}`;
+}
+
+/** A linha visível sob o GMV com os avisos curtos da Denavita (em tom de aviso); sem avisos, a linha como veio. */
+export function comAvisosMenores(linha: { texto: string; aviso: boolean } | null, m: Menores): { texto: string; aviso: boolean } | null {
+  const avisos = m.estado === "ok" && m.avisos?.length ? m.avisos.map((a) => a.curto).join(" · ") : null;
+  if (!avisos) return linha;
+  return { texto: linha ? `${linha.texto} · ${avisos}` : avisos, aviso: true };
 }
 
 // ---------------------------------------------------------------------------

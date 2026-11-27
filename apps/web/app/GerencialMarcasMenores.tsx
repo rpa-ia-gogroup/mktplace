@@ -29,14 +29,14 @@ import { toISODate } from "@/lib/filters/presets";
 import type { GlobalFilters } from "@/lib/filters/types";
 import { buildKpiBand } from "@/lib/gerencial/kpi-band";
 import { linhasDeMarcasMenores, seriesDeMenores, topProdutosDeMenores } from "@/lib/gerencial/marcas-menores-adaptador";
-import { filtrarMarcasMenores, menoresNaGerencial, motivoSemBaseDoRecorte, overviewDeMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { DENAVITA, comAvisosMenores, filtrarMarcasMenores, menoresNaGerencial, motivoSemBaseDoRecorte, overviewDeMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import type { TrendMetric } from "@/lib/gerencial/request-key";
 import { mergeChannelSeries, reconcileSeriesTotal } from "@/lib/gerencial/trend-series";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
 import type { Marketplace } from "@/lib/mock-data";
 
 const NOTA_FONTE =
-  "Dado do Bling (conta da Rituária), em tempo quase real: o dia de hoje conta. Receita = total do pedido (produtos − descontos + frete), sem cancelados; só Shopee e TikTok. Ads, ACOS e meta não existem para estas marcas.";
+  "Dado do Bling (conta da Rituária), em tempo quase real: o dia de hoje conta. Receita = total do pedido (produtos − descontos + frete), sem cancelados; Shopee e TikTok (a Denavita também no ML, pelo Bling dela). Ads, ACOS e meta não existem para estas marcas.";
 
 export default function GerencialMarcasMenores({
   filters,
@@ -83,7 +83,13 @@ export default function GerencialMarcasMenores({
   // Hoje ainda esta andando: comparar com o periodo anterior inteiro enganaria. Sem variacao.
   const emAndamento = !!dados?.periodo && dados.periodo.fim >= toISODate(new Date());
   const comparar = filters.compare && !emAndamento;
-  const semCanalDelas = !canais.some((c) => c === "shopee" || c === "tiktok");
+  // A Denavita vende tambem no ML (Bling dela); as outras menores so' na Shopee e no TikTok.
+  const canaisDelas = useMemo(
+    () => canais.filter((c) => c !== "ml" || escopo.menores.includes(DENAVITA)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- idsKey e canaisKey cobrem as listas
+    [idsKey, canaisKey],
+  );
+  const semCanalDelas = canaisDelas.length === 0;
   const carregando = dados === undefined;
   const comDado = !!f && f.marcas.some((m) => m.total != null);
 
@@ -96,7 +102,7 @@ export default function GerencialMarcasMenores({
   const kpis = useMemo(() => buildKpiBand(overview, canais, comparar), [overview, canais, comparar]);
   // A Evolucao so' tem os canais onde elas vendem (Shopee e TikTok): um canal sem venda possivel (ML) nao e' uma
   // serie "vazia" a reconciliar, e' um canal que nao existe para estas marcas.
-  const canaisSerie = useMemo(() => canais.filter((c) => c === "shopee" || c === "tiktok"), [canais]);
+  const canaisSerie = canaisDelas;
   const series = useMemo(() => (f ? seriesDeMenores(f, canaisSerie, granularity) : []), [f, canaisSerie, granularity]);
   const merged = useMemo(() => mergeChannelSeries(series, canaisSerie, metric, granularity), [series, canaisSerie, metric, granularity]);
   const reconciliation = useMemo(
@@ -141,7 +147,11 @@ export default function GerencialMarcasMenores({
         semCanalDelas ? (
           <StateBlock tipo="vazio" titulo="Sem dado das demais marcas no canal selecionado" descricao="As demais marcas vendem só na Shopee e no TikTok." />
         ) : (
-          <StateBlock tipo="vazio" titulo="Sem dado no período" descricao="Nenhum pedido das marcas escolhidas chegou do Bling neste recorte." />
+          <StateBlock
+            tipo="vazio"
+            titulo="Sem dado no período"
+            descricao={menoresOk?.avisos.map((a) => a.longo).join(" ") || "Nenhum pedido das marcas escolhidas chegou do Bling neste recorte."}
+          />
         )
       ) : (
         <>
@@ -174,11 +184,14 @@ export default function GerencialMarcasMenores({
             semMetaDaMarca
             notaMenores={NOTA_FONTE}
             linhaMenores={
-              emAndamento
-                ? { texto: "inclui hoje, dia em andamento", aviso: false }
-                : semBase
-                  ? { texto: `Variação: — (${semBase})`, aviso: true }
-                  : null
+              comAvisosMenores(
+                emAndamento
+                  ? { texto: "inclui hoje, dia em andamento", aviso: false }
+                  : semBase
+                    ? { texto: `Variação: — (${semBase})`, aviso: true }
+                    : null,
+                menoresOk ?? { estado: "fora" },
+              )
             }
           />
           <KpiBand kpis={kpis} loading={false} error={false} onOpen={abrirAbaMenores} onRetry={() => setRecarga((n) => n + 1)} />
