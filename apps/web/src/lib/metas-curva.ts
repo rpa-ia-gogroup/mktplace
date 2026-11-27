@@ -100,6 +100,26 @@ export function metaDoDia(metaMes: number, mes: string, canal: string, dia: numb
   return metaMes * fracaoDoDia(mes, canal, dia);
 }
 
+/**
+ * Meta do dia FIXA (decisão do usuário, 27/11): na Black vale a "Meta Black" da Nat
+ * (aba 'Meta hora Black' da planilha de metas, R$ 2.000.000 em Shopee + ML), não a curva.
+ * shortcut: valores copiados da aba em 27/11 10:50; se a aba mudar, atualizar aqui (ou ler da API black-hora).
+ */
+const META_DIA_FIXA: Record<string, Record<string, number>> = {
+  "2026-11-27": {
+    "apice|shopee": 152_014, "barbours|shopee": 223_849, "kokeshi|shopee": 600_945,
+    "lescent|shopee": 42_637, "rituaria|shopee": 62_644,
+    "apice|ml": 0, "barbours|ml": 325_830, "kokeshi|ml": 384_401,
+    "lescent|ml": 121_350, "rituaria|ml": 86_329,
+  },
+};
+
+/** Meta do dia da célula marca × canal: a fixa do dia, se houver; senão a curva. */
+export function metaDoDiaDaCelula(metaMes: number, dia: string, brand: string, canal: string): number {
+  const fixa = META_DIA_FIXA[dia]?.[`${brand}|${canal}`];
+  return fixa ?? metaDoDia(metaMes, dia.slice(0, 7), canal, Number(dia.slice(8, 10)));
+}
+
 /** Nome do evento do dia (`AAAA-MM-DD`) na curva do mes, ou `null`. */
 export function eventoDoDia(dia: string): string | null {
   return CURVAS[dia.slice(0, 7)]?.[Number(dia.slice(8, 10)) - 1]?.evento ?? null;
@@ -182,8 +202,6 @@ export function progressoDoDia(args: {
 }): ProgressoDia | null {
   const { celulas, linhas, dia, hoje } = args;
   if (celulas.length === 0) return null;
-  const mes = dia.slice(0, 7);
-  const d = Number(dia.slice(8, 10));
   const emAndamento = dia >= hoje;
   const statusDe = (realizado: number, meta: number): StatusDia =>
     emAndamento ? "em_andamento" : realizado >= meta ? "atingida" : "nao_atingida";
@@ -196,7 +214,7 @@ export function progressoDoDia(args: {
   const marcas: Record<string, { meta: number; realizado: number; canais: Marketplace[] }> = {};
   for (const c of celulas) {
     const canal = c.channel as Marketplace;
-    const meta = metaDoDia(c.meta_gmv, mes, canal, d);
+    const meta = metaDoDiaDaCelula(c.meta_gmv, dia, c.brand, canal);
     metaTotal += meta;
     let valor = linhas.find((l) => l.brand === c.brand)?.[GMV_DO_CANAL[canal]] ?? null;
     if (valor == null && !emAndamento && chegou(canal)) valor = 0;
