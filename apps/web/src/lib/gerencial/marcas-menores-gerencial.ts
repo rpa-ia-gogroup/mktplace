@@ -312,7 +312,9 @@ export interface LinhaSobGmv {
 
 /** Linhas visíveis sob o GMV, uma ideia por linha: a linha como veio e, abaixo, os avisos da Denavita em tom de aviso. */
 export function comAvisosMenores(linha: LinhaSobGmv | null, m: Menores): LinhaSobGmv[] {
-  const avisos = m.estado === "ok" && m.avisos?.length ? `Denavita: ${m.avisos.map((a) => a.curto).join(" · ")}` : null;
+  // "Shopee sem pedidos" fica só no ⓘ (pedido do usuário, 27/11): a integração parou no Bling da Denavita, não é a Torre.
+  const visiveis = (m.estado === "ok" ? m.avisos ?? [] : []).filter((a) => a !== AVISO_SHOPEE_DENAVITA);
+  const avisos = visiveis.length ? `Denavita: ${visiveis.map((a) => a.curto).join(" · ")}` : null;
   return [linha, avisos ? { texto: avisos, aviso: true } : null].filter((l): l is LinhaSobGmv => l != null);
 }
 
