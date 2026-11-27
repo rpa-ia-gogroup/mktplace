@@ -175,6 +175,19 @@ export default function TvClient() {
   const metaTotal = metaDe(black?.linhas);
   const cortes = canais.map((c) => c.corte).filter((c): c is number => c !== null && c > 0);
   const corteMin = cortes.length ? Math.min(...cortes) : null;
+  // Última atualização dos dados = o canal visível mais atrasado (todos têm dado até essa hora).
+  const fontes = visiveis
+    .map((id) => dados?.canais.find((c) => c.channel === id)?.fonte_ate)
+    .filter((f): f is string => !!f)
+    .map((f) => new Date(f).getTime())
+    .filter((t) => Number.isFinite(t));
+  const dadosAte = fontes.length ? new Date(Math.min(...fontes)) : null;
+
+  // TV fica dias aberta: recarrega a página a cada 30 min para pegar versões novas da tela.
+  useEffect(() => {
+    const t = setTimeout(() => window.location.reload(), 30 * 60_000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Portal no <body>: a moldura do shell cria um bloco de contencao e prenderia o `fixed`.
   const [montado, setMontado] = useState(false);
@@ -195,6 +208,11 @@ export default function TvClient() {
             <span className="tv-marca text-[2.1vw] font-extrabold uppercase tracking-[0.32em]">Black Friday</span>
             <span className="text-[1.05vw] font-medium tracking-[0.18em] text-white/45">27 · 11 · 2026</span>
           </div>
+          {dadosAte && (
+            <span className="text-[1.15vw] font-medium text-white/60">
+              Última atualização dos dados às <span className="tv-num font-bold text-white">{hhmm(dadosAte)}</span>
+            </span>
+          )}
           <div className="flex items-center gap-[2vw]">
             <button
               type="button"
