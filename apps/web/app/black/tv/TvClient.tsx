@@ -201,26 +201,28 @@ export default function TvClient() {
       <div className="relative flex h-full flex-col px-[3.2vw] pb-[2.4vw] pt-[2.2vw]">
         {/* Topo */}
         <header className="tv-in flex items-center justify-between" style={{ animationDelay: "0ms" }}>
-          <div className="flex items-baseline gap-[1.2vw]">
-            <span className="tv-marca text-[1.75vw] font-extrabold uppercase tracking-[0.22em]">Black Marketplace GoBeauté</span>
-            <span className="text-[1.05vw] font-medium tracking-[0.18em] text-white/45">27 · 11 · 2026</span>
-          </div>
-          {dadosAte && (
-            <span className="text-[1.15vw] font-medium text-white/60">
-              Última atualização dos dados às <span className="tv-num font-bold text-white">{hhmm(dadosAte)}</span>
+          <div className="min-w-0">
+            <span className="tv-marca block whitespace-nowrap text-[1.6vw] font-extrabold uppercase tracking-[0.2em]">Black Marketplace GoBeauté</span>
+            <span className="mt-[0.4vw] block whitespace-nowrap text-[1.05vw] font-medium text-white/55">
+              27 · 11 · 2026
+              {dadosAte && (
+                <>
+                  {"  ·  "}Última atualização dos dados às <span className="tv-num font-bold text-white">{hhmm(dadosAte)}</span>
+                </>
+              )}
             </span>
-          )}
+          </div>
           <div className="flex items-center gap-[2vw]">
             <button
               type="button"
               onClick={alternarTiktok}
               aria-pressed={comTiktok}
-              className={`flex items-center gap-[0.5vw] rounded-full border px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold transition ${comTiktok ? "border-[#a78bfa]/70 bg-[#a78bfa]/15 text-white" : "border-white/15 bg-white/[0.04] text-white/60 hover:border-white/35 hover:text-white"}`}
+              className={`flex items-center gap-[0.5vw] whitespace-nowrap rounded-full border px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold transition ${comTiktok ? "border-[#a78bfa]/70 bg-[#a78bfa]/15 text-white" : "border-white/15 bg-white/[0.04] text-white/60 hover:border-white/35 hover:text-white"}`}
             >
               <span className="h-[0.6vw] w-[0.6vw] rounded-full" style={{ background: comTiktok ? "#a78bfa" : "transparent", boxShadow: "inset 0 0 0 2px #a78bfa" }} />
               {comTiktok ? "Com TikTok" : "+ TikTok"}
             </button>
-            <span className="flex items-center gap-[0.6vw] rounded-full border border-white/15 bg-white/[0.04] px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold uppercase tracking-[0.22em] text-white/80">
+            <span className="flex items-center gap-[0.6vw] whitespace-nowrap rounded-full border border-white/15 bg-white/[0.04] px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold uppercase tracking-[0.22em] text-white/80">
               <span className="tv-pulso relative inline-block h-[0.7vw] w-[0.7vw] rounded-full bg-[#f43f5e]" />
               Ao vivo
             </span>
