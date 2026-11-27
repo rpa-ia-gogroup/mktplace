@@ -3,17 +3,18 @@
 /**
  * BLACK-TV — a receita de hoje em números grandes, para a TV do time (Nath, 27/11).
  *
- * Fonte: `GET /performance/hoje-por-hora` (o mesmo "Hoje" da Gerencial): cada canal
- * até a sua última hora fechada, total = soma dos canais. Só o atual, sem meta nem
- * comparativo. Ocupa a tela inteira por cima do shell; Esc volta para /black.
+ * Fonte: a MESMA do GMV de hoje da Gerencial (fato diária, com a hora em andamento):
+ * `overview` de hoje por canal e `brands` de hoje por marca × canal; total = soma
+ * dos canais. Meta pela regra da /black (`metaDe`). Ocupa a tela inteira por cima
+ * do shell; Esc volta para /black.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { corteDaLinha, type LinhaBlack, type RespostaBlack } from "@/lib/black-hora";
-import type { HojePorHora } from "@/lib/gerencial/hoje-por-hora";
+import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
+import { canalDoOverview, marcasDoBrands, metaDe, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -35,19 +36,6 @@ const centavos = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maxi
 const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
 
-/** Meta da planilha 'Meta hora Black' (só Shopee + ML): do dia e até a última hora fechada de cada linha,
- *  contra o realizado da MESMA fonte (a mesma conta da tela /black). `null` sem meta. */
-function metaDe(linhas: readonly LinhaBlack[] | undefined, marca?: string) {
-  const ls = (linhas ?? []).filter((l) => !marca || l.marca === marca);
-  if (!ls.length || ls.some((l) => l.meta_dia === null)) return null;
-  let dia = 0, ate = 0, real = 0;
-  for (const l of ls) {
-    dia += l.meta_dia ?? 0;
-    const corte = corteDaLinha(l);
-    for (let h = 0; h < corte; h++) { ate += l.meta_hora[h] ?? 0; real += l.realizado_hora[h] ?? 0; }
-  }
-  return { dia, ate, real, atingido: ate > 0 ? real / ate : null, doDia: dia > 0 ? real / dia : null };
-}
 const tomMeta = (a: number | null) => (a === null ? "text-white/50" : a >= 1 ? "text-[#34d399]" : a >= 0.9 ? "text-[#fbbf24]" : "text-[#fb7185]");
 const pct0 = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
@@ -99,7 +87,7 @@ function Reais({ valor, className = "" }: { valor: number; className?: string })
 
 export default function TvClient() {
   const router = useRouter();
-  const [dados, setDados] = useState<HojePorHora | null>(null);
+  const [dados, setDados] = useState<{ canais: CanalHojeTv[]; marcas: MarcaHojeTv[]; disponivel: boolean } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [lidoEm, setLidoEm] = useState<Date | null>(null);
   const [black, setBlack] = useState<RespostaBlack | null>(null);
@@ -110,17 +98,29 @@ export default function TvClient() {
       torreFetch(`${API_URL}/api/v1/performance/black-hora`, { signal: ctrl.signal })
         .then(async (r) => { if (r.ok) setBlack((await r.json()) as RespostaBlack); })
         .catch(() => {}); // sem meta, a TV segue com o realizado
-    const ler = () =>
-      (void lerMeta(),
-      torreFetch(`${API_URL}/api/v1/performance/hoje-por-hora`, { signal: ctrl.signal }))
-        .then(async (r) => {
-          if (!r.ok) throw new Error("A Torre não respondeu.");
-          const d = (await r.json()) as HojePorHora;
-          setDados(d);
-          setErro(d.disponivel ? null : d.motivo ?? "Vendas de hoje indisponíveis.");
+    // O GMV de hoje da Gerencial: overview de hoje por canal + brands de hoje (a mesma fato diária).
+    const json = async <T,>(url: string) => {
+      const r = await torreFetch(`${API_URL}${url}`, { signal: ctrl.signal });
+      if (!r.ok) throw new Error("A Torre não respondeu.");
+      return (await r.json()) as T;
+    };
+    const ler = () => {
+      void lerMeta();
+      const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const dia = `date_from=${hoje}&date_to=${hoje}`;
+      const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
+      return Promise.all([
+        ...ids.map((id) => json<OverviewTv>(`/api/v1/performance/overview?${dia}&marketplace=${id}`)),
+        json<{ brands: MarcaTvApi[] }>(`/api/v1/performance/brands?${dia}&marketplace=tiktok,ml,shopee`),
+      ])
+        .then((rs) => {
+          const canais = ids.map((id, i) => canalDoOverview(id, rs[i] as OverviewTv));
+          setDados({ canais, marcas: marcasDoBrands((rs[3] as { brands: MarcaTvApi[] }).brands), disponivel: canais.some((x) => x.gmv !== null) });
+          setErro(canais.some((x) => x.gmv !== null) ? null : "Vendas de hoje indisponíveis.");
           setLidoEm(new Date());
         })
         .catch((e) => { if (!ctrl.signal.aborted) setErro(e instanceof Error ? e.message : "Falha ao carregar."); });
+    };
     void ler();
     const t = setInterval(ler, RELER_MS);
     return () => { ctrl.abort(); clearInterval(t); };
@@ -158,26 +158,23 @@ export default function TvClient() {
   const visiveis = ORDEM_CANAIS.filter((id) => comTiktok || id !== "tiktok");
 
   const canais = visiveis.map((id) => {
-    const v = dados?.por_canal.find((c) => c.channel === id);
-    const fonte = dados?.canais.find((c) => c.channel === id);
-    return { id, ...CANAIS[id], gmv: v?.hoje.gmv ?? null, pedidos: v?.hoje.pedidos ?? 0, corte: fonte?.corte_hora ?? fonte?.horas_fechadas_hoje ?? null };
+    const v = dados?.canais.find((c) => c.id === id);
+    return { id, ...CANAIS[id], gmv: v?.gmv ?? null, pedidos: v?.pedidos ?? 0, ate: v?.ate ?? null };
   });
   // Total, pedidos e ticket só dos canais visíveis (a soma dos canais é o total da API).
   const total = canais.reduce((s, c) => s + (c.gmv ?? 0), 0);
   const pedidos = canais.reduce((s, c) => s + c.pedidos, 0);
   const ticket = pedidos > 0 ? total / pedidos : null;
   const animado = useContagem(total);
-  const parteDaMarca = (m: NonNullable<HojePorHora["por_marca"]>[number], id: string) => m.por_canal?.find((p) => p.channel === id)?.hoje ?? 0;
-  const marcas = (dados?.por_marca ?? [])
+  const parteDaMarca = (m: MarcaHojeTv, id: CanalTv) => m.porCanal[id] ?? 0;
+  const marcas = (dados?.marcas ?? [])
     .map((m) => ({ ...m, valor: visiveis.reduce((s, id) => s + parteDaMarca(m, id), 0) }))
     .sort((a, b) => b.valor - a.valor);
   const maiorMarca = marcas[0]?.valor ?? 0;
-  const metaTotal = metaDe(black?.linhas);
-  const cortes = canais.map((c) => c.corte).filter((c): c is number => c !== null && c > 0);
-  const corteMin = cortes.length ? Math.min(...cortes) : null;
+  const metaTotal = metaDe(black);
   // Última atualização dos dados = o canal visível mais atrasado (todos têm dado até essa hora).
-  const fontes = visiveis
-    .map((id) => dados?.canais.find((c) => c.channel === id)?.fonte_ate)
+  const fontes = canais
+    .map((c) => c.ate)
     .filter((f): f is string => !!f)
     .map((f) => new Date(f).getTime())
     .filter((t) => Number.isFinite(t));
@@ -254,7 +251,6 @@ export default function TvClient() {
                 <div className="mt-[2.2vw] flex gap-[3.2vw]">
                   <Mini rotulo="Pedidos" valor={inteiro.format(pedidos)} />
                   <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
-                  <Mini rotulo="Dados até" valor={corteMin !== null ? `${corteMin}h` : "—"} />
                 </div>
                 {metaTotal && (
                   <div className="mt-[2vw] max-w-[44vw]">
@@ -267,7 +263,7 @@ export default function TvClient() {
                     </div>
                     <p className="mt-[0.5vw] text-[1.05vw] text-white/55">
                       <span className="tv-num font-bold text-white/85">{pct0(metaTotal.doDia)}</span> da meta do dia ·{" "}
-                      <span className={`tv-num font-bold ${tomMeta(metaTotal.atingido)}`}>{pct0(metaTotal.atingido)}</span> da meta até a última hora fechada
+                      <span className={`tv-num font-bold ${tomMeta(metaTotal.atingido)}`}>{pct0(metaTotal.atingido)}</span> da meta até {metaTotal.rotulo ?? "a última hora fechada"}
                     </p>
                   </div>
                 )}
@@ -282,7 +278,7 @@ export default function TvClient() {
                         {c.nome}
                       </span>
                       <span className="text-[0.95vw] font-medium text-white/45">
-                        {c.corte ? `até ${c.corte}h` : "sem hora fechada"} · {pct(c.gmv ?? 0, total)}%
+                        {c.ate ? `até ${horaMinuto(c.ate)}` : "sem dado"} · {pct(c.gmv ?? 0, total)}%
                       </span>
                     </div>
                     <p className="mt-[0.3vw] text-[3.6vw] font-bold leading-tight tracking-[-0.02em]">
@@ -305,9 +301,9 @@ export default function TvClient() {
                     <div className="flex items-baseline justify-between">
                       <span className="text-[1.15vw] font-semibold text-white/85">{MARCA[m.brand] ?? m.brand}</span>
                       {(() => {
-                        const mm = metaDe(black?.linhas, m.brand);
+                        const mm = metaDe(black, m.brand);
                         return mm ? (
-                          <span className={`tv-num text-[1vw] font-bold ${tomMeta(mm.atingido)}`} title="Realizado ÷ meta até a última hora fechada (Shopee + ML)">
+                          <span className={`tv-num text-[1vw] font-bold ${tomMeta(mm.atingido)}`} title="Realizado ÷ meta até agora, com a hora em andamento pró-rata (Shopee + ML)">
                             {pct0(mm.atingido)} da meta
                           </span>
                         ) : (
@@ -327,8 +323,7 @@ export default function TvClient() {
                     </div>
                     <ul className="mt-[0.7vw] space-y-[0.25vw]">
                       {visiveis.map((id) => {
-                        const parte = m.por_canal?.find((p) => p.channel === id);
-                        const fora = m.canais_fora?.includes(id);
+                        const parte = m.porCanal[id];
                         return (
                           <li key={id} className="flex items-center justify-between text-[0.95vw]">
                             <span className="flex items-center gap-[0.45vw] text-white/60">
@@ -336,14 +331,14 @@ export default function TvClient() {
                               {CANAIS[id].curto}
                             </span>
                             <span className="tv-num font-semibold text-white/90">
-                              {parte ? `R$ ${inteiro.format(Math.round(parte.hoje))}` : fora ? "sem hora" : "—"}
+                              {parte != null ? `R$ ${inteiro.format(Math.round(parte))}` : "—"}
                             </span>
                           </li>
                         );
                       })}
                     </ul>
                     {(() => {
-                      const mm = metaDe(black?.linhas, m.brand);
+                      const mm = metaDe(black, m.brand);
                       return mm ? (
                         <p className="mt-[0.6vw] flex justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
                           <span>Meta do dia</span>
@@ -357,7 +352,8 @@ export default function TvClient() {
             </section>
 
             <footer className="tv-in mt-[1.4vw] flex items-center justify-between text-[0.85vw] text-white/35" style={{ animationDelay: "1000ms" }}>
-              <span>Vendas pagas · cada canal até a sua última hora fechada · atualiza a cada 2 min{lidoEm ? ` · lido às ${hhmm(lidoEm)}` : ""}{erro ? " · última leitura falhou, mostrando a anterior" : ""}</span>
+              {/* Só o aviso de falha (pedido do usuário); sem legenda de método. */}
+              <span className="text-[#fbbf24]/80">{erro && dados ? "sem conexão, mostrando a última leitura" : ""}</span>
               <span className="flex items-center gap-[1.4vw]">
                 <button type="button" onClick={() => void document.documentElement.requestFullscreen?.().catch(() => {})} className="rounded-full border border-white/15 px-[0.9vw] py-[0.3vw] text-white/60 transition hover:border-white/40 hover:text-white">
                   Tela cheia

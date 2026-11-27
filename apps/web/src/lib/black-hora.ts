@@ -7,7 +7,10 @@
  * - cada canal compara com a meta até a SUA última hora fechada (a Shopee
  *   atrasada não puxa o ML para baixo);
  * - GMV soma entre marcas e canais (é venda, não impacto potencial);
- * - ausência nunca vira 0: sem meta lida, % e diferença ficam `null`.
+ * - ausência nunca vira 0: sem meta lida, % e diferença ficam `null`;
+ * - a hora em andamento (`realizado_parcial`, o que a fato diária já tem além
+ *   das horas fechadas) soma no realizado, e a meta dela entra pró-rata
+ *   (`meta_hora[corte] × fracao`): o total bate com o GMV de hoje da Gerencial.
  * Sem React: testável com `node --test`.
  */
 
@@ -20,6 +23,18 @@ export interface LinhaBlack {
   meta_dia: number | null;
   meta_hora: (number | null)[];
   realizado_hora: (number | null)[];
+  /** Hora em andamento (diária − horas fechadas); null/ausente = sem parcial no canal. */
+  realizado_parcial?: number | null;
+  /** Preenchido pelo front (`linhasComParcial`): a hora em andamento do canal desta linha. */
+  parcial?: ParcialBlack | null;
+}
+
+export interface ParcialBlack {
+  hora: number;
+  /** ISO da carga da fato diária (o "até 09:47"). */
+  ate: string;
+  /** Fração da hora `hora` já decorrida em `ate` (0..1). */
+  fracao: number;
 }
 
 export interface RespostaBlack {
@@ -28,8 +43,37 @@ export interface RespostaBlack {
   motivo: string | null;
   meta: { disponivel: boolean; motivo: string | null; fonte: string; lida_em: string | null };
   cortes: Partial<Record<CanalBlack, number>>;
+  /** Hora em andamento por canal (API nova); ausente na antiga = só horas fechadas. */
+  parcial?: Partial<Record<CanalBlack, ParcialBlack | null>>;
   linhas: LinhaBlack[];
 }
+
+/** As linhas com a hora em andamento do canal (`parcial`) ao lado; sem parcial, a linha como veio. */
+export function linhasComParcial(d: Pick<RespostaBlack, "linhas" | "parcial">): LinhaBlack[] {
+  return d.linhas.map((l) => {
+    const p = d.parcial?.[l.canal];
+    return p && l.realizado_parcial != null ? { ...l, parcial: p } : { ...l, parcial: null };
+  });
+}
+
+const parcialDe = (l: LinhaBlack) => (l.parcial && l.realizado_parcial != null ? l.realizado_parcial : 0);
+/** Meta pró-rata do que a diária tem além das horas fechadas: da hora do corte até `ate` (meta da hora × fração
+ *  decorrida). Na mesma hora é `meta_hora[corte] × fracao`; carga já na hora seguinte soma a do corte inteira. */
+const metaParcialDe = (l: LinhaBlack) => {
+  const p = l.parcial;
+  if (!p) return 0;
+  const brt = new Date(new Date(p.ate).getTime() - 3 * 3600_000);
+  const fim = brt.getUTCHours() + brt.getUTCMinutes() / 60 + brt.getUTCSeconds() / 3600;
+  if (!Number.isFinite(fim)) return (l.meta_hora[p.hora] ?? 0) * p.fracao;
+  let m = 0;
+  for (let h = p.hora; h < 24 && h < fim; h++) m += (l.meta_hora[h] ?? 0) * Math.min(1, fim - h);
+  return m;
+};
+/** "09:47" (BRT) de um ISO. */
+export const horaMinuto = (iso: string) => {
+  const d = new Date(new Date(iso).getTime() - 3 * 3600_000);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+};
 
 export const NOME_CANAL_BLACK: Record<CanalBlack, string> = { shopee: "Shopee", ml: "Mercado Livre" };
 export const HORAS = Array.from({ length: 24 }, (_, h) => h);
@@ -64,12 +108,15 @@ export interface ResumoBlack {
   projecao: number | null;
   /** Última hora fechada comum às linhas do filtro (−1 = nenhuma). */
   ultimaHora: number;
+  /** Até quando o realizado vai com a hora em andamento ("09:47", o canal mais atrasado); null = só horas fechadas. */
+  ate: string | null;
 }
 
 export function resumoBlack(ls: LinhaBlack[]): ResumoBlack {
-  const realizado = soma(ls.flatMap((l) => l.realizado_hora));
+  const realizado = soma(ls.flatMap((l) => l.realizado_hora)) + ls.reduce((s, l) => s + parcialDe(l), 0);
   const comMeta = temMeta(ls);
-  const metaAteAgora = comMeta ? ls.reduce((s, l) => s + soma(l.meta_hora.slice(0, corteDaLinha(l))), 0) : null;
+  const metaAteAgora = comMeta ? ls.reduce((s, l) => s + soma(l.meta_hora.slice(0, corteDaLinha(l))) + metaParcialDe(l), 0) : null;
+  const ates = ls.length && ls.every((l) => l.parcial) ? ls.map((l) => l.parcial!.ate).sort() : [];
   const metaDia = comMeta ? ls.reduce((s, l) => s + (l.meta_dia ?? 0), 0) : null;
   return {
     realizado,
@@ -78,6 +125,7 @@ export function resumoBlack(ls: LinhaBlack[]): ResumoBlack {
     metaDia,
     projecao: metaAteAgora && metaDia ? (realizado * metaDia) / metaAteAgora : null,
     ultimaHora: ls.length ? Math.min(...ls.map(corteDaLinha)) - 1 : -1,
+    ate: ates.length ? horaMinuto(ates[0]) : null,
   };
 }
 
@@ -91,13 +139,18 @@ export interface HoraBlack {
   realizadoAcum: number | null;
   /** Realizado acumulado ÷ meta acumulada até a hora. */
   pctAcum: number | null;
+  /** Ponto da hora em andamento no gráfico: acumulado fechado + parcial (na hora do corte) e o fechado na hora
+   *  anterior, para o trecho tracejado ligar os dois. null fora disso. */
+  parcialAcum: number | null;
 }
 
 export function horaAHora(ls: LinhaBlack[]): HoraBlack[] {
   const comMeta = temMeta(ls);
   let metaAcum = 0;
   let realAcum = 0;
-  return HORAS.map((h) => {
+  const corte = ls.length && ls.every((l) => l.parcial) ? Math.min(...ls.map((l) => l.parcial!.hora)) : null;
+  const parcial = corte !== null && ls.every((l) => l.parcial!.hora === corte) ? ls.reduce((s, l) => s + parcialDe(l), 0) : null;
+  const linhas = HORAS.map((h) => {
     const meta = comMeta ? soma(ls.map((l) => l.meta_hora[h])) : null;
     const fechada = ls.length > 0 && ls.every((l) => l.realizado_hora[h] !== null);
     const realizado = fechada ? soma(ls.map((l) => l.realizado_hora[h])) : null;
@@ -109,8 +162,17 @@ export function horaAHora(ls: LinhaBlack[]): HoraBlack[] {
       metaAcum: comMeta ? metaAcum : null,
       realizadoAcum: realizado !== null ? realAcum : null,
       pctAcum: realizado !== null && comMeta && metaAcum > 0 ? realAcum / metaAcum : null,
+      parcialAcum: null as number | null,
     };
   });
+  if (parcial !== null && corte !== null && corte < 24) {
+    const antes = corte > 0 ? linhas[corte - 1].realizadoAcum : 0;
+    if (antes !== null) {
+      linhas[corte].parcialAcum = antes + parcial;
+      if (corte > 0) linhas[corte - 1].parcialAcum = antes;
+    }
+  }
+  return linhas;
 }
 
 /** Última hora fechada do canal: meta x realizado daquela hora (todas as marcas do filtro no canal). */
@@ -149,8 +211,8 @@ export function quadroMarcaCanal(ls: LinhaBlack[]): { marcas: string[]; canais: 
     celula: (m, c) => {
       const l = ls.find((x) => x.marca === m && x.canal === c);
       if (!l) return null;
-      const realizado = soma(l.realizado_hora);
-      const ateAgora = l.meta_dia !== null ? soma(l.meta_hora.slice(0, corteDaLinha(l))) : 0;
+      const realizado = soma(l.realizado_hora) + parcialDe(l);
+      const ateAgora = l.meta_dia !== null ? soma(l.meta_hora.slice(0, corteDaLinha(l))) + metaParcialDe(l) : 0;
       return { metaDia: l.meta_dia, realizado, pct: l.meta_dia ? realizado / l.meta_dia : null, metaAteAgora: l.meta_dia !== null ? ateAgora : null, ritmo: ateAgora > 0 ? realizado / ateAgora : null };
     },
   };

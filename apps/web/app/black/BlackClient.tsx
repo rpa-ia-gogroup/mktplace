@@ -25,7 +25,7 @@ import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto } from "@/lib/formatters";
 import { torreFetch } from "@/lib/torre-fetch";
 import {
-  filtrarBlack, horaAHora, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
+  filtrarBlack, horaAHora, linhasComParcial, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
   type CanalBlack, type FiltroCanalBlack, type RespostaBlack,
 } from "@/lib/black-hora";
 
@@ -49,7 +49,7 @@ const PONTO: Record<CanalBlack, string> = { shopee: "bg-canal-shopee", ml: "bg-c
 const MARCAS_BLACK = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
 const DICA_META =
   "Meta da planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black' (sem TikTok). " +
-  "Cada canal compara com a meta até a sua última hora fechada. Realizado: vendas pagas por hora.";
+  "Cada canal compara com a meta até a sua última hora fechada mais a hora em andamento (meta da hora × fração já decorrida). Realizado: vendas pagas, o mesmo GMV de hoje da Gerencial.";
 
 export default function BlackClient() {
   const [dia, setDia] = useState(hojeBrt);
@@ -77,7 +77,7 @@ export default function BlackClient() {
     return () => { ctrl.abort(); clearInterval(t); };
   }, [dia, tentativa]);
 
-  const linhas = useMemo(() => (dados ? filtrarBlack(dados.linhas, marcas, canal) : []), [dados, marcas, canal]);
+  const linhas = useMemo(() => (dados ? filtrarBlack(linhasComParcial(dados), marcas, canal) : []), [dados, marcas, canal]);
   const r = useMemo(() => resumoBlack(linhas), [linhas]);
   const horas = useMemo(() => horaAHora(linhas), [linhas]);
   const quadro = useMemo(() => quadroMarcaCanal(linhas), [linhas]);
@@ -147,7 +147,8 @@ export default function BlackClient() {
     );
   }
 
-  const ate = r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null;
+  // Com a hora em andamento: "até 09:47" (a carga da fato diária); sem ela, a hora cheia fechada.
+  const ate = r.ate ?? (r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null);
   const canais = (["shopee", "ml"] as CanalBlack[]).filter((c) => canal === "todos" || c === canal);
   const pctProj = r.projecao !== null && r.metaDia ? r.projecao / r.metaDia : null;
   const tProj = tomDesvio(pctProj);
@@ -163,15 +164,17 @@ export default function BlackClient() {
       ) : undefined}
       faixa={
         <Heroi
-          rotulo={ate ? `% da meta até ${ate}` : "% da meta"}
+          rotulo={r.pct !== null ? (ate ? `% da meta até ${ate}` : "% da meta") : ate ? `Realizado até ${ate}` : "Realizado"}
           ajuda={<InfoDica emControle texto={DICA_META} />}
           valor={r.pct !== null ? pct(r.pct) : fmtBrlCurto(r.realizado)}
           tom={TOM_HEROI[tom ?? "neutro"]}
           contexto={
+            r.pct !== null && (
             <span className="text-sm">
               <span className="font-semibold text-ink">{fmtBrlCurto(r.realizado)}</span>
               {r.metaAteAgora !== null && <span className="text-ink-muted"> de {reais(r.metaAteAgora)}</span>}
             </span>
+            )
           }
           meio={
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -186,7 +189,8 @@ export default function BlackClient() {
                       <span aria-hidden="true" className={`h-2 w-2 rounded-full ${PONTO[c]}`} />{NOME_CANAL_BLACK[c]}
                     </p>
                     <p className={`mt-0.5 text-xl font-bold tabular-nums ${tc ? TINTA[tc] : "text-ink"}`}>{rc.pct !== null ? pct(rc.pct) : fmtBrlCurto(rc.realizado)}</p>
-                    <p className="truncate text-xs tabular-nums text-ink-muted">{fmtBrlCurto(rc.realizado)}{rc.metaAteAgora !== null && ` de ${reais(rc.metaAteAgora)}`}</p>
+                    {/* Sem meta, o número grande já é o realizado: sem R$ dobrado. */}
+                    {rc.pct !== null && <p className="truncate text-xs tabular-nums text-ink-muted">{fmtBrlCurto(rc.realizado)}{rc.metaAteAgora !== null && ` de ${reais(rc.metaAteAgora)}`}</p>}
                     {u && u.meta !== null && (
                       <p className="mt-0.5 text-xs tabular-nums text-ink-faint">
                         Última hora ({intervaloHora(u.hora)}): <span className={`font-semibold ${tu ? TINTA[tu] : ""}`}>{pct(u.realizado / u.meta)}</span>
@@ -214,15 +218,22 @@ export default function BlackClient() {
           <span aria-hidden="true" className="flex items-center gap-3 text-xs text-ink-muted">
             <span className="inline-flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-accent" />Realizado</span>
             <span className="inline-flex items-center gap-1.5"><span className="w-4 border-t-2 border-dashed border-ink-faint" />Meta</span>
+            {r.ate && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-3 border-t-2 border-dotted border-accent" />
+                <span className="-ml-1 h-2 w-2 rounded-full border-2 border-accent" />
+                Agora (parcial)
+              </span>
+            )}
           </span>
         }
       >
         <div className="h-64 sm:h-80">
-          <Grafico horas={horas} ultimaHora={r.ultimaHora} />
+          <Grafico horas={horas} ultimaHora={r.ultimaHora} ate={r.ate} />
         </div>
       </Panel>
 
-      <Panel titulo="Marca × canal" ajuda="% da meta acumulada até a última hora fechada (a mesma conta do topo). Embaixo, o realizado; a meta fica no hover." semPadding>
+      <Panel titulo="Marca × canal" ajuda="% da meta acumulada até agora, com a hora em andamento (a mesma conta do topo). Embaixo, o realizado; a meta fica no hover." semPadding>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <caption className="sr-only">% da meta acumulada e realizado por marca e canal</caption>
