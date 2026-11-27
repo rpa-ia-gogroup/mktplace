@@ -29,6 +29,8 @@ export interface CanalHojeTv {
   pedidos: number;
   /** Carga da fato diária do canal (ISO); null sem dado. */
   ate: string | null;
+  /** Hora (ISO) em que entrou venda nova, vista pela TV; null = ainda não viu entrar. */
+  vendaNova?: string | null;
 }
 
 export interface MarcaHojeTv {
@@ -59,4 +61,15 @@ export function metaDe(black: RespostaBlack | null | undefined, marca?: string) 
   if (!ls.length || ls.some((l) => l.meta_dia === null)) return null;
   const r = resumoBlack(ls);
   return { dia: r.metaDia ?? 0, ate: r.metaAteAgora ?? 0, real: r.realizado, atingido: r.pct, doDia: r.metaDia ? r.realizado / r.metaDia : null, rotulo: r.ate };
+}
+
+/** Hora em que entrou VENDA NOVA no canal (GMV subiu desde a leitura anterior). Carga sem venda nova mantém as
+ * horas anteriores (a Nath via "18:55" com os mesmos 60%). Sem leitura anterior não há como saber: `vendaNova` null. */
+export function comHoraDoDadoNovo(
+  ant: { gmv: number | null; ate: string | null; vendaNova?: string | null } | undefined,
+  novo: CanalHojeTv,
+): CanalHojeTv {
+  if (!ant || novo.gmv == null) return { ...novo, vendaNova: null };
+  if (ant.gmv != null && novo.gmv > ant.gmv) return { ...novo, vendaNova: novo.ate };
+  return { ...novo, ate: ant.ate ?? novo.ate, vendaNova: ant.vendaNova ?? null };
 }
