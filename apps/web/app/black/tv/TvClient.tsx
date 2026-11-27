@@ -241,8 +241,8 @@ export default function TvClient() {
                 {metaTotal && (
                   <div className="mt-[2vw] max-w-[44vw]">
                     <div className="flex items-baseline justify-between text-[1.05vw]">
-                      <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Meta do dia · Shopee + ML</span>
-                      <span className="tv-num font-bold text-white/85">R$ {inteiro.format(Math.round(metaTotal.dia))}</span>
+                      <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Meta Black · Shopee + ML</span>
+                      <span className="tv-num font-bold text-white/85">R$ {inteiro.format(Math.round(metaTotal.dia / 1000) * 1000)}</span>
                     </div>
                     <div className="relative mt-[0.6vw] h-[0.7vw] overflow-hidden rounded-full bg-white/[0.08]">
                       <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#7c3aed] via-[#f0abfc] to-[#fb923c]" style={{ width: `${Math.min(100, (metaTotal.doDia ?? 0) * 100)}%` }} />
