@@ -355,7 +355,7 @@ export default function TvClient() {
                       const mm = metaDe(black, m.brand);
                       return mm ? (
                         <div className="mt-[0.6vw] flex items-center justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
-                          <span>Meta <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))}</span></span>
+                          <span className="whitespace-nowrap">Meta <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))}</span></span>
                           <Ritmo a={mm.atingido} tamanho="text-[0.85vw]" />
                         </div>
                       ) : null;
