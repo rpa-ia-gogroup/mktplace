@@ -34,7 +34,8 @@ export default function SeloAtualizado({
   atrasado?: boolean;
   /** Fonte, idade, ressalva: vai no `title`. */
   detalhe?: string;
-  /** Uma hora por canal ("Shopee 18:40 · Meli 18:55") no lugar do "Atualizado HH:MM". */
+  /** Hora da última VENDA NOVA por canal ("Última att Shopee: 19:06 · …") no lugar do "Atualizado HH:MM";
+   * canal sem venda nova vista fica de fora (nunca a hora de uma checagem vazia). */
   porCanal?: { rotulo: string; em: string | null }[];
 }) {
   if (aoVivo === false) {
@@ -68,13 +69,17 @@ export default function SeloAtualizado({
     <span title={detalhe} className={`${BASE} bg-surface text-ink-muted ring-line`} data-testid="selo-atualizado">
       {aoVivo ? <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-ok" /> : null}
       {aoVivo ? <span className="sr-only">Ao vivo · </span> : null}
-      {porCanal?.length ? (
-        porCanal.map((c, i) => (
-          <span key={c.rotulo}>
-            {i > 0 ? " · " : ""}
-            {c.rotulo} <span className="tabular-nums text-ink">{rotuloAtualizado(c.em) ?? "—"}</span>
-          </span>
-        ))
+      {porCanal ? (
+        porCanal.length ? (
+          porCanal.map((c, i) => (
+            <span key={c.rotulo}>
+              {i > 0 ? " · " : ""}
+              Última att {c.rotulo}: <span className="tabular-nums text-ink">{rotuloAtualizado(c.em) ?? "—"}</span>
+            </span>
+          ))
+        ) : (
+          <span>{aoVivo ? "Ao vivo" : "Atualizado —"}</span>
+        )
       ) : (
         <>
           Atualizado <span className="tabular-nums text-ink">{hora ?? "—"}</span>
