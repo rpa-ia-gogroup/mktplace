@@ -353,7 +353,8 @@ export default function TvClient() {
             </section>
 
             <footer className="tv-in mt-[1.4vw] flex items-center justify-between text-[0.85vw] text-white/35" style={{ animationDelay: "1000ms" }}>
-              <span>Vendas pagas · o mesmo GMV de hoje da Gerencial · atualiza a cada 2 min{lidoEm ? ` · lido às ${hhmm(lidoEm)}` : ""}{erro ? " · última leitura falhou, mostrando a anterior" : ""}</span>
+              {/* Só o aviso de falha (pedido do usuário); sem legenda de método. */}
+              <span className="text-[#fbbf24]/80">{erro && dados ? "sem conexão, mostrando a última leitura" : ""}</span>
               <span className="flex items-center gap-[1.4vw]">
                 <button type="button" onClick={() => void document.documentElement.requestFullscreen?.().catch(() => {})} className="rounded-full border border-white/15 px-[0.9vw] py-[0.3vw] text-white/60 transition hover:border-white/40 hover:text-white">
                   Tela cheia

@@ -89,4 +89,9 @@ test("TV: meta pela regra da /black (metaDe com a hora em andamento)", () => {
   assert.ok(!tv.includes("hoje-por-hora"), "a TV não lê mais o hoje-por-hora cortado na hora cheia");
   assert.ok(tv.includes("/api/v1/performance/overview?") && tv.includes("/api/v1/performance/brands?"));
   assert.ok(ler("app/black/BlackClient.tsx").includes("filtrarBlack(linhasComParcial(dados), marcas, canal)"));
+  // rodapé: só 'Tela cheia' e 'Sair (Esc)'; aviso curto só quando a leitura falha
+  const rodape = tv.slice(tv.indexOf("<footer"), tv.indexOf("</footer>"));
+  assert.ok(!rodape.includes("Vendas pagas") && !rodape.includes("lido às") && !rodape.includes("atualiza a cada"));
+  assert.ok(rodape.includes('erro && dados ? "sem conexão, mostrando a última leitura" : ""'));
+  assert.ok(rodape.includes("Tela cheia") && rodape.includes("Sair (Esc)"));
 });
