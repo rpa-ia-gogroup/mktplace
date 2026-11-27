@@ -14,6 +14,8 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
+import { menoresNaGerencial } from "@/lib/gerencial/marcas-menores-gerencial";
+import type { MarcasMenores } from "@/lib/marcas-menores";
 import { canalDoOverview, comHoraDoDadoNovo, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
@@ -119,6 +121,7 @@ export default function TvClient() {
   const [erro, setErro] = useState<string | null>(null);
   const [lidoEm, setLidoEm] = useState<Date | null>(null);
   const [black, setBlack] = useState<RespostaBlack | null>(null);
+  const [menoresApi, setMenoresApi] = useState<MarcasMenores | null>(null);
   /** Mês até hoje (Torre, a mesma da Gerencial) por canal + meta do mês por canal (/metas/{mes}). */
   const [mes, setMes] = useState<{ gmv: Partial<Record<CanalTv, number | null>>; meta: Partial<Record<CanalTv, number>> } | null>(null);
 
@@ -136,6 +139,9 @@ export default function TvClient() {
     };
     const ler = () => {
       void lerMeta();
+      // Marcas menores (Bling) entram no total e na meta; sem elas, a TV segue com as grandes.
+      const hj = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      json<MarcasMenores>(`/api/v1/performance/marcas-menores?date_from=${hj}&date_to=${hj}`).then(setMenoresApi).catch(() => {});
       const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
       const dia = `date_from=${hoje}&date_to=${hoje}`;
       const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
@@ -208,13 +214,15 @@ export default function TvClient() {
   };
   const visiveis = ORDEM_CANAIS.filter((id) => comTiktok || id !== "tiktok");
 
+  const menores = (() => { const m = menoresNaGerencial(menoresApi, visiveis, true); return m.estado === "ok" && m.total > 0 ? m : null; })();
   const canais = visiveis.map((id) => {
     const v = dados?.canais.find((c) => c.id === id);
-    return { id, ...CANAIS[id], gmv: v?.gmv ?? null, pedidos: v?.pedidos ?? 0, ate: v?.ate ?? null, vendaNova: v?.vendaNova ?? null };
+    const gmv = v?.gmv == null ? null : v.gmv + (menores?.porCanal[id] ?? 0);
+    return { id, ...CANAIS[id], gmv, pedidos: v?.pedidos ?? 0, ate: v?.ate ?? null, vendaNova: v?.vendaNova ?? null };
   });
   // Total, pedidos e ticket só dos canais visíveis (a soma dos canais é o total da API).
   const total = canais.reduce((s, c) => s + (c.gmv ?? 0), 0);
-  const pedidos = canais.reduce((s, c) => s + c.pedidos, 0);
+  const pedidos = canais.reduce((s, c) => s + c.pedidos, 0) + (menores?.pedidos ?? 0);
   const ticket = pedidos > 0 ? total / pedidos : null;
   const animado = useContagem(total);
   const parteDaMarca = (m: MarcaHojeTv, id: CanalTv) => m.porCanal[id] ?? 0;
@@ -318,6 +326,11 @@ export default function TvClient() {
                 <p className="tv-heroi mt-[0.4vw] font-extrabold leading-[0.92] tracking-[-0.035em]">
                   <Reais valor={animado} />
                 </p>
+                {menores && (
+                  <p className="mt-[0.3vw] text-[0.85vw] text-white/35">
+                    Inclui {menores.marcas.length} marcas menores, também contando para a meta · totalizando {reaisCurto(menores.total)}
+                  </p>
+                )}
                 <div className="mt-[2.2vw] flex gap-[3.2vw]">
                   <Mini rotulo="Pedidos" valor={inteiro.format(pedidos)} />
                   <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
