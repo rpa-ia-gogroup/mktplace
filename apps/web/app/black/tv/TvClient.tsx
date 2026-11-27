@@ -268,11 +268,11 @@ export default function TvClient() {
             <span className="tv-marca block whitespace-nowrap text-[1.6vw] font-extrabold uppercase tracking-[0.2em]">Black Marketplace GoBeaute</span>
             <span className="mt-[0.4vw] block whitespace-nowrap text-[1.05vw] font-medium text-white/55">
               27 · 11 · 2026
-              {dadosAte && (
-                <>
-                  {"  ·  "}Última atualização dos dados às <span className="tv-num font-bold text-white">{hhmm(dadosAte)}</span>
-                </>
-              )}
+              {canais.filter((c) => c.ate).map((c) => (
+                <span key={c.id}>
+                  {"  ·  "}Última att {c.id === "ml" ? "Meli" : c.nome}: <span className="tv-num font-bold text-white">{hhmm(new Date(c.ate!))}</span>
+                </span>
+              ))}
             </span>
           </div>
           <div className="flex items-center gap-[2vw]">
