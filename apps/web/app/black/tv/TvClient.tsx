@@ -5,7 +5,7 @@
  *
  * Fonte: a MESMA do GMV de hoje da Gerencial (fato diária, com a hora em andamento):
  * `overview` de hoje por canal e `brands` de hoje por marca × canal; total = soma
- * dos canais. Meta pela regra da /black (`metaDe`). Ocupa a tela inteira por cima
+ * dos canais. Meta pela regra da /black (no mesmo corte do número mostrado). Ocupa a tela inteira por cima
  * do shell; Esc volta para /black.
  */
 import Link from "next/link";
@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
-import { canalDoOverview, marcasDoBrands, metaDe, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
+import { canalDoOverview, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -41,6 +41,29 @@ const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / t
 const projecao = (mm: { dia: number; atingido: number | null } | null) =>
   mm && mm.atingido !== null && mm.atingido !== undefined ? mm.dia * mm.atingido : null;
 const tomProj = (a: number | null) => (a === null ? "text-white/60" : a >= 1 ? "text-[#34d399]" : "text-[#fda4af]");
+/** Meta no MESMO corte do número da TV (a Torre), não no do Data Mart: meta das horas cheias até o `ate` de cada
+ *  canal + a hora em andamento pró-rata. `real` = o realizado que a TV mostra. `null` sem meta. */
+function metaNoCorte(
+  black: RespostaBlack | null | undefined,
+  ateDoCanal: Partial<Record<CanalTv, string | null>>,
+  real: number,
+  filtro: (l: RespostaBlack["linhas"][number]) => boolean = () => true,
+) {
+  const ls = (black?.linhas ?? []).filter(filtro);
+  if (!ls.length || ls.some((l) => l.meta_dia === null)) return null;
+  let dia = 0, ate = 0;
+  for (const l of ls) {
+    dia += l.meta_dia ?? 0;
+    const iso = ateDoCanal[l.canal as CanalTv];
+    if (!iso) continue;
+    const d = new Date(iso);
+    const local = new Date(d.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+    const h = local.getHours(), frac = local.getMinutes() / 60;
+    for (let k = 0; k < h; k++) ate += l.meta_hora[k] ?? 0;
+    ate += (l.meta_hora[h] ?? 0) * frac;
+  }
+  return { dia, ate, real, atingido: ate > 0 ? real / ate : null, doDia: dia > 0 ? real / dia : null };
+}
 const reaisCurto = (v: number) => (v >= 1e6 ? `R$ ${(v / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mi` : `R$ ${Math.round(v / 1000).toLocaleString("pt-BR")} mil`);
 const pct0 = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
@@ -176,7 +199,9 @@ export default function TvClient() {
     .map((m) => ({ ...m, valor: visiveis.reduce((s, id) => s + parteDaMarca(m, id), 0) }))
     .sort((a, b) => b.valor - a.valor);
   const maiorMarca = marcas[0]?.valor ?? 0;
-  const metaTotal = metaDe(black);
+  const ateDoCanal: Partial<Record<CanalTv, string | null>> = Object.fromEntries(canais.map((c) => [c.id, c.ate]));
+  const realComMeta = canais.filter((c) => c.id !== "tiktok").reduce((a, c) => a + (c.gmv ?? 0), 0);
+  const metaTotal = metaNoCorte(black, ateDoCanal, realComMeta);
   // Última atualização dos dados = o canal visível mais atrasado (todos têm dado até essa hora).
   const fontes = canais
     .map((c) => c.ate)
@@ -296,12 +321,12 @@ export default function TvClient() {
                         {c.ate ? `até ${horaMinuto(c.ate)}` : "sem dado"} · {pct(c.gmv ?? 0, total)}%
                       </span>
                     </div>
-                    <p className="mt-[0.3vw] text-[3.6vw] font-bold leading-tight tracking-[-0.02em]">
+                    <p className="mt-[0.2vw] text-[3vw] font-bold leading-tight tracking-[-0.02em]">
                       {c.gmv === null ? <span className="text-white/40">sem dado</span> : <Reais valor={c.gmv} />}
                     </p>
                     {(() => {
                       // Meta do canal = as linhas marca × canal da aba Black só deste canal (TikTok não tem meta).
-                      const mc = black ? metaDe({ ...black, linhas: black.linhas.filter((l) => l.canal === c.id) }) : null;
+                      const mc = metaNoCorte(black, ateDoCanal, c.gmv ?? 0, (l) => l.canal === c.id);
                       return (
                         <>
                           <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
@@ -340,7 +365,7 @@ export default function TvClient() {
                     <div className="flex items-baseline justify-between">
                       <span className="text-[1.15vw] font-semibold text-white/85">{MARCA[m.brand] ?? m.brand}</span>
                       {(() => {
-                        const mm = metaDe(black, m.brand);
+                        const mm = metaNoCorte(black, ateDoCanal, (m.porCanal.shopee ?? 0) + (m.porCanal.ml ?? 0), (l) => l.marca === m.brand);
                         return mm ? (
                           <span className="tv-num text-[1.05vw] font-bold text-white" title="Realizado ÷ meta do dia (Shopee + ML)">
                             {pct0(mm.doDia)} <span className="text-[0.85vw] font-semibold text-white/55">da meta</span>
@@ -377,7 +402,7 @@ export default function TvClient() {
                       })}
                     </ul>
                     {(() => {
-                      const mm = metaDe(black, m.brand);
+                      const mm = metaNoCorte(black, ateDoCanal, (m.porCanal.shopee ?? 0) + (m.porCanal.ml ?? 0), (l) => l.marca === m.brand);
                       return mm ? (
                         <div className="mt-[0.7vw] grid grid-cols-2 gap-[0.6vw] border-t border-white/[0.07] pt-[0.6vw]">
                           <div>
@@ -429,7 +454,7 @@ const CSS = `
 .tv { background: #07061a; font-family: var(--font-sans), system-ui, sans-serif; }
 /* Inter: algarismos tabulares, o numero que muda nao "danca" na TV. */
 .tv-num { font-family: var(--font-num), var(--font-sans), sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "cv11" 1; }
-.tv-heroi { font-size: clamp(5rem, 10.2vw, 14rem); background: linear-gradient(180deg, #ffffff 30%, #d8ccff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0.6vw 2.4vw rgba(139, 92, 246, 0.35)); }
+.tv-heroi { font-size: clamp(4.5rem, 8.6vw, 12rem); background: linear-gradient(180deg, #ffffff 30%, #d8ccff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0.6vw 2.4vw rgba(139, 92, 246, 0.35)); }
 .tv-heroi .tv-num > span { -webkit-text-fill-color: rgba(255,255,255,0.55); }
 .tv-marca { background: linear-gradient(90deg, #fff 0%, #f0abfc 45%, #fb923c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .tv-fundo { position: absolute; inset: -20%; background:
