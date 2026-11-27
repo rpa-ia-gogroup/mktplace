@@ -63,7 +63,7 @@ import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import type { FullPorMarca } from "@/lib/gerencial/divisao-full";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
-import { canalComMenores, gmvComMenores, menoresNaGerencial, notaMenores, pedidosTicketComMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { DENAVITA, canalComMenores, gmvComMenores, comAvisosMenores, menoresNaGerencial, notaMenores, pedidosTicketComMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import { linhasDeMarcasMenores } from "@/lib/gerencial/marcas-menores-adaptador";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
 import { MARCAS_MENORES_KEYS, escopoDeMarcas } from "@/lib/filters/brands";
@@ -430,7 +430,9 @@ function GerencialComGrandes() {
     atual != null && antes != null && antes > 0 ? ((atual - antes) / antes) * 100 : null;
   // Marcas menores (Bling): somam no GMV do topo, na rosca e nas marcas, sem meta. Carregam EM PARALELO e
   // sozinhas: Bling lento ou fora nao atrasa nem apaga o resto (so o aviso no (i)). So a lista de pedidos.
-  const querMenores = escopo.temMenores && !sources.demoMode && filters.channels.some((c) => c === "shopee" || c === "tiktok");
+  // Denavita vende tambem no ML (Bling dela): com ela no escopo, o ML tambem pede as menores.
+  const querMenores =
+    escopo.temMenores && !sources.demoMode && filters.channels.some((c) => c !== "ml" || escopo.menores.includes(DENAVITA));
   const [menoresBruto, setMenoresBruto] = useState<MarcasMenores | null | undefined>(undefined);
   useEffect(() => {
     setMenoresBruto(undefined);
@@ -470,14 +472,16 @@ function GerencialComGrandes() {
   const notaDasMenores = notaMenores(menores, topo.variacaoInclui, diaEmAndamento, fmtCompacto);
   // Linha VISIVEL sob o GMV: o topo (com menores) e a barra da meta (so marcas com meta) mostram numeros diferentes,
   // e Bling fora deixa o GMV menor: aviso de dado incompleto nunca fica so no (i).
-  const linhaMenores =
+  const linhaMenores = comAvisosMenores(
     menores.estado === "ok" && menores.total > 0
       ? { texto: `inclui ${fmtCompacto(menores.total)} das demais marcas, sem meta`, aviso: false }
       : menores.estado === "indisponivel"
         ? { texto: "sem as demais marcas (Bling indisponível)", aviso: true }
         : menores.estado === "carregando"
           ? { texto: "somando as demais marcas…", aviso: false }
-          : null;
+          : null,
+    menores,
+  );
   const brandsComMenores = useMemo<BrandRow[]>(
     () => [
       ...brands,

@@ -105,7 +105,8 @@ interface Props {
   /** T-0111: o recorte nao tem linha na fonte; o GMV mostra "—" e o aviso diz por que. */
   semDadoNoRecorte?: boolean;
   /** Linha visivel sob o GMV (menores incluidas / indisponiveis / somando). */
-  linhaMenores?: { texto: string; aviso: boolean } | null;
+  /** Uma ideia por linha (ex.: "inclui R$ X das demais marcas" e, abaixo, o aviso da Denavita). */
+  linhaMenores?: { texto: string; aviso: boolean } | { texto: string; aviso: boolean }[] | null;
   /** GMV de cada canal ao longo do periodo (os mesmos pontos do grafico de evolucao), para a mini tendencia. */
   serieGmvPorCanal?: Partial<Record<Marketplace, number[]>> | null;
   /** So' no "Hoje": soma das tendencias de fechamento das marcas. */
@@ -176,9 +177,9 @@ function Resultado({ periodLabel, gmv, prevGmv, momPct, compareActive, loading, 
               <InfoDica texto={SEM_DADO_NO_RECORTE_DICA} />
             </p>
           )}
-          {linhaMenores && (
-            <p className={`mt-1 text-xs ${linhaMenores.aviso ? "font-semibold text-warn-ink" : "text-ink-muted"}`}>{linhaMenores.texto}</p>
-          )}
+          {[linhaMenores ?? []].flat().map((l) => (
+            <p key={l.texto} className={`mt-1 text-xs ${l.aviso ? "font-semibold text-warn-ink" : "text-ink-muted"}`}>{l.texto}</p>
+          ))}
           {compareActive && momPct != null && (
             <p className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs tabular-nums">
               <span
