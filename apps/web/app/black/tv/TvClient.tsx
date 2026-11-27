@@ -36,16 +36,12 @@ const centavos = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maxi
 const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
 
-/** Ritmo: realizado ÷ meta até agora (com a hora em andamento pró-rata). Acima/abaixo do esperado para a hora. */
-function Ritmo({ a, tamanho = "text-[1vw]" }: { a: number | null; tamanho?: string }) {
-  if (a === null) return null;
-  const acima = a >= 1;
-  return (
-    <span className={`inline-flex items-center gap-[0.35vw] whitespace-nowrap rounded-full px-[0.7vw] py-[0.2vw] font-semibold ${tamanho} ${acima ? "bg-[#34d399]/15 text-[#34d399]" : "bg-[#fb7185]/15 text-[#fb7185]"}`}>
-      {acima ? "▲ Acima do ritmo" : "▼ Abaixo do ritmo"}
-    </span>
-  );
-}
+/** Projeção do dia = meta do dia × ritmo (realizado ÷ meta até agora): o resto do dia segue a curva da meta
+ *  no ritmo de hoje. A mesma conta da "Projeção do dia" da /black. `null` sem meta até agora. */
+const projecao = (mm: { dia: number; atingido: number | null } | null) =>
+  mm && mm.atingido !== null && mm.atingido !== undefined ? mm.dia * mm.atingido : null;
+const tomProj = (a: number | null) => (a === null ? "text-white/60" : a >= 1 ? "text-[#34d399]" : "text-[#fda4af]");
+const reaisCurto = (v: number) => (v >= 1e6 ? `R$ ${(v / 1e6).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} mi` : `R$ ${Math.round(v / 1000).toLocaleString("pt-BR")} mil`);
 const pct0 = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
 /** Conta do valor anterior ao novo quando o dado chega (sem animação com reduced-motion). */
@@ -276,8 +272,13 @@ export default function TvClient() {
                       <span className="text-[1.8vw] font-bold text-white">
                         <span className="tv-num">{pct0(metaTotal.doDia)}</span> <span className="text-[1.1vw] font-semibold text-white/60">da meta do dia</span>
                       </span>
-                      <Ritmo a={metaTotal.atingido} tamanho="text-[1.05vw]" />
-                      <span className="text-[0.9vw] text-white/40">{pct0(metaTotal.atingido)} do esperado até {metaTotal.rotulo ?? "agora"}</span>
+                      {projecao(metaTotal) !== null && (
+                        <span className="text-[1.15vw] text-white/60">
+                          Projeção do dia{" "}
+                          <span className={`tv-num font-bold ${tomProj(metaTotal.atingido)}`}>{reaisCurto(projecao(metaTotal)!)}</span>
+                          <span className="text-white/40"> · {pct0(metaTotal.atingido)} da meta</span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 )}
@@ -354,9 +355,17 @@ export default function TvClient() {
                     {(() => {
                       const mm = metaDe(black, m.brand);
                       return mm ? (
-                        <div className="mt-[0.6vw] flex items-center justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
-                          <span className="whitespace-nowrap">Meta <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))}</span></span>
-                          <Ritmo a={mm.atingido} tamanho="text-[0.85vw]" />
+                        <div className="mt-[0.7vw] grid grid-cols-2 gap-[0.6vw] border-t border-white/[0.07] pt-[0.6vw]">
+                          <div>
+                            <p className="text-[0.75vw] font-semibold uppercase tracking-[0.16em] text-white/40">Meta</p>
+                            <p className="tv-num whitespace-nowrap text-[1vw] font-semibold text-white/75">{reaisCurto(mm.dia)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[0.75vw] font-semibold uppercase tracking-[0.16em] text-white/40">Projeção</p>
+                            <p className={`tv-num whitespace-nowrap text-[1vw] font-bold ${tomProj(mm.atingido)}`}>
+                              {projecao(mm) !== null ? reaisCurto(projecao(mm)!) : "—"}
+                            </p>
+                          </div>
                         </div>
                       ) : null;
                     })()}
