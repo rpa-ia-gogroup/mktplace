@@ -122,15 +122,33 @@ export default function TvClient() {
     };
   }, [router]);
 
-  const total = dados?.hoje?.gmv ?? 0;
-  const animado = useContagem(total);
-  const canais = ORDEM_CANAIS.map((id) => {
+  // Padrão: só Shopee + Mercado Livre (pedido do usuário). `?tiktok=1` inclui o TikTok e fica na URL da TV.
+  const [comTiktok, setComTiktok] = useState(false);
+  useEffect(() => { setComTiktok(new URLSearchParams(window.location.search).get("tiktok") === "1"); }, []);
+  const alternarTiktok = () => {
+    const novo = !comTiktok;
+    setComTiktok(novo);
+    const url = new URL(window.location.href);
+    if (novo) url.searchParams.set("tiktok", "1"); else url.searchParams.delete("tiktok");
+    window.history.replaceState(null, "", url);
+  };
+  const visiveis = ORDEM_CANAIS.filter((id) => comTiktok || id !== "tiktok");
+
+  const canais = visiveis.map((id) => {
     const v = dados?.por_canal.find((c) => c.channel === id);
     const fonte = dados?.canais.find((c) => c.channel === id);
     return { id, ...CANAIS[id], gmv: v?.hoje.gmv ?? null, pedidos: v?.hoje.pedidos ?? 0, corte: fonte?.corte_hora ?? fonte?.horas_fechadas_hoje ?? null };
   });
-  const marcas = [...(dados?.por_marca ?? [])].sort((a, b) => b.hoje - a.hoje);
-  const maiorMarca = marcas[0]?.hoje ?? 0;
+  // Total, pedidos e ticket só dos canais visíveis (a soma dos canais é o total da API).
+  const total = canais.reduce((s, c) => s + (c.gmv ?? 0), 0);
+  const pedidos = canais.reduce((s, c) => s + c.pedidos, 0);
+  const ticket = pedidos > 0 ? total / pedidos : null;
+  const animado = useContagem(total);
+  const parteDaMarca = (m: NonNullable<HojePorHora["por_marca"]>[number], id: string) => m.por_canal?.find((p) => p.channel === id)?.hoje ?? 0;
+  const marcas = (dados?.por_marca ?? [])
+    .map((m) => ({ ...m, valor: visiveis.reduce((s, id) => s + parteDaMarca(m, id), 0) }))
+    .sort((a, b) => b.valor - a.valor);
+  const maiorMarca = marcas[0]?.valor ?? 0;
   const cortes = canais.map((c) => c.corte).filter((c): c is number => c !== null && c > 0);
   const corteMin = cortes.length ? Math.min(...cortes) : null;
 
@@ -154,6 +172,15 @@ export default function TvClient() {
             <span className="text-[1.05vw] font-medium tracking-[0.18em] text-white/45">27 · 11 · 2026</span>
           </div>
           <div className="flex items-center gap-[2vw]">
+            <button
+              type="button"
+              onClick={alternarTiktok}
+              aria-pressed={comTiktok}
+              className={`flex items-center gap-[0.5vw] rounded-full border px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold transition ${comTiktok ? "border-[#a78bfa]/70 bg-[#a78bfa]/15 text-white" : "border-white/15 bg-white/[0.04] text-white/60 hover:border-white/35 hover:text-white"}`}
+            >
+              <span className="h-[0.6vw] w-[0.6vw] rounded-full" style={{ background: comTiktok ? "#a78bfa" : "transparent", boxShadow: "inset 0 0 0 2px #a78bfa" }} />
+              {comTiktok ? "Com TikTok" : "+ TikTok"}
+            </button>
             <span className="flex items-center gap-[0.6vw] rounded-full border border-white/15 bg-white/[0.04] px-[1vw] py-[0.45vw] text-[0.95vw] font-semibold uppercase tracking-[0.22em] text-white/80">
               <span className="tv-pulso relative inline-block h-[0.7vw] w-[0.7vw] rounded-full bg-[#f43f5e]" />
               Ao vivo
@@ -176,13 +203,15 @@ export default function TvClient() {
             {/* Herói + canais */}
             <section className="mt-[2vw] grid flex-1 grid-cols-[1.45fr_1fr] items-center gap-[3.5vw]">
               <div className="tv-in" style={{ animationDelay: "120ms" }}>
-                <p className="text-[1.15vw] font-semibold uppercase tracking-[0.34em] text-white/55">Receita de hoje</p>
+                <p className="text-[1.15vw] font-semibold uppercase tracking-[0.34em] text-white/55">
+                  Receita de hoje <span className="text-white/35">· {canais.map((c) => c.curto).join(" + ")}</span>
+                </p>
                 <p className="tv-heroi mt-[0.4vw] font-extrabold leading-[0.92] tracking-[-0.035em]">
                   <Reais valor={animado} />
                 </p>
                 <div className="mt-[2.2vw] flex gap-[3.2vw]">
-                  <Mini rotulo="Pedidos" valor={inteiro.format(dados.hoje?.pedidos ?? 0)} />
-                  <Mini rotulo="Ticket médio" valor={dados.hoje?.ticket != null ? `R$ ${centavos.format(dados.hoje.ticket)}` : "—"} />
+                  <Mini rotulo="Pedidos" valor={inteiro.format(pedidos)} />
+                  <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
                   <Mini rotulo="Dados até" valor={corteMin !== null ? `${corteMin}h` : "—"} />
                 </div>
               </div>
@@ -220,18 +249,18 @@ export default function TvClient() {
                       <span className="text-[1.15vw] font-semibold text-white/85">{MARCA[m.brand] ?? m.brand}</span>
                       <span className="tv-num text-[0.9vw] font-semibold text-white/35">#{i + 1}</span>
                     </div>
-                    <p className="mt-[0.2vw] text-[2.3vw] font-bold leading-tight tracking-[-0.02em]"><Reais valor={m.hoje} /></p>
+                    <p className="mt-[0.2vw] text-[2.3vw] font-bold leading-tight tracking-[-0.02em]"><Reais valor={m.valor} /></p>
                     {/* Marca x canal: barra empilhada (largura relativa a' maior marca) + valor de cada canal. */}
                     <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
-                      <div className="tv-barra flex h-full" style={{ width: `${maiorMarca > 0 ? (m.hoje / maiorMarca) * 100 : 0}%` }}>
-                        {ORDEM_CANAIS.map((id) => {
-                          const v = m.por_canal?.find((p) => p.channel === id)?.hoje ?? 0;
-                          return v > 0 ? <div key={id} style={{ width: `${pct(v, m.hoje)}%`, background: CANAIS[id].cor }} /> : null;
+                      <div className="tv-barra flex h-full" style={{ width: `${maiorMarca > 0 ? (m.valor / maiorMarca) * 100 : 0}%` }}>
+                        {visiveis.map((id) => {
+                          const v = parteDaMarca(m, id);
+                          return v > 0 ? <div key={id} style={{ width: `${pct(v, m.valor)}%`, background: CANAIS[id].cor }} /> : null;
                         })}
                       </div>
                     </div>
                     <ul className="mt-[0.7vw] space-y-[0.25vw]">
-                      {ORDEM_CANAIS.map((id) => {
+                      {visiveis.map((id) => {
                         const parte = m.por_canal?.find((p) => p.channel === id);
                         const fora = m.canais_fora?.includes(id);
                         return (
