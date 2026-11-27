@@ -25,7 +25,9 @@ import re
 import threading
 import time
 import unicodedata
-from datetime import date, datetime
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as EsperaEsgotada
+from datetime import date, datetime, timedelta
 from typing import Callable, Optional
 
 from sqlalchemy import text
@@ -36,6 +38,117 @@ from app.services import full_curva_abc_service as abc
 from app.services.hoje_por_hora_service import FONTES, TABELA, hora_fechada_do_canal
 
 DIARIA = "marts.fact_marketplace_daily_performance"
+
+# ---------------------------------------------------------------------------
+# HOJE direto do Data Mart (só a /black): ~20-25 min à frente da Torre. As
+# MESMAS regras de `pipelines/sync_vendas_por_hora.py` (quem grava a
+# fact_marketplace_hourly_sales), só para o dia de hoje e só ML + Shopee:
+#   ML      api.ml_orders, status = 'paid', GMV = total_amount; date_created
+#           está em UTC-4: +1 h antes de tirar a hora (BRT).
+#   Shopee  silver.stg_shopee_orders + _order_items, fora cancelled e unpaid,
+#           GMV = soma de item_total, hora = create_time em BRT.
+#   Corte   ML = pedido mais recente (+1 h); Shopee = última carga
+#           (max ingested_at) − 10 min (FOLGA_SHOPEE do pipeline).
+# UMA consulta para os dois canais, cache de 2,5 min. Falha ou > 15 s: a Torre.
+# ---------------------------------------------------------------------------
+
+#: Marcas de cada canal: as do pipeline (BRANDS_IN_SCOPE do ML e CONTAS_API da Shopee).
+DM_MARCAS_ML = ["barbours", "kokeshi", "lescent", "rituaria"]
+DM_MARCAS_SHOPEE = ["apice", "barbours", "kokeshi", "lescent", "rituaria"]
+FOLGA_SHOPEE = timedelta(minutes=10)
+DM_CACHE_S = 150.0
+DM_ESPERA_S = 15.0
+
+SQL_HOJE_DM = """
+WITH ml AS (
+    SELECT 'ml' AS canal, brand,
+           extract(hour FROM date_created + interval '1 hour')::int AS hora,
+           SUM(total_amount) AS gmv
+    FROM api.ml_orders
+    WHERE status = 'paid'
+      AND brand = ANY(:marcas_ml)
+      AND date_created >= CAST(:inicio AS timestamp) - interval '1 hour'
+      AND date_created <  CAST(:fim AS timestamp) - interval '1 hour'
+    GROUP BY 2, 3
+),
+o AS (
+    SELECT order_sn, brand, create_time AT TIME ZONE 'America/Sao_Paulo' AS criado_brt
+    FROM silver.stg_shopee_orders
+    WHERE brand = ANY(:marcas_shopee)
+      AND create_time >= CAST(:inicio AS timestamp) AT TIME ZONE 'America/Sao_Paulo'
+      AND create_time <  CAST(:fim AS timestamp) AT TIME ZONE 'America/Sao_Paulo'
+      AND lower(order_status) NOT IN ('cancelled', 'unpaid')
+),
+i AS (
+    SELECT order_sn, SUM(item_total) AS total
+    FROM silver.stg_shopee_order_items
+    WHERE order_sn IN (SELECT order_sn FROM o)
+    GROUP BY 1
+),
+sh AS (
+    SELECT 'shopee' AS canal, o.brand, extract(hour FROM o.criado_brt)::int AS hora,
+           COALESCE(SUM(i.total), 0) AS gmv
+    FROM o LEFT JOIN i USING (order_sn)
+    GROUP BY 2, 3
+),
+f AS (
+    SELECT (SELECT max(date_created) + interval '1 hour' FROM api.ml_orders
+             WHERE brand = ANY(:marcas_ml)
+               AND date_created >= CAST(:inicio AS timestamp) - interval '1 hour') AS ml_fonte_at,
+           (SELECT max(ingested_at) FROM silver.stg_shopee_orders
+             WHERE brand = ANY(:marcas_shopee)) AS shopee_fonte_at
+)
+SELECT d.canal, d.brand, d.hora, d.gmv, f.ml_fonte_at, f.shopee_fonte_at
+FROM f LEFT JOIN (SELECT * FROM ml UNION ALL SELECT * FROM sh) d ON true
+"""
+
+
+def _brt(momento, folga: timedelta = timedelta(0)) -> Optional[datetime]:
+    """Como `para_brt` do pipeline: sem fuso = já em BRT; com fuso = convertido. Menos a folga."""
+    if momento is None:
+        return None
+    if isinstance(momento, str):
+        momento = datetime.fromisoformat(momento.replace("Z", "+00:00"))
+    if momento.tzinfo is None:
+        momento = momento.replace(tzinfo=APP_TIMEZONE)
+    return momento.astimezone(APP_TIMEZONE) - folga
+
+
+def ler_hoje_datamart(dia: date, consultar: Optional[Callable] = None) -> tuple[dict, dict]:
+    """({(marca, canal): [24 GMV]}, {canal: fonte_ate BRT}). Levanta se a fonte não respondeu."""
+    if consultar is None:
+        from app.services import datamart_leitura
+
+        def consultar(sql, params):
+            return datamart_leitura.consultar(sql, params, timeout_metabase=DM_ESPERA_S, ttl_s=DM_CACHE_S)
+    linhas = consultar(SQL_HOJE_DM, {"inicio": dia, "fim": dia + timedelta(days=1),
+                                     "marcas_ml": DM_MARCAS_ML, "marcas_shopee": DM_MARCAS_SHOPEE})
+    if not linhas:
+        raise RuntimeError("Data Mart sem resposta")
+    fontes = {"ml": _brt(linhas[0].get("ml_fonte_at")),
+              "shopee": _brt(linhas[0].get("shopee_fonte_at"), FOLGA_SHOPEE)}
+    real: dict[tuple[str, str], list[float]] = {}
+    for x in linhas:
+        if x.get("canal") is None or x.get("hora") is None or not 0 <= int(x["hora"]) < 24:
+            continue
+        real.setdefault((_norm(x["brand"]), x["canal"]), [0.0] * 24)[int(x["hora"])] += float(x["gmv"] or 0)
+    return real, fontes
+
+
+_dm_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="black-dm")
+
+
+def hoje_do_datamart(dia: date, ler: Callable = ler_hoje_datamart, espera_s: float = DM_ESPERA_S):
+    """A leitura do Data Mart com teto de espera; None = falhou ou demorou (a tela cai para a Torre).
+    Quem demorou segue em segundo plano e deixa o cache quente para a próxima chamada."""
+    try:
+        return _dm_pool.submit(ler, dia).result(timeout=espera_s)
+    except EsperaEsgotada:
+        return None
+    except Exception:  # noqa: BLE001 — qualquer falha do Data Mart: a Torre responde
+        import logging
+        logging.getLogger(__name__).warning("black-hora: Data Mart falhou; usando a Torre", exc_info=True)
+        return None
 
 PLANILHA_ID = "1LHKwXuSzZqjPV6tCtuF-WEAZWOL0s5A2E-Fxe4TMKEw"
 ABA = "Meta hora Black"
@@ -158,7 +271,10 @@ def parcial_do_canal(ate: Optional[datetime], corte: int, dia: date) -> Optional
 
 
 def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[datetime] = None,
-                   obter: Callable = obter_meta) -> dict:
+                   obter: Callable = obter_meta, datamart: Optional[Callable] | str = "padrao") -> dict:
+    """`datamart`: leitor de HOJE no Data Mart (None = só a Torre). Dia passado: sempre a Torre."""
+    if datamart == "padrao":
+        datamart = hoje_do_datamart
     agora = (agora or datetime.now(APP_TIMEZONE)).astimezone(APP_TIMEZONE)
     dia = dia or agora.date()
     meta, motivo_meta, lida_em = obter()
@@ -207,6 +323,20 @@ def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[date
             continue
         real.setdefault((_norm(r["brand"]), canal), [0.0] * 24)[int(r["hora"])] += float(r["gmv"] or 0)
 
+    # Hora em andamento: diária de hoje − horas fechadas (nunca negativo).
+    parcial_valor = {k: max(v - sum(real.get(k, [0.0] * 24)[:cortes[k[1]]]), 0.0) for k, v in dia_total.items()}
+    fonte = None
+    dm = datamart(dia) if datamart is not None and dia == agora.date() else None
+    if dm is not None:
+        real, fontes_dm = dm
+        cortes = {c: corte_do_dia(fontes_dm.get(c), dia, agora) for c in cortes}
+        # Hora em andamento = o que o Data Mart já tem do corte em diante; `ate` = o corte da fonte.
+        parcial = {c: parcial_do_canal(fontes_dm.get(c), cortes[c], dia) for c in cortes}
+        parcial_valor = {k: sum(v[cortes[k[1]]:]) for k, v in real.items()}
+        fonte = "datamart"
+    elif datamart is not None and dia == agora.date():
+        fonte = "torre"  # o Data Mart falhou ou demorou: a tela mostra o selo
+
     # As marca × canal da meta; sem meta lida, as que venderam no dia (só o realizado).
     pares = [(x["marca"], x["canal"]) for x in meta] if meta else sorted(real)
     por_par = {(x["marca"], x["canal"]): x for x in meta or []}
@@ -220,8 +350,9 @@ def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[date
             "meta_hora": m["meta_hora"] if m else [None] * 24,
             # Hora ainda não fechada no canal: None (nunca 0).
             "realizado_hora": [round(v, 2) if h < cortes[canal] else None for h, v in enumerate(r)],
-            # Hora em andamento: diária de hoje − horas fechadas (nunca negativo). None sem parcial no canal.
-            "realizado_parcial": (round(max(dia_total.get((marca, canal), 0.0) - sum(r[:cortes[canal]]), 0.0), 2)
-                                  if parcial[canal] else None),
+            # Hora em andamento (Torre: diária − horas fechadas; Data Mart: do corte em diante). None sem parcial.
+            "realizado_parcial": round(parcial_valor.get((marca, canal), 0.0), 2) if parcial[canal] else None,
         })
-    return {**base, "disponivel": True, "motivo": None, "cortes": cortes, "parcial": parcial, "linhas": linhas}
+    return {**base, "disponivel": True, "motivo": None, "cortes": cortes, "parcial": parcial, "linhas": linhas,
+            # "datamart" = hoje direto do Data Mart; "torre" = ele falhou (selo); None = dia passado (Torre, normal).
+            "fonte": fonte}

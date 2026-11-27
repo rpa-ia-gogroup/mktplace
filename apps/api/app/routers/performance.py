@@ -638,11 +638,12 @@ def produtos_gap(
 @router.get("/black-hora")
 def black_hora(
     dia: Optional[date] = Query(None, description="Dia (AAAA-MM-DD). Padrão: hoje (BRT)."),
+    fonte: Optional[str] = Query(None, pattern="^torre$", description="'torre' = sem o Data Mart (conferência)."),
     db: Session = Depends(get_db),
 ):
     """Black Friday hora a hora: meta da planilha 'Meta hora Black' x realizado por
     hora (ML e Shopee, sem TikTok), cada canal cortado na sua última hora fechada."""
-    return black_svc.get_black_hora(_require_db(db), dia)
+    return black_svc.get_black_hora(_require_db(db), dia, datamart=None if fonte == "torre" else black_svc.hoje_do_datamart)
 
 
 @router.get("/tempo-real", response_model=TempoRealResponse)

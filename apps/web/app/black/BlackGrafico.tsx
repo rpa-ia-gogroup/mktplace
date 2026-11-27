@@ -62,7 +62,7 @@ export default function BlackGrafico({ horas, ultimaHora, ate }: { horas: HoraBl
           labelFormatter={(h: number) => `Até ${ateHora(h)}`}
           formatter={(v: number, nome: string) => [fmtBrlCurto(v), NOME[nome] ?? nome]}
         />
-        {atual && <ReferenceLine x={ultimaHora} stroke={tema.eixo} strokeOpacity={0.5} label={{ value: ateHora(ultimaHora), position: "insideTopRight", fill: tema.eixo, fontSize: 11 }} />}
+        {atual && <ReferenceLine x={ultimaHora} stroke={tema.eixo} strokeOpacity={0.5} label={{ value: ateHora(ultimaHora), position: "insideTopRight", offset: 14, fill: tema.eixo, fontSize: 11 }} />}
         <Line dataKey="metaAcum" stroke={tema.referencia} strokeWidth={2} strokeDasharray="6 5" dot={false} activeDot={false} type="monotone" isAnimationActive={false} />
         <Area dataKey="realizadoAcum" stroke={tema.total} strokeWidth={2.5} fill={`url(#${grad})`} dot={false} type="monotone" connectNulls={false} isAnimationActive={false} />
         {atual?.realizadoAcum != null && <ReferenceDot x={ultimaHora} y={atual.realizadoAcum} r={4.5} fill={tema.total} stroke={tema.tooltipFundo} strokeWidth={2} />}
