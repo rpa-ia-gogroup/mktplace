@@ -89,8 +89,8 @@ class _R:
 
 
 class Sessao:
-    def __init__(self, fontes, vendas, existe=True):
-        self.fontes, self.vendas, self.existe = fontes, vendas, existe
+    def __init__(self, fontes, vendas, existe=True, diaria=None):
+        self.fontes, self.vendas, self.existe, self.diaria = fontes, vendas, existe, diaria or []
 
     def execute(self, sql, params=None):
         sql = str(sql)
@@ -98,6 +98,8 @@ class Sessao:
             return _R(escalar=self.existe)
         if S.FONTES in sql:
             return _R(list(self.fontes.items()))
+        if S.DIARIA in sql:
+            return _R(self.diaria)
         return _R(self.vendas)
 
 
@@ -134,3 +136,39 @@ def test_sem_meta_segue_com_o_realizado_e_o_motivo():
 def test_dia_futuro_nao_tem_hora_fechada():
     agora = datetime(2026, 11, 24, 18, 0, tzinfo=BRT)
     assert S.corte_do_dia(datetime(2026, 11, 24, 17, 0, tzinfo=BRT), DIA, agora) == 0
+
+
+def test_hora_em_andamento_vem_da_diaria_como_parcial():
+    """Hora em andamento = diária de hoje − horas fechadas; parcial {hora, ate (carga da diária), fracao}."""
+    agora = datetime(2026, 11, 27, 9, 50, tzinfo=BRT)
+    fontes = {3: datetime(2026, 11, 27, 9, 11, 6, tzinfo=BRT), 2: datetime(2026, 11, 27, 9, 33, tzinfo=BRT)}
+    vendas = [  # a tabela por hora nao tem a hora 9 (so' hora inteira)
+        {"brand": "kokeshi", "marketplace_id": 3, "hora": 8, "gmv": 100},
+        {"brand": "kokeshi", "marketplace_id": 2, "hora": 8, "gmv": 10},
+    ]
+    carga = datetime(2026, 11, 27, 9, 42, tzinfo=BRT)
+    diaria = [
+        {"brand": "kokeshi", "marketplace_id": 3, "gmv": 140, "ate": carga},
+        {"brand": "kokeshi", "marketplace_id": 2, "gmv": 17, "ate": datetime(2026, 11, 27, 9, 33, tzinfo=BRT)},
+        {"brand": "denavita", "marketplace_id": 3, "gmv": 999, "ate": carga},  # fora da meta
+    ]
+    r = S.get_black_hora(Sessao(fontes, vendas, diaria=diaria), DIA, agora, obter=lambda: (S.interpretar(aba()), None, "x"))
+    assert r["cortes"] == {"shopee": 9, "ml": 9}
+    assert r["parcial"]["shopee"] == {"hora": 9, "ate": "2026-11-27T09:42:00-03:00", "fracao": 0.7}
+    assert r["parcial"]["ml"]["fracao"] == 0.55
+    ks = next(x for x in r["linhas"] if x["marca"] == "kokeshi" and x["canal"] == "shopee")
+    assert ks["realizado_hora"][9] is None and ks["realizado_parcial"] == 40
+    a = next(x for x in r["linhas"] if x["marca"] == "apice")
+    assert a["realizado_parcial"] == 0, "canal com parcial: marca sem venda = 0 de verdade"
+    # fechado + parcial = a diária de hoje (o GMV da Gerencial) das marcas da meta
+    fechado = sum(v or 0 for x in r["linhas"] for v in x["realizado_hora"])
+    assert fechado + sum(x["realizado_parcial"] for x in r["linhas"]) == 157
+
+
+def test_sem_parcial_quando_a_diaria_e_velha_ou_o_dia_fechou():
+    assert S.parcial_do_canal(None, 9, DIA) is None
+    assert S.parcial_do_canal(datetime(2026, 11, 26, 23, 0, tzinfo=BRT), 0, DIA) is None, "carga de ontem"
+    assert S.parcial_do_canal(datetime(2026, 11, 28, 1, 0, tzinfo=BRT), 24, DIA) is None, "dia fechado"
+    assert S.parcial_do_canal(datetime(2026, 11, 27, 8, 50, tzinfo=BRT), 9, DIA) is None, "diaria mais velha que o corte"
+    assert S.parcial_do_canal(datetime(2026, 11, 27, 9, 0, tzinfo=BRT), 9, DIA)["fracao"] == 0.0
+    assert S.parcial_do_canal(datetime(2026, 11, 27, 10, 30, tzinfo=BRT), 9, DIA)["fracao"] == 1.0, "limitado a 1"

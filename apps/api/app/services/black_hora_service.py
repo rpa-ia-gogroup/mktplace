@@ -11,6 +11,13 @@ Realizado: `marts.fact_marketplace_hourly_sales` (o mesmo do Hoje por hora),
 só ML e Shopee (a meta não tem TikTok), só as marca × canal que a meta tem
 (sem isso o realizado teria marcas que a meta não cobre). Cada canal corta na
 sua última hora fechada: hora sem dado fechado volta `None`, nunca 0.
+A hora em andamento vem à parte em `realizado_parcial`, com `parcial[canal] =
+{hora, ate, fracao}`. A tabela por hora só recebe hora inteira (a hora do corte
+fica vazia mesmo com `fonte_ate` dentro dela); o que já entrou nela está na fato
+DIÁRIA, a mesma do GMV de hoje da Gerencial. Então parcial = diária de hoje −
+horas fechadas (por marca × canal) e `ate` = a carga da diária (`ingested_at`):
+fechado + parcial = o GMV de hoje da Gerencial (Shopee + ML). Em dia fechado,
+as duas fatos batem ao centavo (conferido em 25 e 26/11).
 """
 from __future__ import annotations
 
@@ -27,6 +34,8 @@ from sqlalchemy.orm import Session
 from app.deps.period import APP_TIMEZONE
 from app.services import full_curva_abc_service as abc
 from app.services.hoje_por_hora_service import FONTES, TABELA, hora_fechada_do_canal
+
+DIARIA = "marts.fact_marketplace_daily_performance"
 
 PLANILHA_ID = "1LHKwXuSzZqjPV6tCtuF-WEAZWOL0s5A2E-Fxe4TMKEw"
 ABA = "Meta hora Black"
@@ -136,6 +145,18 @@ def corte_do_dia(fonte_ate: Optional[datetime], dia: date, agora: datetime) -> i
     return min(hora_fechada_do_canal(fonte_ate, dia), teto)
 
 
+def parcial_do_canal(ate: Optional[datetime], corte: int, dia: date) -> Optional[dict]:
+    """A hora em andamento do canal: {hora, ate, fracao} (tempo de `ate` dentro da hora do corte ÷ 60 min, 0..1).
+    `ate` = carga da fato diária. None quando ela é de outro dia, mais velha que o corte, ou o dia fechou."""
+    if ate is None or corte >= 24:
+        return None
+    local = ate.astimezone(APP_TIMEZONE)
+    if local.date() != dia or local.hour < corte:
+        return None
+    fracao = (local - local.replace(hour=corte, minute=0, second=0, microsecond=0)).total_seconds() / 3600
+    return {"hora": corte, "ate": local.isoformat(), "fracao": round(min(max(fracao, 0.0), 1.0), 4)}
+
+
 def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[datetime] = None,
                    obter: Callable = obter_meta) -> dict:
     agora = (agora or datetime.now(APP_TIMEZONE)).astimezone(APP_TIMEZONE)
@@ -147,7 +168,7 @@ def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[date
                         {"t": TABELA, "f": FONTES}).scalar()
     if not existe:
         return {**base, "disponivel": False, "motivo": "As vendas por hora ainda não estão publicadas no banco.",
-                "cortes": {}, "linhas": []}
+                "cortes": {}, "parcial": {}, "linhas": []}
     ids = list(CANAIS.values())
     fontes = {r[0]: r[1] for r in db.execute(
         text(f"SELECT marketplace_id, fonte_ate FROM {FONTES} WHERE marketplace_id = ANY(:m)"), {"m": ids})}
@@ -160,6 +181,25 @@ def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[date
         WHERE h.dia = :dia AND h.marketplace_id = ANY(:m)
         GROUP BY 1, 2, 3
     """), {"dia": dia, "m": ids}).mappings().all()
+    # O que já entrou hoje (inclui a hora em andamento): fato diária, a mesma do GMV da Gerencial.
+    diaria = db.execute(text(f"""
+        SELECT l.brand_key AS brand, f.marketplace_id, SUM(f.gmv) AS gmv, MAX(f.ingested_at) AS ate
+        FROM {DIARIA} f
+        JOIN marts.dim_loja l ON l.loja_id = f.loja_id
+        WHERE f.date = :dia AND f.marketplace_id = ANY(:m)
+        GROUP BY 1, 2
+    """), {"dia": dia, "m": ids}).mappings().all()
+    dia_total: dict[tuple[str, str], float] = {}
+    ate: dict[str, datetime] = {}
+    for r in diaria:
+        canal = por_id.get(r["marketplace_id"])
+        if canal is None:
+            continue
+        chave = (_norm(r["brand"]), canal)
+        dia_total[chave] = dia_total.get(chave, 0.0) + float(r["gmv"] or 0)
+        if r["ate"] is not None and (canal not in ate or r["ate"] > ate[canal]):
+            ate[canal] = r["ate"]
+    parcial = {c: parcial_do_canal(ate.get(c), cortes[c], dia) for c in cortes}
     real: dict[tuple[str, str], list[float]] = {}
     for r in vendas:
         canal = por_id.get(r["marketplace_id"])
@@ -180,5 +220,8 @@ def get_black_hora(db: Session, dia: Optional[date] = None, agora: Optional[date
             "meta_hora": m["meta_hora"] if m else [None] * 24,
             # Hora ainda não fechada no canal: None (nunca 0).
             "realizado_hora": [round(v, 2) if h < cortes[canal] else None for h, v in enumerate(r)],
+            # Hora em andamento: diária de hoje − horas fechadas (nunca negativo). None sem parcial no canal.
+            "realizado_parcial": (round(max(dia_total.get((marca, canal), 0.0) - sum(r[:cortes[canal]]), 0.0), 2)
+                                  if parcial[canal] else None),
         })
-    return {**base, "disponivel": True, "motivo": None, "cortes": cortes, "linhas": linhas}
+    return {**base, "disponivel": True, "motivo": None, "cortes": cortes, "parcial": parcial, "linhas": linhas}

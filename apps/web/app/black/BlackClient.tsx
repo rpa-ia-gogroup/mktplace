@@ -25,7 +25,7 @@ import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto } from "@/lib/formatters";
 import { torreFetch } from "@/lib/torre-fetch";
 import {
-  filtrarBlack, horaAHora, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
+  filtrarBlack, horaAHora, linhasComParcial, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
   type CanalBlack, type FiltroCanalBlack, type RespostaBlack,
 } from "@/lib/black-hora";
 
@@ -49,7 +49,7 @@ const PONTO: Record<CanalBlack, string> = { shopee: "bg-canal-shopee", ml: "bg-c
 const MARCAS_BLACK = ["apice", "barbours", "kokeshi", "lescent", "rituaria"];
 const DICA_META =
   "Meta da planilha 'Meta diária Marketplace — nov/26', aba 'Meta hora Black' (sem TikTok). " +
-  "Cada canal compara com a meta até a sua última hora fechada. Realizado: vendas pagas por hora.";
+  "Cada canal compara com a meta até a sua última hora fechada mais a hora em andamento (meta da hora × fração já decorrida). Realizado: vendas pagas, o mesmo GMV de hoje da Gerencial.";
 
 export default function BlackClient() {
   const [dia, setDia] = useState(hojeBrt);
@@ -77,7 +77,7 @@ export default function BlackClient() {
     return () => { ctrl.abort(); clearInterval(t); };
   }, [dia, tentativa]);
 
-  const linhas = useMemo(() => (dados ? filtrarBlack(dados.linhas, marcas, canal) : []), [dados, marcas, canal]);
+  const linhas = useMemo(() => (dados ? filtrarBlack(linhasComParcial(dados), marcas, canal) : []), [dados, marcas, canal]);
   const r = useMemo(() => resumoBlack(linhas), [linhas]);
   const horas = useMemo(() => horaAHora(linhas), [linhas]);
   const quadro = useMemo(() => quadroMarcaCanal(linhas), [linhas]);
@@ -147,7 +147,8 @@ export default function BlackClient() {
     );
   }
 
-  const ate = r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null;
+  // Com a hora em andamento: "até 09:47" (a carga da fato diária); sem ela, a hora cheia fechada.
+  const ate = r.ate ?? (r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null);
   const canais = (["shopee", "ml"] as CanalBlack[]).filter((c) => canal === "todos" || c === canal);
   const pctProj = r.projecao !== null && r.metaDia ? r.projecao / r.metaDia : null;
   const tProj = tomDesvio(pctProj);
@@ -218,7 +219,7 @@ export default function BlackClient() {
         }
       >
         <div className="h-64 sm:h-80">
-          <Grafico horas={horas} ultimaHora={r.ultimaHora} />
+          <Grafico horas={horas} ultimaHora={r.ultimaHora} ate={r.ate} />
         </div>
       </Panel>
 

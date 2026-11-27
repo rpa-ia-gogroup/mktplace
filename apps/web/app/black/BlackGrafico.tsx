@@ -13,16 +13,26 @@ import { temaDoGrafico } from "@/lib/chart-theme";
 import { fmtBrlCurto } from "@/lib/formatters";
 import { rotuloHora, type HoraBlack } from "@/lib/black-hora";
 
-const NOME: Record<string, string> = { metaAcum: "Meta", realizadoAcum: "Realizado" };
+const NOME: Record<string, string> = { metaAcum: "Meta", realizadoAcum: "Realizado", parcialAcum: "Com a hora em andamento" };
 /** Ponto da hora h = acumulado ATÉ o fim dela: o eixo mostra a hora em que o acumulado fecha. */
 const ateHora = (h: number) => rotuloHora(h + 1);
 /** Eixo curto, sem quebra: "1,5 mi", "500 mil". */
 const eixoY = (v: number) => (v >= 1e6 ? `${(v / 1e6).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mi` : v >= 1e3 ? `${Math.round(v / 1e3)} mil` : String(v));
 
-export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]; ultimaHora: number }) {
+/** "09:42" -> posição no eixo (o ponto h = fim da hora h): 8,7. */
+const posicaoDe = (hhmm: string) => {
+  const [h, m] = hhmm.split(":").map(Number);
+  return h + m / 60 - 1;
+};
+
+export default function BlackGrafico({ horas, ultimaHora, ate }: { horas: HoraBlack[]; ultimaHora: number; ate?: string | null }) {
   const tema = temaDoGrafico(useTema().resolvido);
   const grad = useId().replace(/:/g, "");
   const atual = ultimaHora >= 0 ? horas[ultimaHora] : null;
+  // Hora em andamento: do último acumulado fechado até "agora" (posição exata de `ate`), tracejado e vazado.
+  const p = horas.find((h) => h.parcialAcum !== null && h.realizadoAcum === null) ?? null;
+  const inicio = p ? (p.hora > 0 ? horas[p.hora - 1].parcialAcum : 0) : null;
+  const parcial = p && ate && inicio !== null ? { de: { x: p.hora - 1, y: inicio }, ate: { x: Math.min(23, posicaoDe(ate)), y: p.parcialAcum! } } : null;
   // Passo fixo no eixo: 3 h no largo, 6 h no celular. O ponto -1 e' o "00h" (acumulado zero).
   const [estreito, setEstreito] = useState(false);
   useEffect(() => {
@@ -46,7 +56,7 @@ export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]
         </defs>
         <CartesianGrid stroke={tema.grade} vertical={false} />
         <XAxis dataKey="hora" type="number" domain={[-1, 23]} ticks={ticks} tickFormatter={ateHora} tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} />
-        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={60} tickFormatter={eixoY} />
+        <YAxis tick={{ fontSize: 12, fill: tema.eixo }} axisLine={false} tickLine={false} width={60} tickFormatter={eixoY} domain={[0, (max: number) => Math.max(max, parcial?.ate.y ?? 0)]} />
         <Tooltip
           contentStyle={{ background: tema.tooltipFundo, border: `1px solid ${tema.tooltipBorda}`, borderRadius: 8, color: tema.tooltipTinta, fontSize: 12 }}
           labelFormatter={(h: number) => `Até ${ateHora(h)}`}
@@ -56,6 +66,9 @@ export default function BlackGrafico({ horas, ultimaHora }: { horas: HoraBlack[]
         <Line dataKey="metaAcum" stroke={tema.referencia} strokeWidth={2} strokeDasharray="6 5" dot={false} activeDot={false} type="monotone" isAnimationActive={false} />
         <Area dataKey="realizadoAcum" stroke={tema.total} strokeWidth={2.5} fill={`url(#${grad})`} dot={false} type="monotone" connectNulls={false} isAnimationActive={false} />
         {atual?.realizadoAcum != null && <ReferenceDot x={ultimaHora} y={atual.realizadoAcum} r={4.5} fill={tema.total} stroke={tema.tooltipFundo} strokeWidth={2} />}
+        {/* Hora em andamento: trecho tracejado e ponto vazado (ainda não é hora fechada). */}
+        {parcial && <ReferenceLine segment={[parcial.de, parcial.ate]} stroke={tema.total} strokeWidth={2} strokeDasharray="3 4" ifOverflow="extendDomain" />}
+        {parcial && <ReferenceDot x={parcial.ate.x} y={parcial.ate.y} r={5} fill="transparent" stroke={tema.total} strokeWidth={2.5} ifOverflow="extendDomain" />}
       </ComposedChart>
     </ResponsiveContainer>
   );
