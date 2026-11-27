@@ -146,10 +146,10 @@ export default function TvClient() {
         .then((rs) => {
           // Hora do último dado novo por canal; guardada no navegador p/ sobreviver ao recarregar da TV.
           const chave = `black-tv-dado-novo-${hoje}`;
-          let ant: Partial<Record<CanalTv, { gmv: number | null; ate: string | null }>> = {};
+          let ant: Partial<Record<CanalTv, { gmv: number | null; ate: string | null; vendaNova?: string | null }>> = {};
           try { ant = JSON.parse(localStorage.getItem(chave) ?? "{}"); } catch { /* sem histórico */ }
           const canais = ids.map((id, i) => comHoraDoDadoNovo(ant[id], canalDoOverview(id, rs[i] as OverviewTv)));
-          try { localStorage.setItem(chave, JSON.stringify(Object.fromEntries(canais.map((c) => [c.id, { gmv: c.gmv, ate: c.ate }])))); } catch { /* ok */ }
+          try { localStorage.setItem(chave, JSON.stringify(Object.fromEntries(canais.map((c) => [c.id, { gmv: c.gmv, ate: c.ate, vendaNova: c.vendaNova ?? null }])))); } catch { /* ok */ }
           setDados({ canais, marcas: marcasDoBrands((rs[3] as { brands: MarcaTvApi[] }).brands), disponivel: canais.some((x) => x.gmv !== null) });
           setErro(canais.some((x) => x.gmv !== null) ? null : "Vendas de hoje indisponíveis.");
           setLidoEm(new Date());
@@ -210,7 +210,7 @@ export default function TvClient() {
 
   const canais = visiveis.map((id) => {
     const v = dados?.canais.find((c) => c.id === id);
-    return { id, ...CANAIS[id], gmv: v?.gmv ?? null, pedidos: v?.pedidos ?? 0, ate: v?.ate ?? null };
+    return { id, ...CANAIS[id], gmv: v?.gmv ?? null, pedidos: v?.pedidos ?? 0, ate: v?.ate ?? null, vendaNova: v?.vendaNova ?? null };
   });
   // Total, pedidos e ticket só dos canais visíveis (a soma dos canais é o total da API).
   const total = canais.reduce((s, c) => s + (c.gmv ?? 0), 0);
@@ -273,9 +273,9 @@ export default function TvClient() {
             <span className="tv-marca block whitespace-nowrap text-[1.6vw] font-extrabold uppercase tracking-[0.2em]">Black Marketplace GoBeaute</span>
             <span className="mt-[0.4vw] block whitespace-nowrap text-[1.05vw] font-medium text-white/55">
               27 · 11 · 2026
-              {canais.filter((c) => c.ate).map((c) => (
+              {canais.filter((c) => c.vendaNova).map((c) => (
                 <span key={c.id}>
-                  {"  ·  "}Última att {c.id === "ml" ? "Meli" : c.nome}: <span className="tv-num font-bold text-white">{hhmm(new Date(c.ate!))}</span>
+                  {"  ·  "}Última att {c.id === "ml" ? "Meli" : c.nome}: <span className="tv-num font-bold text-white">{hhmm(new Date(c.vendaNova!))}</span>
                 </span>
               ))}
             </span>

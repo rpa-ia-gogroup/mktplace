@@ -103,10 +103,12 @@ test("TV: meta pela regra da /black (metaDe com a hora em andamento)", () => {
   assert.ok(rodape.includes("Tela cheia") && rodape.includes("Sair (Esc)"));
 });
 
-test("TV: horário do canal só anda quando entra dado novo", async () => {
+test("TV: última att só quando entra venda nova", async () => {
   const { comHoraDoDadoNovo } = await import("../src/lib/black-tv.ts");
   const novo = { id: "ml" as const, gmv: 100, pedidos: 1, ate: "2026-11-27T21:55:00Z" };
-  assert.equal(comHoraDoDadoNovo({ gmv: 100, ate: "2026-11-27T21:40:00Z" }, novo).ate, "2026-11-27T21:40:00Z");
-  assert.equal(comHoraDoDadoNovo({ gmv: 90, ate: "2026-11-27T21:40:00Z" }, novo).ate, "2026-11-27T21:55:00Z");
-  assert.equal(comHoraDoDadoNovo(undefined, novo).ate, "2026-11-27T21:55:00Z");
+  const antes = { gmv: 100, ate: "2026-11-27T21:40:00Z", vendaNova: "2026-11-27T21:40:00Z" };
+  assert.equal(comHoraDoDadoNovo(antes, novo).vendaNova, "2026-11-27T21:40:00Z"); // mesma venda: mantém
+  assert.equal(comHoraDoDadoNovo({ ...antes, gmv: 90 }, novo).vendaNova, "2026-11-27T21:55:00Z"); // subiu
+  assert.equal(comHoraDoDadoNovo(undefined, novo).vendaNova, null); // 1ª leitura: não sabe
+  assert.equal(comHoraDoDadoNovo({ ...antes, gmv: 110 }, novo).vendaNova, "2026-11-27T21:40:00Z"); // caiu: não é venda nova
 });
