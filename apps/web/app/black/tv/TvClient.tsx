@@ -195,7 +195,7 @@ export default function TvClient() {
   if (!montado) return null;
 
   return createPortal(
-    <div className="tv fixed inset-0 z-[70] overflow-hidden text-white" role="main" aria-label="Black Friday — receita de hoje">
+    <div className="tv fixed inset-0 z-[70] overflow-hidden text-white" role="main" aria-label="Black Marketplace GoBeauté — receita de hoje">
       <style>{CSS}</style>
       <div aria-hidden className="tv-fundo" />
       <div aria-hidden className="tv-grade" />
@@ -205,7 +205,7 @@ export default function TvClient() {
         {/* Topo */}
         <header className="tv-in flex items-center justify-between" style={{ animationDelay: "0ms" }}>
           <div className="flex items-baseline gap-[1.2vw]">
-            <span className="tv-marca text-[2.1vw] font-extrabold uppercase tracking-[0.32em]">Black Friday</span>
+            <span className="tv-marca text-[1.75vw] font-extrabold uppercase tracking-[0.22em]">Black Marketplace GoBeauté</span>
             <span className="text-[1.05vw] font-medium tracking-[0.18em] text-white/45">27 · 11 · 2026</span>
           </div>
           {dadosAte && (
