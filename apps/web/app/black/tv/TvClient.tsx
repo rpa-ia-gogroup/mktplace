@@ -417,7 +417,11 @@ export default function TvClient() {
                     <p className="mt-[0.2vw] text-[2.3vw] font-bold leading-tight tracking-[-0.02em]"><Reais valor={m.valor} /></p>
                     {/* Marca x canal: barra empilhada (largura relativa a' maior marca) + valor de cada canal. */}
                     <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
-                      <div className="tv-barra flex h-full" style={{ width: `${maiorMarca > 0 ? (m.valor / maiorMarca) * 100 : 0}%` }}>
+                      <div className="tv-barra flex h-full" style={{ width: `${(() => {
+                        // Barra = % da meta do dia da marca (Shopee + ML); sem meta, o tamanho relativo à maior marca.
+                        const mb = metaNoCorte(black, ateDoCanal, (m.porCanal.shopee ?? 0) + (m.porCanal.ml ?? 0), (l) => l.marca === m.brand);
+                        return mb?.doDia != null ? Math.min(100, mb.doDia * 100) : maiorMarca > 0 ? (m.valor / maiorMarca) * 100 : 0;
+                      })()}%` }}>
                         {visiveis.map((id) => {
                           const v = parteDaMarca(m, id);
                           return v > 0 ? <div key={id} style={{ width: `${pct(v, m.valor)}%`, background: CANAIS[id].cor }} /> : null;
