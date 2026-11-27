@@ -119,6 +119,8 @@ export default function TvClient() {
   const [erro, setErro] = useState<string | null>(null);
   const [lidoEm, setLidoEm] = useState<Date | null>(null);
   const [black, setBlack] = useState<RespostaBlack | null>(null);
+  /** Mês até hoje (Torre, a mesma da Gerencial) por canal + meta do mês por canal (/metas/{mes}). */
+  const [mes, setMes] = useState<{ gmv: Partial<Record<CanalTv, number | null>>; meta: Partial<Record<CanalTv, number>> } | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -149,8 +151,24 @@ export default function TvClient() {
         })
         .catch((e) => { if (!ctrl.signal.aborted) setErro(e instanceof Error ? e.message : "Falha ao carregar."); });
     };
-    void ler();
-    const t = setInterval(ler, RELER_MS);
+    const lerMes = () => {
+      const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
+      const periodo = `date_from=${hoje.slice(0, 8)}01&date_to=${hoje}`;
+      Promise.all([
+        ...ids.map((id) => json<OverviewTv>(`/api/v1/performance/overview?${periodo}&marketplace=${id}`).catch(() => null)),
+        json<{ celulas: { brand: string; channel: CanalTv; meta_gmv: number }[] }>(`/api/v1/metas/${hoje.slice(0, 7)}`).catch(() => null),
+      ]).then((rs) => {
+        const gmv: Partial<Record<CanalTv, number | null>> = {};
+        ids.forEach((id, i) => { gmv[id] = (rs[i] as OverviewTv | null)?.current?.gmv ?? null; });
+        const meta: Partial<Record<CanalTv, number>> = {};
+        for (const c of (rs[3] as { celulas: { channel: CanalTv; meta_gmv: number }[] } | null)?.celulas ?? []) meta[c.channel] = (meta[c.channel] ?? 0) + c.meta_gmv;
+        setMes({ gmv, meta });
+      });
+    };
+    const lerTudo = () => { void ler(); lerMes(); };
+    lerTudo();
+    const t = setInterval(lerTudo, RELER_MS);
     return () => { ctrl.abort(); clearInterval(t); };
   }, []);
 
@@ -202,6 +220,11 @@ export default function TvClient() {
   const ateDoCanal: Partial<Record<CanalTv, string | null>> = Object.fromEntries(canais.map((c) => [c.id, c.ate]));
   const realComMeta = canais.filter((c) => c.id !== "tiktok").reduce((a, c) => a + (c.gmv ?? 0), 0);
   const metaTotal = metaNoCorte(black, ateDoCanal, realComMeta);
+  // Mês até hoje só dos canais visíveis que têm meta no mês (sem meta = fora da conta, nunca 0).
+  const canaisMes = visiveis.filter((id) => (mes?.meta[id] ?? 0) > 0 && mes?.gmv[id] != null);
+  const mesGmv = canaisMes.reduce((a, id) => a + (mes?.gmv[id] ?? 0), 0);
+  const mesMeta = canaisMes.reduce((a, id) => a + (mes?.meta[id] ?? 0), 0);
+  const nomeMes = new Date(Date.now() - 3 * 3600_000).toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
   // Última atualização dos dados = o canal visível mais atrasado (todos têm dado até essa hora).
   const fontes = canais
     .map((c) => c.ate)
@@ -304,6 +327,18 @@ export default function TvClient() {
                           <span className="text-white/40"> · {pct0(metaTotal.atingido)} da meta</span>
                         </span>
                       )}
+                {mesMeta > 0 && (
+                  <div className="mt-[1.4vw] max-w-[44vw]">
+                    <div className="flex items-baseline justify-between text-[1.05vw]">
+                      <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Mês de {nomeMes} · {canaisMes.map((id) => CANAIS[id].curto).join(" + ")}</span>
+                      <span className="tv-num font-bold text-white/85">{reaisCurto(mesGmv)} <span className="font-medium text-white/45">de {reaisCurto(mesMeta)}</span></span>
+                    </div>
+                    <div className="relative mt-[0.6vw] h-[0.5vw] overflow-hidden rounded-full bg-white/[0.08]">
+                      <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#22d3ee] to-[#a78bfa]" style={{ width: `${Math.min(100, (mesGmv / mesMeta) * 100)}%` }} />
+                    </div>
+                    <p className="mt-[0.5vw] text-[1.05vw] text-white/55"><span className="tv-num text-[1.5vw] font-bold text-white">{pct0(mesGmv / mesMeta)}</span> da meta do mês</p>
+                  </div>
+                )}
                     </div>
                   </div>
                 )}
