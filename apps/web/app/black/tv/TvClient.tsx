@@ -233,10 +233,20 @@ export default function TvClient() {
     .filter((t) => Number.isFinite(t));
   const dadosAte = fontes.length ? new Date(Math.min(...fontes)) : null;
 
-  // TV fica dias aberta: recarrega a página a cada 30 min para pegar versões novas da tela.
+  // TV fica dias aberta: a cada 2 min confere a versão publicada e recarrega sozinha quando sai uma nova
+  // (sem F5). Reserva: recarrega a cada 30 min, se a versão não puder ser lida.
   useEffect(() => {
-    const t = setTimeout(() => window.location.reload(), 30 * 60_000);
-    return () => clearTimeout(t);
+    const minha = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA;
+    const conferir = () =>
+      fetch("/api/versao", { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v: { versao?: string | null } | null) => {
+          if (minha && v?.versao && v.versao !== minha) window.location.reload();
+        })
+        .catch(() => {});
+    const t = setInterval(conferir, 2 * 60_000);
+    const reserva = setTimeout(() => window.location.reload(), 30 * 60_000);
+    return () => { clearInterval(t); clearTimeout(reserva); };
   }, []);
 
   // Portal no <body>: a moldura do shell cria um bloco de contencao e prenderia o `fixed`.
