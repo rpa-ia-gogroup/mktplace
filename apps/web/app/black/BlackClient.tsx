@@ -25,7 +25,7 @@ import { brandLabel } from "@/lib/filters/brands";
 import { fmtBrlCurto } from "@/lib/formatters";
 import { torreFetch } from "@/lib/torre-fetch";
 import {
-  filtrarBlack, horaAHora, linhasComParcial, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
+  DICA_DATAMART, filtrarBlack, rotuloAte, horaAHora, linhasComParcial, NOME_CANAL_BLACK, quadroMarcaCanal, resumoBlack, intervaloHora, rotuloHora, tomDesvio, ultimaHoraDoCanal,
   type CanalBlack, type FiltroCanalBlack, type RespostaBlack,
 } from "@/lib/black-hora";
 
@@ -123,7 +123,13 @@ export default function BlackClient() {
       </Link>
     </div>
   );
-  const selo = <SeloAtualizado em={lidoEm} carregando={!dados && !erro} detalhe={dados?.meta.fonte} />;
+  const selo = (
+    <>
+      <SeloAtualizado em={lidoEm} carregando={!dados && !erro} detalhe={dados?.meta.fonte} />
+      {/* O Data Mart falhou ou demorou: a Torre respondeu (horas fechadas ~20-25 min atrás). */}
+      {dados?.fonte === "torre" && <span className="text-xs text-ink-faint">fonte: Torre</span>}
+    </>
+  );
 
   if (erro && !dados) {
     return (
@@ -148,7 +154,7 @@ export default function BlackClient() {
   }
 
   // Com a hora em andamento: "até 09:47" (a carga da fato diária); sem ela, a hora cheia fechada.
-  const ate = r.ate ?? (r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null);
+  const ate = rotuloAte(r.ate ?? (r.ultimaHora >= 0 ? rotuloHora(r.ultimaHora + 1) : null), dados.fonte);
   const canais = (["shopee", "ml"] as CanalBlack[]).filter((c) => canal === "todos" || c === canal);
   const pctProj = r.projecao !== null && r.metaDia ? r.projecao / r.metaDia : null;
   const tProj = tomDesvio(pctProj);
@@ -165,7 +171,7 @@ export default function BlackClient() {
       faixa={
         <Heroi
           rotulo={r.pct !== null ? (ate ? `% da meta até ${ate}` : "% da meta") : ate ? `Realizado até ${ate}` : "Realizado"}
-          ajuda={<InfoDica emControle texto={DICA_META} />}
+          ajuda={<InfoDica emControle texto={dados.fonte === "datamart" ? `${DICA_META} ${DICA_DATAMART}` : DICA_META} />}
           valor={r.pct !== null ? pct(r.pct) : fmtBrlCurto(r.realizado)}
           tom={TOM_HEROI[tom ?? "neutro"]}
           contexto={

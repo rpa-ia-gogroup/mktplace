@@ -46,7 +46,16 @@ export interface RespostaBlack {
   /** Hora em andamento por canal (API nova); ausente na antiga = só horas fechadas. */
   parcial?: Partial<Record<CanalBlack, ParcialBlack | null>>;
   linhas: LinhaBlack[];
+  /** Hoje: "datamart" = lido direto do Data Mart; "torre" = ele falhou e a Torre respondeu (selo). Ausente = dia passado. */
+  fonte?: "datamart" | "torre" | null;
 }
+
+export const DICA_DATAMART =
+  "Lido direto do Data Mart: inclui pedidos pagos depois da última carga da Torre, por isso pode ficar um pouco acima da Gerencial e da TV.";
+
+/** O "até HH:MM" do topo, com a fonte quando é o Data Mart. */
+export const rotuloAte = (ate: string | null, fonte: RespostaBlack["fonte"]) =>
+  ate && fonte === "datamart" ? `${ate} (Data Mart)` : ate;
 
 /** As linhas com a hora em andamento do canal (`parcial`) ao lado; sem parcial, a linha como veio. */
 export function linhasComParcial(d: Pick<RespostaBlack, "linhas" | "parcial">): LinhaBlack[] {

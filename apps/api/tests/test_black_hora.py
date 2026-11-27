@@ -172,3 +172,91 @@ def test_sem_parcial_quando_a_diaria_e_velha_ou_o_dia_fechou():
     assert S.parcial_do_canal(datetime(2026, 11, 27, 8, 50, tzinfo=BRT), 9, DIA) is None, "diaria mais velha que o corte"
     assert S.parcial_do_canal(datetime(2026, 11, 27, 9, 0, tzinfo=BRT), 9, DIA)["fracao"] == 0.0
     assert S.parcial_do_canal(datetime(2026, 11, 27, 10, 30, tzinfo=BRT), 9, DIA)["fracao"] == 1.0, "limitado a 1"
+
+
+_HOJE_DM = S.hoje_do_datamart  # o original, antes do fixture trocar
+
+
+@pytest.fixture(autouse=True)
+def _sem_datamart_real(monkeypatch):
+    """Nenhum teste chama o Data Mart de verdade: o padrão vira 'falhou' (a Torre responde)."""
+    monkeypatch.setattr(S, "hoje_do_datamart", lambda dia: None)
+
+
+def _dm_real(pares):
+    real = {}
+    for (marca, canal, hora), gmv in pares.items():
+        real.setdefault((marca, canal), [0.0] * 24)[hora] += gmv
+    return real
+
+
+def test_hoje_vem_do_datamart_com_corte_e_parcial_da_fonte():
+    agora = datetime(2026, 11, 27, 10, 47, tzinfo=BRT)
+    fontes = {3: datetime(2026, 11, 27, 9, 11, tzinfo=BRT), 2: datetime(2026, 11, 27, 9, 33, tzinfo=BRT)}
+    torre = [{"brand": "kokeshi", "marketplace_id": 3, "hora": 8, "gmv": 100}]
+    real = _dm_real({("kokeshi", "shopee", 8): 102.0, ("kokeshi", "shopee", 9): 50.0, ("kokeshi", "shopee", 10): 7.0,
+                     ("kokeshi", "ml", 10): 3.0})
+    dm_fontes = {"shopee": datetime(2026, 11, 27, 10, 11, tzinfo=BRT), "ml": datetime(2026, 11, 27, 10, 31, tzinfo=BRT)}
+    r = S.get_black_hora(Sessao(fontes, torre), DIA, agora, obter=lambda: (S.interpretar(aba()), None, "x"),
+                         datamart=lambda dia: (real, dm_fontes))
+    assert r["fonte"] == "datamart"
+    assert r["cortes"] == {"shopee": 10, "ml": 10}, "corte = a fonte do Data Mart, não a da Torre (9h)"
+    assert r["parcial"]["ml"] == {"hora": 10, "ate": "2026-11-27T10:31:00-03:00", "fracao": 0.5167}
+    ks = next(x for x in r["linhas"] if x["marca"] == "kokeshi" and x["canal"] == "shopee")
+    assert ks["realizado_hora"][8] == 102 and ks["realizado_hora"][9] == 50 and ks["realizado_hora"][10] is None
+    assert ks["realizado_parcial"] == 7
+    a = next(x for x in r["linhas"] if x["marca"] == "apice")
+    assert a["realizado_parcial"] == 0 and a["realizado_hora"][0] == 0
+
+
+def test_datamart_falhou_cai_para_a_torre_com_o_selo_e_dia_passado_nem_tenta():
+    agora = datetime(2026, 11, 27, 10, 47, tzinfo=BRT)
+    fontes = {3: datetime(2026, 11, 27, 9, 11, tzinfo=BRT), 2: datetime(2026, 11, 27, 9, 33, tzinfo=BRT)}
+    meta = lambda: (S.interpretar(aba()), None, "x")  # noqa: E731
+    r = S.get_black_hora(Sessao(fontes, []), DIA, agora, obter=meta, datamart=lambda dia: None)
+    assert r["fonte"] == "torre" and r["cortes"] == {"shopee": 9, "ml": 9}
+    chamadas = []
+    passado = S.get_black_hora(Sessao(fontes, []), date(2026, 11, 26), agora, obter=meta,
+                               datamart=lambda dia: chamadas.append(dia))
+    assert passado["fonte"] is None and chamadas == []
+    assert S.get_black_hora(Sessao(fontes, []), DIA, agora, obter=meta, datamart=None)["fonte"] is None
+
+
+def test_ler_hoje_datamart_uma_consulta_relogios_do_pipeline():
+    vistos = []
+
+    def consultar(sql, params):
+        vistos.append(params)
+        return [
+            {"canal": "ml", "brand": "Kokeshi", "hora": 9, "gmv": 10, "ml_fonte_at": datetime(2026, 11, 27, 10, 31),
+             "shopee_fonte_at": datetime(2026, 11, 27, 13, 21, tzinfo=timezone.utc)},
+            {"canal": "shopee", "brand": "barbours", "hora": 9, "gmv": 5.5, "ml_fonte_at": None, "shopee_fonte_at": None},
+        ]
+    real, fontes = S.ler_hoje_datamart(DIA, consultar=consultar)
+    assert len(vistos) == 1 and vistos[0]["marcas_ml"] == S.DM_MARCAS_ML and vistos[0]["fim"] == date(2026, 11, 28)
+    assert real[("kokeshi", "ml")][9] == 10 and real[("barbours", "shopee")][9] == 5.5
+    assert fontes["ml"] == datetime(2026, 11, 27, 10, 31, tzinfo=BRT), "ML: já em BRT depois do +1 h (sem fuso)"
+    assert fontes["shopee"] == datetime(2026, 11, 27, 10, 11, tzinfo=BRT), "Shopee: carga − 10 min (FOLGA_SHOPEE)"
+    with pytest.raises(RuntimeError):
+        S.ler_hoje_datamart(DIA, consultar=lambda sql, params: [])
+
+
+def test_sql_do_datamart_usa_as_regras_do_pipeline():
+    q = S.SQL_HOJE_DM
+    assert "status = 'paid'" in q and "date_created + interval '1 hour'" in q
+    assert "NOT IN ('cancelled', 'unpaid')" in q and "SUM(item_total)" in q
+    assert "create_time AT TIME ZONE 'America/Sao_Paulo'" in q and "max(ingested_at)" in q
+
+
+def test_datamart_lento_ou_com_erro_vira_none():
+    import time as _t
+
+    def lento(dia):
+        _t.sleep(0.5)
+        return ({}, {})
+
+    def quebra(dia):
+        raise RuntimeError("fora")
+    assert _HOJE_DM(DIA, ler=lento, espera_s=0.05) is None, "passou do teto: a Torre responde"
+    assert _HOJE_DM(DIA, ler=quebra) is None
+    assert _HOJE_DM(DIA, ler=lambda dia: ({}, {"ml": None})) == ({}, {"ml": None})
