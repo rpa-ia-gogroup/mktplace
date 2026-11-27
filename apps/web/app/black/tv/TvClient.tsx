@@ -251,7 +251,6 @@ export default function TvClient() {
                 <div className="mt-[2.2vw] flex gap-[3.2vw]">
                   <Mini rotulo="Pedidos" valor={inteiro.format(pedidos)} />
                   <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
-                  <Mini rotulo="Dados até" valor={dadosAte ? horaMinuto(dadosAte.toISOString()) : "—"} />
                 </div>
                 {metaTotal && (
                   <div className="mt-[2vw] max-w-[44vw]">

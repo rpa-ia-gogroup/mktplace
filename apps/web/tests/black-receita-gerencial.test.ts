@@ -89,6 +89,13 @@ test("TV: meta pela regra da /black (metaDe com a hora em andamento)", () => {
   assert.ok(!tv.includes("hoje-por-hora"), "a TV não lê mais o hoje-por-hora cortado na hora cheia");
   assert.ok(tv.includes("/api/v1/performance/overview?") && tv.includes("/api/v1/performance/brands?"));
   assert.ok(ler("app/black/BlackClient.tsx").includes("filtrarBlack(linhasComParcial(dados), marcas, canal)"));
+  // Revisor UX: rótulo sem meta = 'Realizado até', sem R$ dobrado; ⓘ do quadro; legenda do parcial; TV sem 'Dados até'
+  const bc = ler("app/black/BlackClient.tsx");
+  assert.ok(bc.includes('r.pct !== null ? (ate ? `% da meta até ${ate}` : "% da meta") : ate ? `Realizado até ${ate}` : "Realizado"'));
+  assert.ok(bc.includes("r.pct !== null && (") && bc.includes("{rc.pct !== null && <p"));
+  assert.ok(bc.includes("% da meta acumulada até agora, com a hora em andamento (a mesma conta do topo)."));
+  assert.ok(bc.includes("Agora (parcial)") && bc.includes("border-dotted"));
+  assert.ok(!tv.includes('rotulo="Dados até"'));
   // rodapé: só 'Tela cheia' e 'Sair (Esc)'; aviso curto só quando a leitura falha
   const rodape = tv.slice(tv.indexOf("<footer"), tv.indexOf("</footer>"));
   assert.ok(!rodape.includes("Vendas pagas") && !rodape.includes("lido às") && !rodape.includes("atualiza a cada"));

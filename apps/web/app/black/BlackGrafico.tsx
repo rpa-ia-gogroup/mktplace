@@ -67,7 +67,7 @@ export default function BlackGrafico({ horas, ultimaHora, ate }: { horas: HoraBl
         <Area dataKey="realizadoAcum" stroke={tema.total} strokeWidth={2.5} fill={`url(#${grad})`} dot={false} type="monotone" connectNulls={false} isAnimationActive={false} />
         {atual?.realizadoAcum != null && <ReferenceDot x={ultimaHora} y={atual.realizadoAcum} r={4.5} fill={tema.total} stroke={tema.tooltipFundo} strokeWidth={2} />}
         {/* Hora em andamento: trecho tracejado e ponto vazado (ainda não é hora fechada). */}
-        {parcial && <ReferenceLine segment={[parcial.de, parcial.ate]} stroke={tema.total} strokeWidth={2} strokeDasharray="3 4" ifOverflow="extendDomain" />}
+        {parcial && <ReferenceLine segment={[parcial.de, parcial.ate]} stroke={tema.total} strokeWidth={2.75} strokeDasharray="3 4" ifOverflow="extendDomain" />}
         {parcial && <ReferenceDot x={parcial.ate.x} y={parcial.ate.y} r={5} fill="transparent" stroke={tema.total} strokeWidth={2.5} ifOverflow="extendDomain" />}
       </ComposedChart>
     </ResponsiveContainer>
