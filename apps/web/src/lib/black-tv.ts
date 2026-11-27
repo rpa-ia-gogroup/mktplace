@@ -65,10 +65,10 @@ export function metaDe(black: RespostaBlack | null | undefined, marca?: string) 
 
 /** Hora em que entrou VENDA NOVA no canal (GMV subiu desde a leitura anterior). Carga sem venda nova mantém as
  * horas anteriores (a Nath via "18:55" com os mesmos 60%). Sem leitura anterior não há como saber: `vendaNova` null. */
-export function comHoraDoDadoNovo(
+export function comHoraDoDadoNovo<T extends { gmv: number | null; ate: string | null; vendaNova?: string | null }>(
   ant: { gmv: number | null; ate: string | null; vendaNova?: string | null } | undefined,
-  novo: CanalHojeTv,
-): CanalHojeTv {
+  novo: T,
+): T {
   if (!ant || novo.gmv == null) return { ...novo, vendaNova: null };
   if (ant.gmv != null && novo.gmv > ant.gmv) return { ...novo, vendaNova: novo.ate };
   return { ...novo, ate: ant.ate ?? novo.ate, vendaNova: ant.vendaNova ?? null };
