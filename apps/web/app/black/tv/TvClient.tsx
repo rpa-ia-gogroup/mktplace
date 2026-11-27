@@ -308,7 +308,7 @@ export default function TvClient() {
                   <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
                 </div>
                 {metaTotal && (
-                  <div className="mt-[2vw] max-w-[44vw]">
+                  <div className="mt-[1.4vw] max-w-[44vw]">
                     <div className="flex items-baseline justify-between text-[1.05vw]">
                       <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Meta Black · Shopee + ML</span>
                       <span className="tv-num font-bold text-white/85">R$ {inteiro.format(Math.round(metaTotal.dia / 1000) * 1000)}</span>
@@ -328,15 +328,19 @@ export default function TvClient() {
                         </span>
                       )}
                 {mesMeta > 0 && (
-                  <div className="mt-[1.4vw] max-w-[44vw]">
-                    <div className="flex items-baseline justify-between text-[1.05vw]">
-                      <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Mês de {nomeMes} · {canaisMes.map((id) => CANAIS[id].curto).join(" + ")}</span>
-                      <span className="tv-num font-bold text-white/85">{reaisCurto(mesGmv)} <span className="font-medium text-white/45">de {reaisCurto(mesMeta)}</span></span>
+                  <div className="mt-[1vw] max-w-[44vw]">
+                    <div className="flex items-baseline justify-between gap-[1vw] whitespace-nowrap text-[1vw]">
+                      <span className="font-semibold uppercase tracking-[0.2em] text-white/50">
+                        {nomeMes} · {canaisMes.map((id) => (id === "ml" ? "ML" : CANAIS[id].curto)).join(" + ")}
+                      </span>
+                      <span className="text-white/55">
+                        <span className="tv-num text-[1.3vw] font-bold text-white">{pct0(mesGmv / mesMeta)}</span> da meta do mês ·{" "}
+                        <span className="tv-num font-semibold text-white/80">{reaisCurto(mesGmv)}</span> de {reaisCurto(mesMeta)}
+                      </span>
                     </div>
-                    <div className="relative mt-[0.6vw] h-[0.5vw] overflow-hidden rounded-full bg-white/[0.08]">
+                    <div className="relative mt-[0.45vw] h-[0.4vw] overflow-hidden rounded-full bg-white/[0.08]">
                       <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#22d3ee] to-[#a78bfa]" style={{ width: `${Math.min(100, (mesGmv / mesMeta) * 100)}%` }} />
                     </div>
-                    <p className="mt-[0.5vw] text-[1.05vw] text-white/55"><span className="tv-num text-[1.5vw] font-bold text-white">{pct0(mesGmv / mesMeta)}</span> da meta do mês</p>
                   </div>
                 )}
                     </div>
