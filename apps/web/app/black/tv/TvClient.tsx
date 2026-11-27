@@ -36,7 +36,16 @@ const centavos = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maxi
 const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
 
-const tomMeta = (a: number | null) => (a === null ? "text-white/50" : a >= 1 ? "text-[#34d399]" : a >= 0.9 ? "text-[#fbbf24]" : "text-[#fb7185]");
+/** Ritmo: realizado ÷ meta até agora (com a hora em andamento pró-rata). Acima/abaixo do esperado para a hora. */
+function Ritmo({ a, tamanho = "text-[1vw]" }: { a: number | null; tamanho?: string }) {
+  if (a === null) return null;
+  const acima = a >= 1;
+  return (
+    <span className={`inline-flex items-center gap-[0.35vw] whitespace-nowrap rounded-full px-[0.7vw] py-[0.2vw] font-semibold ${tamanho} ${acima ? "bg-[#34d399]/15 text-[#34d399]" : "bg-[#fb7185]/15 text-[#fb7185]"}`}>
+      {acima ? "▲ Acima do ritmo" : "▼ Abaixo do ritmo"}
+    </span>
+  );
+}
 const pct0 = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
 /** Conta do valor anterior ao novo quando o dado chega (sem animação com reduced-motion). */
@@ -263,10 +272,13 @@ export default function TvClient() {
                     <div className="relative mt-[0.6vw] h-[0.7vw] overflow-hidden rounded-full bg-white/[0.08]">
                       <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#7c3aed] via-[#f0abfc] to-[#fb923c]" style={{ width: `${Math.min(100, (metaTotal.doDia ?? 0) * 100)}%` }} />
                     </div>
-                    <p className="mt-[0.5vw] text-[1.05vw] text-white/55">
-                      <span className="tv-num font-bold text-white/85">{pct0(metaTotal.doDia)}</span> da meta do dia ·{" "}
-                      <span className={`tv-num font-bold ${tomMeta(metaTotal.atingido)}`}>{pct0(metaTotal.atingido)}</span> da meta até {metaTotal.rotulo ?? "a última hora fechada"}
-                    </p>
+                    <div className="mt-[0.7vw] flex flex-wrap items-center gap-[1vw]">
+                      <span className="text-[1.8vw] font-bold text-white">
+                        <span className="tv-num">{pct0(metaTotal.doDia)}</span> <span className="text-[1.1vw] font-semibold text-white/60">da meta do dia</span>
+                      </span>
+                      <Ritmo a={metaTotal.atingido} tamanho="text-[1.05vw]" />
+                      <span className="text-[0.9vw] text-white/40">{pct0(metaTotal.atingido)} do esperado até {metaTotal.rotulo ?? "agora"}</span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -305,8 +317,8 @@ export default function TvClient() {
                       {(() => {
                         const mm = metaDe(black, m.brand);
                         return mm ? (
-                          <span className={`tv-num text-[1vw] font-bold ${tomMeta(mm.atingido)}`} title="Realizado ÷ meta até agora, com a hora em andamento pró-rata (Shopee + ML)">
-                            {pct0(mm.atingido)} da meta
+                          <span className="tv-num text-[1.05vw] font-bold text-white" title="Realizado ÷ meta do dia (Shopee + ML)">
+                            {pct0(mm.doDia)} <span className="text-[0.85vw] font-semibold text-white/55">da meta</span>
                           </span>
                         ) : (
                           <span className="tv-num text-[0.9vw] font-semibold text-white/35">#{i + 1}</span>
@@ -342,10 +354,10 @@ export default function TvClient() {
                     {(() => {
                       const mm = metaDe(black, m.brand);
                       return mm ? (
-                        <p className="mt-[0.6vw] flex justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
-                          <span>Meta do dia</span>
-                          <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))} · {pct0(mm.doDia)}</span>
-                        </p>
+                        <div className="mt-[0.6vw] flex items-center justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
+                          <span>Meta <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))}</span></span>
+                          <Ritmo a={mm.atingido} tamanho="text-[0.85vw]" />
+                        </div>
                       ) : null;
                     })()}
                   </div>
