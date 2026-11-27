@@ -20,9 +20,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const RELER_MS = 2 * 60_000;
 
 const CANAIS = {
-  tiktok: { nome: "TikTok Shop", cor: "#a78bfa" },
-  ml: { nome: "Mercado Livre", cor: "#22d3ee" },
-  shopee: { nome: "Shopee", cor: "#fb923c" },
+  tiktok: { nome: "TikTok Shop", curto: "TikTok", cor: "#a78bfa" },
+  ml: { nome: "Mercado Livre", curto: "Mercado Livre", cor: "#22d3ee" },
+  shopee: { nome: "Shopee", curto: "Shopee", cor: "#fb923c" },
 } as const;
 const ORDEM_CANAIS = ["tiktok", "shopee", "ml"] as const;
 const MARCA: Record<string, string> = {
@@ -221,9 +221,32 @@ export default function TvClient() {
                       <span className="tv-num text-[0.9vw] font-semibold text-white/35">#{i + 1}</span>
                     </div>
                     <p className="mt-[0.2vw] text-[2.3vw] font-bold leading-tight tracking-[-0.02em]"><Reais valor={m.hoje} /></p>
-                    <div className="mt-[0.5vw] h-[0.3vw] overflow-hidden rounded-full bg-white/[0.07]">
-                      <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#7c3aed] to-[#f0abfc]" style={{ width: `${maiorMarca > 0 ? (m.hoje / maiorMarca) * 100 : 0}%` }} />
+                    {/* Marca x canal: barra empilhada (largura relativa a' maior marca) + valor de cada canal. */}
+                    <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
+                      <div className="tv-barra flex h-full" style={{ width: `${maiorMarca > 0 ? (m.hoje / maiorMarca) * 100 : 0}%` }}>
+                        {ORDEM_CANAIS.map((id) => {
+                          const v = m.por_canal?.find((p) => p.channel === id)?.hoje ?? 0;
+                          return v > 0 ? <div key={id} style={{ width: `${pct(v, m.hoje)}%`, background: CANAIS[id].cor }} /> : null;
+                        })}
+                      </div>
                     </div>
+                    <ul className="mt-[0.7vw] space-y-[0.25vw]">
+                      {ORDEM_CANAIS.map((id) => {
+                        const parte = m.por_canal?.find((p) => p.channel === id);
+                        const fora = m.canais_fora?.includes(id);
+                        return (
+                          <li key={id} className="flex items-center justify-between text-[0.95vw]">
+                            <span className="flex items-center gap-[0.45vw] text-white/60">
+                              <span className="h-[0.5vw] w-[0.5vw] rounded-full" style={{ background: CANAIS[id].cor }} />
+                              {CANAIS[id].curto}
+                            </span>
+                            <span className="tv-num font-semibold text-white/90">
+                              {parte ? `R$ ${inteiro.format(Math.round(parte.hoje))}` : fora ? "sem hora" : "—"}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   </div>
                 ))}
               </div>
@@ -259,7 +282,7 @@ const CSS = `
 .tv { background: #07061a; font-family: var(--font-sans), system-ui, sans-serif; }
 /* Inter: algarismos tabulares, o numero que muda nao "danca" na TV. */
 .tv-num { font-family: var(--font-num), var(--font-sans), sans-serif; font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "cv11" 1; }
-.tv-heroi { font-size: clamp(5rem, 11.5vw, 15rem); background: linear-gradient(180deg, #ffffff 30%, #d8ccff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0.6vw 2.4vw rgba(139, 92, 246, 0.35)); }
+.tv-heroi { font-size: clamp(5rem, 10.2vw, 14rem); background: linear-gradient(180deg, #ffffff 30%, #d8ccff 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 0.6vw 2.4vw rgba(139, 92, 246, 0.35)); }
 .tv-heroi .tv-num > span { -webkit-text-fill-color: rgba(255,255,255,0.55); }
 .tv-marca { background: linear-gradient(90deg, #fff 0%, #f0abfc 45%, #fb923c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .tv-fundo { position: absolute; inset: -20%; background:
