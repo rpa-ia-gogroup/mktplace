@@ -97,11 +97,11 @@ test("TikTok da Denavita = fonte provisoria; Shopee sem pedidos = aviso visivel,
   assert.equal(sh.total, 0);
   assert.deepEqual(sh.avisos, [AVISO_SHOPEE_DENAVITA]);
   // so' Denavita: so' a linha de aviso
-  assert.deepEqual(comAvisosMenores(null, sh), [{ texto: "Denavita: Shopee sem pedidos", aviso: true }]);
+  assert.deepEqual(comAvisosMenores(null, sh), []); // Shopee sem pedidos: só no ⓘ
   // Todas: uma ideia por linha; a 1a neutra como antes, a 2a em tom de aviso, prefixo uma vez
   assert.deepEqual(comAvisosMenores({ texto: "inclui R$ 392 mil das demais marcas, sem meta", aviso: false }, ok([])), [
     { texto: "inclui R$ 392 mil das demais marcas, sem meta", aviso: false },
-    { texto: "Denavita: TikTok provisório · Shopee sem pedidos", aviso: true },
+    { texto: "Denavita: TikTok provisório", aviso: true },
   ]);
   // sem a Denavita: a linha como veio, nada a mais
   assert.deepEqual(comAvisosMenores({ texto: "x", aviso: false }, ok(["yenzah"])), [{ texto: "x", aviso: false }]);
