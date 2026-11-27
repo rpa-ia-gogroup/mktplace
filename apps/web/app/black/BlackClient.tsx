@@ -10,6 +10,7 @@
  * Regras em `src/lib/black-hora.ts`.
  */
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import Aba from "@/components/layout/Aba";
@@ -109,13 +110,18 @@ export default function BlackClient() {
     </div>
   );
   const direita = (
-    <Segmented
-      rotulo="Canal"
-      opcoes={[{ valor: "todos", texto: "Todos" }, { valor: "shopee", texto: "Shopee" }, { valor: "ml", texto: "Mercado Livre" }]}
-      valor={canal}
-      aoEscolher={(c) => setCanal(c as FiltroCanalBlack)}
-      className="whitespace-nowrap"
-    />
+    <div className="flex items-center gap-2">
+      <Segmented
+        rotulo="Canal"
+        opcoes={[{ valor: "todos", texto: "Todos" }, { valor: "shopee", texto: "Shopee" }, { valor: "ml", texto: "Mercado Livre" }]}
+        valor={canal}
+        aoEscolher={(c) => setCanal(c as FiltroCanalBlack)}
+        className="whitespace-nowrap"
+      />
+      <Link href="/black/tv" className="whitespace-nowrap rounded-lg border border-line px-3 py-1.5 text-xs font-semibold text-ink-muted transition hover:border-line-strong hover:text-ink">
+        Modo TV
+      </Link>
+    </div>
   );
   const selo = <SeloAtualizado em={lidoEm} carregando={!dados && !erro} detalhe={dados?.meta.fonte} />;
 
