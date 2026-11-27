@@ -24,7 +24,8 @@ test("ⓘ do Data Mart e selo 'fonte: Torre' na /black; a TV não muda", () => {
   );
   const bc = ler("app/black/BlackClient.tsx");
   assert.ok(bc.includes('dados.fonte === "datamart" ? `${DICA_META} ${DICA_DATAMART}` : DICA_META'));
-  assert.ok(bc.includes('dados?.fonte === "torre" && <span className="text-xs text-ink-faint">fonte: Torre</span>'));
+  assert.ok(bc.includes('dados?.fonte === "torre" && <span className="text-xs font-semibold text-warn-ink">Data Mart fora · dado da Torre, até ~20 min atrás</span>'));
+  assert.ok(ler("app/black/BlackGrafico.tsx").includes('position: "insideTopRight", offset: 14'), "rótulo da linha longe do ponto");
   assert.ok(bc.includes("rotuloAte(r.ate ??"));
   const tv = ler("app/black/tv/TvClient.tsx");
   assert.ok(!tv.includes("Data Mart") && !tv.includes("rotuloAte"), "TV segue na fonte da Gerencial");

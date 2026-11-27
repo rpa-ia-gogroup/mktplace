@@ -127,7 +127,7 @@ export default function BlackClient() {
     <>
       <SeloAtualizado em={lidoEm} carregando={!dados && !erro} detalhe={dados?.meta.fonte} />
       {/* O Data Mart falhou ou demorou: a Torre respondeu (horas fechadas ~20-25 min atrás). */}
-      {dados?.fonte === "torre" && <span className="text-xs text-ink-faint">fonte: Torre</span>}
+      {dados?.fonte === "torre" && <span className="text-xs font-semibold text-warn-ink">Data Mart fora · dado da Torre, até ~20 min atrás</span>}
     </>
   );
 
