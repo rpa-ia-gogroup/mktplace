@@ -60,3 +60,9 @@ export function metaDe(black: RespostaBlack | null | undefined, marca?: string) 
   const r = resumoBlack(ls);
   return { dia: r.metaDia ?? 0, ate: r.metaAteAgora ?? 0, real: r.realizado, atingido: r.pct, doDia: r.metaDia ? r.realizado / r.metaDia : null, rotulo: r.ate };
 }
+
+/** Hora do último dado NOVO do canal: se a carga rodou e o GMV não mudou, mantém a hora anterior
+ * (a Nath via "18:55" com os mesmos 60% — a checagem do ML rodou sem pedido novo). */
+export function comHoraDoDadoNovo(ant: { gmv: number | null; ate: string | null } | undefined, novo: CanalHojeTv): CanalHojeTv {
+  return ant?.ate && novo.gmv != null && ant.gmv === novo.gmv ? { ...novo, ate: ant.ate } : novo;
+}

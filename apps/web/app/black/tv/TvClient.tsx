@@ -14,7 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
-import { canalDoOverview, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
+import { canalDoOverview, comHoraDoDadoNovo, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -144,7 +144,12 @@ export default function TvClient() {
         json<{ brands: MarcaTvApi[] }>(`/api/v1/performance/brands?${dia}&marketplace=tiktok,ml,shopee`),
       ])
         .then((rs) => {
-          const canais = ids.map((id, i) => canalDoOverview(id, rs[i] as OverviewTv));
+          // Hora do último dado novo por canal; guardada no navegador p/ sobreviver ao recarregar da TV.
+          const chave = `black-tv-dado-novo-${hoje}`;
+          let ant: Partial<Record<CanalTv, { gmv: number | null; ate: string | null }>> = {};
+          try { ant = JSON.parse(localStorage.getItem(chave) ?? "{}"); } catch { /* sem histórico */ }
+          const canais = ids.map((id, i) => comHoraDoDadoNovo(ant[id], canalDoOverview(id, rs[i] as OverviewTv)));
+          try { localStorage.setItem(chave, JSON.stringify(Object.fromEntries(canais.map((c) => [c.id, { gmv: c.gmv, ate: c.ate }])))); } catch { /* ok */ }
           setDados({ canais, marcas: marcasDoBrands((rs[3] as { brands: MarcaTvApi[] }).brands), disponivel: canais.some((x) => x.gmv !== null) });
           setErro(canais.some((x) => x.gmv !== null) ? null : "Vendas de hoje indisponíveis.");
           setLidoEm(new Date());

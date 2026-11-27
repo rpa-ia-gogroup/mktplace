@@ -102,3 +102,11 @@ test("TV: meta pela regra da /black (metaDe com a hora em andamento)", () => {
   assert.ok(rodape.includes('erro && dados ? "sem conexão, mostrando a última leitura" : ""'));
   assert.ok(rodape.includes("Tela cheia") && rodape.includes("Sair (Esc)"));
 });
+
+test("TV: horário do canal só anda quando entra dado novo", async () => {
+  const { comHoraDoDadoNovo } = await import("../src/lib/black-tv.ts");
+  const novo = { id: "ml" as const, gmv: 100, pedidos: 1, ate: "2026-11-27T21:55:00Z" };
+  assert.equal(comHoraDoDadoNovo({ gmv: 100, ate: "2026-11-27T21:40:00Z" }, novo).ate, "2026-11-27T21:40:00Z");
+  assert.equal(comHoraDoDadoNovo({ gmv: 90, ate: "2026-11-27T21:40:00Z" }, novo).ate, "2026-11-27T21:55:00Z");
+  assert.equal(comHoraDoDadoNovo(undefined, novo).ate, "2026-11-27T21:55:00Z");
+});
