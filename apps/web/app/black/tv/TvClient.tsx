@@ -10,6 +10,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { torreFetch } from "@/lib/torre-fetch";
@@ -133,7 +134,12 @@ export default function TvClient() {
   const cortes = canais.map((c) => c.corte).filter((c): c is number => c !== null && c > 0);
   const corteMin = cortes.length ? Math.min(...cortes) : null;
 
-  return (
+  // Portal no <body>: a moldura do shell cria um bloco de contencao e prenderia o `fixed`.
+  const [montado, setMontado] = useState(false);
+  useEffect(() => setMontado(true), []);
+  if (!montado) return null;
+
+  return createPortal(
     <div className="tv fixed inset-0 z-[70] overflow-hidden text-white" role="main" aria-label="Black Friday — receita de hoje">
       <style>{CSS}</style>
       <div aria-hidden className="tv-fundo" />
@@ -168,7 +174,7 @@ export default function TvClient() {
         ) : (
           <>
             {/* Herói + canais */}
-            <section className="grid flex-1 grid-cols-[1.45fr_1fr] items-center gap-[3.5vw]">
+            <section className="mt-[2vw] grid flex-1 grid-cols-[1.45fr_1fr] items-center gap-[3.5vw]">
               <div className="tv-in" style={{ animationDelay: "120ms" }}>
                 <p className="text-[1.15vw] font-semibold uppercase tracking-[0.34em] text-white/55">Receita de hoje</p>
                 <p className="tv-heroi mt-[0.4vw] font-extrabold leading-[0.92] tracking-[-0.035em]">
@@ -235,7 +241,8 @@ export default function TvClient() {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
