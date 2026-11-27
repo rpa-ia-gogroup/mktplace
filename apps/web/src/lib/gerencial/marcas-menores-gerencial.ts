@@ -29,17 +29,17 @@ import {
 const CANAL: Record<string, Marketplace> = { MELI: "ml", SHOPEE: "shopee", TIKTOK: "tiktok" };
 
 export const DENAVITA = "denavita";
-/** Avisos da Denavita: `curto` vai na linha visível sob o GMV; `longo`, no ⓘ. */
+/** Avisos da Denavita: `curto` vai na 2ª linha visível sob o GMV ("Denavita: ..."); `longo`, no ⓘ. */
 export interface AvisoMenores {
   curto: string;
   longo: string;
 }
 export const AVISO_TIKTOK_DENAVITA: AvisoMenores = {
-  curto: "TikTok da Denavita: fonte provisória",
-  longo: "Denavita no TikTok: fonte provisória (gold.tiktok_brand_daily do Data Mart, GMV com definição própria, 1,4% a 3,9% acima do mart da Torre).",
+  curto: "TikTok provisório",
+  longo: "Denavita no TikTok: fonte provisória (base do Data Mart, GMV com definição própria, 1,4% a 3,9% acima do mart da Torre).",
 };
 export const AVISO_SHOPEE_DENAVITA: AvisoMenores = {
-  curto: "Shopee da Denavita sem pedidos",
+  curto: "Shopee sem pedidos",
   longo: "Denavita na Shopee: sem pedidos no período, a integração parou no Bling dela desde 22/10 (não é a Torre).",
 };
 
@@ -305,11 +305,15 @@ export function notaMenores(m: Menores, variacaoInclui: boolean, hoje: boolean, 
   return `Inclui as demais marcas pelo Bling (${nomes}): ${fmt(m.total)}. Sem meta: ficam fora da meta, da tendência do dia e do corte por hora.${ag}${prov}${den} ${variacao}`;
 }
 
-/** A linha visível sob o GMV com os avisos curtos da Denavita (em tom de aviso); sem avisos, a linha como veio. */
-export function comAvisosMenores(linha: { texto: string; aviso: boolean } | null, m: Menores): { texto: string; aviso: boolean } | null {
-  const avisos = m.estado === "ok" && m.avisos?.length ? m.avisos.map((a) => a.curto).join(" · ") : null;
-  if (!avisos) return linha;
-  return { texto: linha ? `${linha.texto} · ${avisos}` : avisos, aviso: true };
+export interface LinhaSobGmv {
+  texto: string;
+  aviso: boolean;
+}
+
+/** Linhas visíveis sob o GMV, uma ideia por linha: a linha como veio e, abaixo, os avisos da Denavita em tom de aviso. */
+export function comAvisosMenores(linha: LinhaSobGmv | null, m: Menores): LinhaSobGmv[] {
+  const avisos = m.estado === "ok" && m.avisos?.length ? `Denavita: ${m.avisos.map((a) => a.curto).join(" · ")}` : null;
+  return [linha, avisos ? { texto: avisos, aviso: true } : null].filter((l): l is LinhaSobGmv => l != null);
 }
 
 // ---------------------------------------------------------------------------

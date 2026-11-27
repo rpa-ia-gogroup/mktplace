@@ -96,12 +96,19 @@ test("TikTok da Denavita = fonte provisoria; Shopee sem pedidos = aviso visivel,
   const sh = ok(["denavita"], ["shopee"]);
   assert.equal(sh.total, 0);
   assert.deepEqual(sh.avisos, [AVISO_SHOPEE_DENAVITA]);
-  assert.deepEqual(comAvisosMenores(null, sh), { texto: AVISO_SHOPEE_DENAVITA.curto, aviso: true });
-  const linha = comAvisosMenores({ texto: "inclui R$ 392 mil das demais marcas, sem meta", aviso: false }, ok([]));
-  assert.equal(linha!.texto, "inclui R$ 392 mil das demais marcas, sem meta · TikTok da Denavita: fonte provisória · Shopee da Denavita sem pedidos");
-  assert.equal(linha!.aviso, true);
+  // so' Denavita: so' a linha de aviso
+  assert.deepEqual(comAvisosMenores(null, sh), [{ texto: "Denavita: Shopee sem pedidos", aviso: true }]);
+  // Todas: uma ideia por linha; a 1a neutra como antes, a 2a em tom de aviso, prefixo uma vez
+  assert.deepEqual(comAvisosMenores({ texto: "inclui R$ 392 mil das demais marcas, sem meta", aviso: false }, ok([])), [
+    { texto: "inclui R$ 392 mil das demais marcas, sem meta", aviso: false },
+    { texto: "Denavita: TikTok provisório · Shopee sem pedidos", aviso: true },
+  ]);
+  // sem a Denavita: a linha como veio, nada a mais
+  assert.deepEqual(comAvisosMenores({ texto: "x", aviso: false }, ok(["yenzah"])), [{ texto: "x", aviso: false }]);
+  assert.deepEqual(comAvisosMenores(null, ok(["yenzah"])), []);
   const nota = notaMenores(ok([]), false, false, (v) => String(Math.round(v)))!;
-  assert.match(nota, /fonte provisória \(gold\.tiktok_brand_daily/);
+  assert.match(nota, /fonte provisória \(base do Data Mart,/);
+  assert.doesNotMatch(nota, /gold\./);
   assert.match(nota, /parou no Bling dela desde 22\/10 \(não é a Torre\)/);
 });
 
@@ -114,6 +121,7 @@ test("Denavita sem o Bling dela (so' TikTok provisorio) continua fora da soma", 
 test("fiacao: ML pede as menores com a Denavita; a aba recortada mantem o ML dela", () => {
   assert.ok(ler("app/page.tsx").includes('filters.channels.some((c) => c !== "ml" || escopo.menores.includes(DENAVITA))'));
   assert.ok(ler("app/page.tsx").includes("const linhaMenores = comAvisosMenores("));
+  assert.ok(ler("src/components/gerencial/MetaHero.tsx").includes("[linhaMenores ?? []].flat().map((l) => ("));
   assert.ok(ler("app/GerencialMarcasMenores.tsx").includes('canais.filter((c) => c !== "ml" || escopo.menores.includes(DENAVITA))'));
   assert.ok(ler("app/marcas-menores/page.tsx").includes('canal === "todos" ? ["ml", "shopee", "tiktok"] : [canal]'));
 });
