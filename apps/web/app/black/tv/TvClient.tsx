@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { corteDaLinha, type LinhaBlack, type RespostaBlack } from "@/lib/black-hora";
 import type { HojePorHora } from "@/lib/gerencial/hoje-por-hora";
 import { torreFetch } from "@/lib/torre-fetch";
 
@@ -33,6 +34,22 @@ const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const centavos = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
+
+/** Meta da planilha 'Meta hora Black' (só Shopee + ML): do dia e até a última hora fechada de cada linha,
+ *  contra o realizado da MESMA fonte (a mesma conta da tela /black). `null` sem meta. */
+function metaDe(linhas: readonly LinhaBlack[] | undefined, marca?: string) {
+  const ls = (linhas ?? []).filter((l) => !marca || l.marca === marca);
+  if (!ls.length || ls.some((l) => l.meta_dia === null)) return null;
+  let dia = 0, ate = 0, real = 0;
+  for (const l of ls) {
+    dia += l.meta_dia ?? 0;
+    const corte = corteDaLinha(l);
+    for (let h = 0; h < corte; h++) { ate += l.meta_hora[h] ?? 0; real += l.realizado_hora[h] ?? 0; }
+  }
+  return { dia, ate, real, atingido: ate > 0 ? real / ate : null, doDia: dia > 0 ? real / dia : null };
+}
+const tomMeta = (a: number | null) => (a === null ? "text-white/50" : a >= 1 ? "text-[#34d399]" : a >= 0.9 ? "text-[#fbbf24]" : "text-[#fb7185]");
+const pct0 = (v: number | null) => (v === null ? "—" : `${Math.round(v * 100)}%`);
 
 /** Conta do valor anterior ao novo quando o dado chega (sem animação com reduced-motion). */
 function useContagem(alvo: number, ms = 1600) {
@@ -85,11 +102,17 @@ export default function TvClient() {
   const [dados, setDados] = useState<HojePorHora | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [lidoEm, setLidoEm] = useState<Date | null>(null);
+  const [black, setBlack] = useState<RespostaBlack | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
+    const lerMeta = () =>
+      torreFetch(`${API_URL}/api/v1/performance/black-hora`, { signal: ctrl.signal })
+        .then(async (r) => { if (r.ok) setBlack((await r.json()) as RespostaBlack); })
+        .catch(() => {}); // sem meta, a TV segue com o realizado
     const ler = () =>
-      torreFetch(`${API_URL}/api/v1/performance/hoje-por-hora`, { signal: ctrl.signal })
+      (void lerMeta(),
+      torreFetch(`${API_URL}/api/v1/performance/hoje-por-hora`, { signal: ctrl.signal }))
         .then(async (r) => {
           if (!r.ok) throw new Error("A Torre não respondeu.");
           const d = (await r.json()) as HojePorHora;
@@ -149,6 +172,7 @@ export default function TvClient() {
     .map((m) => ({ ...m, valor: visiveis.reduce((s, id) => s + parteDaMarca(m, id), 0) }))
     .sort((a, b) => b.valor - a.valor);
   const maiorMarca = marcas[0]?.valor ?? 0;
+  const metaTotal = metaDe(black?.linhas);
   const cortes = canais.map((c) => c.corte).filter((c): c is number => c !== null && c > 0);
   const corteMin = cortes.length ? Math.min(...cortes) : null;
 
@@ -214,6 +238,21 @@ export default function TvClient() {
                   <Mini rotulo="Ticket médio" valor={ticket !== null ? `R$ ${centavos.format(ticket)}` : "—"} />
                   <Mini rotulo="Dados até" valor={corteMin !== null ? `${corteMin}h` : "—"} />
                 </div>
+                {metaTotal && (
+                  <div className="mt-[2vw] max-w-[44vw]">
+                    <div className="flex items-baseline justify-between text-[1.05vw]">
+                      <span className="font-semibold uppercase tracking-[0.22em] text-white/50">Meta do dia · Shopee + ML</span>
+                      <span className="tv-num font-bold text-white/85">R$ {inteiro.format(Math.round(metaTotal.dia))}</span>
+                    </div>
+                    <div className="relative mt-[0.6vw] h-[0.7vw] overflow-hidden rounded-full bg-white/[0.08]">
+                      <div className="tv-barra h-full rounded-full bg-gradient-to-r from-[#7c3aed] via-[#f0abfc] to-[#fb923c]" style={{ width: `${Math.min(100, (metaTotal.doDia ?? 0) * 100)}%` }} />
+                    </div>
+                    <p className="mt-[0.5vw] text-[1.05vw] text-white/55">
+                      <span className="tv-num font-bold text-white/85">{pct0(metaTotal.doDia)}</span> da meta do dia ·{" "}
+                      <span className={`tv-num font-bold ${tomMeta(metaTotal.atingido)}`}>{pct0(metaTotal.atingido)}</span> da meta até a última hora fechada
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="flex flex-col gap-[1.6vw]">
@@ -247,7 +286,16 @@ export default function TvClient() {
                   <div key={m.brand} className="tv-in tv-cartao rounded-[1vw] px-[1.4vw] py-[1.1vw]" style={{ animationDelay: `${680 + i * 80}ms`, ["--cor" as string]: "#c4b5fd" }}>
                     <div className="flex items-baseline justify-between">
                       <span className="text-[1.15vw] font-semibold text-white/85">{MARCA[m.brand] ?? m.brand}</span>
-                      <span className="tv-num text-[0.9vw] font-semibold text-white/35">#{i + 1}</span>
+                      {(() => {
+                        const mm = metaDe(black?.linhas, m.brand);
+                        return mm ? (
+                          <span className={`tv-num text-[1vw] font-bold ${tomMeta(mm.atingido)}`} title="Realizado ÷ meta até a última hora fechada (Shopee + ML)">
+                            {pct0(mm.atingido)} da meta
+                          </span>
+                        ) : (
+                          <span className="tv-num text-[0.9vw] font-semibold text-white/35">#{i + 1}</span>
+                        );
+                      })()}
                     </div>
                     <p className="mt-[0.2vw] text-[2.3vw] font-bold leading-tight tracking-[-0.02em]"><Reais valor={m.valor} /></p>
                     {/* Marca x canal: barra empilhada (largura relativa a' maior marca) + valor de cada canal. */}
@@ -276,6 +324,15 @@ export default function TvClient() {
                         );
                       })}
                     </ul>
+                    {(() => {
+                      const mm = metaDe(black?.linhas, m.brand);
+                      return mm ? (
+                        <p className="mt-[0.6vw] flex justify-between border-t border-white/[0.07] pt-[0.5vw] text-[0.9vw] text-white/45">
+                          <span>Meta do dia</span>
+                          <span className="tv-num font-semibold text-white/70">R$ {inteiro.format(Math.round(mm.dia))} · {pct0(mm.doDia)}</span>
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                 ))}
               </div>
