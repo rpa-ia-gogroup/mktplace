@@ -299,9 +299,33 @@ export default function TvClient() {
                     <p className="mt-[0.3vw] text-[3.6vw] font-bold leading-tight tracking-[-0.02em]">
                       {c.gmv === null ? <span className="text-white/40">sem dado</span> : <Reais valor={c.gmv} />}
                     </p>
-                    <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
-                      <div className="tv-barra h-full rounded-full" style={{ width: `${pct(c.gmv ?? 0, total)}%`, background: `linear-gradient(90deg, ${c.cor}55, ${c.cor})` }} />
-                    </div>
+                    {(() => {
+                      // Meta do canal = as linhas marca × canal da aba Black só deste canal (TikTok não tem meta).
+                      const mc = black ? metaDe({ ...black, linhas: black.linhas.filter((l) => l.canal === c.id) }) : null;
+                      return (
+                        <>
+                          <div className="mt-[0.6vw] h-[0.42vw] overflow-hidden rounded-full bg-white/[0.07]">
+                            <div className="tv-barra h-full rounded-full" style={{ width: `${mc ? Math.min(100, (mc.doDia ?? 0) * 100) : pct(c.gmv ?? 0, total)}%`, background: `linear-gradient(90deg, ${c.cor}55, ${c.cor})` }} />
+                          </div>
+                          {mc && (
+                            <div className="mt-[0.7vw] grid grid-cols-3 gap-[0.8vw]">
+                              <div>
+                                <p className="text-[0.75vw] font-semibold uppercase tracking-[0.16em] text-white/40">Meta do dia</p>
+                                <p className="tv-num whitespace-nowrap text-[1.1vw] font-semibold text-white/75">{reaisCurto(mc.dia)}</p>
+                              </div>
+                              <div className="text-center">
+                                <p className="text-[0.75vw] font-semibold uppercase tracking-[0.16em] text-white/40">Atingido</p>
+                                <p className="tv-num text-[1.1vw] font-bold text-white">{pct0(mc.doDia)}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-[0.75vw] font-semibold uppercase tracking-[0.16em] text-white/40">Projeção</p>
+                                <p className={`tv-num whitespace-nowrap text-[1.1vw] font-bold ${tomProj(mc.atingido)}`}>{projecao(mc) !== null ? reaisCurto(projecao(mc)!) : "—"}</p>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
