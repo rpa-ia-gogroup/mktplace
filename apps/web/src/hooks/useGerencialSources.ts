@@ -522,6 +522,8 @@ export function useGerencialSources(input: UseGerencialSourcesInput): GerencialS
         status: seriesStatus,
         granularity: state?.data?.granularity ?? "day",
         points: seriesStatus === "fresh" ? (state?.data?.points ?? []) : [],
+        // Hora de carga DESTE canal (o /trend e' pedido por canal): o selo da Gerencial mostra uma por canal.
+        refreshedAt: seriesStatus === "fresh" ? (state?.refreshedAt ?? null) : null,
         comparisonStatus,
         comparisonPoints: comparisonStatus === "fresh" ? (cmpOk?.data ?? []) : [],
         // Janela do CONTRATO, transportada intacta e apenas quando a comparacao

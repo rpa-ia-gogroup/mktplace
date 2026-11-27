@@ -776,7 +776,12 @@ function GerencialComGrandes() {
       // — nunca da requisicao anterior (`headerLive` e' null ate' la').
       selo={
         <>
-          <SeloAtualizado aoVivo={headerLive} em={headerLive != null ? sources.overview.refreshedAt : null} carregando={sources.anyLoading} />
+          <SeloAtualizado
+            aoVivo={headerLive}
+            em={headerLive != null ? sources.overview.refreshedAt : null}
+            carregando={sources.anyLoading}
+            porCanal={sources.series.map((s) => ({ rotulo: ROTULO_SELO[s.channel], em: s.refreshedAt ?? null }))}
+          />
           {/* Confianca no dado: selo pequeno ao lado do Atualizado; o clique abre o detalhe de sempre. */}
           {visaoAtiva === "geral" && (
             <ConfidenceStrip
@@ -1182,6 +1187,9 @@ function GerencialInner() {
 
 /** Fontes do CX: Shopee (`/api/v1/cx/shopee`) e Mercado Livre (`/api/v1/cx/mercadolivre`). */
 const CX_CANAIS_COBERTOS: readonly Marketplace[] = ["shopee", "ml"];
+
+// Selo do topo: uma hora de carga por canal do filtro (pedido 27/11).
+const ROTULO_SELO: Record<string, string> = { shopee: "Shopee", ml: "Meli", tiktok: "TikTok" };
 
 export default function Gerencial() {
   return (

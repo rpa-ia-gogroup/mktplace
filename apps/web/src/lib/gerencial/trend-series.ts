@@ -60,6 +60,8 @@ export interface ChannelSeries {
   status: ChannelSeriesStatus;
   granularity: TrendGranularity;
   points: TrendPoint[];
+  /** Hora de carga do canal (refreshed_at do /trend dele); null sem resposta fresca. */
+  refreshedAt?: string | null;
   /** Gate V2-2 — omitido pelos chamadores que nao pedem comparacao. */
   comparisonStatus?: ComparisonStatus;
   comparisonPoints?: TrendPoint[];
