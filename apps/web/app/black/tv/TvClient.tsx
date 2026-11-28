@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
 import { menoresNaGerencial } from "@/lib/gerencial/marcas-menores-gerencial";
 import type { MarcasMenores } from "@/lib/marcas-menores";
-import { canalDoOverview, comHoraDoDadoNovo, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
+import { canalDoOverview, comHoraDoDadoNovo, diaDaBlack, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -128,7 +128,7 @@ export default function TvClient() {
   useEffect(() => {
     const ctrl = new AbortController();
     const lerMeta = () =>
-      torreFetch(`${API_URL}/api/v1/performance/black-hora`, { signal: ctrl.signal })
+      torreFetch(`${API_URL}/api/v1/performance/black-hora?dia=${diaDaBlack()}`, { signal: ctrl.signal })
         .then(async (r) => { if (r.ok) setBlack((await r.json()) as RespostaBlack); })
         .catch(() => {}); // sem meta, a TV segue com o realizado
     // O GMV de hoje da Gerencial: overview de hoje por canal + brands de hoje (a mesma fato diária).
@@ -140,9 +140,9 @@ export default function TvClient() {
     const ler = () => {
       void lerMeta();
       // Marcas menores (Bling) entram no total e na meta; sem elas, a TV segue com as grandes.
-      const hj = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const hj = diaDaBlack();
       json<MarcasMenores>(`/api/v1/performance/marcas-menores?date_from=${hj}&date_to=${hj}`).then(setMenoresApi).catch(() => {});
-      const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const hoje = diaDaBlack();
       const dia = `date_from=${hoje}&date_to=${hoje}`;
       const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
       return Promise.all([
@@ -163,7 +163,7 @@ export default function TvClient() {
         .catch((e) => { if (!ctrl.signal.aborted) setErro(e instanceof Error ? e.message : "Falha ao carregar."); });
     };
     const lerMes = () => {
-      const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+      const hoje = diaDaBlack();
       const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
       const periodo = `date_from=${hoje.slice(0, 8)}01&date_to=${hoje}`;
       Promise.all([

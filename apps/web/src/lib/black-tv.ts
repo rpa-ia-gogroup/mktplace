@@ -73,3 +73,11 @@ export function comHoraDoDadoNovo<T extends { gmv: number | null; ate: string | 
   if (ant.gmv != null && novo.gmv > ant.gmv) return { ...novo, vendaNova: novo.ate };
   return { ...novo, ate: ant.ate ?? novo.ate, vendaNova: ant.vendaNova ?? null };
 }
+
+/** Dia da Black na /black e na TV: data BRT, mas o 27/11 segue na tela até 12h de 28/11 para mostrar o
+ * fechamento (pedido do usuário, 27/11). shortcut: data fixa da Black 2026; remover depois. */
+export function diaDaBlack(agora: number = Date.now()): string {
+  const brt = new Date(agora - 3 * 3600_000);
+  const dia = brt.toISOString().slice(0, 10);
+  return dia === "2026-11-28" && brt.getUTCHours() < 12 ? "2026-11-27" : dia;
+}

@@ -9,6 +9,7 @@
  * canal valem para a página toda. Sem TikTok: a meta não tem.
  * Regras em `src/lib/black-hora.ts`.
  */
+import { diaDaBlack } from "@/lib/black-tv";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +39,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 const DIA_DA_BLACK = "2026-11-27";
 /** No dia, o dado anda de hora em hora: relê a cada 5 min. */
 const RELER_MS = 5 * 60_000;
-const hojeBrt = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+const hojeBrt = () => diaDaBlack();
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}%`);
 const reais = (v: number | null) => (v === null ? "—" : fmtBrlCurto(v));
 const TINTA = { ok: "text-ok-ink", warn: "text-warn-ink", crit: "text-crit-ink" } as const;
