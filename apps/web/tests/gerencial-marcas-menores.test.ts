@@ -290,3 +290,13 @@ test("filtrarMarcasMenores: a aba Demais marcas mantem a Denavita (fonte proviso
   assert.deepEqual(aba.marcas.map((m) => [m.id, m.total]), [["denavita", 100], ["yenzah", 10]]);
   assert.equal(aba.consolidado?.total, 110);
 });
+
+test("meta do dia: marcas menores contam no realizado do topo", async () => {
+  const { progressoComMenores } = await import("../src/lib/gerencial/marcas-menores-gerencial.ts");
+  const p = { emAndamento: true, metaComDado: 2_000_000, realizado: 1_670_000, atingimento: 0.835, falta: 330_000, status: "em_andamento" };
+  const r = progressoComMenores(p, { total: 16_000 })!;
+  assert.equal(r.realizado, 1_686_000);
+  assert.equal(r.falta, 314_000);
+  assert.equal(r.status, "em_andamento");
+  assert.equal(progressoComMenores(p, null), p);
+});

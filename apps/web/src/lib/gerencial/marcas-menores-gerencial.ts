@@ -440,3 +440,22 @@ export function overviewDeMenores(f: MarcasMenores, canais: readonly Marketplace
     prev_avg_ticket: prevGmv != null && prevOrders ? prevGmv / prevOrders : null,
   };
 }
+
+/**
+ * Meta do dia com as marcas menores CONTANDO (pedido 27/11): o realizado do topo soma o GMV delas
+ * (sem meta própria), como na TV. Os cards por marca não mudam.
+ */
+export function progressoComMenores<P extends { emAndamento: boolean; metaComDado: number; realizado: number; atingimento: number | null; falta: number; status: string }>(
+  p: P | null,
+  m: { total: number } | null,
+): P | null {
+  if (!p || !m || m.total <= 0) return p;
+  const realizado = p.realizado + m.total;
+  return {
+    ...p,
+    realizado,
+    atingimento: p.metaComDado > 0 ? realizado / p.metaComDado : p.atingimento,
+    falta: Math.max(p.metaComDado - realizado, 0),
+    status: p.emAndamento ? p.status : realizado >= p.metaComDado ? "atingida" : "nao_atingida",
+  };
+}

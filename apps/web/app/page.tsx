@@ -64,7 +64,7 @@ import { buildQuery as queryShopeeFbs } from "@/lib/shopee-fbs";
 import type { FullPorMarca } from "@/lib/gerencial/divisao-full";
 import { isMarketplaceSelected } from "@/lib/marketplace-filter";
 import { comparacaoDeHoje, tendenciaConsolidada, type HojePorHora } from "@/lib/gerencial/hoje-por-hora";
-import { DENAVITA, canalComMenores, gmvComMenores, comAvisosMenores, menoresNaGerencial, notaMenores, pedidosTicketComMenores } from "@/lib/gerencial/marcas-menores-gerencial";
+import { DENAVITA, progressoComMenores, canalComMenores, gmvComMenores, comAvisosMenores, menoresNaGerencial, notaMenores, pedidosTicketComMenores } from "@/lib/gerencial/marcas-menores-gerencial";
 import { linhasDeMarcasMenores } from "@/lib/gerencial/marcas-menores-adaptador";
 import { variacaoPct, type MarcasMenores } from "@/lib/marcas-menores";
 import { MARCAS_MENORES_KEYS, escopoDeMarcas } from "@/lib/filters/brands";
@@ -559,6 +559,8 @@ function GerencialComGrandes() {
       metaAplicavel && diaMeta ? progressoDoDia({ celulas: celulasEscopo, linhas: brands, dia: diaMeta, hoje }) : null,
     [metaAplicavel, diaMeta, celulasEscopo, brands, hoje],
   );
+  // Topo da meta do dia: as marcas menores contam no realizado (os cards por marca seguem sem elas).
+  const progressoDiaTopo = useMemo(() => progressoComMenores(progressoDia, menoresOk), [progressoDia, menoresOk]);
   const progressoPorMarca = useMemo(() => {
     const mapa: Record<string, MetaDaMarca | null> = {};
     if (progressoDia) return progressoDia.porMarca;
@@ -587,8 +589,13 @@ function GerencialComGrandes() {
   }, [progressoDia, metaAplicavel, mesMeta, metaEscopo.porMarca, realizadoEscopo, celulasEscopo, hoje, ultimoDia]);
   // Topo: a soma das tendencias dos cards, so' no "Hoje" com a meta do dia.
   const tendenciaTopo = useMemo(
-    () => (diaEmAndamento && progressoDia ? tendenciaConsolidada(tendenciaDoDia, progressoPorMarca) : null),
-    [diaEmAndamento, progressoDia, tendenciaDoDia, progressoPorMarca],
+    () => {
+      const t = diaEmAndamento && progressoDia ? tendenciaConsolidada(tendenciaDoDia, progressoPorMarca) : null;
+      // Menores no mesmo ritmo das grandes: projeção × (realizado com elas ÷ realizado sem elas).
+      if (!t || !menoresOk || !progressoDia || progressoDia.realizado <= 0) return t;
+      return { ...t, projecao: t.projecao * (1 + menoresOk.total / progressoDia.realizado) };
+    },
+    [diaEmAndamento, progressoDia, tendenciaDoDia, progressoPorMarca, menoresOk],
   );
   // Mes atual: o fechamento de cada marca pela MESMA projecao do heroi (com
   // meta). Marca sem meta: o GMV dos canais filtrados no ritmo linear, sem %.
@@ -836,7 +843,7 @@ function GerencialComGrandes() {
         onRetryMetas={metas.status === "error" ? metas.tentarDeNovo : sources.retry}
         progresso={progresso}
         comCurva={comCurva}
-        progressoDia={progressoDia}
+        progressoDia={progressoDiaTopo}
         semDado={progressoDia ? resumoSemDado(progressoDia.semDado, celulasEscopo) : []}
         canaisForaDaMeta={celulasEscopo.length > 0 ? canaisForaDaMeta : []}
         ultimoDia={ultimoDia}
