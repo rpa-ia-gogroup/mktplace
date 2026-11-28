@@ -112,3 +112,11 @@ test("TV: última att só quando entra venda nova", async () => {
   assert.equal(comHoraDoDadoNovo(undefined, novo).vendaNova, null); // 1ª leitura: não sabe
   assert.equal(comHoraDoDadoNovo({ ...antes, gmv: 110 }, novo).vendaNova, "2026-11-27T21:40:00Z"); // caiu: não é venda nova
 });
+
+test("Black: 27/11 segue na tela até 12h de 28/11", async () => {
+  const { diaDaBlack } = await import("../src/lib/black-tv.ts");
+  assert.equal(diaDaBlack(Date.parse("2026-11-28T03:05:00Z")), "2026-11-27"); // 00:05 BRT
+  assert.equal(diaDaBlack(Date.parse("2026-11-28T14:59:00Z")), "2026-11-27"); // 11:59 BRT
+  assert.equal(diaDaBlack(Date.parse("2026-11-28T15:00:00Z")), "2026-11-28"); // 12:00 BRT
+  assert.equal(diaDaBlack(Date.parse("2026-11-27T20:00:00Z")), "2026-11-27");
+});
