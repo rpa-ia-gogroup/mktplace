@@ -16,7 +16,7 @@ import { createPortal } from "react-dom";
 import { horaMinuto, type RespostaBlack } from "@/lib/black-hora";
 import { menoresNaGerencial } from "@/lib/gerencial/marcas-menores-gerencial";
 import type { MarcasMenores } from "@/lib/marcas-menores";
-import { canalDoOverview, comHoraDoDadoNovo, diaDaBlack, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
+import { canalDoOverview, comHoraDoDadoNovo, marcasDoBrands, type CanalHojeTv, type CanalTv, type MarcaHojeTv, type MarcaTvApi, type OverviewTv } from "@/lib/black-tv";
 import { torreFetch } from "@/lib/torre-fetch";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -35,6 +35,8 @@ const MARCA: Record<string, string> = {
 
 const inteiro = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 const centavos = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** A TV da Black é estática: sempre o 27/11/2026 (receita e meta do dia), mesmo depois da virada. */
+const DIA_BLACK = "2026-11-27";
 const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const pct = (parte: number, total: number) => (total > 0 ? Math.round((parte / total) * 100) : 0);
 
@@ -128,7 +130,7 @@ export default function TvClient() {
   useEffect(() => {
     const ctrl = new AbortController();
     const lerMeta = () =>
-      torreFetch(`${API_URL}/api/v1/performance/black-hora?dia=${diaDaBlack()}`, { signal: ctrl.signal })
+      torreFetch(`${API_URL}/api/v1/performance/black-hora?dia=${DIA_BLACK}`, { signal: ctrl.signal })
         .then(async (r) => { if (r.ok) setBlack((await r.json()) as RespostaBlack); })
         .catch(() => {}); // sem meta, a TV segue com o realizado
     // O GMV de hoje da Gerencial: overview de hoje por canal + brands de hoje (a mesma fato diária).
@@ -140,9 +142,9 @@ export default function TvClient() {
     const ler = () => {
       void lerMeta();
       // Marcas menores (Bling) entram no total e na meta; sem elas, a TV segue com as grandes.
-      const hj = diaDaBlack();
+      const hj = DIA_BLACK;
       json<MarcasMenores>(`/api/v1/performance/marcas-menores?date_from=${hj}&date_to=${hj}`).then(setMenoresApi).catch(() => {});
-      const hoje = diaDaBlack();
+      const hoje = DIA_BLACK;
       const dia = `date_from=${hoje}&date_to=${hoje}`;
       const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
       return Promise.all([
@@ -163,7 +165,7 @@ export default function TvClient() {
         .catch((e) => { if (!ctrl.signal.aborted) setErro(e instanceof Error ? e.message : "Falha ao carregar."); });
     };
     const lerMes = () => {
-      const hoje = diaDaBlack();
+      const hoje = DIA_BLACK;
       const ids: CanalTv[] = ["tiktok", "ml", "shopee"];
       const periodo = `date_from=${hoje.slice(0, 8)}01&date_to=${hoje}`;
       Promise.all([
